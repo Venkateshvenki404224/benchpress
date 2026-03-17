@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FrappeDeploy — Self-hosted Frappe Cloud</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <link rel="stylesheet" href="css/custom.css">
+</head>
+<body>
+
+<nav class="fd-navbar">
+  <div class="container d-flex align-items-center justify-content-between">
+    <a href="index.html" class="d-flex align-items-center gap-2 text-decoration-none">
+      <div class="fd-logo">F</div>
+      <span class="fd-brand-name">FrappeDeploy</span>
+      <span class="fd-badge-beta">Beta</span>
+    </a>
+    <div class="d-none d-md-flex align-items-center gap-1">
+      <a href="#features" class="nav-link">Features</a>
+      <a href="#how-it-works" class="nav-link">How it Works</a>
+      <a href="#architecture" class="nav-link">Architecture</a>
+      <a href="dashboard.html" class="btn btn-fd-outline btn-sm ms-2">Dashboard →</a>
+    </div>
+    <button class="btn btn-fd-ghost d-md-none" type="button" data-bs-toggle="collapse" data-bs-target="#mobileNav">
+      <i class="bi bi-list fs-4"></i>
+    </button>
+  </div>
+  <div class="collapse container mt-2 d-md-none" id="mobileNav">
+    <div class="d-flex flex-column gap-1 pb-2">
+      <a href="#features" class="nav-link">Features</a>
+      <a href="#how-it-works" class="nav-link">How it Works</a>
+      <a href="dashboard.html" class="btn btn-fd-outline btn-sm mt-1">Dashboard →</a>
+    </div>
+  </div>
+</nav>
+
+<section class="container py-5" style="padding-top: 5rem !important; padding-bottom: 5rem !important;">
+  <div class="row align-items-center">
+    <div class="col-lg-6 anim-fade-up">
+      <h1 class="fd-hero-title mb-3">
+        Deploy Frappe.<br><span class="highlight">One click.</span>
+      </h1>
+      <p class="fd-hero-sub mb-4">
+        Spin up Frappe benches and sites from a web UI. Docker containers, Traefik routing, WireGuard SSH access — all automated, all self-hosted.
+      </p>
+      <div class="d-flex gap-3 flex-wrap">
+        <a href="dashboard.html" class="btn btn-fd-primary btn-fd-primary-lg">
+          Get Started →
+        </a>
+        <a href="https://github.com" target="_blank" class="btn btn-fd-outline" style="padding: 0.85rem 2rem;">
+          <i class="bi bi-github me-2"></i>View on GitHub
+        </a>
+      </div>
+      <div class="d-flex align-items-center gap-4 mt-4 pt-2" style="font-size: 0.82rem; color: var(--fd-text-dim);">
+        <span><i class="bi bi-shield-check me-1 text-green"></i> Open Source</span>
+        <span><i class="bi bi-box me-1 text-cyan"></i> Docker Native</span>
+        <span><i class="bi bi-lock me-1 text-green"></i> WireGuard VPN</span>
+      </div>
+    </div>
+
+    <div class="col-lg-6 mt-5 mt-lg-0 anim-fade-up" style="animation-delay: 0.15s;">
+      <div style="transform: perspective(1000px) rotateY(-4deg) rotateX(2deg); transition: transform 0.4s;"
+           onmouseenter="this.style.transform='perspective(1000px) rotateY(0) rotateX(0)'"
+           onmouseleave="this.style.transform='perspective(1000px) rotateY(-4deg) rotateX(2deg)'">
+        <div class="fd-card" style="border-color: rgba(34,197,94,0.12); box-shadow: 0 20px 60px rgba(0,0,0,0.5), 0 0 40px rgba(34,197,94,0.05);">
+          <div class="d-flex align-items-center gap-2 mb-3 pb-2" style="border-bottom: 1px solid var(--fd-border);">
+            <span style="width:10px;height:10px;border-radius:50%;background:#ef4444;"></span>
+            <span style="width:10px;height:10px;border-radius:50%;background:#f59e0b;"></span>
+            <span style="width:10px;height:10px;border-radius:50%;background:#22c55e;"></span>
+            <span class="ms-2" style="font-size: 0.72rem; color: var(--fd-text-dim);">FrappeDeploy Dashboard</span>
+          </div>
+          <div class="d-flex flex-column gap-2">
+            <div class="fd-card fd-card-sm d-flex align-items-center justify-content-between" style="padding: 0.7rem 1rem;">
+              <div class="d-flex align-items-center gap-3">
+                <span class="fd-status-dot running"></span>
+                <span class="font-mono" style="font-size: 0.82rem; font-weight: 500;">erp-production</span>
+                <span class="fd-version-pill">v15</span>
+              </div>
+              <div class="d-flex align-items-center gap-3">
+                <div class="fd-minibar"><div class="fd-minibar-fill green" style="width: 34%;"></div></div>
+                <span style="font-size: 0.72rem; color: var(--fd-text-dim);">14d 6h</span>
+              </div>
+            </div>
+            <div class="fd-card fd-card-sm d-flex align-items-center justify-content-between" style="padding: 0.7rem 1rem;">
+              <div class="d-flex align-items-center gap-3">
+                <span class="fd-status-dot running"></span>
+                <span class="font-mono" style="font-size: 0.82rem; font-weight: 500;">lms-staging</span>
+                <span class="fd-version-pill">v15</span>
+              </div>
+              <div class="d-flex align-items-center gap-3">
+                <div class="fd-minibar"><div class="fd-minibar-fill green" style="width: 12%;"></div></div>
+                <span style="font-size: 0.72rem; color: var(--fd-text-dim);">3d 12h</span>
+              </div>
+            </div>
+            <div class="fd-card fd-card-sm d-flex align-items-center justify-content-between" style="padding: 0.7rem 1rem;">
+              <div class="d-flex align-items-center gap-3">
+                <span class="fd-status-dot stopped"></span>
+                <span class="font-mono" style="font-size: 0.82rem; font-weight: 500;">dev-playground</span>
+                <span class="fd-version-pill">v14</span>
+              </div>
+              <div class="d-flex align-items-center gap-3">
+                <div class="fd-minibar"><div class="fd-minibar-fill" style="width: 0%;background:#475569;"></div></div>
+                <span style="font-size: 0.72rem; color: var(--fd-text-dim);">—</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="features" class="container py-5">
+  <div class="text-center mb-5 anim-fade-up">
+    <h2 class="mb-2" style="font-size: 2rem;">Everything you need to self-host Frappe</h2>
+    <p class="text-muted-custom" style="max-width: 480px; margin: 0 auto;">No vendor lock-in. No monthly bills. Your infrastructure, your control.</p>
+  </div>
+  <div class="row g-3">
+    <div class="col-md-4 anim-fade-up stagger-1">
+      <div class="fd-feature-card">
+        <div class="fd-feature-icon"><i class="bi bi-box-seam"></i></div>
+        <div class="fd-feature-title">One-Click Deploy</div>
+        <div class="fd-feature-desc">Create a full Frappe bench with your chosen apps. Docker handles the heavy lifting under the hood.</div>
+      </div>
+    </div>
+    <div class="col-md-4 anim-fade-up stagger-2">
+      <div class="fd-feature-card">
+        <div class="fd-feature-icon cyan-icon"><i class="bi bi-globe2"></i></div>
+        <div class="fd-feature-title">Instant Domains</div>
+        <div class="fd-feature-desc">Traefik auto-routes your site to a public subdomain with automatic SSL certificate provisioning.</div>
+      </div>
+    </div>
+    <div class="col-md-4 anim-fade-up stagger-3">
+      <div class="fd-feature-card">
+        <div class="fd-feature-icon"><i class="bi bi-shield-lock"></i></div>
+        <div class="fd-feature-title">WireGuard SSH</div>
+        <div class="fd-feature-desc">Download a VPN config and SSH directly into your container. Encrypted tunnel, no exposed ports.</div>
+      </div>
+    </div>
+    <div class="col-md-4 anim-fade-up stagger-4">
+      <div class="fd-feature-card">
+        <div class="fd-feature-icon cyan-icon"><i class="bi bi-layers"></i></div>
+        <div class="fd-feature-title">Multi-App Support</div>
+        <div class="fd-feature-desc">Install ERPNext, HRMS, LMS, Wiki, Insights, Helpdesk — pick exactly what you need per bench.</div>
+      </div>
+    </div>
+    <div class="col-md-4 anim-fade-up stagger-5">
+      <div class="fd-feature-card">
+        <div class="fd-feature-icon"><i class="bi bi-terminal"></i></div>
+        <div class="fd-feature-title">Real-time Logs</div>
+        <div class="fd-feature-desc">Watch your deployment happen live with streaming terminal output. Know exactly what's happening.</div>
+      </div>
+    </div>
+    <div class="col-md-4 anim-fade-up stagger-6">
+      <div class="fd-feature-card">
+        <div class="fd-feature-icon cyan-icon"><i class="bi bi-git"></i></div>
+        <div class="fd-feature-title">Version Control</div>
+        <div class="fd-feature-desc">Choose Frappe v14 or v15. Pin specific app branches. Reproducible environments every time.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="how-it-works" class="container py-5">
+  <div class="text-center mb-5 anim-fade-up">
+    <h2 class="mb-2" style="font-size: 2rem;">Three steps. That's it.</h2>
+    <p class="text-muted-custom">From zero to a running Frappe site in under 5 minutes.</p>
+  </div>
+  <div class="row align-items-start justify-content-center">
+    <div class="col-md-3 text-center anim-fade-up stagger-1">
+      <div class="fd-step-number mx-auto">1</div>
+      <h5 class="mt-2 mb-2" style="font-size: 1.05rem; font-weight: 600;">Configure</h5>
+      <p style="font-size: 0.875rem; color: var(--fd-text-muted); line-height: 1.6;">Pick your Frappe version, select the apps you want, and set your domain name.</p>
+    </div>
+    <div class="col-auto d-none d-md-flex align-items-center" style="padding-top: 0.5rem;">
+      <div style="width: 60px; height: 2px; background: linear-gradient(90deg, var(--fd-green), transparent); opacity: 0.3;"></div>
+    </div>
+    <div class="col-md-3 text-center anim-fade-up stagger-2">
+      <div class="fd-step-number mx-auto">2</div>
+      <h5 class="mt-2 mb-2" style="font-size: 1.05rem; font-weight: 600;">Deploy</h5>
+      <p style="font-size: 0.875rem; color: var(--fd-text-muted); line-height: 1.6;">One click. We pull the Docker image, configure Traefik labels, and set up WireGuard.</p>
+    </div>
+    <div class="col-auto d-none d-md-flex align-items-center" style="padding-top: 0.5rem;">
+      <div style="width: 60px; height: 2px; background: linear-gradient(90deg, var(--fd-green), transparent); opacity: 0.3;"></div>
+    </div>
+    <div class="col-md-3 text-center anim-fade-up stagger-3">
+      <div class="fd-step-number mx-auto">3</div>
+      <h5 class="mt-2 mb-2" style="font-size: 1.05rem; font-weight: 600;">Access</h5>
+      <p style="font-size: 0.875rem; color: var(--fd-text-muted); line-height: 1.6;">Your site is live on a public domain. Download the WireGuard config and SSH in.</p>
+    </div>
+  </div>
+</section>
+
+<section id="architecture" class="container py-5">
+  <div class="text-center mb-5 anim-fade-up">
+    <h2 class="mb-2" style="font-size: 2rem;">Under the Hood</h2>
+    <p class="text-muted-custom">A clean stack with no magic. Docker, Traefik, WireGuard.</p>
+  </div>
+  <div class="anim-fade-up" style="animation-delay: 0.1s;">
+    <div class="fd-card mx-auto" style="max-width: 680px; overflow-x: auto;">
+      <div class="text-center mb-3">
+        <div class="fd-arch-node d-inline-block"><i class="bi bi-browser-chrome me-2"></i>Your Browser</div>
+      </div>
+      <div class="text-center mb-3"><div class="fd-arch-arrow">↓</div></div>
+      <div class="text-center mb-3">
+        <div class="fd-arch-node green-border d-inline-block"><i class="bi bi-window-stack me-2 text-green"></i>FrappeDeploy UI</div>
+      </div>
+      <div class="text-center mb-3"><div class="fd-arch-arrow">↓</div></div>
+      <div class="text-center mb-3">
+        <div class="fd-arch-node d-inline-block"><i class="bi bi-gear me-2"></i>Frappe Backend API</div>
+      </div>
+      <div class="text-center mb-3"><div class="fd-arch-arrow">↓</div></div>
+      <div class="d-flex justify-content-center gap-4 flex-wrap mb-3">
+        <div class="fd-arch-node green-border"><i class="bi bi-box me-2 text-green"></i>Docker Engine</div>
+        <div class="fd-arch-node cyan-border"><i class="bi bi-diagram-3 me-2 text-cyan"></i>Traefik Proxy</div>
+      </div>
+      <div class="text-center mb-3"><div class="fd-arch-arrow">↓</div></div>
+      <div class="d-flex justify-content-center gap-2 flex-wrap mb-3">
+        <div class="fd-arch-node" style="font-size: 0.72rem;"><i class="bi bi-hdd-stack me-1"></i>Bench 1</div>
+        <div class="fd-arch-node" style="font-size: 0.72rem;"><i class="bi bi-hdd-stack me-1"></i>Bench 2</div>
+        <div class="fd-arch-node" style="font-size: 0.72rem;"><i class="bi bi-hdd-stack me-1"></i>Bench N</div>
+      </div>
+      <div class="text-center mb-3"><div class="fd-arch-arrow">↓</div></div>
+      <div class="text-center mb-3">
+        <div class="fd-arch-node cyan-border d-inline-block"><i class="bi bi-shield-lock me-2 text-cyan"></i>WireGuard VPN Tunnel</div>
+      </div>
+      <div class="text-center mb-3"><div class="fd-arch-arrow">↓</div></div>
+      <div class="text-center">
+        <div class="fd-arch-node d-inline-block"><i class="bi bi-terminal me-2"></i>Your SSH Terminal</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="container py-5">
+  <div class="fd-oss-banner anim-fade-up">
+    <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">🛠️</div>
+    <h2 style="font-size: 1.8rem; margin-bottom: 0.5rem;">100% Open Source</h2>
+    <p class="text-muted-custom mb-4" style="max-width: 400px; margin: 0 auto;">
+      Built for FOSS Hack 2026. MIT Licensed. Contributions welcome.
+    </p>
+    <div class="d-flex gap-3 justify-content-center flex-wrap">
+      <a href="https://github.com" target="_blank" class="btn btn-fd-primary">
+        <i class="bi bi-star me-2"></i>Star on GitHub
+      </a>
+      <a href="#" class="btn btn-fd-outline">Read the Docs</a>
+    </div>
+  </div>
+</section>
+
+<footer class="fd-footer">
+  <div class="container d-flex flex-wrap justify-content-between align-items-center">
+    <div class="d-flex align-items-center gap-2">
+      <div class="fd-logo" style="width:24px;height:24px;font-size:11px;border-radius:5px;">F</div>
+      <span>FrappeDeploy</span>
+      <span class="mx-2">·</span>
+      <span>Built with <a href="https://frappe.io" target="_blank">Frappe Framework</a></span>
+    </div>
+    <div class="d-flex gap-3 mt-2 mt-md-0">
+      <a href="https://github.com" target="_blank" class="text-muted-custom"><i class="bi bi-github"></i></a>
+      <a href="https://fossunited.org/fosshack/2026" target="_blank" class="text-muted-custom">FOSS Hack 2026</a>
+    </div>
+  </div>
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        entry.target.style.animationPlayState = 'running';
+      }
+    });
+  }, { threshold: 0.1 });
+
+  document.querySelectorAll('.anim-fade-up, .anim-slide-in').forEach(el => {
+    el.style.animationPlayState = 'paused';
+    observer.observe(el);
+  });
+</script>
+</body>
+</html>

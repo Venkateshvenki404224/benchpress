@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard — FrappeDeploy</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <link rel="stylesheet" href="css/custom.css">
+</head>
+<body>
+
+<nav class="fd-navbar">
+  <div class="container d-flex align-items-center justify-content-between">
+    <a href="index.html" class="d-flex align-items-center gap-2 text-decoration-none">
+      <div class="fd-logo">F</div>
+      <span class="fd-brand-name">FrappeDeploy</span>
+      <span class="fd-badge-beta">Beta</span>
+    </a>
+    <div class="d-flex align-items-center gap-1">
+      <button class="nav-link btn btn-fd-ghost" onclick="showView('bench-list')">Dashboard</button>
+      <button class="nav-link btn btn-fd-ghost" onclick="showView('deploy-log')">Deploy Logs</button>
+    </div>
+  </div>
+</nav>
+
+<div class="container" style="max-width: 1060px; padding: 2rem 1rem;">
+
+  <div id="view-bench-list" class="fd-view active anim-fade-up">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+      <div>
+        <h1 style="font-size: 1.6rem; font-weight: 700; letter-spacing: -0.03em; margin-bottom: 2px;">Your Benches</h1>
+        <p class="text-muted-custom mb-0" style="font-size: 0.875rem;">
+          <span id="running-count">2</span> running · <span id="total-count">3</span> total
+        </p>
+      </div>
+      <button class="btn btn-fd-primary" onclick="showView('new-bench')">
+        <i class="bi bi-plus-lg me-1"></i> New Bench
+      </button>
+    </div>
+
+    <div id="bench-list" class="d-flex flex-column gap-2">
+
+      <div class="fd-card fd-card-hover anim-slide-in stagger-1" onclick="showBenchDetail('erp-production')">
+        <div class="fd-bench-row">
+          <div class="d-flex align-items-center gap-3 flex-grow-1 overflow-hidden">
+            <div class="fd-bench-icon running">▶</div>
+            <div class="min-width-0">
+              <div class="d-flex align-items-center gap-2 flex-wrap">
+                <span style="font-size: 1rem; font-weight: 600;">erp-production</span>
+                <span class="fd-version-pill">v15</span>
+              </div>
+              <div class="fd-bench-meta">erp.example.com · 3 apps · 2 sites</div>
+            </div>
+          </div>
+          <div class="fd-bench-stats">
+            <div class="fd-bench-stat-item">
+              <div class="fd-bench-stat-label">CPU</div>
+              <div class="d-flex align-items-center gap-2">
+                <div class="fd-minibar"><div class="fd-minibar-fill green" style="width:34%"></div></div>
+                <span class="fd-bench-stat-value">34%</span>
+              </div>
+            </div>
+            <div class="fd-bench-stat-item">
+              <div class="fd-bench-stat-label">RAM</div>
+              <div class="d-flex align-items-center gap-2">
+                <div class="fd-minibar"><div class="fd-minibar-fill cyan" style="width:62%"></div></div>
+                <span class="fd-bench-stat-value">62%</span>
+              </div>
+            </div>
+            <div class="fd-bench-stat-item">
+              <div class="fd-bench-stat-label">Uptime</div>
+              <span class="fd-bench-stat-value">14d 6h</span>
+            </div>
+            <div>
+              <span class="fd-status-badge running">
+                <span class="fd-status-dot running"></span> Running
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="fd-card fd-card-hover anim-slide-in stagger-2" onclick="showBenchDetail('lms-staging')">
+        <div class="fd-bench-row">
+          <div class="d-flex align-items-center gap-3 flex-grow-1 overflow-hidden">
+            <div class="fd-bench-icon running">▶</div>
+            <div>
+              <div class="d-flex align-items-center gap-2 flex-wrap">
+                <span style="font-size: 1rem; font-weight: 600;">lms-staging</span>
+                <span class="fd-version-pill">v15</span>
+              </div>
+              <div class="fd-bench-meta">lms.example.com · 2 apps · 1 site</div>
+            </div>
+          </div>
+          <div class="fd-bench-stats">
+            <div class="fd-bench-stat-item">
+              <div class="fd-bench-stat-label">CPU</div>
+              <div class="d-flex align-items-center gap-2">
+                <div class="fd-minibar"><div class="fd-minibar-fill green" style="width:12%"></div></div>
+                <span class="fd-bench-stat-value">12%</span>
+              </div>
+            </div>
+            <div class="fd-bench-stat-item">
+              <div class="fd-bench-stat-label">RAM</div>
+              <div class="d-flex align-items-center gap-2">
+                <div class="fd-minibar"><div class="fd-minibar-fill cyan" style="width:28%"></div></div>
+                <span class="fd-bench-stat-value">28%</span>
+              </div>
+            </div>
+            <div class="fd-bench-stat-item">
+              <div class="fd-bench-stat-label">Uptime</div>
+              <span class="fd-bench-stat-value">3d 12h</span>
+            </div>
+            <div>
+              <span class="fd-status-badge running">
+                <span class="fd-status-dot running"></span> Running
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="fd-card fd-card-hover anim-slide-in stagger-3" onclick="showBenchDetail('dev-playground')">
+        <div class="fd-bench-row">
+          <div class="d-flex align-items-center gap-3 flex-grow-1 overflow-hidden">
+            <div class="fd-bench-icon stopped">■</div>
+            <div>
+              <div class="d-flex align-items-center gap-2 flex-wrap">
+                <span style="font-size: 1rem; font-weight: 600;">dev-playground</span>
+                <span class="fd-version-pill">v14</span>
+              </div>
+              <div class="fd-bench-meta">dev.example.com · 2 apps · 0 sites</div>
+            </div>
+          </div>
+          <div class="fd-bench-stats">
+            <div class="fd-bench-stat-item">
+              <div class="fd-bench-stat-label">CPU</div>
+              <div class="d-flex align-items-center gap-2">
+                <div class="fd-minibar"><div class="fd-minibar-fill" style="width:0%"></div></div>
+                <span class="fd-bench-stat-value">0%</span>
+              </div>
+            </div>
+            <div class="fd-bench-stat-item">
+              <div class="fd-bench-stat-label">RAM</div>
+              <div class="d-flex align-items-center gap-2">
+                <div class="fd-minibar"><div class="fd-minibar-fill" style="width:0%"></div></div>
+                <span class="fd-bench-stat-value">0%</span>
+              </div>
+            </div>
+            <div class="fd-bench-stat-item">
+              <div class="fd-bench-stat-label">Uptime</div>
+              <span class="fd-bench-stat-value">—</span>
+            </div>
+            <div>
+              <span class="fd-status-badge stopped">
+                <span class="fd-status-dot stopped"></span> Stopped
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+
+  <div id="view-new-bench" class="fd-view" style="max-width: 640px;">
+    <button class="btn btn-fd-ghost mb-3" onclick="showView('bench-list')">
+      <i class="bi bi-arrow-left me-1"></i> Back to Dashboard
+    </button>
+    <h2 style="font-size: 1.5rem; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 2px;">Create New Bench</h2>
+    <p class="text-muted-custom mb-4" style="font-size: 0.875rem;">Configure your Frappe bench and deploy with one click.</p>
+
+    <div class="mb-3">
+      <label class="fd-label">Bench Name</label>
+      <input type="text" class="fd-input" id="bench-name" placeholder="my-project">
+    </div>
+
+    <div class="row g-3 mb-3">
+      <div class="col-sm-6">
+        <label class="fd-label">Frappe Version</label>
+        <select class="fd-input fd-select" id="bench-version">
+          <option value="v15">Version 15 (latest)</option>
+          <option value="v14">Version 14 (LTS)</option>
+        </select>
+      </div>
+      <div class="col-sm-6">
+        <label class="fd-label">Domain</label>
+        <input type="text" class="fd-input" id="bench-domain" placeholder="myapp.example.com">
+      </div>
+    </div>
+
+    <div class="mb-3">
+      <label class="fd-label">Apps to Install</label>
+      <div class="row g-2" id="app-grid"></div>
+    </div>
+
+    <div class="fd-info-card mb-4">
+      <div class="fd-info-icon" style="background: var(--fd-cyan-glow); color: var(--fd-cyan);">
+        <i class="bi bi-shield-lock"></i>
+      </div>
+      <div>
+        <div style="font-size: 0.9rem; font-weight: 600;">WireGuard VPN Access</div>
+        <div style="font-size: 0.8rem; color: var(--fd-text-muted);">
+          A WireGuard peer config will be auto-generated for SSH access into your container.
+        </div>
+      </div>
+    </div>
+
+    <button class="btn btn-fd-primary btn-fd-primary-lg w-100" onclick="startDeploy()" id="deploy-btn">
+      🚀 Deploy Bench
+    </button>
+  </div>
+
+
+  <div id="view-deploy-log" class="fd-view" style="max-width: 720px;">
+    <button class="btn btn-fd-ghost mb-3" onclick="showView('bench-list')">
+      <i class="bi bi-arrow-left me-1"></i> Back to Dashboard
+    </button>
+    <h2 id="deploy-title" style="font-size: 1.5rem; font-weight: 700; margin-bottom: 2px;">Deploying...</h2>
+    <p id="deploy-subtitle" class="text-muted-custom mb-4" style="font-size: 0.875rem;">Setting up your Frappe bench...</p>
+
+    <div id="deploy-success" class="fd-success-banner mb-3" style="display: none;">
+      <span style="font-size: 1.3rem;">✓</span>
+      <div>
+        <div style="font-weight: 600; color: var(--fd-green);">Bench deployed successfully</div>
+        <div style="font-size: 0.82rem; color: var(--fd-text-muted);">Domain is live via Traefik. WireGuard config ready for download.</div>
+      </div>
+    </div>
+
+    <div class="fd-terminal" id="deploy-terminal"></div>
+
+    <div id="deploy-actions" class="d-flex gap-2 mt-3 flex-wrap" style="display: none !important;">
+      <button class="btn btn-fd-primary" onclick="showView('bench-list')">Go to Dashboard</button>
+      <button class="btn btn-fd-cyan"><i class="bi bi-download me-1"></i> Download WireGuard Config</button>
+      <a href="#" class="btn btn-fd-outline" target="_blank"><i class="bi bi-box-arrow-up-right me-1"></i> Open Site</a>
+    </div>
+  </div>
+
+
+  <div id="view-bench-detail" class="fd-view">
+    <button class="btn btn-fd-ghost mb-3" onclick="showView('bench-list')">
+      <i class="bi bi-arrow-left me-1"></i> Back to Dashboard
+    </button>
+
+    <div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-4">
+      <div>
+        <div class="d-flex align-items-center gap-3">
+          <h2 id="detail-name" style="font-size: 1.5rem; font-weight: 700; margin: 0;">erp-production</h2>
+          <span id="detail-status" class="fd-status-badge running">
+            <span class="fd-status-dot running"></span> Running
+          </span>
+        </div>
+        <p id="detail-meta" class="text-muted-custom mb-0 mt-1" style="font-size: 0.85rem;">v15 · erp.example.com</p>
+      </div>
+      <div class="d-flex gap-2">
+        <button class="btn btn-fd-outline btn-sm"><i class="bi bi-arrow-clockwise me-1"></i> Restart</button>
+        <button class="btn btn-fd-danger btn-sm"><i class="bi bi-stop-fill me-1"></i> Stop</button>
+      </div>
+    </div>
+
+    <div class="row g-2 mb-4" id="detail-stats">
+      <div class="col-6 col-md-3">
+        <div class="fd-stat-card">
+          <div class="fd-stat-label">CPU Usage</div>
+          <div class="fd-stat-value text-green" id="detail-cpu">34%</div>
+          <div class="mt-2"><div class="fd-minibar" style="width: 100%;"><div class="fd-minibar-fill green" id="detail-cpu-bar" style="width:34%"></div></div></div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="fd-stat-card">
+          <div class="fd-stat-label">Memory</div>
+          <div class="fd-stat-value text-cyan" id="detail-ram">62%</div>
+          <div class="mt-2"><div class="fd-minibar" style="width: 100%;"><div class="fd-minibar-fill cyan" id="detail-ram-bar" style="width:62%"></div></div></div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="fd-stat-card">
+          <div class="fd-stat-label">Uptime</div>
+          <div class="fd-stat-value" id="detail-uptime">14d 6h</div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="fd-stat-card">
+          <div class="fd-stat-label">WireGuard IP</div>
+          <div class="fd-stat-value" id="detail-wgip" style="font-size: 1.1rem;">10.10.0.2</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="row g-3 mb-4">
+      <div class="col-md-6">
+        <div class="fd-card h-100">
+          <div class="fd-section-title">Installed Apps</div>
+          <div class="d-flex flex-column gap-2" id="detail-apps">
+            <div class="fd-pill">frappe</div>
+            <div class="fd-pill">erpnext</div>
+            <div class="fd-pill">hrms</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div class="fd-card h-100">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <div class="fd-section-title mb-0">Sites</div>
+            <button class="btn btn-sm" style="font-size: 0.78rem; font-weight: 600; color: var(--fd-green); background: var(--fd-green-glow); border: none; padding: 3px 12px; border-radius: 6px;">
+              <i class="bi bi-plus me-1"></i>New Site
+            </button>
+          </div>
+          <div class="d-flex flex-column gap-2" id="detail-sites">
+            <div class="fd-card fd-card-sm d-flex align-items-center justify-content-between" style="padding: 0.6rem 0.9rem;">
+              <span class="font-mono" style="font-size: 0.82rem;">company.erp.example.com</span>
+              <span class="fd-status-dot active"></span>
+            </div>
+            <div class="fd-card fd-card-sm d-flex align-items-center justify-content-between" style="padding: 0.6rem 0.9rem;">
+              <span class="font-mono" style="font-size: 0.82rem;">test.erp.example.com</span>
+              <span class="fd-status-dot active"></span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="fd-card mb-4">
+      <div class="fd-section-title">SSH Access via WireGuard</div>
+      <div class="fd-code mb-3">
+        <span id="detail-ssh">$ ssh frappe@10.10.0.2</span>
+        <button class="btn btn-fd-ghost btn-sm" onclick="copySSH()"><i class="bi bi-clipboard"></i></button>
+      </div>
+      <div class="d-flex gap-2 flex-wrap">
+        <button class="btn btn-fd-cyan btn-sm"><i class="bi bi-download me-1"></i> Download WireGuard Config</button>
+        <span style="font-size: 0.78rem; color: var(--fd-text-dim); align-self: center;">Import into your WireGuard client, then SSH using the command above.</span>
+      </div>
+    </div>
+
+    <details>
+      <summary style="font-size: 0.82rem; color: var(--fd-red); cursor: pointer; font-weight: 600; margin-bottom: 0.75rem;">
+        <i class="bi bi-exclamation-triangle me-1"></i> Danger Zone
+      </summary>
+      <div class="fd-card" style="border-color: rgba(239,68,68,0.2);">
+        <p style="font-size: 0.85rem; color: var(--fd-text-muted); margin-bottom: 0.75rem;">
+          This will permanently destroy the bench container, all sites, and their data. This action cannot be undone.
+        </p>
+        <button class="btn btn-fd-danger btn-sm"><i class="bi bi-trash3 me-1"></i> Delete Bench</button>
+      </div>
+    </details>
+  </div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+const BENCHES = {
+  'erp-production': {
+    name: 'erp-production', version: 'v15', status: 'running',
+    domain: 'erp.example.com', wg_ip: '10.10.0.2',
+    apps: ['frappe', 'erpnext', 'hrms'],
+    sites: [
+      { name: 'company.erp.example.com', status: 'active' },
+      { name: 'test.erp.example.com', status: 'active' },
+    ],
+    cpu: 34, ram: 62, uptime: '14d 6h',
+  },
+  'lms-staging': {
+    name: 'lms-staging', version: 'v15', status: 'running',
+    domain: 'lms.example.com', wg_ip: '10.10.0.3',
+    apps: ['frappe', 'lms'],
+    sites: [{ name: 'learn.lms.example.com', status: 'active' }],
+    cpu: 12, ram: 28, uptime: '3d 12h',
+  },
+  'dev-playground': {
+    name: 'dev-playground', version: 'v14', status: 'stopped',
+    domain: 'dev.example.com', wg_ip: '10.10.0.4',
+    apps: ['frappe', 'wiki'],
+    sites: [],
+    cpu: 0, ram: 0, uptime: '—',
+  },
+};
+
+const AVAILABLE_APPS = [
+  { name: 'frappe', desc: 'Core Framework', required: true },
+  { name: 'erpnext', desc: 'ERP System' },
+  { name: 'hrms', desc: 'HR Management' },
+  { name: 'lms', desc: 'Learning Platform' },
+  { name: 'wiki', desc: 'Wiki / Knowledge Base' },
+  { name: 'insights', desc: 'Data Analytics' },
+  { name: 'gameplan', desc: 'Project Management' },
+  { name: 'helpdesk', desc: 'Support Desk' },
+];
+
+const DEPLOY_LOGS = [
+  { time: '00:01', msg: 'Pulling frappe/bench:v15-latest...' },
+  { time: '00:08', msg: 'Image pulled successfully' },
+  { time: '00:09', msg: 'Creating container...' },
+  { time: '00:11', msg: 'Applying Traefik labels for domain routing' },
+  { time: '00:13', msg: 'Generating WireGuard peer config' },
+  { time: '00:15', msg: 'Starting MariaDB service...' },
+  { time: '00:22', msg: 'Running bench init --frappe-branch version-15' },
+  { time: '01:04', msg: 'Installing selected apps...' },
+  { time: '02:31', msg: 'Creating site...' },
+  { time: '02:58', msg: 'Site ready. Admin password: ••••••••' },
+  { time: '03:01', msg: '✓ Bench deployed. Domain live via Traefik.', success: true },
+];
+
+let selectedApps = ['frappe'];
+let deployInterval = null;
+
+function showView(view) {
+  document.querySelectorAll('.fd-view').forEach(el => el.classList.remove('active'));
+  const target = document.getElementById('view-' + view);
+  if (target) {
+    target.classList.add('active');
+    target.classList.add('anim-fade-up');
+    void target.offsetWidth;
+  }
+}
+
+function showBenchDetail(benchId) {
+  const b = BENCHES[benchId];
+  if (!b) return;
+
+  document.getElementById('detail-name').textContent = b.name;
+  document.getElementById('detail-meta').textContent = `${b.version} · ${b.domain}`;
+  document.getElementById('detail-cpu').textContent = b.cpu + '%';
+  document.getElementById('detail-ram').textContent = b.ram + '%';
+  document.getElementById('detail-cpu-bar').style.width = b.cpu + '%';
+  document.getElementById('detail-ram-bar').style.width = b.ram + '%';
+  document.getElementById('detail-uptime').textContent = b.uptime;
+  document.getElementById('detail-wgip').textContent = b.wg_ip;
+  document.getElementById('detail-ssh').textContent = `$ ssh frappe@${b.wg_ip}`;
+
+  const badge = document.getElementById('detail-status');
+  badge.className = `fd-status-badge ${b.status}`;
+  badge.innerHTML = `<span class="fd-status-dot ${b.status}"></span> ${b.status.charAt(0).toUpperCase() + b.status.slice(1)}`;
+
+  const appsEl = document.getElementById('detail-apps');
+  appsEl.innerHTML = b.apps.map(a => `<div class="fd-pill">${a}</div>`).join('');
+
+  const sitesEl = document.getElementById('detail-sites');
+  if (b.sites.length === 0) {
+    sitesEl.innerHTML = '<div style="font-size: 0.85rem; color: var(--fd-text-dim);">No sites yet. Create your first site.</div>';
+  } else {
+    sitesEl.innerHTML = b.sites.map(s => `
+      <div class="fd-card fd-card-sm d-flex align-items-center justify-content-between" style="padding: 0.6rem 0.9rem;">
+        <span class="font-mono" style="font-size: 0.82rem;">${s.name}</span>
+        <span class="fd-status-dot ${s.status}"></span>
+      </div>
+    `).join('');
+  }
+
+  showView('bench-detail');
+}
+
+function renderAppGrid() {
+  const grid = document.getElementById('app-grid');
+  grid.innerHTML = AVAILABLE_APPS.map(app => {
+    const selected = selectedApps.includes(app.name);
+    const disabled = app.required;
+    return `
+      <div class="col-6">
+        <div class="fd-app-card ${selected ? 'selected' : ''} ${disabled ? 'disabled' : ''}"
+             onclick="${disabled ? '' : `toggleApp('${app.name}')`}">
+          <div class="d-flex justify-content-between align-items-center">
+            <div>
+              <span class="font-mono" style="font-size: 0.88rem; font-weight: 500;">${app.name}</span>
+              ${disabled ? '<span style="font-size:0.68rem;color:var(--fd-text-dim);margin-left:6px;">required</span>' : ''}
+              <div style="font-size: 0.78rem; color: var(--fd-text-muted); margin-top: 2px;">${app.desc}</div>
+            </div>
+            <div class="fd-app-check">${selected ? '✓' : ''}</div>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function toggleApp(name) {
+  const idx = selectedApps.indexOf(name);
+  if (idx > -1) {
+    selectedApps.splice(idx, 1);
+  } else {
+    selectedApps.push(name);
+  }
+  renderAppGrid();
+}
+
+function startDeploy() {
+  document.getElementById('deploy-terminal').innerHTML = '';
+  document.getElementById('deploy-success').style.display = 'none';
+  document.getElementById('deploy-actions').style.display = 'none';
+  document.getElementById('deploy-actions').style.setProperty('display', 'none', 'important');
+  document.getElementById('deploy-title').textContent = 'Deploying...';
+  document.getElementById('deploy-subtitle').textContent = 'Setting up your Frappe bench...';
+
+  showView('deploy-log');
+
+  let index = 0;
+  if (deployInterval) clearInterval(deployInterval);
+
+  deployInterval = setInterval(() => {
+    if (index >= DEPLOY_LOGS.length) {
+      clearInterval(deployInterval);
+      document.getElementById('deploy-success').style.display = 'flex';
+      document.getElementById('deploy-actions').style.removeProperty('display');
+      document.getElementById('deploy-actions').style.display = 'flex';
+      document.getElementById('deploy-title').textContent = 'Deploy Complete ✓';
+      document.getElementById('deploy-subtitle').textContent = 'Your bench is live and ready to use.';
+      const cursor = document.querySelector('.fd-terminal-cursor');
+      if (cursor) cursor.remove();
+      return;
+    }
+
+    const log = DEPLOY_LOGS[index];
+    const terminal = document.getElementById('deploy-terminal');
+
+    const oldCursor = terminal.querySelector('.fd-terminal-cursor');
+    if (oldCursor) oldCursor.remove();
+
+    const line = document.createElement('div');
+    line.className = 'fd-terminal-line';
+    line.innerHTML = `
+      <span class="fd-terminal-time">${log.time}</span>
+      <span class="fd-terminal-msg ${log.success ? 'success' : ''}">${log.msg}</span>
+    `;
+    terminal.appendChild(line);
+
+    const cursorLine = document.createElement('div');
+    cursorLine.className = 'fd-terminal-line';
+    cursorLine.innerHTML = `
+      <span class="fd-terminal-time">></span>
+      <span class="fd-terminal-cursor"></span>
+    `;
+    terminal.appendChild(cursorLine);
+
+    terminal.scrollTop = terminal.scrollHeight;
+
+    index++;
+  }, 500);
+}
+
+function copySSH() {
+  const text = document.getElementById('detail-ssh').textContent.replace('$ ', '');
+  navigator.clipboard.writeText(text);
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  renderAppGrid();
+});
+</script>
+</body>
+</html>
