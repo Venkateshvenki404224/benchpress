@@ -162,12 +162,9 @@ def get_container_stats(container_id: str) -> dict:
 		stats = container.stats(stream=False)
 
 		cpu_delta = (
-			stats["cpu_stats"]["cpu_usage"]["total_usage"]
-			- stats["precpu_stats"]["cpu_usage"]["total_usage"]
+			stats["cpu_stats"]["cpu_usage"]["total_usage"] - stats["precpu_stats"]["cpu_usage"]["total_usage"]
 		)
-		system_delta = (
-			stats["cpu_stats"]["system_cpu_usage"] - stats["precpu_stats"]["system_cpu_usage"]
-		)
+		system_delta = stats["cpu_stats"]["system_cpu_usage"] - stats["precpu_stats"]["system_cpu_usage"]
 		num_cpus = stats["cpu_stats"]["online_cpus"]
 		cpu_percent = (cpu_delta / system_delta) * num_cpus * 100 if system_delta > 0 else 0
 

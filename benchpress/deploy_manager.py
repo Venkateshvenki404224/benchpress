@@ -171,7 +171,9 @@ def build_lab(lab_name: str) -> None:
 			after_commit=False,
 		)
 		current = frappe.db.get_value("Build Log", build_log_name, "message") or ""
-		frappe.db.set_value("Build Log", build_log_name, "message", current + line + "\n", update_modified=False)
+		frappe.db.set_value(
+			"Build Log", build_log_name, "message", current + line + "\n", update_modified=False
+		)
 		frappe.db.commit()
 
 	try:

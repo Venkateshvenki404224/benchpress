@@ -4,7 +4,6 @@
 import frappe
 from frappe import _
 
-
 # --- Lab endpoints ---
 
 
@@ -12,7 +11,17 @@ from frappe import _
 def get_labs() -> list[dict]:
 	labs = frappe.get_all(
 		"Lab",
-		fields=["name", "lab_id", "title", "description", "frappe_version", "status", "image_tag", "memory_limit", "cpu_cores"],
+		fields=[
+			"name",
+			"lab_id",
+			"title",
+			"description",
+			"frappe_version",
+			"status",
+			"image_tag",
+			"memory_limit",
+			"cpu_cores",
+		],
 		order_by="creation desc",
 	)
 	for lab in labs:
@@ -34,7 +43,10 @@ def get_lab(name: str) -> dict:
 		"image_tag": lab.image_tag,
 		"memory_limit": lab.memory_limit,
 		"cpu_cores": lab.cpu_cores,
-		"apps": [{"app_name": a.app_name, "app_label": a.app_label, "git_url": a.git_url, "branch": a.branch} for a in lab.apps],
+		"apps": [
+			{"app_name": a.app_name, "app_label": a.app_label, "git_url": a.git_url, "branch": a.branch}
+			for a in lab.apps
+		],
 	}
 
 
@@ -55,12 +67,15 @@ def create_lab(data: str) -> dict:
 	)
 
 	for app in data.get("apps", []):
-		doc.append("apps", {
-			"app_name": app.get("app_name"),
-			"app_label": app.get("app_label", app.get("app_name")),
-			"git_url": app.get("git_url"),
-			"branch": app.get("branch"),
-		})
+		doc.append(
+			"apps",
+			{
+				"app_name": app.get("app_name"),
+				"app_label": app.get("app_label", app.get("app_name")),
+				"git_url": app.get("git_url"),
+				"branch": app.get("branch"),
+			},
+		)
 
 	doc.insert()
 	frappe.db.commit()
@@ -87,9 +102,17 @@ def get_benches() -> list[dict]:
 	benches = frappe.get_all(
 		"Bench Instance",
 		fields=[
-			"name", "bench_name", "lab", "frappe_version", "domain",
-			"status", "container_id", "wg_ip",
-			"cpu_usage", "memory_usage", "started_at",
+			"name",
+			"bench_name",
+			"lab",
+			"frappe_version",
+			"domain",
+			"status",
+			"container_id",
+			"wg_ip",
+			"cpu_usage",
+			"memory_usage",
+			"started_at",
 		],
 		order_by="creation desc",
 	)
@@ -153,12 +176,15 @@ def create_bench(data: str) -> dict:
 
 	# Copy apps from lab to bench
 	for app in lab.apps:
-		doc.append("apps", {
-			"app_name": app.app_name,
-			"app_label": app.app_label,
-			"git_url": app.git_url,
-			"branch": app.branch,
-		})
+		doc.append(
+			"apps",
+			{
+				"app_name": app.app_name,
+				"app_label": app.app_label,
+				"git_url": app.git_url,
+				"branch": app.branch,
+			},
+		)
 
 	doc.insert()
 	frappe.db.commit()
@@ -203,6 +229,7 @@ def bench_action(bench_name: str, action: str) -> dict:
 			remove_container(bench.container_id)
 		if bench.wg_public_key:
 			from benchpress.wg_manager import remove_peer_from_server
+
 			try:
 				remove_peer_from_server(bench.wg_public_key)
 			except Exception:
@@ -275,10 +302,13 @@ def create_site(data: str) -> dict:
 	)
 
 	for app in data.get("apps", []):
-		doc.append("apps_installed", {
-			"app_name": app.get("name"),
-			"app_label": app.get("label", app.get("name")),
-		})
+		doc.append(
+			"apps_installed",
+			{
+				"app_name": app.get("name"),
+				"app_label": app.get("label", app.get("name")),
+			},
+		)
 
 	doc.insert()
 	frappe.db.commit()
@@ -368,13 +398,39 @@ def site_action(site_name: str, action: str) -> dict:
 @frappe.whitelist()
 def get_available_apps() -> list[dict]:
 	return [
-		{"name": "frappe", "label": "Frappe Framework", "git_url": "https://github.com/frappe/frappe", "branch": "version-15", "required": True},
-		{"name": "erpnext", "label": "ERPNext", "git_url": "https://github.com/frappe/erpnext", "branch": "version-15"},
-		{"name": "hrms", "label": "HRMS", "git_url": "https://github.com/frappe/hrms", "branch": "version-15"},
+		{
+			"name": "frappe",
+			"label": "Frappe Framework",
+			"git_url": "https://github.com/frappe/frappe",
+			"branch": "version-15",
+			"required": True,
+		},
+		{
+			"name": "erpnext",
+			"label": "ERPNext",
+			"git_url": "https://github.com/frappe/erpnext",
+			"branch": "version-15",
+		},
+		{
+			"name": "hrms",
+			"label": "HRMS",
+			"git_url": "https://github.com/frappe/hrms",
+			"branch": "version-15",
+		},
 		{"name": "lms", "label": "LMS", "git_url": "https://github.com/frappe/lms", "branch": "develop"},
-		{"name": "helpdesk", "label": "Helpdesk", "git_url": "https://github.com/frappe/helpdesk", "branch": "develop"},
+		{
+			"name": "helpdesk",
+			"label": "Helpdesk",
+			"git_url": "https://github.com/frappe/helpdesk",
+			"branch": "develop",
+		},
 		{"name": "wiki", "label": "Wiki", "git_url": "https://github.com/frappe/wiki", "branch": "develop"},
-		{"name": "webshop", "label": "Webshop", "git_url": "https://github.com/frappe/webshop", "branch": "version-15"},
+		{
+			"name": "webshop",
+			"label": "Webshop",
+			"git_url": "https://github.com/frappe/webshop",
+			"branch": "version-15",
+		},
 		{"name": "crm", "label": "CRM", "git_url": "https://github.com/frappe/crm", "branch": "develop"},
 	]
 
@@ -396,6 +452,7 @@ def health_check() -> dict:
 
 	try:
 		from benchpress.docker_manager import get_client
+
 		client = get_client()
 		client.ping()
 		result["docker"] = True
@@ -404,9 +461,12 @@ def health_check() -> dict:
 
 	try:
 		import subprocess
+
 		output = subprocess.run(
 			["sudo", "wg", "show", "wg0"],
-			capture_output=True, text=True, timeout=5,
+			capture_output=True,
+			text=True,
+			timeout=5,
 		)
 		result["wireguard"] = output.returncode == 0
 	except Exception:

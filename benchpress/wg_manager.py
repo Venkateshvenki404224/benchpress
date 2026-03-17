@@ -8,9 +8,7 @@ from frappe import _
 
 
 def generate_keypair() -> dict:
-	private = subprocess.run(
-		["wg", "genkey"], capture_output=True, text=True, check=True
-	).stdout.strip()
+	private = subprocess.run(["wg", "genkey"], capture_output=True, text=True, check=True).stdout.strip()
 	public = subprocess.run(
 		["wg", "pubkey"], input=private, capture_output=True, text=True, check=True
 	).stdout.strip()
