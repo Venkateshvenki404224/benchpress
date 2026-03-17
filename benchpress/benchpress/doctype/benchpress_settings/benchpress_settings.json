@@ -1,0 +1,157 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2026-03-17 22:39:43.929945",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "docker_section",
+  "docker_socket",
+  "default_image",
+  "column_break_docker",
+  "base_domain",
+  "traefik_network",
+  "wireguard_section",
+  "wg_server_ip",
+  "wg_subnet",
+  "wg_server_port",
+  "column_break_wg",
+  "wg_server_public_key",
+  "wg_server_endpoint",
+  "next_wg_ip",
+  "resource_section",
+  "container_memory_limit",
+  "column_break_resource",
+  "container_cpu_quota"
+ ],
+ "fields": [
+  {
+   "fieldname": "docker_section",
+   "fieldtype": "Section Break",
+   "label": "Docker Configuration"
+  },
+  {
+   "default": "unix:///var/run/docker.sock",
+   "fieldname": "docker_socket",
+   "fieldtype": "Data",
+   "label": "Docker Socket"
+  },
+  {
+   "default": "frappe/bench:latest",
+   "fieldname": "default_image",
+   "fieldtype": "Data",
+   "label": "Default Image"
+  },
+  {
+   "fieldname": "column_break_docker",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "base_domain",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Base Domain",
+   "reqd": 1
+  },
+  {
+   "default": "traefik-public",
+   "fieldname": "traefik_network",
+   "fieldtype": "Data",
+   "label": "Traefik Network"
+  },
+  {
+   "fieldname": "wireguard_section",
+   "fieldtype": "Section Break",
+   "label": "WireGuard Configuration"
+  },
+  {
+   "default": "10.10.0.1",
+   "fieldname": "wg_server_ip",
+   "fieldtype": "Data",
+   "label": "WG Server IP"
+  },
+  {
+   "default": "10.10.0.0/24",
+   "fieldname": "wg_subnet",
+   "fieldtype": "Data",
+   "label": "WG Subnet"
+  },
+  {
+   "default": "51820",
+   "fieldname": "wg_server_port",
+   "fieldtype": "Int",
+   "label": "WG Server Port"
+  },
+  {
+   "fieldname": "column_break_wg",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "wg_server_public_key",
+   "fieldtype": "Data",
+   "label": "WG Server Public Key"
+  },
+  {
+   "fieldname": "wg_server_endpoint",
+   "fieldtype": "Data",
+   "label": "WG Server Endpoint"
+  },
+  {
+   "default": "2",
+   "fieldname": "next_wg_ip",
+   "fieldtype": "Int",
+   "label": "Next WG IP"
+  },
+  {
+   "fieldname": "resource_section",
+   "fieldtype": "Section Break",
+   "label": "Container Resource Limits"
+  },
+  {
+   "default": "512m",
+   "description": "Docker memory limit per container (e.g., 512m, 1g, 2g)",
+   "fieldname": "container_memory_limit",
+   "fieldtype": "Data",
+   "label": "Memory Limit"
+  },
+  {
+   "fieldname": "column_break_resource",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "100000",
+   "description": "Docker CPU quota in microseconds (100000 = 1 core)",
+   "fieldname": "container_cpu_quota",
+   "fieldtype": "Int",
+   "label": "CPU Quota"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "issingle": 1,
+ "links": [],
+ "modified": "2026-03-17 22:52:37.032832",
+ "modified_by": "Administrator",
+ "module": "Benchpress",
+ "name": "BenchPress Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

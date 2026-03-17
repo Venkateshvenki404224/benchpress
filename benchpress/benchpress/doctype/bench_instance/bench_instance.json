@@ -1,0 +1,201 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "field:bench_name",
+ "creation": "2026-03-17 22:40:22.020242",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "bench_name",
+  "frappe_version",
+  "column_break_basic",
+  "domain",
+  "status",
+  "container_section",
+  "container_id",
+  "container_image",
+  "column_break_container",
+  "started_at",
+  "admin_password",
+  "stats_section",
+  "cpu_usage",
+  "column_break_stats",
+  "memory_usage",
+  "wireguard_section",
+  "wg_ip",
+  "wg_public_key",
+  "column_break_wg",
+  "wg_private_key",
+  "wg_config",
+  "apps_section",
+  "apps",
+  "lab"
+ ],
+ "fields": [
+  {
+   "fieldname": "bench_name",
+   "fieldtype": "Data",
+   "label": "Bench Name",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "frappe_version",
+   "fieldtype": "Select",
+   "label": "Frappe Version",
+   "options": "version-15\nversion-14\nversion-16\ndevelop",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_basic",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "domain",
+   "fieldtype": "Data",
+   "label": "Domain",
+   "reqd": 1
+  },
+  {
+   "default": "Draft",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Status",
+   "options": "Draft\nDeploying\nRunning\nStopped\nError",
+   "read_only": 1
+  },
+  {
+   "fieldname": "container_section",
+   "fieldtype": "Section Break",
+   "label": "Container Details"
+  },
+  {
+   "fieldname": "container_id",
+   "fieldtype": "Data",
+   "label": "Container ID",
+   "read_only": 1
+  },
+  {
+   "fieldname": "container_image",
+   "fieldtype": "Data",
+   "label": "Container Image",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_container",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "started_at",
+   "fieldtype": "Datetime",
+   "label": "Started At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "admin_password",
+   "fieldtype": "Password",
+   "label": "Admin Password"
+  },
+  {
+   "fieldname": "stats_section",
+   "fieldtype": "Section Break",
+   "label": "Resource Usage"
+  },
+  {
+   "fieldname": "cpu_usage",
+   "fieldtype": "Float",
+   "label": "CPU Usage (%)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_stats",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "memory_usage",
+   "fieldtype": "Float",
+   "label": "Memory Usage (%)",
+   "read_only": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "wireguard_section",
+   "fieldtype": "Section Break",
+   "label": "WireGuard VPN"
+  },
+  {
+   "fieldname": "wg_ip",
+   "fieldtype": "Data",
+   "label": "WireGuard IP",
+   "read_only": 1
+  },
+  {
+   "fieldname": "wg_public_key",
+   "fieldtype": "Data",
+   "label": "WG Public Key",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_wg",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "wg_private_key",
+   "fieldtype": "Password",
+   "label": "WG Private Key"
+  },
+  {
+   "fieldname": "wg_config",
+   "fieldtype": "Code",
+   "label": "WG Config",
+   "read_only": 1
+  },
+  {
+   "fieldname": "apps_section",
+   "fieldtype": "Section Break",
+   "label": "Apps"
+  },
+  {
+   "fieldname": "apps",
+   "fieldtype": "Table",
+   "label": "Apps",
+   "options": "Bench App"
+  },
+  {
+   "fieldname": "lab",
+   "fieldtype": "Link",
+   "label": "Lab",
+   "options": "Lab"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-03-18 00:39:18.338472",
+ "modified_by": "Administrator",
+ "module": "Benchpress",
+ "name": "Bench Instance",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}
