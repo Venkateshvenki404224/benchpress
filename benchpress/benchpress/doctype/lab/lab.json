@@ -1,0 +1,165 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "field:lab_id",
+ "creation": "2026-03-17 23:56:41.599042",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "lab_id",
+  "title",
+  "column_break_basic",
+  "frappe_version",
+  "status",
+  "description",
+  "image_section",
+  "image_tag",
+  "resources_section",
+  "memory_limit",
+  "column_break_resources",
+  "cpu_cores",
+  "apps_section",
+  "apps",
+  "build_log_section",
+  "build_log_html",
+  "build_log"
+ ],
+ "fields": [
+  {
+   "fieldname": "lab_id",
+   "fieldtype": "Data",
+   "label": "Lab ID",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "title",
+   "fieldtype": "Data",
+   "label": "Title",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_basic",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "frappe_version",
+   "fieldtype": "Select",
+   "label": "Frappe Version",
+   "options": "version-15\nversion-14\nversion-16\ndevelop",
+   "reqd": 1
+  },
+  {
+   "default": "Draft",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Status",
+   "options": "Draft\nBuilding\nReady\nError"
+  },
+  {
+   "fieldname": "description",
+   "fieldtype": "Small Text",
+   "label": "Description"
+  },
+  {
+   "fieldname": "image_section",
+   "fieldtype": "Section Break",
+   "label": "Docker Image"
+  },
+  {
+   "fieldname": "image_tag",
+   "fieldtype": "Data",
+   "label": "Image Tag",
+   "read_only": 1
+  },
+  {
+   "fieldname": "resources_section",
+   "fieldtype": "Section Break",
+   "label": "Resource Limits"
+  },
+  {
+   "default": "512m",
+   "fieldname": "memory_limit",
+   "fieldtype": "Data",
+   "label": "Memory Limit"
+  },
+  {
+   "fieldname": "column_break_resources",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "1",
+   "fieldname": "cpu_cores",
+   "fieldtype": "Int",
+   "label": "CPU Cores"
+  },
+  {
+   "fieldname": "apps_section",
+   "fieldtype": "Section Break",
+   "label": "Apps"
+  },
+  {
+   "fieldname": "apps",
+   "fieldtype": "Table",
+   "label": "Apps",
+   "options": "Lab App"
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "build_log_section",
+   "fieldtype": "Section Break",
+   "label": "Build Log"
+  },
+  {
+   "fieldname": "build_log_html",
+   "fieldtype": "HTML",
+   "label": "Build Log"
+  },
+  {
+   "fieldname": "build_log",
+   "fieldtype": "Code",
+   "label": "Raw Build Log",
+   "options": "Shell",
+   "read_only": 1
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "links": [
+  {
+   "link_doctype": "Build Log",
+   "link_fieldname": "lab"
+  },
+  {
+   "link_doctype": "Bench Instance",
+   "link_fieldname": "lab"
+  }
+ ],
+ "modified": "2026-03-18 00:39:18.027821",
+ "modified_by": "Administrator",
+ "module": "Benchpress",
+ "name": "Lab",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}
