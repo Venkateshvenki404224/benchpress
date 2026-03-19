@@ -92,7 +92,12 @@ PostDown = iptables -D FORWARD -i %i -j ACCEPT; iptables -D FORWARD -o %i -j ACC
 """
 
 	subprocess.run(
-		["sudo", "bash", "-c", f"echo '{config}' > /etc/wireguard/wg0.conf && chmod 600 /etc/wireguard/wg0.conf"],
+		[
+			"sudo",
+			"bash",
+			"-c",
+			f"echo '{config}' > /etc/wireguard/wg0.conf && chmod 600 /etc/wireguard/wg0.conf",
+		],
 		check=True,
 		capture_output=True,
 	)
@@ -146,9 +151,24 @@ def setup_wg_routing(wg_ip: str, container_id: str) -> None:
 	for port in ["22", "8000", "9000"]:
 		subprocess.run(
 			[
-				"sudo", "iptables", "-t", "nat", "-A", "PREROUTING",
-				"-i", "wg0", "-d", wg_ip, "-p", "tcp", "--dport", port,
-				"-j", "DNAT", "--to-destination", f"{docker_ip}:{port}",
+				"sudo",
+				"iptables",
+				"-t",
+				"nat",
+				"-A",
+				"PREROUTING",
+				"-i",
+				"wg0",
+				"-d",
+				wg_ip,
+				"-p",
+				"tcp",
+				"--dport",
+				port,
+				"-j",
+				"DNAT",
+				"--to-destination",
+				f"{docker_ip}:{port}",
 			],
 			check=True,
 			capture_output=True,
@@ -167,9 +187,24 @@ def remove_wg_routing(wg_ip: str, container_id: str) -> None:
 	for port in ["22", "8000", "9000"]:
 		subprocess.run(
 			[
-				"sudo", "iptables", "-t", "nat", "-D", "PREROUTING",
-				"-i", "wg0", "-d", wg_ip, "-p", "tcp", "--dport", port,
-				"-j", "DNAT", "--to-destination", f"{docker_ip}:{port}",
+				"sudo",
+				"iptables",
+				"-t",
+				"nat",
+				"-D",
+				"PREROUTING",
+				"-i",
+				"wg0",
+				"-d",
+				wg_ip,
+				"-p",
+				"tcp",
+				"--dport",
+				port,
+				"-j",
+				"DNAT",
+				"--to-destination",
+				f"{docker_ip}:{port}",
 			],
 			capture_output=True,
 		)

@@ -87,7 +87,9 @@ def deploy_bench(bench_name: str) -> None:
 			frappe.db.commit()
 
 			log_deploy(bench_name, f"Building lab image for {lab.title}...")
-			_build_lab_with_logs(lab, bench.site_name, admin_password, lambda msg: log_deploy(bench_name, msg))
+			_build_lab_with_logs(
+				lab, bench.site_name, admin_password, lambda msg: log_deploy(bench_name, msg)
+			)
 		else:
 			log_deploy(bench_name, f"Using cached lab image: {lab.image_tag}")
 

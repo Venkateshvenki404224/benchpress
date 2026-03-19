@@ -17,9 +17,7 @@ def get_lab_template_dir() -> str:
 	return os.path.join(app_path, "lab-templates")
 
 
-def build_lab_image(
-	lab_doc, site_name: str, admin_password: str, log_fn=None, no_cache: bool = False
-) -> str:
+def build_lab_image(lab_doc, site_name: str, admin_password: str, log_fn=None, no_cache: bool = False) -> str:
 	"""Build Docker image with bench + apps + site baked in via layered Dockerfile.
 
 	Layer caching means only changed layers rebuild:
@@ -35,10 +33,7 @@ def build_lab_image(
 	image_tag = f"benchpress/{lab_doc.lab_id}:latest"
 	version_branch = lab_doc.frappe_version
 
-	apps = [
-		{"app_name": a.app_name, "git_url": a.git_url, "branch": a.branch}
-		for a in lab_doc.apps
-	]
+	apps = [{"app_name": a.app_name, "git_url": a.git_url, "branch": a.branch} for a in lab_doc.apps]
 
 	build_args = {
 		"FRAPPE_BRANCH": version_branch,
