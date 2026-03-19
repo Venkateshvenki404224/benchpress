@@ -59,3 +59,20 @@ def remove_peer_from_server(public_key: str) -> None:
 		check=True,
 		capture_output=True,
 	)
+
+
+@frappe.whitelist()
+def setup_wg_server():
+	"""Generate WireGuard server keys and save to BenchPress Settings."""
+	settings = frappe.get_doc("BenchPress Settings")
+
+	if settings.wg_server_public_key:
+		frappe.throw(_("WireGuard server is already configured"))
+
+	keypair = generate_keypair()
+	settings.wg_server_private_key = keypair["private_key"]
+	settings.wg_server_public_key = keypair["public_key"]
+	settings.save(ignore_permissions=True)
+	frappe.db.commit()
+
+	return {"public_key": keypair["public_key"]}
