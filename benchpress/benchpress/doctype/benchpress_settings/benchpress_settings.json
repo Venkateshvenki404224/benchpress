@@ -23,7 +23,8 @@
   "resource_section",
   "container_memory_limit",
   "column_break_resource",
-  "container_cpu_quota"
+  "container_cpu_quota",
+  "wg_server_private_key"
  ],
  "fields": [
   {
@@ -125,13 +126,18 @@
    "fieldname": "container_cpu_quota",
    "fieldtype": "Int",
    "label": "CPU Quota"
+  },
+  {
+   "fieldname": "wg_server_private_key",
+   "fieldtype": "Password",
+   "label": "WG Server Private Key"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2026-03-17 22:52:37.032832",
+ "modified": "2026-03-20 00:51:45.245516",
  "modified_by": "Administrator",
  "module": "Benchpress",
  "name": "BenchPress Settings",
