@@ -1,12 +1,11 @@
 export default [
 	{
-		path: '/login',
-		name: 'Login',
-		component: () =>
-			import(/* webpackChunkName: "login" */ '../views/Login.vue'),
+		path: "/login",
+		name: "Login",
+		component: () => import(/* webpackChunkName: "login" */ "../views/Login.vue"),
 		meta: {
-			isLoginPage: true
+			isLoginPage: true,
 		},
-		props: true
-	}
-]
+		props: true,
+	},
+];

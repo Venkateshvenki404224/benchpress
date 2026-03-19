@@ -1,8 +1,8 @@
-import './index.css';
+import "./index.css";
 import { createApp, reactive } from "vue";
 import App from "./App.vue";
 
-import router from './router';
+import router from "./router";
 import resourceManager from "../../../doppio/libs/resourceManager";
 import call from "../../../doppio/libs/controllers/call";
 import socket from "../../../doppio/libs/controllers/socket";
@@ -21,20 +21,19 @@ app.provide("$auth", auth);
 app.provide("$call", call);
 app.provide("$socket", socket);
 
-
 // Configure route gaurds
 router.beforeEach(async (to, from, next) => {
 	if (to.matched.some((record) => !record.meta.isLoginPage)) {
 		// this route requires auth, check if logged in
 		// if not, redirect to login page.
 		if (!auth.isLoggedIn) {
-			next({ name: 'Login', query: { route: to.path } });
+			next({ name: "Login", query: { route: to.path } });
 		} else {
 			next();
 		}
 	} else {
 		if (auth.isLoggedIn) {
-			next({ name: 'Home' });
+			next({ name: "Home" });
 		} else {
 			next();
 		}

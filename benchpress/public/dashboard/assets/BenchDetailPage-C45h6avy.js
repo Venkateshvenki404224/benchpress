@@ -1,1 +1,372 @@
-import{D as e,S as t,a as n,c as r,d as i,g as a,m as o,o as s,q as c,s as l,t as u,u as d,v as f,w as p}from"./asyncToGenerator-xMs8Wj7k.js";import{n as m,t as h}from"./index-ifQeZ2Ak.js";import{t as g}from"./GlassCard--GH8BpzT.js";import{t as _}from"./StatusDot-NHL9V5FS.js";import{t as v}from"./StatBar-BG9jHiRY.js";var y={key:0,class:`animate-fade-up`},b={class:`flex items-center justify-between mb-8`},x={class:`flex items-center gap-3`},S={class:`text-2xl font-bold text-bp-text`},C={class:`flex items-center gap-3 text-sm text-bp-dim mt-1`},w={class:`px-1.5 py-0.5 rounded bg-white/5`},T={key:0},E={class:`flex gap-2`},D={class:`grid grid-cols-1 md:grid-cols-4 gap-4 mb-8`},O={class:`text-bp-text font-mono text-sm`},k={class:`text-bp-text text-sm font-medium`},A={class:`bg-black/30 rounded-lg p-3 font-mono text-xs text-bp-muted mb-3 break-all whitespace-pre-wrap`},j={key:1,class:`text-bp-muted text-center py-12`},M={__name:`BenchDetailPage`,setup(M){let N=o(`$call`),P=h(),F=m(),I=e(null);function L(){return R.apply(this,arguments)}function R(){return R=u(function*(){try{I.value=yield N(`benchpress.api.get_bench`,{bench_name:P.params.id})}catch(e){console.error(`Failed to fetch bench:`,e)}}),R.apply(this,arguments)}function z(e){return B.apply(this,arguments)}function B(){return B=u(function*(e){try{yield N(`benchpress.api.bench_action`,{bench_name:I.value.name,action:e}),yield L()}catch(t){console.error(`Action ${e} failed:`,t)}}),B.apply(this,arguments)}function V(){let e=new Blob([I.value.wg_config],{type:`text/plain`}),t=URL.createObjectURL(e),n=document.createElement(`a`);n.href=t,n.download=`${I.value.bench_name||I.value.name}.conf`,n.click(),URL.revokeObjectURL(t)}function H(){navigator.clipboard.writeText(I.value.wg_config)}function U(){return W.apply(this,arguments)}function W(){return W=u(function*(){if(confirm(`Are you sure? This will permanently delete the bench and all its data.`))try{yield N(`benchpress.api.bench_action`,{bench_name:I.value.name,action:`delete`}),F.push(`/dashboard/benches`)}catch(e){console.error(`Delete failed:`,e)}}),W.apply(this,arguments)}return a(L),(e,a)=>{var o;let u=t(`router-link`);return I.value?(f(),r(`div`,y,[i(u,{to:`/dashboard/benches`,class:`text-bp-muted hover:text-bp-text text-sm mb-6 inline-flex items-center gap-1`},{default:p(()=>[...a[3]||(a[3]=[d(` ← Back to Benches `,-1)])]),_:1}),n(`div`,b,[n(`div`,x,[i(_,{status:((o=I.value.status)==null?void 0:o.toLowerCase())||`stopped`},null,8,[`status`]),n(`div`,null,[n(`h1`,S,c(I.value.bench_name||I.value.name),1),n(`div`,C,[n(`span`,w,c(I.value.frappe_version||`v15`),1),I.value.lab?(f(),r(`span`,T,`Lab: `+c(I.value.lab),1)):l(``,!0)])])]),n(`div`,E,[I.value.status===`Stopped`?(f(),r(`button`,{key:0,onClick:a[0]||(a[0]=e=>z(`start`)),class:`btn-primary`},`Start`)):l(``,!0),I.value.status===`Running`?(f(),r(`button`,{key:1,onClick:a[1]||(a[1]=e=>z(`restart`)),class:`btn-secondary`},`Restart`)):l(``,!0),I.value.status===`Running`?(f(),r(`button`,{key:2,onClick:a[2]||(a[2]=e=>z(`stop`)),class:`btn-secondary`},`Stop`)):l(``,!0)])]),n(`div`,D,[i(g,{class:`!p-4`},{default:p(()=>[a[4]||(a[4]=n(`p`,{class:`text-bp-dim text-xs mb-2`},`CPU Usage`,-1)),i(v,{label:``,value:I.value.cpu_usage||0},null,8,[`value`])]),_:1}),i(g,{class:`!p-4`},{default:p(()=>[a[5]||(a[5]=n(`p`,{class:`text-bp-dim text-xs mb-2`},`Memory`,-1)),i(v,{label:``,value:I.value.memory_usage||0,color:`cyan`},null,8,[`value`])]),_:1}),i(g,{class:`!p-4`},{default:p(()=>[a[6]||(a[6]=n(`p`,{class:`text-bp-dim text-xs mb-2`},`WireGuard IP`,-1)),n(`p`,O,c(I.value.wg_ip||`Not configured`),1)]),_:1}),i(g,{class:`!p-4`},{default:p(()=>[a[7]||(a[7]=n(`p`,{class:`text-bp-dim text-xs mb-2`},`Status`,-1)),n(`p`,k,c(I.value.status),1)]),_:1})]),I.value.wg_config?(f(),s(g,{key:0,class:`mb-6`},{default:p(()=>[a[8]||(a[8]=n(`h3`,{class:`text-bp-text font-medium mb-3`},`VPN Access`,-1)),n(`div`,A,` ssh frappe@`+c(I.value.wg_ip),1),n(`div`,{class:`flex gap-2`},[n(`button`,{onClick:V,class:`btn-primary text-xs`},`Download .conf`),n(`button`,{onClick:H,class:`btn-secondary text-xs`},`Copy Config`)])]),_:1})):l(``,!0),i(g,{class:`!border-bp-red/20`},{default:p(()=>[a[9]||(a[9]=n(`h3`,{class:`text-bp-red font-medium mb-3`},`Danger Zone`,-1)),a[10]||(a[10]=n(`p`,{class:`text-bp-muted text-sm mb-3`},`Permanently delete this bench and all its data.`,-1)),n(`button`,{onClick:U,class:`btn-danger text-xs`},`Delete Bench`)]),_:1})])):(f(),r(`div`,j,`Loading bench...`))}}};export{M as default};
+import {
+	D as e,
+	S as t,
+	a as n,
+	c as r,
+	d as i,
+	g as a,
+	m as o,
+	o as s,
+	q as c,
+	s as l,
+	t as u,
+	u as d,
+	v as f,
+	w as p,
+} from "./asyncToGenerator-xMs8Wj7k.js";
+import { n as m, t as h } from "./index-ifQeZ2Ak.js";
+import { t as g } from "./GlassCard--GH8BpzT.js";
+import { t as _ } from "./StatusDot-NHL9V5FS.js";
+import { t as v } from "./StatBar-BG9jHiRY.js";
+var y = { key: 0, class: `animate-fade-up` },
+	b = { class: `flex items-center justify-between mb-8` },
+	x = { class: `flex items-center gap-3` },
+	S = { class: `text-2xl font-bold text-bp-text` },
+	C = { class: `flex items-center gap-3 text-sm text-bp-dim mt-1` },
+	w = { class: `px-1.5 py-0.5 rounded bg-white/5` },
+	T = { key: 0 },
+	E = { class: `flex gap-2` },
+	D = { class: `grid grid-cols-1 md:grid-cols-4 gap-4 mb-8` },
+	O = { class: `text-bp-text font-mono text-sm` },
+	k = { class: `text-bp-text text-sm font-medium` },
+	A = {
+		class: `bg-black/30 rounded-lg p-3 font-mono text-xs text-bp-muted mb-3 break-all whitespace-pre-wrap`,
+	},
+	j = { key: 1, class: `text-bp-muted text-center py-12` },
+	M = {
+		__name: `BenchDetailPage`,
+		setup(M) {
+			let N = o(`$call`),
+				P = h(),
+				F = m(),
+				I = e(null);
+			function L() {
+				return R.apply(this, arguments);
+			}
+			function R() {
+				return (
+					(R = u(function* () {
+						try {
+							I.value = yield N(`benchpress.api.get_bench`, {
+								bench_name: P.params.id,
+							});
+						} catch (e) {
+							console.error(`Failed to fetch bench:`, e);
+						}
+					})),
+					R.apply(this, arguments)
+				);
+			}
+			function z(e) {
+				return B.apply(this, arguments);
+			}
+			function B() {
+				return (
+					(B = u(function* (e) {
+						try {
+							yield N(`benchpress.api.bench_action`, {
+								bench_name: I.value.name,
+								action: e,
+							}),
+								yield L();
+						} catch (t) {
+							console.error(`Action ${e} failed:`, t);
+						}
+					})),
+					B.apply(this, arguments)
+				);
+			}
+			function V() {
+				let e = new Blob([I.value.wg_config], { type: `text/plain` }),
+					t = URL.createObjectURL(e),
+					n = document.createElement(`a`);
+				(n.href = t),
+					(n.download = `${I.value.bench_name || I.value.name}.conf`),
+					n.click(),
+					URL.revokeObjectURL(t);
+			}
+			function H() {
+				navigator.clipboard.writeText(I.value.wg_config);
+			}
+			function U() {
+				return W.apply(this, arguments);
+			}
+			function W() {
+				return (
+					(W = u(function* () {
+						if (
+							confirm(
+								`Are you sure? This will permanently delete the bench and all its data.`
+							)
+						)
+							try {
+								yield N(`benchpress.api.bench_action`, {
+									bench_name: I.value.name,
+									action: `delete`,
+								}),
+									F.push(`/dashboard/benches`);
+							} catch (e) {
+								console.error(`Delete failed:`, e);
+							}
+					})),
+					W.apply(this, arguments)
+				);
+			}
+			return (
+				a(L),
+				(e, a) => {
+					var o;
+					let u = t(`router-link`);
+					return I.value
+						? (f(),
+						  r(`div`, y, [
+								i(
+									u,
+									{
+										to: `/dashboard/benches`,
+										class: `text-bp-muted hover:text-bp-text text-sm mb-6 inline-flex items-center gap-1`,
+									},
+									{
+										default: p(() => [
+											...(a[3] || (a[3] = [d(` ← Back to Benches `, -1)])),
+										]),
+										_: 1,
+									}
+								),
+								n(`div`, b, [
+									n(`div`, x, [
+										i(
+											_,
+											{
+												status:
+													((o = I.value.status) == null
+														? void 0
+														: o.toLowerCase()) || `stopped`,
+											},
+											null,
+											8,
+											[`status`]
+										),
+										n(`div`, null, [
+											n(`h1`, S, c(I.value.bench_name || I.value.name), 1),
+											n(`div`, C, [
+												n(
+													`span`,
+													w,
+													c(I.value.frappe_version || `v15`),
+													1
+												),
+												I.value.lab
+													? (f(),
+													  r(`span`, T, `Lab: ` + c(I.value.lab), 1))
+													: l(``, !0),
+											]),
+										]),
+									]),
+									n(`div`, E, [
+										I.value.status === `Stopped`
+											? (f(),
+											  r(
+													`button`,
+													{
+														key: 0,
+														onClick:
+															a[0] || (a[0] = (e) => z(`start`)),
+														class: `btn-primary`,
+													},
+													`Start`
+											  ))
+											: l(``, !0),
+										I.value.status === `Running`
+											? (f(),
+											  r(
+													`button`,
+													{
+														key: 1,
+														onClick:
+															a[1] || (a[1] = (e) => z(`restart`)),
+														class: `btn-secondary`,
+													},
+													`Restart`
+											  ))
+											: l(``, !0),
+										I.value.status === `Running`
+											? (f(),
+											  r(
+													`button`,
+													{
+														key: 2,
+														onClick: a[2] || (a[2] = (e) => z(`stop`)),
+														class: `btn-secondary`,
+													},
+													`Stop`
+											  ))
+											: l(``, !0),
+									]),
+								]),
+								n(`div`, D, [
+									i(
+										g,
+										{ class: `!p-4` },
+										{
+											default: p(() => [
+												a[4] ||
+													(a[4] = n(
+														`p`,
+														{ class: `text-bp-dim text-xs mb-2` },
+														`CPU Usage`,
+														-1
+													)),
+												i(
+													v,
+													{ label: ``, value: I.value.cpu_usage || 0 },
+													null,
+													8,
+													[`value`]
+												),
+											]),
+											_: 1,
+										}
+									),
+									i(
+										g,
+										{ class: `!p-4` },
+										{
+											default: p(() => [
+												a[5] ||
+													(a[5] = n(
+														`p`,
+														{ class: `text-bp-dim text-xs mb-2` },
+														`Memory`,
+														-1
+													)),
+												i(
+													v,
+													{
+														label: ``,
+														value: I.value.memory_usage || 0,
+														color: `cyan`,
+													},
+													null,
+													8,
+													[`value`]
+												),
+											]),
+											_: 1,
+										}
+									),
+									i(
+										g,
+										{ class: `!p-4` },
+										{
+											default: p(() => [
+												a[6] ||
+													(a[6] = n(
+														`p`,
+														{ class: `text-bp-dim text-xs mb-2` },
+														`WireGuard IP`,
+														-1
+													)),
+												n(`p`, O, c(I.value.wg_ip || `Not configured`), 1),
+											]),
+											_: 1,
+										}
+									),
+									i(
+										g,
+										{ class: `!p-4` },
+										{
+											default: p(() => [
+												a[7] ||
+													(a[7] = n(
+														`p`,
+														{ class: `text-bp-dim text-xs mb-2` },
+														`Status`,
+														-1
+													)),
+												n(`p`, k, c(I.value.status), 1),
+											]),
+											_: 1,
+										}
+									),
+								]),
+								I.value.wg_config
+									? (f(),
+									  s(
+											g,
+											{ key: 0, class: `mb-6` },
+											{
+												default: p(() => [
+													a[8] ||
+														(a[8] = n(
+															`h3`,
+															{
+																class: `text-bp-text font-medium mb-3`,
+															},
+															`VPN Access`,
+															-1
+														)),
+													n(
+														`div`,
+														A,
+														` ssh frappe@` + c(I.value.wg_ip),
+														1
+													),
+													n(`div`, { class: `flex gap-2` }, [
+														n(
+															`button`,
+															{
+																onClick: V,
+																class: `btn-primary text-xs`,
+															},
+															`Download .conf`
+														),
+														n(
+															`button`,
+															{
+																onClick: H,
+																class: `btn-secondary text-xs`,
+															},
+															`Copy Config`
+														),
+													]),
+												]),
+												_: 1,
+											}
+									  ))
+									: l(``, !0),
+								i(
+									g,
+									{ class: `!border-bp-red/20` },
+									{
+										default: p(() => [
+											a[9] ||
+												(a[9] = n(
+													`h3`,
+													{ class: `text-bp-red font-medium mb-3` },
+													`Danger Zone`,
+													-1
+												)),
+											a[10] ||
+												(a[10] = n(
+													`p`,
+													{ class: `text-bp-muted text-sm mb-3` },
+													`Permanently delete this bench and all its data.`,
+													-1
+												)),
+											n(
+												`button`,
+												{ onClick: U, class: `btn-danger text-xs` },
+												`Delete Bench`
+											),
+										]),
+										_: 1,
+									}
+								),
+						  ]))
+						: (f(), r(`div`, j, `Loading bench...`));
+				}
+			);
+		},
+	};
+export { M as default };

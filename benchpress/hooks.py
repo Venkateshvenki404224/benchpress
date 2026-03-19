@@ -33,4 +33,6 @@ scheduler_events = {
 # Ignore Deploy Log links when deleting Bench Instance
 ignore_links_on_delete = ["Deploy Log", "Build Log"]
 
-website_route_rules = [{'from_route': '/dashboard/<path:app_path>', 'to_route': 'dashboard'},]
+website_route_rules = [
+	{"from_route": "/dashboard/<path:app_path>", "to_route": "dashboard"},
+]

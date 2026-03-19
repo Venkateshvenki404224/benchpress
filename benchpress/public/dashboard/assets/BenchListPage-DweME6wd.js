@@ -1,1 +1,312 @@
-import{D as e,G as t,S as n,a as r,b as i,c as a,d as o,g as s,i as c,m as l,n as u,o as d,q as f,s as p,t as m,u as h,v as g,w as _}from"./asyncToGenerator-xMs8Wj7k.js";import{t as v}from"./GlassCard--GH8BpzT.js";import{t as y}from"./StatusDot-NHL9V5FS.js";import{t as b}from"./StatBar-BG9jHiRY.js";var x={class:`animate-fade-up`},S={class:`flex items-center justify-between mb-8`},C={class:`text-bp-muted text-sm mt-1`},w={key:0,class:`text-bp-muted text-center py-12`},T={key:1,class:`text-center py-12`},E={key:2,class:`space-y-3`},D={class:`flex items-center justify-between`},O={class:`flex items-center gap-3`},k={class:`text-bp-text font-medium`},A={class:`flex items-center gap-3 text-xs text-bp-dim mt-0.5`},j={class:`px-1.5 py-0.5 rounded bg-white/5`},M={key:0},N={key:1},P={class:`flex items-center gap-6`},F={class:`w-24 hidden sm:block`},I={class:`w-24 hidden sm:block`},L={__name:`BenchListPage`,setup(L){let R=l(`$call`),z=e([]),B=e(!0),V=c(()=>z.value.filter(e=>e.status===`Running`).length);function H(){return U.apply(this,arguments)}function U(){return U=m(function*(){B.value=!0;try{z.value=yield R(`benchpress.api.get_benches`)}catch(e){console.error(`Failed to fetch benches:`,e)}B.value=!1}),U.apply(this,arguments)}function W(e){let t={Running:`bg-bp-green/10 text-bp-green`,Stopped:`bg-white/5 text-bp-muted`,Deploying:`bg-bp-amber/10 text-bp-amber`,Error:`bg-bp-red/10 text-bp-red`,Draft:`bg-white/5 text-bp-dim`};return t[e]||t.Draft}return s(H),(e,s)=>{let c=n(`router-link`);return g(),a(`div`,x,[r(`div`,S,[r(`div`,null,[s[0]||(s[0]=r(`h1`,{class:`text-2xl font-bold text-bp-text`},`Benches`,-1)),r(`p`,C,f(V.value)+` running · `+f(z.value.length)+` total `,1)])]),B.value?(g(),a(`div`,w,`Loading benches...`)):z.value.length===0?(g(),a(`div`,T,[s[2]||(s[2]=r(`p`,{class:`text-bp-muted mb-4`},`No benches deployed yet`,-1)),o(c,{to:`/dashboard`,class:`btn-primary`},{default:_(()=>[...s[1]||(s[1]=[h(`Go to Labs to deploy`,-1)])]),_:1})])):(g(),a(`div`,E,[(g(!0),a(u,null,i(z.value,e=>(g(),d(c,{key:e.name,to:`/dashboard/bench/${e.name}`,class:`block`},{default:_(()=>[o(v,{class:`hover:-translate-y-0.5 transition-transform`},{default:_(()=>{var n;return[r(`div`,D,[r(`div`,O,[o(y,{status:((n=e.status)==null?void 0:n.toLowerCase())||`stopped`},null,8,[`status`]),r(`div`,null,[r(`h3`,k,f(e.bench_name||e.name),1),r(`div`,A,[r(`span`,j,f(e.frappe_version||`v15`),1),e.wg_ip?(g(),a(`span`,M,f(e.wg_ip),1)):p(``,!0),e.lab?(g(),a(`span`,N,f(e.lab),1)):p(``,!0)])])]),r(`div`,P,[r(`div`,F,[o(b,{label:`CPU`,value:e.cpu_usage||0},null,8,[`value`])]),r(`div`,I,[o(b,{label:`RAM`,value:e.memory_usage||0,color:`cyan`},null,8,[`value`])]),r(`span`,{class:t([`text-xs font-medium px-2 py-1 rounded`,W(e.status)])},f(e.status),3)])])]}),_:2},1024)]),_:2},1032,[`to`]))),128))]))])}}};export{L as default};
+import {
+	D as e,
+	G as t,
+	S as n,
+	a as r,
+	b as i,
+	c as a,
+	d as o,
+	g as s,
+	i as c,
+	m as l,
+	n as u,
+	o as d,
+	q as f,
+	s as p,
+	t as m,
+	u as h,
+	v as g,
+	w as _,
+} from "./asyncToGenerator-xMs8Wj7k.js";
+import { t as v } from "./GlassCard--GH8BpzT.js";
+import { t as y } from "./StatusDot-NHL9V5FS.js";
+import { t as b } from "./StatBar-BG9jHiRY.js";
+var x = { class: `animate-fade-up` },
+	S = { class: `flex items-center justify-between mb-8` },
+	C = { class: `text-bp-muted text-sm mt-1` },
+	w = { key: 0, class: `text-bp-muted text-center py-12` },
+	T = { key: 1, class: `text-center py-12` },
+	E = { key: 2, class: `space-y-3` },
+	D = { class: `flex items-center justify-between` },
+	O = { class: `flex items-center gap-3` },
+	k = { class: `text-bp-text font-medium` },
+	A = { class: `flex items-center gap-3 text-xs text-bp-dim mt-0.5` },
+	j = { class: `px-1.5 py-0.5 rounded bg-white/5` },
+	M = { key: 0 },
+	N = { key: 1 },
+	P = { class: `flex items-center gap-6` },
+	F = { class: `w-24 hidden sm:block` },
+	I = { class: `w-24 hidden sm:block` },
+	L = {
+		__name: `BenchListPage`,
+		setup(L) {
+			let R = l(`$call`),
+				z = e([]),
+				B = e(!0),
+				V = c(() => z.value.filter((e) => e.status === `Running`).length);
+			function H() {
+				return U.apply(this, arguments);
+			}
+			function U() {
+				return (
+					(U = m(function* () {
+						B.value = !0;
+						try {
+							z.value = yield R(`benchpress.api.get_benches`);
+						} catch (e) {
+							console.error(`Failed to fetch benches:`, e);
+						}
+						B.value = !1;
+					})),
+					U.apply(this, arguments)
+				);
+			}
+			function W(e) {
+				let t = {
+					Running: `bg-bp-green/10 text-bp-green`,
+					Stopped: `bg-white/5 text-bp-muted`,
+					Deploying: `bg-bp-amber/10 text-bp-amber`,
+					Error: `bg-bp-red/10 text-bp-red`,
+					Draft: `bg-white/5 text-bp-dim`,
+				};
+				return t[e] || t.Draft;
+			}
+			return (
+				s(H),
+				(e, s) => {
+					let c = n(`router-link`);
+					return (
+						g(),
+						a(`div`, x, [
+							r(`div`, S, [
+								r(`div`, null, [
+									s[0] ||
+										(s[0] = r(
+											`h1`,
+											{ class: `text-2xl font-bold text-bp-text` },
+											`Benches`,
+											-1
+										)),
+									r(
+										`p`,
+										C,
+										f(V.value) + ` running · ` + f(z.value.length) + ` total `,
+										1
+									),
+								]),
+							]),
+							B.value
+								? (g(), a(`div`, w, `Loading benches...`))
+								: z.value.length === 0
+								? (g(),
+								  a(`div`, T, [
+										s[2] ||
+											(s[2] = r(
+												`p`,
+												{ class: `text-bp-muted mb-4` },
+												`No benches deployed yet`,
+												-1
+											)),
+										o(
+											c,
+											{ to: `/dashboard`, class: `btn-primary` },
+											{
+												default: _(() => [
+													...(s[1] ||
+														(s[1] = [h(`Go to Labs to deploy`, -1)])),
+												]),
+												_: 1,
+											}
+										),
+								  ]))
+								: (g(),
+								  a(`div`, E, [
+										(g(!0),
+										a(
+											u,
+											null,
+											i(
+												z.value,
+												(e) => (
+													g(),
+													d(
+														c,
+														{
+															key: e.name,
+															to: `/dashboard/bench/${e.name}`,
+															class: `block`,
+														},
+														{
+															default: _(() => [
+																o(
+																	v,
+																	{
+																		class: `hover:-translate-y-0.5 transition-transform`,
+																	},
+																	{
+																		default: _(() => {
+																			var n;
+																			return [
+																				r(`div`, D, [
+																					r(`div`, O, [
+																						o(
+																							y,
+																							{
+																								status:
+																									((n =
+																										e.status) ==
+																									null
+																										? void 0
+																										: n.toLowerCase()) ||
+																									`stopped`,
+																							},
+																							null,
+																							8,
+																							[
+																								`status`,
+																							]
+																						),
+																						r(
+																							`div`,
+																							null,
+																							[
+																								r(
+																									`h3`,
+																									k,
+																									f(
+																										e.bench_name ||
+																											e.name
+																									),
+																									1
+																								),
+																								r(
+																									`div`,
+																									A,
+																									[
+																										r(
+																											`span`,
+																											j,
+																											f(
+																												e.frappe_version ||
+																													`v15`
+																											),
+																											1
+																										),
+																										e.wg_ip
+																											? (g(),
+																											  a(
+																													`span`,
+																													M,
+																													f(
+																														e.wg_ip
+																													),
+																													1
+																											  ))
+																											: p(
+																													``,
+																													!0
+																											  ),
+																										e.lab
+																											? (g(),
+																											  a(
+																													`span`,
+																													N,
+																													f(
+																														e.lab
+																													),
+																													1
+																											  ))
+																											: p(
+																													``,
+																													!0
+																											  ),
+																									]
+																								),
+																							]
+																						),
+																					]),
+																					r(`div`, P, [
+																						r(
+																							`div`,
+																							F,
+																							[
+																								o(
+																									b,
+																									{
+																										label: `CPU`,
+																										value:
+																											e.cpu_usage ||
+																											0,
+																									},
+																									null,
+																									8,
+																									[
+																										`value`,
+																									]
+																								),
+																							]
+																						),
+																						r(
+																							`div`,
+																							I,
+																							[
+																								o(
+																									b,
+																									{
+																										label: `RAM`,
+																										value:
+																											e.memory_usage ||
+																											0,
+																										color: `cyan`,
+																									},
+																									null,
+																									8,
+																									[
+																										`value`,
+																									]
+																								),
+																							]
+																						),
+																						r(
+																							`span`,
+																							{
+																								class: t(
+																									[
+																										`text-xs font-medium px-2 py-1 rounded`,
+																										W(
+																											e.status
+																										),
+																									]
+																								),
+																							},
+																							f(
+																								e.status
+																							),
+																							3
+																						),
+																					]),
+																				]),
+																			];
+																		}),
+																		_: 2,
+																	},
+																	1024
+																),
+															]),
+															_: 2,
+														},
+														1032,
+														[`to`]
+													)
+												)
+											),
+											128
+										)),
+								  ])),
+						])
+					);
+				}
+			);
+		},
+	};
+export { L as default };
