@@ -7,7 +7,6 @@ import os
 import subprocess
 
 import docker
-import docker as docker_lib
 import frappe
 from frappe import _
 
@@ -88,12 +87,12 @@ def create_bench_container(bench_doc, lab_doc) -> str:
 	# Ensure benchpress network exists
 	try:
 		client.networks.get("benchpress")
-	except docker_lib.errors.NotFound:
+	except docker.errors.NotFound:
 		client.networks.create(
 			"benchpress",
 			driver="bridge",
-			ipam=docker_lib.types.IPAMConfig(
-				pool_configs=[docker_lib.types.IPAMPool(subnet="172.30.0.0/24")]
+			ipam=docker.types.IPAMConfig(
+				pool_configs=[docker.types.IPAMPool(subnet="172.30.0.0/24")]
 			),
 		)
 

@@ -13,7 +13,6 @@ from benchpress.docker_manager import (
 	exec_in_container,
 	start_container,
 	stop_container,
-	write_file_to_container,
 )
 
 
@@ -225,7 +224,7 @@ def stop_bench(bench_name: str) -> None:
 
 			remove_wg_routing(bench.wg_ip, bench.container_id)
 		except Exception:
-			pass
+			frappe.log_error(title=f"WG routing cleanup failed: {bench_name}")
 
 	if bench.container_id:
 		stop_container(bench.container_id)

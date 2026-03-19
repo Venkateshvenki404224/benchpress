@@ -33,4 +33,4 @@ class BenchInstance(Document):
 
 				remove_wg_routing(self.wg_ip, self.container_id)
 			except Exception:
-				pass
+				frappe.log_error(title=f"WG routing cleanup failed: {self.name}")
