@@ -91,9 +91,7 @@ def create_bench_container(bench_doc, lab_doc) -> str:
 		client.networks.create(
 			"benchpress",
 			driver="bridge",
-			ipam=docker.types.IPAMConfig(
-				pool_configs=[docker.types.IPAMPool(subnet="172.30.0.0/24")]
-			),
+			ipam=docker.types.IPAMConfig(pool_configs=[docker.types.IPAMPool(subnet="172.30.0.0/24")]),
 		)
 
 	name = bench_doc.bench_name
