@@ -17,8 +17,8 @@ add_to_apps_screen = [
 
 # Website route rules
 website_route_rules = [
-	{"from_route": "/benchpress", "to_route": "index"},
-	{"from_route": "/dashboard", "to_route": "dashboard"},
+	{"from_route": "/benchpress", "to_route": "home"},
+	{"from_route": "/dashboard/<path:app_path>", "to_route": "dashboard"},
 ]
 
 # Scheduled Tasks
@@ -32,3 +32,7 @@ scheduler_events = {
 
 # Ignore Deploy Log links when deleting Bench Instance
 ignore_links_on_delete = ["Deploy Log", "Build Log"]
+
+website_route_rules = [
+	{"from_route": "/dashboard/<path:app_path>", "to_route": "dashboard"},
+]

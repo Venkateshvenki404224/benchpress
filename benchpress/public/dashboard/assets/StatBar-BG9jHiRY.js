@@ -1,0 +1,43 @@
+import { K as e, a as t, c as n, i as r, q as i, v as a } from "./asyncToGenerator-xMs8Wj7k.js";
+var o = { class: `flex justify-between text-xs mb-1` },
+	s = { class: `text-bp-muted` },
+	c = { class: `text-bp-text font-mono` },
+	l = { class: `stat-bar` },
+	u = {
+		__name: `StatBar`,
+		props: {
+			label: String,
+			value: { type: Number, default: 0 },
+			color: { type: String, default: `green` },
+		},
+		setup(u) {
+			let d = u,
+				f = r(() =>
+					d.value > 80
+						? `#ef4444`
+						: d.value > 60
+						? `#f59e0b`
+						: d.color === `cyan`
+						? `#06b6d4`
+						: `#22c55e`
+				);
+			return (r, d) => (
+				a(),
+				n(`div`, null, [
+					t(`div`, o, [t(`span`, s, i(u.label), 1), t(`span`, c, i(u.value) + `%`, 1)]),
+					t(`div`, l, [
+						t(
+							`div`,
+							{
+								class: `stat-bar-fill`,
+								style: e({ width: u.value + `%`, backgroundColor: f.value }),
+							},
+							null,
+							4
+						),
+					]),
+				])
+			);
+		},
+	};
+export { u as t };

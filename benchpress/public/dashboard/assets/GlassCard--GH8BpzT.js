@@ -1,0 +1,22 @@
+import { G as e, c as t, v as n, x as r } from "./asyncToGenerator-xMs8Wj7k.js";
+var i = {
+	__name: `GlassCard`,
+	props: { shimmer: { type: Boolean, default: !1 } },
+	setup(i) {
+		return (a, o) => (
+			n(),
+			t(
+				`div`,
+				{
+					class: e([
+						`glass-card glass-card-glow p-6`,
+						[i.shimmer && `shimmer-border`, a.$attrs.class],
+					]),
+				},
+				[r(a.$slots, `default`)],
+				2
+			)
+		);
+	},
+};
+export { i as t };

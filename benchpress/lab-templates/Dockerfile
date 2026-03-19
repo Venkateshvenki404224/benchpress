@@ -1,85 +1,62 @@
+# syntax=docker/dockerfile:1
 ARG FRAPPE_BRANCH=version-15
 
-FROM ubuntu:24.04
+FROM frappe/build:${FRAPPE_BRANCH}
 
-ARG FRAPPE_BRANCH=version-15
-ARG APPS_JSON_BASE64
+USER root
 
 ENV DEBIAN_FRONTEND=noninteractive
-ENV PIP_BREAK_SYSTEM_PACKAGES=1
 
-# Install system dependencies for Frappe
-RUN apt-get update && apt-get install -y \
-    git curl wget sudo nano htop \
-    python3 python3-dev python3-pip python3-venv \
-    mariadb-server mariadb-client libmariadb-dev \
+# --- Layer 1: System deps (rarely changes, always cached) ---
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    mariadb-server mariadb-client \
     redis-server \
     openssh-server \
-    wireguard iproute2 \
-    node-less \
-    xvfb libfontconfig \
-    dumb-init jq \
-    build-essential \
+    sudo nano htop \
+    net-tools iproute2 wireguard-tools \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Node.js 18
-RUN curl -fsSL https://deb.nodesource.com/setup_18.x | bash - \
-    && apt-get install -y nodejs \
-    && npm install -g yarn
-
-# Install wkhtmltopdf
-RUN wget -q https://github.com/wkhtmltopdf/packaging/releases/download/0.12.6.1-3/wkhtmltox_0.12.6.1-3.jammy_amd64.deb \
-    && apt-get install -y ./wkhtmltox_0.12.6.1-3.jammy_amd64.deb \
-    && rm wkhtmltox_0.12.6.1-3.jammy_amd64.deb
-
-# Configure MariaDB - set root password with native password auth
-RUN service mariadb start \
-    && mariadb -e "SET PASSWORD FOR 'root'@'localhost' = PASSWORD('frappe');" \
-    && mariadb -e "FLUSH PRIVILEGES;" \
-    && service mariadb stop \
-    && sed -i 's/^bind-address\s*=.*/bind-address = 0.0.0.0/' /etc/mysql/mariadb.conf.d/50-server.cnf
-
-# Configure SSH
-RUN mkdir -p /var/run/sshd /etc/wireguard/clients \
-    && sed -ri 's/^#?PermitRootLogin\s+.*/PermitRootLogin no/' /etc/ssh/sshd_config
-
-# Create frappe user
-RUN adduser --disabled-password --gecos "" frappe \
-    && usermod -aG sudo frappe \
+# --- Layer 2: Service configs (rarely changes) ---
+RUN mkdir -p /run/mysqld && chown mysql:mysql /run/mysqld \
+    && mkdir -p /var/run/sshd \
+    && sed -ri 's/^#?PermitRootLogin\s+.*/PermitRootLogin no/' /etc/ssh/sshd_config \
+    && sed -ri 's/^#?PasswordAuthentication\s+.*/PasswordAuthentication yes/' /etc/ssh/sshd_config \
     && echo "frappe ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers.d/frappe
 
-# Install bench CLI
-RUN pip3 install frappe-bench
+# Copy all scripts (entry.sh, install-apps.sh, create-site.sh, setup-site.sh)
+RUN mkdir -p /opt/benchpress/scripts
+COPY scripts/ /opt/benchpress/scripts/
+RUN chmod +x /opt/benchpress/scripts/*
 
-# Switch to frappe user for bench operations
+# --- Layer 3: bench init (changes only when FRAPPE_BRANCH changes) ---
 USER frappe
-WORKDIR /home/frappe
-
-# Decode apps.json if provided
-RUN if [ -n "${APPS_JSON_BASE64}" ]; then \
-    mkdir -p /tmp/frappe && echo "${APPS_JSON_BASE64}" | base64 -d > /tmp/frappe/apps.json; \
-    fi
-
-# Initialize bench with apps
-RUN export APP_INSTALL_ARGS="" && \
-    if [ -f /tmp/frappe/apps.json ]; then \
-    export APP_INSTALL_ARGS="--apps_path=/tmp/frappe/apps.json"; \
-    fi && \
-    bench init ${APP_INSTALL_ARGS} \
-    --frappe-branch=${FRAPPE_BRANCH} \
-    --no-procfile \
+ARG FRAPPE_BRANCH
+RUN bench init --frappe-branch ${FRAPPE_BRANCH} \
     --no-backups \
+    --skip-redis-config-generation \
     --verbose \
-    frappe-bench
+    /home/frappe/frappe-bench
 
 WORKDIR /home/frappe/frappe-bench
 
-# Copy scripts
+# Write common_site_config for local MariaDB + Redis
+RUN echo '{"db_host":"127.0.0.1","db_port":3306,"redis_cache":"redis://127.0.0.1:6379","redis_queue":"redis://127.0.0.1:6379","redis_socketio":"redis://127.0.0.1:6379"}' \
+    > sites/common_site_config.json
+
+# --- Layer 4: Install apps (changes when apps list changes) ---
+ARG APPS_JSON=[]
+RUN /opt/benchpress/scripts/install-apps.sh "$APPS_JSON"
+
+# --- Layer 5: Create site (needs MariaDB + Redis running in-layer) ---
+ARG SITE_NAME=site1.localhost
+ARG ADMIN_PASSWORD=admin
+
 USER root
-RUN mkdir -p /var/labsdata/scripts
-COPY scripts/ /var/labsdata/scripts/
-RUN chmod +x /var/labsdata/scripts/*
+RUN /opt/benchpress/scripts/create-site.sh "$SITE_NAME" "$ADMIN_PASSWORD" "$APPS_JSON"
+
+USER frappe
+WORKDIR /home/frappe/frappe-bench
 
 EXPOSE 8000 9000 22
 
-CMD ["/var/labsdata/scripts/entry.sh"]
+CMD ["/opt/benchpress/scripts/entry.sh"]

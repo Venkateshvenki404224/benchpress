@@ -1,14 +1,10 @@
 # Copyright (c) 2026, Venkatesh and contributors
 # For license information, please see license.txt
 
-import base64
-import json
 import os
-import subprocess
 
 import docker
 import frappe
-from frappe import _
 
 
 def get_client() -> docker.DockerClient:
@@ -17,51 +13,48 @@ def get_client() -> docker.DockerClient:
 
 
 def get_lab_template_dir() -> str:
-	"""Returns path to the shared lab-templates directory."""
 	app_path = frappe.get_app_path("benchpress")
 	return os.path.join(app_path, "lab-templates")
 
 
-def get_apps_json(lab_doc) -> list[dict]:
-	"""Build apps.json list from Lab App child table."""
-	apps = []
-	for app in lab_doc.apps:
-		if app.app_name == "frappe":
-			continue
-		apps.append({"url": app.git_url, "branch": app.branch})
-	return apps
+def build_lab_image(lab_doc, site_name: str, admin_password: str, log_fn=None, no_cache: bool = False) -> str:
+	"""Build Docker image with bench + apps + site baked in via layered Dockerfile.
 
-
-def build_lab_image(lab_doc, log_fn=None) -> str:
-	"""Build Docker image for a lab with apps baked in.
-	Uses low-level API for realtime log streaming.
-	Returns the image tag string.
+	Layer caching means only changed layers rebuild:
+	  Layer 1: System deps (apt) — rarely changes
+	  Layer 2: Service configs — rarely changes
+	  Layer 3: bench init — changes when FRAPPE_BRANCH changes
+	  Layer 4: Apps — changes when app list changes
+	  Layer 5: Site creation — changes when site name/apps change
 	"""
+	import json
+
 	template_dir = get_lab_template_dir()
 	image_tag = f"benchpress/{lab_doc.lab_id}:latest"
 	version_branch = lab_doc.frappe_version
 
-	apps = get_apps_json(lab_doc)
-	apps_json_b64 = base64.b64encode(json.dumps(apps).encode()).decode() if apps else ""
+	apps = [{"app_name": a.app_name, "git_url": a.git_url, "branch": a.branch} for a in lab_doc.apps]
 
 	build_args = {
 		"FRAPPE_BRANCH": version_branch,
-		"APPS_JSON_BASE64": apps_json_b64,
+		"APPS_JSON": json.dumps(apps),
+		"SITE_NAME": site_name,
+		"ADMIN_PASSWORD": admin_password,
 	}
 
 	if log_fn:
-		log_fn(f"Building image {image_tag} (branch: {version_branch})...")
+		log_fn(f"Building image {image_tag} (base: frappe/build:{version_branch}, apps: {len(apps)})...")
 
 	client = get_client()
 	api_client = client.api
 
-	# Use low-level API for streaming logs during build
 	stream = api_client.build(
 		path=template_dir,
 		tag=image_tag,
 		buildargs=build_args,
 		rm=True,
 		decode=True,
+		nocache=no_cache,
 	)
 
 	for chunk in stream:
@@ -104,14 +97,14 @@ def create_bench_container(bench_doc, lab_doc) -> str:
 
 	container = client.containers.create(
 		image=lab_doc.image_tag,
-		name=f"benchpress-{name}",
+		name=name,
 		labels=labels,
 		detach=True,
 		hostname=name,
 		privileged=True,
 		cap_add=["NET_ADMIN"],
 		volumes={
-			f"benchpress-{name}-data": {"bind": "/home/frappe/frappe-bench", "mode": "rw"},
+			f"benchpress-{name}-data": {"bind": "/home/frappe", "mode": "rw"},
 		},
 		mem_limit=lab_doc.memory_limit or "512m",
 		nano_cpus=int((lab_doc.cpu_cores or 1) * 1e9),
@@ -141,14 +134,15 @@ def remove_container(container_id: str) -> None:
 	client.containers.get(container_id).remove(force=True, v=True)
 
 
-def exec_in_container(container_id: str, command: str, user: str = "frappe") -> tuple[int, str]:
-	"""Returns (exit_code, output_string)."""
+def exec_in_container(
+	container_id: str, command: str, user: str = "frappe", workdir: str = "/home/frappe"
+) -> tuple[int, str]:
 	client = get_client()
 	container = client.containers.get(container_id)
 	exit_code, output = container.exec_run(
 		cmd=["bash", "-c", command],
 		user=user,
-		workdir="/home/frappe/frappe-bench",
+		workdir=workdir,
 	)
 	return exit_code, output.decode("utf-8", errors="replace")
 

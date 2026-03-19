@@ -5,19 +5,17 @@ import secrets
 import time
 
 import frappe
-from frappe import _
 
 from benchpress.docker_manager import (
 	build_lab_image,
 	create_bench_container,
-	exec_in_container,
+	remove_container,
 	start_container,
 	stop_container,
 )
 
 
 def log_deploy(bench_name: str, message: str, log_type: str = "info") -> None:
-	"""Insert a deploy log entry and push realtime update to the browser."""
 	frappe.get_doc(
 		{
 			"doctype": "Deploy Log",
@@ -34,14 +32,47 @@ def log_deploy(bench_name: str, message: str, log_type: str = "info") -> None:
 		message={"bench": bench_name, "log": message, "type": log_type},
 		doctype="Bench Instance",
 		docname=bench_name,
+		after_commit=False,
 	)
 
 
+def _remove_stale_container(bench) -> None:
+	"""Remove any existing container and its volume (for orphaned containers)."""
+	from benchpress.docker_manager import get_client
+
+	client = get_client()
+
+	# Try by stored container_id first
+	if bench.container_id:
+		try:
+			client.containers.get(bench.container_id).remove(force=True, v=True)
+		except Exception:
+			pass
+		bench.container_id = None
+
+	# Also try by name — handles orphaned containers from failed deploys
+	try:
+		container = client.containers.get(bench.bench_name)
+		container.remove(force=True, v=True)
+	except Exception:
+		pass
+
+	# Remove the named volume so Docker repopulates it from the image on next create
+	volume_name = f"benchpress-{bench.bench_name}-data"
+	try:
+		client.volumes.get(volume_name).remove(force=True)
+	except Exception:
+		pass
+
+
 def deploy_bench(bench_name: str) -> None:
-	"""Full deployment pipeline. Runs as a background job via frappe.enqueue."""
+	"""Deploy pipeline. Image already has bench + apps + site baked in.
+
+	Step 1: Build lab image if not ready (layered Dockerfile with caching)
+	Step 2: Create and start container — everything is ready to go
+	"""
 	bench = frappe.get_doc("Bench Instance", bench_name)
 	lab = frappe.get_doc("Lab", bench.lab)
-	settings = frappe.get_cached_doc("BenchPress Settings")
 
 	try:
 		bench.status = "Deploying"
@@ -50,21 +81,21 @@ def deploy_bench(bench_name: str) -> None:
 
 		# Step 1: Build lab image if not ready
 		if lab.status != "Ready" or not lab.image_tag:
-			log_deploy(bench_name, f"Building lab image for {lab.title}...")
-			lab.status = "Building"
-			lab.save(ignore_permissions=True)
+			admin_password = secrets.token_urlsafe(16)
+			bench.admin_password = admin_password
+			bench.save(ignore_permissions=True)
 			frappe.db.commit()
 
-			image_tag = build_lab_image(lab, log_fn=lambda msg: log_deploy(bench_name, msg))
-			lab.image_tag = image_tag
-			lab.status = "Ready"
-			lab.save(ignore_permissions=True)
-			frappe.db.commit()
-			log_deploy(bench_name, f"Lab image built: {image_tag}", "success")
+			log_deploy(bench_name, f"Building lab image for {lab.title}...")
+			_build_lab_with_logs(
+				lab, bench.site_name, admin_password, lambda msg: log_deploy(bench_name, msg)
+			)
 		else:
 			log_deploy(bench_name, f"Using cached lab image: {lab.image_tag}")
 
-		# Step 2: Create container
+		# Step 2: Create and start container (remove stale container by name if exists)
+		_remove_stale_container(bench)
+
 		log_deploy(bench_name, f"Creating container (mem: {lab.memory_limit}, cpu: {lab.cpu_cores})...")
 		container_id = create_bench_container(bench, lab)
 		bench.container_id = container_id
@@ -72,11 +103,9 @@ def deploy_bench(bench_name: str) -> None:
 		bench.save(ignore_permissions=True)
 		frappe.db.commit()
 
-		# Step 3: Start container (entry.sh starts MariaDB, Redis, SSH)
 		log_deploy(bench_name, "Starting container...")
 		start_container(container_id)
-		log_deploy(bench_name, "Waiting for services to initialize...")
-		time.sleep(15)
+		time.sleep(5)
 
 		# Step 4: WireGuard VPN setup
 		if settings.wg_server_public_key and settings.wg_server_endpoint:
@@ -110,32 +139,28 @@ def deploy_bench(bench_name: str) -> None:
 			bench.wg_public_key = keys["public_key"]
 			bench.wg_config = config
 			bench.save(ignore_permissions=True)
-			frappe.db.commit()
+			frappe.db.commit()  # nosemgrep: persist WG config before SSH step
 			log_deploy(bench_name, f"VPN configured at {wg_ip}")
 		else:
 			log_deploy(bench_name, "WireGuard not configured, skipping VPN.", "warning")
 
-		# Step 5: Create Frappe site
-		admin_password = secrets.token_urlsafe(16)
-		bench.admin_password = admin_password
-		apps_csv = ",".join(a.app_name for a in lab.apps if a.app_name != "frappe")
+		# Step 5: Setup SSH user password
+		from benchpress.docker_manager import exec_in_container
 
-		log_deploy(bench_name, f"Creating site {bench.domain}...")
-		exit_code, output = exec_in_container(
+		ssh_password = secrets.token_urlsafe(12)
+		exec_in_container(
 			container_id,
-			f"bash /var/labsdata/scripts/setup-site.sh {bench.domain} {admin_password} {apps_csv}",
+			f"echo 'frappe:{ssh_password}' | sudo chpasswd",
+			user="root",
 		)
-		if exit_code != 0:
-			log_deploy(bench_name, f"Site setup warning: {output[:500]}", "warning")
-		else:
-			log_deploy(bench_name, "Site created and apps installed.")
+		log_deploy(bench_name, "SSH user 'frappe' password set.")
 
-		# Done
+		# Done — user will SSH in and run bench start
 		bench.status = "Running"
 		bench.started_at = frappe.utils.now_datetime()
 		bench.save(ignore_permissions=True)
 		frappe.db.commit()
-		log_deploy(bench_name, "Bench deployed. SSH in and run 'bench start' to access your site.", "success")
+		log_deploy(bench_name, "Bench ready! SSH in and run 'bench start'.", "success")
 
 	except Exception as e:
 		bench.reload()
@@ -149,13 +174,61 @@ def deploy_bench(bench_name: str) -> None:
 		)
 
 
+def stop_bench(bench_name: str) -> None:
+	bench = frappe.get_doc("Bench Instance", bench_name)
+	if not bench.container_id:
+		frappe.throw("No container to stop.")
+
+	stop_container(bench.container_id)
+	bench.status = "Stopped"
+	bench.save(ignore_permissions=True)
+	frappe.db.commit()
+
+
+def redeploy_bench(bench_name: str) -> None:
+	bench = frappe.get_doc("Bench Instance", bench_name)
+
+	if bench.container_id:
+		try:
+			stop_container(bench.container_id)
+		except Exception:
+			pass
+		try:
+			remove_container(bench.container_id)
+		except Exception:
+			pass
+
+	bench.container_id = None
+	bench.container_image = None
+	bench.status = "Draft"
+	bench.started_at = None
+	bench.save(ignore_permissions=True)
+	frappe.db.commit()
+
+	deploy_bench(bench_name)
+
+
+def _build_lab_with_logs(lab, site_name, admin_password, log_fn) -> None:
+	"""Build image with bench + apps + site baked in via layered Dockerfile."""
+	lab.status = "Building"
+	lab.save(ignore_permissions=True)
+	frappe.db.commit()
+
+	image_tag = build_lab_image(lab, site_name, admin_password, log_fn=log_fn)
+
+	lab.reload()
+	lab.image_tag = image_tag
+	lab.status = "Ready"
+	lab.save(ignore_permissions=True)
+	frappe.db.commit()
+	if log_fn:
+		log_fn(f"Lab image ready: {image_tag}")
+
+
 def build_lab(lab_name: str) -> None:
-	"""Build a lab image as a background job with realtime log streaming.
-	Creates a single Build Log document and appends all lines to it.
-	"""
+	"""Build a lab image as a background job with realtime log streaming."""
 	lab = frappe.get_doc("Lab", lab_name)
 
-	# Create one Build Log doc for this entire build
 	build_log = frappe.get_doc(
 		{
 			"doctype": "Build Log",
@@ -170,7 +243,6 @@ def build_lab(lab_name: str) -> None:
 	build_log_name = build_log.name
 
 	def append_log(line: str, log_type: str = "info") -> None:
-		"""Append a line to the Build Log doc and push realtime."""
 		frappe.publish_realtime(
 			event="lab_build_log",
 			message={"lab": lab_name, "log": line, "type": log_type, "build_log": build_log_name},
@@ -183,19 +255,15 @@ def build_lab(lab_name: str) -> None:
 		frappe.db.commit()
 
 	try:
-		lab.status = "Building"
-		lab.save(ignore_permissions=True)
-		frappe.db.commit()
+		# Generate a default site name and password for the baked-in site
+		from benchpress.benchpress.doctype.bench_instance import get_instance_id
 
-		image_tag = build_lab_image(lab, log_fn=append_log)
+		site_name = f"{get_instance_id('default', lab_name)}.localhost"
+		admin_password = secrets.token_urlsafe(16)
 
-		lab.reload()
-		lab.image_tag = image_tag
-		lab.status = "Ready"
-		lab.save(ignore_permissions=True)
-		frappe.db.commit()
+		_build_lab_with_logs(lab, site_name, admin_password, append_log)
 
-		append_log(f"=== Build complete: {image_tag} ===", "success")
+		append_log(f"=== Build complete: {lab.image_tag} ===", "success")
 		frappe.db.set_value("Build Log", build_log_name, "log_type", "success")
 		frappe.db.commit()
 
