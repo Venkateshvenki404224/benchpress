@@ -54,4 +54,7 @@ jspm_packages/
 # Aider AI Chat
 .aider*
 CLAUDE.md
+.claudebenchpress/public/node_modules/
+.mcp.json
+everything-claude-code/
 .claude
