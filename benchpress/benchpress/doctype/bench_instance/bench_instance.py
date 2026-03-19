@@ -1,20 +1,56 @@
 # Copyright (c) 2026, Venkatesh and contributors
 # For license information, please see license.txt
 
-import re
-
 import frappe
-from frappe import _
 from frappe.model.document import Document
+
+from benchpress.benchpress.doctype.bench_instance import get_instance_id
 
 
 class BenchInstance(Document):
-	def validate(self):
-		self.validate_bench_name()
+	def before_insert(self):
+		instance_id = get_instance_id(frappe.session.user, self.lab)
+		self.bench_name = instance_id
+		self.site_name = f"{instance_id}.localhost"
 
-	def validate_bench_name(self):
-		"""Ensure bench_name is a valid slug (lowercase alphanumeric + hyphens)."""
-		if not re.match(r"^[a-z0-9][a-z0-9-]*[a-z0-9]$", self.bench_name):
-			frappe.throw(
-				_("Bench Name must be lowercase alphanumeric with hyphens only (e.g., 'erp-production').")
-			)
+	def autoname(self):
+		self.name = self.bench_name
+
+	@frappe.whitelist()
+	def enqueue_deploy(self):
+		frappe.enqueue(
+			"benchpress.deploy_manager.deploy_bench",
+			bench_name=self.name,
+			queue="long",
+			timeout=1800,
+		)
+		frappe.msgprint("Deploy started. Watch the Deploy Log for progress.")
+
+	@frappe.whitelist()
+	def enqueue_stop(self):
+		from benchpress.deploy_manager import stop_bench
+
+		stop_bench(self.name)
+		frappe.msgprint("Bench stopped.")
+
+	@frappe.whitelist()
+	def enqueue_redeploy(self):
+		frappe.enqueue(
+			"benchpress.deploy_manager.redeploy_bench",
+			bench_name=self.name,
+			queue="long",
+			timeout=1800,
+		)
+		frappe.msgprint("Redeploy started. Watch the Deploy Log for progress.")
+
+	@frappe.whitelist()
+	def enqueue_start(self):
+		from benchpress.docker_manager import start_container
+
+		if not self.container_id:
+			frappe.throw("No container to start.")
+		start_container(self.container_id)
+		self.status = "Running"
+		self.save(ignore_permissions=True)
+		frappe.db.commit()
+		frappe.msgprint("Bench started.")
