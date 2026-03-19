@@ -1,0 +1,1 @@
+import{G as e,c as t,v as n}from"./asyncToGenerator-xMs8Wj7k.js";var r={__name:`StatusDot`,props:{status:{type:String,default:`stopped`}},setup(r){return(i,a)=>(n(),t(`span`,{class:e([`status-dot`,`status-dot-${r.status}`])},null,2))}};export{r as t};

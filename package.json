@@ -1,0 +1,24 @@
+{
+  "name": "benchpress",
+  "version": "1.0.0",
+  "description": "<div align=\"center\">",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "postinstall": "cd dashboard && yarn install",
+    "dev": "cd dashboard && yarn dev",
+    "build": "cd dashboard && yarn build"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Venkateshvenki404224/benchpress.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/Venkateshvenki404224/benchpress/issues"
+  },
+  "homepage": "https://github.com/Venkateshvenki404224/benchpress#readme"
+}
