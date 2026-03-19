@@ -113,7 +113,7 @@ def setup_wg_server() -> dict:
 	subprocess.run(["sudo", "wg-quick", "up", WG_INTERFACE], check=True, capture_output=True)
 
 	settings.save(ignore_permissions=True)
-	frappe.db.commit()
+	frappe.db.commit()  # nosemgrep -- must persist keys before running wg-quick on host
 
 	return {"public_key": settings.wg_server_public_key, "status": "active"}
 

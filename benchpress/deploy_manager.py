@@ -231,4 +231,4 @@ def stop_bench(bench_name: str) -> None:
 
 	bench.status = "Stopped"
 	bench.save(ignore_permissions=True)
-	frappe.db.commit()
+	frappe.db.commit()  # nosemgrep -- immediate status update needed for UI feedback
