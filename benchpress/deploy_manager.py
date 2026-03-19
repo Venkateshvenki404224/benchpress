@@ -12,13 +12,8 @@ from benchpress.docker_manager import (
 	create_bench_container,
 	exec_in_container,
 	start_container,
+	stop_container,
 	write_file_to_container,
-)
-from benchpress.wg_manager import (
-	add_peer_to_server,
-	allocate_ip,
-	generate_keypair,
-	generate_peer_config,
 )
 
 
@@ -84,30 +79,42 @@ def deploy_bench(bench_name: str) -> None:
 		log_deploy(bench_name, "Waiting for services to initialize...")
 		time.sleep(15)
 
-		# Step 4: WireGuard setup (host-side)
-		log_deploy(bench_name, "Configuring WireGuard VPN...")
-		keys = generate_keypair()
-		wg_ip = allocate_ip()
-		config = generate_peer_config(
-			private_key=keys["private_key"],
-			peer_ip=wg_ip,
-			server_public_key=settings.wg_server_public_key,
-			server_endpoint=settings.wg_server_endpoint,
-			server_port=settings.wg_server_port,
-		)
-		add_peer_to_server(keys["public_key"], wg_ip)
+		# Step 4: WireGuard VPN setup
+		if settings.wg_server_public_key and settings.wg_server_endpoint:
+			from benchpress.wg_manager import (
+				add_peer_to_server,
+				allocate_ip,
+				ensure_wg_running,
+				generate_keypair,
+				generate_peer_config,
+				setup_wg_routing,
+				sync_wg_config,
+			)
 
-		# Write WG config into container and bring up interface
-		write_file_to_container(container_id, config, "/etc/wireguard/wg0.conf")
-		exec_in_container(container_id, "wg-quick up wg0", user="root")
+			log_deploy(bench_name, "Configuring WireGuard VPN...")
+			ensure_wg_running()
+			keys = generate_keypair()
+			wg_ip = allocate_ip()
+			config = generate_peer_config(
+				private_key=keys["private_key"],
+				peer_ip=wg_ip,
+				server_public_key=settings.wg_server_public_key,
+				server_endpoint=settings.wg_server_endpoint,
+				server_port=settings.wg_server_port or 51820,
+			)
+			add_peer_to_server(keys["public_key"], wg_ip)
+			setup_wg_routing(wg_ip, bench.container_id)
+			sync_wg_config()
 
-		bench.wg_ip = wg_ip
-		bench.wg_private_key = keys["private_key"]
-		bench.wg_public_key = keys["public_key"]
-		bench.wg_config = config
-		bench.save(ignore_permissions=True)
-		frappe.db.commit()
-		log_deploy(bench_name, f"WireGuard peer configured at {wg_ip}.")
+			bench.wg_ip = wg_ip
+			bench.wg_private_key = keys["private_key"]
+			bench.wg_public_key = keys["public_key"]
+			bench.wg_config = config
+			bench.save(ignore_permissions=True)
+			frappe.db.commit()
+			log_deploy(bench_name, f"VPN configured at {wg_ip}")
+		else:
+			log_deploy(bench_name, "WireGuard not configured, skipping VPN.", "warning")
 
 		# Step 5: Create Frappe site
 		admin_password = secrets.token_urlsafe(16)
@@ -206,3 +213,23 @@ def build_lab(lab_name: str) -> None:
 			title=f"Lab image build failed: {lab_name}",
 			message=frappe.get_traceback(),
 		)
+
+
+def stop_bench(bench_name: str) -> None:
+	"""Stop a bench container and clean up WireGuard routing."""
+	bench = frappe.get_doc("Bench Instance", bench_name)
+
+	if bench.wg_ip and bench.container_id:
+		try:
+			from benchpress.wg_manager import remove_wg_routing
+
+			remove_wg_routing(bench.wg_ip, bench.container_id)
+		except Exception:
+			pass
+
+	if bench.container_id:
+		stop_container(bench.container_id)
+
+	bench.status = "Stopped"
+	bench.save(ignore_permissions=True)
+	frappe.db.commit()
