@@ -76,6 +76,17 @@ def create_bench_container(bench_doc, lab_doc) -> str:
 	Does NOT start the container. Returns the container ID.
 	"""
 	client = get_client()
+
+	# Ensure benchpress network exists
+	try:
+		client.networks.get("benchpress")
+	except docker.errors.NotFound:
+		client.networks.create(
+			"benchpress",
+			driver="bridge",
+			ipam=docker.types.IPAMConfig(pool_configs=[docker.types.IPAMPool(subnet="172.30.0.0/24")]),
+		)
+
 	name = bench_doc.bench_name
 
 	labels = {
@@ -97,6 +108,7 @@ def create_bench_container(bench_doc, lab_doc) -> str:
 		},
 		mem_limit=lab_doc.memory_limit or "512m",
 		nano_cpus=int((lab_doc.cpu_cores or 1) * 1e9),
+		network="benchpress",
 	)
 
 	return container.id

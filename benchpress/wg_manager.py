@@ -4,6 +4,9 @@
 import subprocess
 
 import frappe
+from frappe import _
+
+WG_INTERFACE = "wg0"
 
 
 def generate_keypair() -> dict:
@@ -15,9 +18,12 @@ def generate_keypair() -> dict:
 
 
 def allocate_ip() -> str:
-	settings = frappe.get_doc("BenchPress Settings")
-	ip = f"10.10.0.{settings.next_wg_ip}"
-	settings.next_wg_ip = settings.next_wg_ip + 1
+	settings = frappe.get_doc("BenchPress Settings", for_update=True)
+	next_ip = settings.next_wg_ip or 2
+	if next_ip > 254:
+		frappe.throw(_("WireGuard IP pool exhausted (max 254 peers)"))
+	ip = f"10.10.0.{next_ip}"
+	settings.next_wg_ip = next_ip + 1
 	settings.save(ignore_permissions=True)
 	frappe.db.commit()
 	return ip
@@ -45,7 +51,7 @@ PersistentKeepalive = 25
 
 def add_peer_to_server(public_key: str, allowed_ip: str) -> None:
 	subprocess.run(
-		["sudo", "wg", "set", "wg0", "peer", public_key, "allowed-ips", f"{allowed_ip}/32"],
+		["sudo", "wg", "set", WG_INTERFACE, "peer", public_key, "allowed-ips", f"{allowed_ip}/32"],
 		check=True,
 		capture_output=True,
 	)
@@ -53,7 +59,7 @@ def add_peer_to_server(public_key: str, allowed_ip: str) -> None:
 
 def remove_peer_from_server(public_key: str) -> None:
 	subprocess.run(
-		["sudo", "wg", "set", "wg0", "peer", public_key, "remove"],
+		["sudo", "wg", "set", WG_INTERFACE, "peer", public_key, "remove"],
 		check=True,
 		capture_output=True,
 	)
@@ -62,6 +68,7 @@ def remove_peer_from_server(public_key: str) -> None:
 # --- Host WireGuard Server Management ---
 
 
+@frappe.whitelist()
 def setup_wg_server() -> dict:
 	settings = frappe.get_doc("BenchPress Settings")
 
@@ -83,58 +90,52 @@ def setup_wg_server() -> dict:
 	port = settings.wg_server_port or 51820
 	server_ip = settings.wg_server_ip or "10.10.0.1"
 
-	config = f"""[Interface]
-Address = {server_ip}/24
-ListenPort = {port}
-PrivateKey = {private_key}
-PostUp = iptables -A FORWARD -i %i -j ACCEPT; iptables -A FORWARD -o %i -j ACCEPT; iptables -t nat -A POSTROUTING -s 10.10.0.0/24 -j MASQUERADE
-PostDown = iptables -D FORWARD -i %i -j ACCEPT; iptables -D FORWARD -o %i -j ACCEPT; iptables -t nat -D POSTROUTING -s 10.10.0.0/24 -j MASQUERADE
-"""
-
-	subprocess.run(
-		[
-			"sudo",
-			"bash",
-			"-c",
-			f"echo '{config}' > /etc/wireguard/wg0.conf && chmod 600 /etc/wireguard/wg0.conf",
-		],
-		check=True,
-		capture_output=True,
+	config = (
+		f"[Interface]\n"
+		f"Address = {server_ip}/24\n"
+		f"ListenPort = {port}\n"
+		f"PrivateKey = {private_key}\n"
+		f"PostUp = iptables -A FORWARD -i %i -j ACCEPT; iptables -A FORWARD -o %i -j ACCEPT; "
+		f"iptables -t nat -A POSTROUTING -s 10.10.0.0/24 -j MASQUERADE\n"
+		f"PostDown = iptables -D FORWARD -i %i -j ACCEPT; iptables -D FORWARD -o %i -j ACCEPT; "
+		f"iptables -t nat -D POSTROUTING -s 10.10.0.0/24 -j MASQUERADE\n"
 	)
 
-	# Enable IP forwarding
 	subprocess.run(
-		["sudo", "sysctl", "-w", "net.ipv4.ip_forward=1"],
-		check=True,
+		["sudo", "tee", "/etc/wireguard/wg0.conf"],
+		input=config,
 		capture_output=True,
+		text=True,
+		check=True,
 	)
-
-	subprocess.run(["sudo", "wg-quick", "up", "wg0"], check=True, capture_output=True)
+	subprocess.run(["sudo", "chmod", "600", "/etc/wireguard/wg0.conf"], check=True, capture_output=True)
+	subprocess.run(["sudo", "sysctl", "-w", "net.ipv4.ip_forward=1"], check=True, capture_output=True)
+	subprocess.run(["sudo", "wg-quick", "up", WG_INTERFACE], check=True, capture_output=True)
 
 	settings.save(ignore_permissions=True)
-	frappe.db.commit()
+	frappe.db.commit()  # nosemgrep -- must persist keys before running wg-quick on host
 
 	return {"public_key": settings.wg_server_public_key, "status": "active"}
 
 
 def ensure_wg_running() -> bool:
-	result = subprocess.run(["sudo", "wg", "show", "wg0"], capture_output=True)
+	result = subprocess.run(["sudo", "wg", "show", WG_INTERFACE], capture_output=True)
 	if result.returncode != 0:
-		subprocess.run(["sudo", "wg-quick", "up", "wg0"], check=True, capture_output=True)
+		subprocess.run(["sudo", "wg-quick", "up", WG_INTERFACE], check=True, capture_output=True)
 	return True
 
 
 def sync_wg_config() -> None:
-	subprocess.run(["sudo", "bash", "-c", "wg-quick save wg0"], capture_output=True)
+	subprocess.run(["sudo", "bash", "-c", f"wg-quick save {WG_INTERFACE}"], capture_output=True)
 
 
 # --- DNAT Routing: WG IP → Container Docker IP ---
 
 
 def _get_container_ip(container_id: str) -> str:
-	import docker
+	from benchpress.docker_manager import get_client
 
-	client = docker.DockerClient(base_url="unix:///var/run/docker.sock")
+	client = get_client()
 	container = client.containers.get(container_id)
 	networks = container.attrs["NetworkSettings"]["Networks"]
 	if "benchpress" in networks:
@@ -158,7 +159,7 @@ def setup_wg_routing(wg_ip: str, container_id: str) -> None:
 				"-A",
 				"PREROUTING",
 				"-i",
-				"wg0",
+				WG_INTERFACE,
 				"-d",
 				wg_ip,
 				"-p",
@@ -194,7 +195,7 @@ def remove_wg_routing(wg_ip: str, container_id: str) -> None:
 				"-D",
 				"PREROUTING",
 				"-i",
-				"wg0",
+				WG_INTERFACE,
 				"-d",
 				wg_ip,
 				"-p",

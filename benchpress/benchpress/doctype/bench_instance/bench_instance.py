@@ -16,6 +16,22 @@ class BenchInstance(Document):
 	def autoname(self):
 		self.name = self.bench_name
 
+	def on_trash(self):
+		if self.wg_public_key:
+			try:
+				from benchpress.wg_manager import remove_peer_from_server
+
+				remove_peer_from_server(self.wg_public_key)
+			except Exception:
+				frappe.log_error(title=f"WG cleanup failed: {self.name}")
+		if self.wg_ip and self.container_id:
+			try:
+				from benchpress.wg_manager import remove_wg_routing
+
+				remove_wg_routing(self.wg_ip, self.container_id)
+			except Exception:
+				frappe.log_error(title=f"WG routing cleanup failed: {self.name}")
+
 	@frappe.whitelist()
 	def enqueue_deploy(self):
 		frappe.enqueue(
@@ -52,5 +68,5 @@ class BenchInstance(Document):
 		start_container(self.container_id)
 		self.status = "Running"
 		self.save(ignore_permissions=True)
-		frappe.db.commit()
+		frappe.db.commit()  # nosemgrep: intentional commit to persist status before response
 		frappe.msgprint("Bench started.")
