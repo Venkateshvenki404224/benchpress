@@ -7,6 +7,8 @@
  "engine": "InnoDB",
  "field_order": [
   "bench_name",
+  "frappe_version",
+  "domain",
   "column_break_basic",
   "status",
   "container_section",
@@ -26,7 +28,9 @@
   "wg_private_key",
   "wg_config",
   "site_name",
-  "lab"
+  "lab",
+  "apps_section",
+  "apps"
  ],
  "fields": [
   {
@@ -35,6 +39,17 @@
    "label": "Bench Name",
    "read_only": 1,
    "unique": 1
+  },
+  {
+   "fieldname": "frappe_version",
+   "fieldtype": "Data",
+   "label": "Frappe Version",
+   "read_only": 1
+  },
+  {
+   "fieldname": "domain",
+   "fieldtype": "Data",
+   "label": "Domain"
   },
   {
    "fieldname": "column_break_basic",
@@ -149,12 +164,23 @@
    "fieldtype": "Data",
    "label": "Site Name",
    "read_only": 1
+  },
+  {
+   "fieldname": "apps_section",
+   "fieldtype": "Section Break",
+   "label": "Apps"
+  },
+  {
+   "fieldname": "apps",
+   "fieldtype": "Table",
+   "label": "Apps",
+   "options": "Bench App"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-03-18 10:06:07.627980",
+ "modified": "2026-03-22 21:00:00.000000",
  "modified_by": "Administrator",
  "module": "Benchpress",
  "name": "Bench Instance",

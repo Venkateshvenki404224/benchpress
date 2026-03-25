@@ -9,7 +9,7 @@ import frappe
 
 def get_client() -> docker.DockerClient:
 	settings = frappe.get_cached_doc("BenchPress Settings")
-	return docker.DockerClient(base_url=settings.docker_socket)
+	return docker.DockerClient(base_url=settings.docker_socket, timeout=600)
 
 
 def get_lab_template_dir() -> str:
@@ -33,7 +33,7 @@ def build_lab_image(lab_doc, site_name: str, admin_password: str, log_fn=None, n
 	image_tag = f"benchpress/{lab_doc.lab_id}:latest"
 	version_branch = lab_doc.frappe_version
 
-	apps = [{"app_name": a.app_name, "git_url": a.git_url, "branch": a.branch} for a in lab_doc.apps]
+	apps = [{"app_name": a.app_name.lower(), "git_url": a.git_url, "branch": a.branch} for a in lab_doc.apps]
 
 	build_args = {
 		"FRAPPE_BRANCH": version_branch,

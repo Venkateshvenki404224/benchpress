@@ -30,8 +30,7 @@ def log_deploy(bench_name: str, message: str, log_type: str = "info") -> None:
 	frappe.publish_realtime(
 		event="bench_deploy_log",
 		message={"bench": bench_name, "log": message, "type": log_type},
-		doctype="Bench Instance",
-		docname=bench_name,
+		user=frappe.session.user,
 		after_commit=False,
 	)
 
@@ -108,6 +107,7 @@ def deploy_bench(bench_name: str) -> None:
 		time.sleep(5)
 
 		# Step 4: WireGuard VPN setup
+		settings = frappe.get_cached_doc("BenchPress Settings")
 		if settings.wg_server_public_key and settings.wg_server_endpoint:
 			from benchpress.wg_manager import (
 				add_peer_to_server,
@@ -174,17 +174,6 @@ def deploy_bench(bench_name: str) -> None:
 		)
 
 
-def stop_bench(bench_name: str) -> None:
-	bench = frappe.get_doc("Bench Instance", bench_name)
-	if not bench.container_id:
-		frappe.throw("No container to stop.")
-
-	stop_container(bench.container_id)
-	bench.status = "Stopped"
-	bench.save(ignore_permissions=True)
-	frappe.db.commit()
-
-
 def redeploy_bench(bench_name: str) -> None:
 	bench = frappe.get_doc("Bench Instance", bench_name)
 
@@ -246,6 +235,7 @@ def build_lab(lab_name: str) -> None:
 		frappe.publish_realtime(
 			event="lab_build_log",
 			message={"lab": lab_name, "log": line, "type": log_type, "build_log": build_log_name},
+			user=frappe.session.user,
 			after_commit=False,
 		)
 		current = frappe.db.get_value("Build Log", build_log_name, "message") or ""

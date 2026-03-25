@@ -37,7 +37,7 @@
 					</span>
 				</div>
 				<div class="flex items-center gap-4 text-sm text-bp-dim mb-4">
-					<span>{{ lab.apps?.length || 0 }} apps</span>
+					<span>{{ lab.app_count || 0 }} apps</span>
 					<span>{{ lab.memory_limit || "512m" }} RAM</span>
 					<span>{{ lab.cpu_cores || 1 }} CPU</span>
 				</div>
