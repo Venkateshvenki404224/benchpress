@@ -30,8 +30,6 @@ def log_deploy(bench_name: str, message: str, log_type: str = "info") -> None:
 	frappe.publish_realtime(
 		event="bench_deploy_log",
 		message={"bench": bench_name, "log": message, "type": log_type},
-		doctype="Bench Instance",
-		docname=bench_name,
 		after_commit=False,
 	)
 
@@ -108,6 +106,7 @@ def deploy_bench(bench_name: str) -> None:
 		time.sleep(5)
 
 		# Step 4: WireGuard VPN setup
+		settings = frappe.get_cached_doc("BenchPress Settings")
 		if settings.wg_server_public_key and settings.wg_server_endpoint:
 			from benchpress.wg_manager import (
 				add_peer_to_server,
