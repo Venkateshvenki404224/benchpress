@@ -39,6 +39,7 @@ repos:
         exclude: |
             (?x)^(
                 benchpress/public/dist/.*|
+                benchpress/public/dashboard/.*|
                 .*node_modules.*|
                 .*boilerplate.*|
                 benchpress/templates/includes/.*|
@@ -56,6 +57,7 @@ repos:
         exclude: |
             (?x)^(
                 benchpress/public/dist/.*|
+                benchpress/public/dashboard/.*|
                 cypress/.*|
                 .*node_modules.*|
                 .*boilerplate.*|

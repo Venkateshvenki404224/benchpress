@@ -173,17 +173,6 @@ def deploy_bench(bench_name: str) -> None:
 		)
 
 
-def stop_bench(bench_name: str) -> None:
-	bench = frappe.get_doc("Bench Instance", bench_name)
-	if not bench.container_id:
-		frappe.throw("No container to stop.")
-
-	stop_container(bench.container_id)
-	bench.status = "Stopped"
-	bench.save(ignore_permissions=True)
-	frappe.db.commit()
-
-
 def redeploy_bench(bench_name: str) -> None:
 	bench = frappe.get_doc("Bench Instance", bench_name)
 

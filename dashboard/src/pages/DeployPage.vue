@@ -108,7 +108,9 @@ async function startDeploy() {
 		{ message: "Starting deployment...", type: "info", timestamp: new Date().toISOString() },
 	];
 	try {
-		const result = await $call("benchpress.api.create_bench", { data: JSON.stringify({ lab: labId }) });
+		const result = await $call("benchpress.api.create_bench", {
+			data: JSON.stringify({ lab: labId }),
+		});
 		benchName.value = result?.bench_name || result?.name || "";
 	} catch (e) {
 		logLines.value.push({ message: `Error: ${e.message || e}`, type: "error" });
