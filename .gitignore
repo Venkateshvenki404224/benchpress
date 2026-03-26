@@ -58,3 +58,7 @@ CLAUDE.md
 .mcp.json
 everything-claude-code/
 .claude
+
+# Frontend build output
+benchpress/public/frontend/
+benchpress/www/frontend.html

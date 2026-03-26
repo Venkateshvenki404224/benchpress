@@ -25,7 +25,14 @@ def get_labs() -> list[dict]:
 		order_by="creation desc",
 	)
 	for lab in labs:
-		lab["app_count"] = frappe.db.count("Lab App", {"parent": lab["name"]})
+		apps = frappe.get_all(
+			"Lab App",
+			filters={"parent": lab["name"]},
+			fields=["app_name"],
+			limit_page_length=50,
+		)
+		lab["app_names"] = [a["app_name"] for a in apps]
+		lab["app_count"] = len(apps)
 		lab["bench_count"] = frappe.db.count("Bench Instance", {"lab": lab["name"]})
 	return labs
 
@@ -255,6 +262,17 @@ def get_deploy_logs(bench_name: str) -> list[dict]:
 		fields=["message", "log_type", "timestamp"],
 		order_by="timestamp asc",
 		limit_page_length=100,
+	)
+
+
+@frappe.whitelist()
+def get_build_logs(lab_name: str) -> list[dict]:
+	return frappe.get_all(
+		"Build Log",
+		filters={"lab": lab_name},
+		fields=["name", "message", "log_type", "timestamp"],
+		order_by="timestamp desc",
+		limit_page_length=20,
 	)
 
 

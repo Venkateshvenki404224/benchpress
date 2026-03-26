@@ -1,0 +1,102 @@
+/*
+ * Benchpress Blue Theme
+ * Overrides frappe-ui's default gray neutrals with blue-gray (slate) tones.
+ */
+
+:root {
+  /* ── Surface (backgrounds) ── */
+  --surface-white: #FFFFFF;
+  --surface-gray-1: #F1F5F9;    /* slate-100 */
+  --surface-gray-2: #E2E8F0;    /* slate-200 */
+  --surface-gray-3: #CBD5E1;    /* slate-300 */
+  --surface-gray-4: #94A3B8;    /* slate-400 */
+  --surface-gray-5: #475569;    /* slate-600 */
+  --surface-gray-6: #334155;    /* slate-700 */
+  --surface-gray-7: #0F172A;    /* slate-900 */
+  --surface-menu-bar: #EFF4FB;  /* blue-tinted sidebar */
+  --surface-cards: #FFFFFF;
+  --surface-modal: #FFFFFF;
+  --surface-selected: #DBEAFE;  /* blue-100 */
+
+  /* ── Primary blue accent ── */
+  --surface-blue-1: #DBEAFE;    /* blue-100 */
+  --surface-blue-2: #2563EB;    /* blue-600 */
+
+  /* ── Ink (text colors) ── */
+  --text-ink-white: #FFFFFF;
+  --text-ink-gray-1: #F8FAFC;   /* slate-50 */
+  --text-ink-gray-2: #F1F5F9;   /* slate-100 */
+  --text-ink-gray-3: #E2E8F0;   /* slate-200 */
+  --text-ink-gray-4: #CBD5E1;   /* slate-300 */
+  --text-ink-gray-5: #64748B;   /* slate-500 */
+  --text-ink-gray-6: #475569;   /* slate-600 */
+  --text-ink-gray-7: #334155;   /* slate-700 */
+  --text-ink-gray-8: #1E293B;   /* slate-800 */
+  --text-ink-gray-9: #0F172A;   /* slate-900 */
+
+  /* ── Primary blue ink ── */
+  --text-ink-blue-1: #EFF6FF;
+  --text-ink-blue-2: #3B82F6;   /* blue-500 */
+  --text-ink-blue-3: #2563EB;   /* blue-600 */
+  --text-ink-blue-4: #1D4ED8;   /* blue-700 */
+
+  /* ── Outline (borders) ── */
+  --outline-white: #FFFFFF;
+  --outline-gray-1: #E2E8F0;    /* slate-200 */
+  --outline-gray-2: #CBD5E1;    /* slate-300 */
+  --outline-gray-3: #94A3B8;    /* slate-400 */
+  --outline-gray-4: #64748B;    /* slate-500 */
+  --outline-gray-5: #475569;    /* slate-600 */
+  --outline-gray-modals: #E2E8F0;
+  --outline-blue-1: #93C5FD;    /* blue-300 */
+  --outline-blue-2: #2563EB;    /* blue-600 */
+}
+
+[data-theme="dark"] {
+  /* ── Surface (backgrounds) ── */
+  --surface-white: #0B1120;     /* deep navy */
+  --surface-gray-1: #0F1A2E;
+  --surface-gray-2: #15243B;
+  --surface-gray-3: #1B2E4A;
+  --surface-gray-4: #234068;
+  --surface-gray-5: #2D5089;
+  --surface-gray-6: #1B2E4A;
+  --surface-gray-7: #F1F5F9;
+  --surface-menu-bar: #0D1526;  /* dark sidebar */
+  --surface-cards: #0F1A2E;
+  --surface-modal: #15243B;
+  --surface-selected: #1E3A5F;
+
+  /* ── Primary blue accent ── */
+  --surface-blue-1: #1E3A5F;
+  --surface-blue-2: #3B82F6;
+
+  /* ── Ink (text colors) ── */
+  --text-ink-white: #FFFFFF;
+  --text-ink-gray-1: #0F172A;
+  --text-ink-gray-2: #1E293B;
+  --text-ink-gray-3: #334155;
+  --text-ink-gray-4: #475569;
+  --text-ink-gray-5: #94A3B8;   /* slate-400 */
+  --text-ink-gray-6: #CBD5E1;   /* slate-300 */
+  --text-ink-gray-7: #E2E8F0;   /* slate-200 */
+  --text-ink-gray-8: #F1F5F9;   /* slate-100 */
+  --text-ink-gray-9: #F8FAFC;   /* slate-50 */
+
+  /* ── Primary blue ink ── */
+  --text-ink-blue-1: #FFFFFF;
+  --text-ink-blue-2: #60A5FA;   /* blue-400 */
+  --text-ink-blue-3: #93C5FD;   /* blue-300 */
+  --text-ink-blue-4: #BFDBFE;   /* blue-200 */
+
+  /* ── Outline (borders) ── */
+  --outline-white: #15243B;
+  --outline-gray-1: #15243B;
+  --outline-gray-2: #1B2E4A;
+  --outline-gray-3: #234068;
+  --outline-gray-4: #2D5089;
+  --outline-gray-5: #94A3B8;
+  --outline-gray-modals: #1B2E4A;
+  --outline-blue-1: #1D4ED8;
+  --outline-blue-2: #3B82F6;
+}
