@@ -167,6 +167,8 @@ def get_bench(name: str) -> dict:
 
 @frappe.whitelist()
 def create_bench(data: str) -> dict:
+	from benchpress.benchpress.doctype.bench_instance import get_instance_id
+
 	data = frappe.parse_json(data)
 
 	lab_name = data.get("lab")
@@ -174,6 +176,23 @@ def create_bench(data: str) -> dict:
 		frappe.throw(_("Lab is required to create a bench."))
 
 	lab = frappe.get_cached_doc("Lab", lab_name)
+
+	# Check if instance already exists for this user + lab
+	instance_id = get_instance_id(frappe.session.user, lab_name)
+	if frappe.db.exists("Bench Instance", instance_id):
+		# Instance exists — redeploy it
+		doc = frappe.get_doc("Bench Instance", instance_id)
+		doc.status = "Deploying"
+		doc.save(ignore_permissions=True)
+		frappe.db.commit()
+
+		frappe.enqueue(
+			"benchpress.deploy_manager.deploy_bench",
+			bench_name=doc.name,
+			queue="long",
+			timeout=3600,
+		)
+		return {"name": doc.name, "status": "Deploying"}
 
 	doc = frappe.get_doc(
 		{

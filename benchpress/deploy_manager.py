@@ -30,7 +30,6 @@ def log_deploy(bench_name: str, message: str, log_type: str = "info") -> None:
 	frappe.publish_realtime(
 		event="bench_deploy_log",
 		message={"bench": bench_name, "log": message, "type": log_type},
-		user=frappe.session.user,
 		after_commit=False,
 	)
 

@@ -5,7 +5,6 @@
 			<div>
 				<div class="flex items-center gap-3">
 					<h1 class="text-2xl font-bold text-ink-gray-9">{{ lab.data.title }}</h1>
-					<Badge :label="lab.data.status" :theme="statusColor(lab.data.status)" />
 				</div>
 				<div class="mt-2 flex items-center gap-2 text-sm text-ink-gray-5">
 					<span>Lab ID:</span>
@@ -31,32 +30,28 @@
 				<!-- No instance: show Deploy -->
 				<Button
 					v-if="!activeBench"
-					appearance="primary"
+					theme="green"
+					variant="solid"
 					size="lg"
 					:loading="deployAction.loading"
 					@click="deployLab"
 					>Deploy</Button
 				>
-				<!-- Instance running: show Stop + Redeploy -->
+				<!-- Instance running: show Stop -->
 				<Button
 					v-if="activeBench && activeBench.status === 'Running'"
+					theme="red"
+					variant="solid"
 					size="lg"
 					:loading="benchAction.loading"
 					@click="doBenchAction('stop')"
 					>Stop</Button
 				>
-				<Button
-					v-if="activeBench && activeBench.status === 'Running'"
-					appearance="primary"
-					size="lg"
-					:loading="redeployAction.loading"
-					@click="doBenchAction('redeploy')"
-					>Redeploy</Button
-				>
 				<!-- Instance stopped: show Deploy again -->
 				<Button
 					v-if="activeBench && activeBench.status === 'Stopped'"
-					appearance="primary"
+					theme="green"
+					variant="solid"
 					size="lg"
 					:loading="deployAction.loading"
 					@click="deployLab"
@@ -67,7 +62,6 @@
 
 		<ErrorMessage class="mb-4" :message="deployAction.error" />
 		<ErrorMessage class="mb-4" :message="benchAction.error" />
-		<ErrorMessage class="mb-4" :message="redeployAction.error" />
 		<ErrorMessage class="mb-4" :message="createSiteAction.error" />
 
 		<!-- Tabs -->
@@ -82,21 +76,12 @@
 							<div
 								class="rounded-lg border border-outline-gray-1 bg-surface-white p-5"
 							>
-								<div class="mb-3 flex items-center gap-2">
-									<h2 class="text-base font-semibold text-ink-gray-9">
-										Lab Information
-									</h2>
-									<span class="text-xs text-ink-gray-5">Readme</span>
-								</div>
-								<p
-									v-if="lab.data.description"
-									class="mb-4 text-sm text-ink-gray-6"
-								>
+								<h2 class="mb-3 text-base font-semibold text-ink-gray-9">Lab Information</h2>
+								<p v-if="lab.data.description" class="mb-4 text-sm text-ink-gray-6">
 									{{ lab.data.description }}
 								</p>
-								<p v-else class="mb-4 text-sm text-ink-gray-5">
-									This lab is not running, please deploy it to get the connection
-									information.
+								<p v-if="!activeBench && !lab.data.description" class="mb-4 text-sm text-ink-gray-5">
+									This lab is not deployed yet. Click "Deploy" to start.
 								</p>
 								<div v-if="lab.data.apps?.length" class="mt-4">
 									<h3 class="mb-2 text-sm font-medium text-ink-gray-7">
@@ -132,12 +117,7 @@
 								v-if="activeBench"
 								class="rounded-lg border border-outline-gray-1 bg-surface-white p-5"
 							>
-								<div class="mb-3 flex items-center gap-2">
-									<h2 class="text-base font-semibold text-ink-gray-9">
-										Lab Information
-									</h2>
-									<span class="text-xs text-ink-gray-5">Readme</span>
-								</div>
+								<h2 class="mb-3 text-base font-semibold text-ink-gray-9">Connection Information</h2>
 								<p class="mb-5 text-sm leading-relaxed text-ink-gray-6">
 									This server is accessible through
 									<strong class="text-ink-gray-8">Code</strong> or
@@ -228,6 +208,17 @@
 										</div>
 									</div>
 								</div>
+								<!-- WireGuard Config Download -->
+								<div class="flex items-center gap-4 border-t border-outline-gray-1 pt-4 mt-2">
+									<Button
+										appearance="primary"
+										icon-left="download"
+										:loading="wgConfigAction.loading"
+										@click="downloadWgConfig"
+										class="w-full"
+									>Download WireGuard Config</Button>
+								</div>
+								<ErrorMessage class="mt-2" :message="wgConfigAction.error" />
 							</div>
 						</div>
 
@@ -403,20 +394,20 @@
 					</Dialog>
 				</div>
 
-				<!-- Build Log Tab -->
-				<div v-if="tab.label === 'Build Log'" class="p-4">
-					<div v-if="buildLogs.data?.length">
-						<LogViewer :rawLog="buildLogs.data[0].message" mode="build" />
+				<!-- Deploy Log Tab -->
+				<div v-if="tab.label === 'Deploy Log'" class="p-4">
+					<div v-if="liveDeployLogs.length">
+						<LogViewer :entries="liveDeployLogs" mode="deploy" />
 					</div>
-					<div v-else-if="buildLogs.loading" class="text-base text-ink-gray-5">
-						Loading build log...
+					<div v-else-if="deployLogs.loading" class="text-base text-ink-gray-5">
+						Loading deploy logs...
 					</div>
 					<div
 						v-else
 						class="rounded-lg border border-outline-gray-1 bg-surface-white p-8 text-center"
 					>
 						<div class="text-sm text-ink-gray-5">
-							No build logs available for this lab.
+							No active deployment. Click "Deploy" to start.
 						</div>
 					</div>
 				</div>
@@ -431,8 +422,9 @@
 </template>
 
 <script setup>
-import { computed, ref } from "vue";
+import { computed, ref, watch, onMounted, onUnmounted } from "vue";
 import { useRoute } from "vue-router";
+import { useSocket } from "@/socket";
 import {
 	createResource,
 	Badge,
@@ -454,7 +446,7 @@ const showNewSite = ref(false);
 const newSiteName = ref("");
 const selectedApps = ref([]);
 
-const tabs = [{ label: "Dashboard" }, { label: "Sites" }, { label: "Build Log" }];
+const tabs = [{ label: "Dashboard" }, { label: "Sites" }, { label: "Deploy Log" }];
 
 const siteColumns = [
 	{ label: "Site Name", key: "site_name", width: "200px" },
@@ -491,15 +483,122 @@ const sites = createResource({
 	auto: computed(() => !!activeBench.value),
 });
 
-const buildLogs = createResource({
-	url: "benchpress.api.get_build_logs",
-	params: { lab_name: labId },
-	auto: true,
+const deployLogs = createResource({
+	url: "benchpress.api.get_deploy_logs",
 });
+
+const liveDeployLogs = ref([]);
+let pollInterval = null;
+
+// Fetch deploy logs when bench is available
+function fetchDeployLogs() {
+	if (!activeBench.value) return;
+	deployLogs.submit({ bench_name: activeBench.value.name });
+}
+
+// Sync fetched logs into live display and detect completion
+watch(() => deployLogs.data, (data) => {
+	if (data?.length) {
+		liveDeployLogs.value = [...data];
+		// Check if deploy completed — reload bench data
+		const hasSuccess = data.some(d => d.log_type === "success");
+		if (hasSuccess) {
+			benches.reload();
+			if (pollInterval) {
+				clearInterval(pollInterval);
+				pollInterval = null;
+			}
+		}
+	}
+});
+
+// Reload logs when activeBench changes
+watch(activeBench, (bench) => {
+	if (bench) {
+		fetchDeployLogs();
+	}
+});
+
+// Poll for new logs while deploying
+watch(() => activeBench.value?.status, (status) => {
+	if (status === "Deploying") {
+		pollInterval = setInterval(fetchDeployLogs, 3000);
+	} else if (pollInterval) {
+		clearInterval(pollInterval);
+		pollInterval = null;
+		// Final fetch to get all logs
+		fetchDeployLogs();
+	}
+}, { immediate: true });
+
+// Also refetch when switching to Deploy Log tab
+watch(activeTab, (tab) => {
+	if (tab === 2 && activeBench.value) {
+		fetchDeployLogs();
+	}
+});
+
+// Socket listener for live deploy logs
+const socket = useSocket();
+
+function onDeployLog(data) {
+	if (activeBench.value && data.bench === activeBench.value.name) {
+		liveDeployLogs.value.push({
+			message: data.log,
+			log_type: data.type || "info",
+			timestamp: new Date().toISOString(),
+		});
+		if (data.type === "success") {
+			benches.reload();
+		}
+	}
+}
+
+onMounted(() => {
+	if (socket) {
+		socket.on("bench_deploy_log", onDeployLog);
+	}
+	// Initial fetch
+	if (activeBench.value) {
+		fetchDeployLogs();
+	}
+});
+
+onUnmounted(() => {
+	if (socket) {
+		socket.off("bench_deploy_log", onDeployLog);
+	}
+	if (pollInterval) {
+		clearInterval(pollInterval);
+	}
+});
+
+const wgConfigAction = createResource({
+	url: "benchpress.api.get_wg_config",
+});
+
+function downloadWgConfig() {
+	if (!activeBench.value) return;
+	wgConfigAction.submit(
+		{ bench_name: activeBench.value.name },
+		{
+			onSuccess(data) {
+				const blob = new Blob([data], { type: "text/plain" });
+				const url = URL.createObjectURL(blob);
+				const a = document.createElement("a");
+				a.href = url;
+				a.download = `benchpress-${labId}.conf`;
+				a.click();
+				URL.revokeObjectURL(url);
+			},
+		}
+	);
+}
 
 const deployAction = createResource({
 	url: "benchpress.api.create_bench",
 	onSuccess() {
+		liveDeployLogs.value = [];
 		benches.reload();
 	},
 });
@@ -519,26 +618,11 @@ const benchAction = createResource({
 
 function doBenchAction(action) {
 	if (!activeBench.value) return;
-	if (action === "redeploy") {
-		redeployAction.submit({
-			dt: "Bench Instance",
-			dn: activeBench.value.name,
-			method: "enqueue_redeploy",
-		});
-		return;
-	}
 	benchAction.submit({
 		bench_name: activeBench.value.name,
 		action,
 	});
 }
-
-const redeployAction = createResource({
-	url: "frappe.client.run_doc_method",
-	onSuccess() {
-		benches.reload();
-	},
-});
 
 const createSiteAction = createResource({
 	url: "benchpress.api.create_site",

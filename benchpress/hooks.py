@@ -231,6 +231,7 @@ ignore_links_on_delete = ["Deploy Log", "Build Log"]
 # Automatically update python controller files with type annotations for this app.
 # export_python_type_annotations = True
 
-# default_log_clearing_doctypes = {
-# 	"Logging DocType Name": 30  # days to retain logs
-# }
+default_log_clearing_doctypes = {
+	"Deploy Log": 7,
+	"Build Log": 7,
+}
