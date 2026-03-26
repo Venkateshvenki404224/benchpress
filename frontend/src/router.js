@@ -9,19 +9,14 @@ const routes = [
 		component: () => import("@/pages/Home.vue"),
 	},
 	{
-		path: "/bench-instances",
-		name: "BenchInstances",
-		component: () => import("@/pages/Home.vue"),
-	},
-	{
-		path: "/bench-sites",
-		name: "BenchSites",
-		component: () => import("@/pages/Home.vue"),
-	},
-	{
 		path: "/labs",
 		name: "Labs",
 		component: () => import("@/pages/Labs.vue"),
+	},
+	{
+		path: "/bench-instances",
+		name: "BenchInstances",
+		component: () => import("@/pages/BenchInstances.vue"),
 	},
 	{
 		path: "/labs/new",
@@ -36,17 +31,17 @@ const routes = [
 	{
 		path: "/deploy-logs",
 		name: "DeployLogs",
-		component: () => import("@/pages/Home.vue"),
+		component: () => import("@/pages/DeployLogs.vue"),
 	},
 	{
 		path: "/build-logs",
 		name: "BuildLogs",
-		component: () => import("@/pages/Home.vue"),
+		component: () => import("@/pages/BuildLogs.vue"),
 	},
 	{
 		path: "/settings",
 		name: "Settings",
-		component: () => import("@/pages/Home.vue"),
+		component: () => import("@/pages/Settings.vue"),
 	},
 ]
 

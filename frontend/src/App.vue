@@ -16,7 +16,6 @@ import { reactive } from 'vue'
 import { session } from '@/data/session'
 
 import ServerIcon from '~icons/lucide/server'
-import GlobeIcon from '~icons/lucide/globe'
 import FlaskConicalIcon from '~icons/lucide/flask-conical'
 import ScrollTextIcon from '~icons/lucide/scroll-text'
 import HammerIcon from '~icons/lucide/hammer'
@@ -52,9 +51,8 @@ const sidebarConfig = reactive({
     {
       label: '',
       items: [
-        { label: 'Bench Instances', icon: ServerIcon, to: '/bench-instances' },
-        { label: 'Bench Sites', icon: GlobeIcon, to: '/bench-sites' },
         { label: 'Labs', icon: FlaskConicalIcon, to: '/labs' },
+        { label: 'Bench Instances', icon: ServerIcon, to: '/bench-instances' },
       ],
     },
     {
