@@ -1,0 +1,151 @@
+{
+ "app": "benchpress",
+ "charts": [],
+ "content": "[{\"id\":\"OcuW-m6eNb\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Visit the Site\",\"col\":3}},{\"id\":\"bp_shortcut_1\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Lab\",\"col\":3}},{\"id\":\"bp_shortcut_2\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Bench Instance\",\"col\":3}},{\"id\":\"bp_shortcut_3\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Bench Site\",\"col\":3}},{\"id\":\"bp_spacer_1\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"bp_card_1\",\"type\":\"card\",\"data\":{\"card_name\":\"Bench Management\",\"col\":4}},{\"id\":\"bp_card_2\",\"type\":\"card\",\"data\":{\"card_name\":\"Logs\",\"col\":4}},{\"id\":\"bp_card_3\",\"type\":\"card\",\"data\":{\"card_name\":\"Settings\",\"col\":4}}]",
+ "creation": "2026-03-26 12:00:00",
+ "custom_blocks": [],
+ "docstatus": 0,
+ "doctype": "Workspace",
+ "for_user": "",
+ "hide_custom": 0,
+ "icon": "server",
+ "idx": 0,
+ "is_hidden": 0,
+ "label": "BenchPress",
+ "links": [
+  {
+   "description": "Create and manage bench environments",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Bench Management",
+   "link_count": 3,
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Lab",
+   "link_count": 0,
+   "link_to": "Lab",
+   "link_type": "DocType",
+   "onboard": 1,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Bench Instance",
+   "link_count": 0,
+   "link_to": "Bench Instance",
+   "link_type": "DocType",
+   "onboard": 1,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Bench Site",
+   "link_count": 0,
+   "link_to": "Bench Site",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "description": "View deploy and build logs",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Logs",
+   "link_count": 2,
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Deploy Log",
+   "link_count": 0,
+   "link_to": "Deploy Log",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Build Log",
+   "link_count": 0,
+   "link_to": "Build Log",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "description": "Configure Docker, WireGuard, and resource limits",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Settings",
+   "link_count": 1,
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "BenchPress Settings",
+   "link_count": 0,
+   "link_to": "BenchPress Settings",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  }
+ ],
+ "modified": "2026-03-26 17:35:52.964251",
+ "modified_by": "Administrator",
+ "module": "Benchpress",
+ "name": "BenchPress",
+ "number_cards": [],
+ "owner": "Administrator",
+ "parent_page": "",
+ "public": 1,
+ "quick_lists": [],
+ "restrict_to_domain": "",
+ "roles": [],
+ "sequence_id": 1.0,
+ "shortcuts": [
+  {
+   "color": "Grey",
+   "doc_view": "List",
+   "label": "Visit the Site",
+   "type": "URL",
+   "url": "/frontend"
+  },
+  {
+   "color": "Green",
+   "doc_view": "List",
+   "label": "Lab",
+   "link_to": "Lab",
+   "type": "DocType"
+  },
+  {
+   "color": "Blue",
+   "doc_view": "List",
+   "label": "Bench Instance",
+   "link_to": "Bench Instance",
+   "type": "DocType"
+  },
+  {
+   "color": "Grey",
+   "doc_view": "List",
+   "label": "Bench Site",
+   "link_to": "Bench Site",
+   "type": "DocType"
+  }
+ ],
+ "title": "BenchPress",
+ "type": "Workspace"
+}

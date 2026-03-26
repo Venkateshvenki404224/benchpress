@@ -1,0 +1,21 @@
+{
+ "app": "benchpress",
+ "bg_color": "gray",
+ "creation": "2026-03-26 17:49:45.852686",
+ "docstatus": 0,
+ "doctype": "Desktop Icon",
+ "hidden": 0,
+ "icon_type": "App",
+ "idx": 0,
+ "label": "BenchPress",
+ "link": "/desk/benchpress",
+ "link_type": "External",
+ "logo_url": "/assets/benchpress/images/logo/favicon.svg",
+ "modified": "2026-03-26 17:49:45.852686",
+ "modified_by": "Administrator",
+ "name": "BenchPress",
+ "owner": "Administrator",
+ "restrict_removal": 0,
+ "roles": [],
+ "standard": 1
+}

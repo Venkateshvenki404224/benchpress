@@ -5,6 +5,7 @@ app_description = "Press a button. Get a Frappe bench. Self-hosted, Docker-power
 app_email = "venkateshvenki404224@gmail.com"
 app_license = "mit"
 app_logo_url = "/assets/benchpress/images/logo/favicon.svg"
+app_home = "/desk/benchpress"
 
 # required_apps = []
 
