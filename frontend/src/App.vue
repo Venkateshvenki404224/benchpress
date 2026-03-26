@@ -38,6 +38,7 @@ const sidebarConfig = reactive({
 	header: {
 		title: "Benchpress",
 		subtitle: session.user || "",
+		logo: "/assets/benchpress/images/logo/favicon.svg",
 		menuItems: [
 			{ label: "Switch to Desk", icon: LayoutDashboardIcon, onClick: switchToDesk },
 			{ label: "Toggle Theme", icon: MoonIcon, onClick: toggleTheme },

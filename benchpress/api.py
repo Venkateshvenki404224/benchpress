@@ -4,6 +4,11 @@
 import frappe
 from frappe import _
 
+
+def has_app_permission() -> bool:
+	return "System Manager" in frappe.get_roles(frappe.session.user)
+
+
 # --- Lab endpoints ---
 
 

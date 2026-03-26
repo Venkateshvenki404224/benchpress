@@ -4,14 +4,16 @@ app_publisher = "Venkatesh"
 app_description = "Press a button. Get a Frappe bench. Self-hosted, Docker-powered, VPN-secured."
 app_email = "venkateshvenki404224@gmail.com"
 app_license = "mit"
+app_logo_url = "/assets/benchpress/images/logo/favicon.svg"
 
 # Apps screen entry
 add_to_apps_screen = [
 	{
 		"name": "benchpress",
-		"logo": "/assets/benchpress/logo.png",
+		"logo": "/assets/benchpress/images/logo/logo.png",
 		"title": "BenchPress",
 		"route": "/frontend",
+		"has_permission": "benchpress.api.has_app_permission",
 	}
 ]
 
