@@ -44,6 +44,7 @@
 - [Project Structure](#project-structure)
 - [Real-Time Communication](#real-time-communication)
 - [Networking](#networking)
+- [WireGuard Setup Guide](docs/wireguard-setup.md)
 - [Supported Frappe Apps](#supported-frappe-apps)
 - [Configuration Reference](#configuration-reference)
 - [Contributing](#contributing)
@@ -402,20 +403,46 @@ bench build --app benchpress
    - **WG Server Port**: `51820` (default)
    - **WG Server Endpoint**: Your server's public IP or hostname
 
-### 4. Initialize WireGuard Server
+### 4. Set Up WireGuard VPN
 
-From the Frappe console, run the one-time WireGuard server setup:
+WireGuard is the networking layer that lets users SSH into containers and access Frappe web servers securely. Follow the complete setup guide:
+
+**[WireGuard Setup Guide](docs/wireguard-setup.md)**
+
+The guide covers:
+1. Installing WireGuard on the host
+2. Configuring passwordless sudo for the bench user
+3. Initializing the WireGuard server (generates keys, writes `wg0.conf`, enables IP forwarding)
+4. Filling in BenchPress Settings (server public key, endpoint IP, subnet)
+5. Verifying the setup
+6. Opening firewall ports
+
+**Quick start** (if you just want the minimum commands):
 
 ```bash
+# Install WireGuard
+sudo apt install -y wireguard wireguard-tools
+
+# Allow bench user to run WireGuard/iptables without password
+sudo visudo -f /etc/sudoers.d/benchpress
+# Add: labs ALL=(ALL) NOPASSWD: /usr/sbin/iptables, /usr/bin/wg, /usr/bin/wg-quick, /sbin/sysctl
+
+# Initialize WireGuard server from Frappe console
 bench --site your-site.localhost console
+>>> from benchpress.wg_manager import setup_wg_server
+>>> setup_wg_server()
+
+# Set your VPS public IP in BenchPress Settings
+>>> s = frappe.get_doc("BenchPress Settings")
+>>> s.wg_server_endpoint = "YOUR_VPS_PUBLIC_IP"  # run: curl -s ifconfig.me
+>>> s.save()
+>>> frappe.db.commit()
+
+# Open the firewall port
+sudo ufw allow 51820/udp
 ```
 
-```python
-from benchpress.wg_manager import setup_wg_server
-setup_wg_server()
-```
-
-This generates server keys, writes `/etc/wireguard/wg0.conf`, enables IP forwarding, and brings up the `wg0` interface.
+> **Note**: WireGuard is optional. If not configured, BenchPress still works — containers run normally but without VPN access. Users can connect via Docker bridge IPs on the local machine. See the [Local Development section](docs/wireguard-setup.md#local-development-no-vpn) in the guide.
 
 ### 5. Start BenchPress
 
@@ -632,6 +659,8 @@ socket.on("bench_deploy_log", (data) => {
 ---
 
 ## Networking
+
+> For complete WireGuard setup instructions, see the **[WireGuard Setup Guide](docs/wireguard-setup.md)**.
 
 | Network | Subnet | Purpose |
 |---------|--------|---------|
