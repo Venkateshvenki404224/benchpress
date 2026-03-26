@@ -1,6 +1,6 @@
-import { userResource } from "@/data/user"
-import { createRouter, createWebHistory } from "vue-router"
-import { session } from "./data/session"
+import { userResource } from "@/data/user";
+import { createRouter, createWebHistory } from "vue-router";
+import { session } from "./data/session";
 
 const routes = [
 	{
@@ -43,28 +43,28 @@ const routes = [
 		name: "Settings",
 		component: () => import("@/pages/Settings.vue"),
 	},
-]
+];
 
 const router = createRouter({
 	history: createWebHistory("/frontend"),
 	routes,
-})
+});
 
 router.beforeEach(async (to, from, next) => {
-	let isLoggedIn = session.isLoggedIn
+	let isLoggedIn = session.isLoggedIn;
 	try {
-		await userResource.promise
+		await userResource.promise;
 	} catch (error) {
-		isLoggedIn = false
+		isLoggedIn = false;
 	}
 
 	if (to.name === "Login" && isLoggedIn) {
-		next({ name: "Home" })
+		next({ name: "Home" });
 	} else if (to.name !== "Login" && !isLoggedIn) {
-		window.location.href = "/login"
+		window.location.href = "/login";
 	} else {
-		next()
+		next();
 	}
-})
+});
 
-export default router
+export default router;

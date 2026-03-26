@@ -1,8 +1,8 @@
-import { createApp } from "vue"
+import { createApp } from "vue";
 
-import App from "./App.vue"
-import router from "./router"
-import { initSocket } from "./socket"
+import App from "./App.vue";
+import router from "./router";
+import { initSocket } from "./socket";
 
 import {
 	Alert,
@@ -17,10 +17,10 @@ import {
 	pageMetaPlugin,
 	resourcesPlugin,
 	setConfig,
-} from "frappe-ui"
+} from "frappe-ui";
 
-import "./index.css"
-import "./theme.css"
+import "./index.css";
+import "./theme.css";
 
 const globalComponents = {
 	Button,
@@ -31,21 +31,21 @@ const globalComponents = {
 	Dialog,
 	Alert,
 	Badge,
-}
+};
 
-const app = createApp(App)
+const app = createApp(App);
 
-setConfig("resourceFetcher", frappeRequest)
+setConfig("resourceFetcher", frappeRequest);
 
-app.use(router)
-app.use(resourcesPlugin)
-app.use(pageMetaPlugin)
+app.use(router);
+app.use(resourcesPlugin);
+app.use(pageMetaPlugin);
 
-const socket = initSocket()
-app.config.globalProperties.$socket = socket
+const socket = initSocket();
+app.config.globalProperties.$socket = socket;
 
 for (const key in globalComponents) {
-	app.component(key, globalComponents[key])
+	app.component(key, globalComponents[key]);
 }
 
-app.mount("#app")
+app.mount("#app");
