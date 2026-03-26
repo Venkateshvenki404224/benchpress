@@ -234,7 +234,6 @@ def build_lab(lab_name: str) -> None:
 		frappe.publish_realtime(
 			event="lab_build_log",
 			message={"lab": lab_name, "log": line, "type": log_type, "build_log": build_log_name},
-			user=frappe.session.user,
 			after_commit=False,
 		)
 		current = frappe.db.get_value("Build Log", build_log_name, "message") or ""

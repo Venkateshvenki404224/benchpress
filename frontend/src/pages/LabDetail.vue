@@ -27,9 +27,19 @@
 				</div>
 			</div>
 			<div class="flex gap-2">
-				<!-- No instance: show Deploy -->
+				<!-- Lab not ready: show Build Image (regardless of bench state) -->
 				<Button
-					v-if="!activeBench"
+					v-if="lab.data.status !== 'Ready'"
+					theme="blue"
+					variant="solid"
+					size="lg"
+					:loading="buildAction.loading || lab.data.status === 'Building'"
+					@click="buildLabImage"
+					>{{ lab.data.status === 'Building' ? 'Building...' : 'Build Image' }}</Button
+				>
+				<!-- Lab ready, no instance or instance stopped/errored: show Deploy -->
+				<Button
+					v-if="lab.data.status === 'Ready' && (!activeBench || activeBench.status === 'Stopped' || activeBench.status === 'Error')"
 					theme="green"
 					variant="solid"
 					size="lg"
@@ -47,19 +57,10 @@
 					@click="doBenchAction('stop')"
 					>Stop</Button
 				>
-				<!-- Instance stopped: show Deploy again -->
-				<Button
-					v-if="activeBench && activeBench.status === 'Stopped'"
-					theme="green"
-					variant="solid"
-					size="lg"
-					:loading="deployAction.loading"
-					@click="deployLab"
-					>Deploy</Button
-				>
 			</div>
 		</div>
 
+		<ErrorMessage class="mb-4" :message="buildAction.error" />
 		<ErrorMessage class="mb-4" :message="deployAction.error" />
 		<ErrorMessage class="mb-4" :message="benchAction.error" />
 		<ErrorMessage class="mb-4" :message="createSiteAction.error" />
@@ -411,6 +412,24 @@
 						</div>
 					</div>
 				</div>
+
+				<!-- Build Log Tab -->
+				<div v-if="tab.label === 'Build Log'" class="p-4">
+					<div v-if="liveBuildLog || buildLogs.data?.length">
+						<LogViewer :rawLog="liveBuildLog || buildLogs.data?.[0]?.message || ''" mode="build" />
+					</div>
+					<div v-else-if="buildLogs.loading" class="text-base text-ink-gray-5">
+						Loading build log...
+					</div>
+					<div
+						v-else
+						class="rounded-lg border border-outline-gray-1 bg-surface-white p-8 text-center"
+					>
+						<div class="text-sm text-ink-gray-5">
+							No build logs yet. Click "Build Image" to start.
+						</div>
+					</div>
+				</div>
 			</template>
 		</Tabs>
 	</div>
@@ -446,7 +465,15 @@ const showNewSite = ref(false);
 const newSiteName = ref("");
 const selectedApps = ref([]);
 
-const tabs = [{ label: "Dashboard" }, { label: "Sites" }, { label: "Deploy Log" }];
+const tabs = computed(() => {
+	const base = [{ label: "Dashboard" }, { label: "Sites" }];
+	if (lab.data?.status === "Ready" || activeBench.value) {
+		base.push({ label: "Deploy Log" });
+	} else {
+		base.push({ label: "Build Log" });
+	}
+	return base;
+});
 
 const siteColumns = [
 	{ label: "Site Name", key: "site_name", width: "200px" },
@@ -526,20 +553,62 @@ watch(() => activeBench.value?.status, (status) => {
 	} else if (pollInterval) {
 		clearInterval(pollInterval);
 		pollInterval = null;
-		// Final fetch to get all logs
 		fetchDeployLogs();
 	}
 }, { immediate: true });
 
-// Also refetch when switching to Deploy Log tab
-watch(activeTab, (tab) => {
-	if (tab === 2 && activeBench.value) {
-		fetchDeployLogs();
+// Poll for build logs while building
+let buildPollInterval = null;
+
+watch(() => lab.data?.status, (status) => {
+	if (status === "Building") {
+		buildPollInterval = setInterval(() => {
+			buildLogs.reload();
+		}, 3000);
+	} else {
+		if (buildPollInterval) {
+			clearInterval(buildPollInterval);
+			buildPollInterval = null;
+		}
+		if (status === "Ready" || status === "Error") {
+			buildLogs.reload();
+		}
+	}
+}, { immediate: true });
+
+// Also poll lab status while building to detect completion
+let labPollInterval = null;
+
+watch(() => lab.data?.status, (status) => {
+	if (status === "Building") {
+		labPollInterval = setInterval(() => { lab.reload(); }, 5000);
+	} else if (labPollInterval) {
+		clearInterval(labPollInterval);
+		labPollInterval = null;
 	}
 });
 
-// Socket listener for live deploy logs
+// Sync build logs into live display
+watch(() => buildLogs.data, (data) => {
+	if (data?.length) {
+		liveBuildLog.value = data[0].message || "";
+	}
+});
+
+// Refetch when switching to log tabs
+watch(activeTab, (tab) => {
+	if (tab === 2) {
+		if (activeBench.value) {
+			fetchDeployLogs();
+		} else {
+			buildLogs.reload();
+		}
+	}
+});
+
+// Socket listeners for live logs
 const socket = useSocket();
+const liveBuildLog = ref("");
 
 function onDeployLog(data) {
 	if (activeBench.value && data.bench === activeBench.value.name) {
@@ -554,9 +623,21 @@ function onDeployLog(data) {
 	}
 }
 
+function onBuildLog(data) {
+	if (data.lab === labId) {
+		liveBuildLog.value += data.log + "\n";
+		// Reload lab status when build completes
+		if (data.type === "success" || data.type === "error") {
+			lab.reload();
+			buildLogs.reload();
+		}
+	}
+}
+
 onMounted(() => {
 	if (socket) {
 		socket.on("bench_deploy_log", onDeployLog);
+		socket.on("lab_build_log", onBuildLog);
 	}
 	// Initial fetch
 	if (activeBench.value) {
@@ -567,9 +648,16 @@ onMounted(() => {
 onUnmounted(() => {
 	if (socket) {
 		socket.off("bench_deploy_log", onDeployLog);
+		socket.off("lab_build_log", onBuildLog);
 	}
 	if (pollInterval) {
 		clearInterval(pollInterval);
+	}
+	if (buildPollInterval) {
+		clearInterval(buildPollInterval);
+	}
+	if (labPollInterval) {
+		clearInterval(labPollInterval);
 	}
 });
 
@@ -593,6 +681,25 @@ function downloadWgConfig() {
 			},
 		}
 	);
+}
+
+const buildLogs = createResource({
+	url: "benchpress.api.get_build_logs",
+	params: { lab_name: labId },
+	auto: true,
+});
+
+const buildAction = createResource({
+	url: "benchpress.api.build_lab_image",
+	onSuccess() {
+		lab.reload();
+		buildLogs.reload();
+	},
+});
+
+function buildLabImage() {
+	liveBuildLog.value = "";
+	buildAction.submit({ lab_name: labId });
 }
 
 const deployAction = createResource({
