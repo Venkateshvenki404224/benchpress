@@ -7,10 +7,36 @@
       </Button>
     </div>
 
+    <!-- Search & Filters -->
+    <div class="mb-4 flex items-center gap-3">
+      <FormControl
+        class="flex-1"
+        type="text"
+        placeholder="Search by Lab ID, title, or app name..."
+        v-model="searchQuery"
+        @input="onSearch"
+        icon-left="search"
+      />
+      <FormControl
+        type="select"
+        :options="statusOptions"
+        v-model="statusFilter"
+        @change="onFilterChange"
+        class="w-40"
+      />
+      <FormControl
+        type="select"
+        :options="versionOptions"
+        v-model="versionFilter"
+        @change="onFilterChange"
+        class="w-44"
+      />
+    </div>
+
     <ListView
-      v-if="labs.data?.length"
+      v-if="filteredRows.length"
       :columns="columns"
-      :rows="labs.data"
+      :rows="filteredRows"
       :options="{
         getRowRoute: (row) => ({ name: 'LabDetail', params: { labId: row.name } }),
         showTooltip: true,
@@ -23,13 +49,34 @@
       Loading...
     </div>
     <div v-else class="py-12 text-center text-base text-ink-gray-5">
-      No labs found. Create your first lab to get started.
+      {{ searchQuery || statusFilter !== 'All' || versionFilter !== 'All' ? 'No labs match your filters.' : 'No labs found. Create your first lab to get started.' }}
     </div>
   </div>
 </template>
 
 <script setup>
-import { ListView, Button, createListResource } from 'frappe-ui'
+import { ref, computed } from 'vue'
+import { ListView, Button, FormControl, createResource } from 'frappe-ui'
+
+const searchQuery = ref('')
+const statusFilter = ref('All')
+const versionFilter = ref('All')
+
+const statusOptions = [
+  { label: 'All Status', value: 'All' },
+  { label: 'Draft', value: 'Draft' },
+  { label: 'Building', value: 'Building' },
+  { label: 'Ready', value: 'Ready' },
+  { label: 'Error', value: 'Error' },
+]
+
+const versionOptions = [
+  { label: 'All Versions', value: 'All' },
+  { label: 'Version 14', value: 'version-14' },
+  { label: 'Version 15', value: 'version-15' },
+  { label: 'Version 16', value: 'version-16' },
+  { label: 'Develop', value: 'develop' },
+]
 
 const columns = [
   { label: 'Lab ID', key: 'lab_id', width: '180px' },
@@ -40,12 +87,49 @@ const columns = [
   { label: 'CPU', key: 'cpu_cores', width: '80px' },
 ]
 
-let labs = createListResource({
-  doctype: 'Lab',
-  fields: ['name', 'lab_id', 'title', 'frappe_version', 'status', 'memory_limit', 'cpu_cores'],
-  orderBy: 'creation desc',
-  start: 0,
-  pageLength: 20,
+const labs = createResource({
+  url: 'benchpress.api.get_labs',
   auto: true,
 })
+
+const filteredRows = computed(() => {
+  if (!labs.data) return []
+
+  let rows = labs.data
+
+  // Status filter
+  if (statusFilter.value !== 'All') {
+    rows = rows.filter(r => r.status === statusFilter.value)
+  }
+
+  // Version filter
+  if (versionFilter.value !== 'All') {
+    rows = rows.filter(r => r.frappe_version === versionFilter.value)
+  }
+
+  // Search filter (lab_id, title, or app names via app_count context)
+  if (searchQuery.value) {
+    const q = searchQuery.value.toLowerCase()
+    rows = rows.filter(r =>
+      (r.lab_id || '').toLowerCase().includes(q) ||
+      (r.title || '').toLowerCase().includes(q) ||
+      (r.description || '').toLowerCase().includes(q) ||
+      (r.app_names || []).some(app => app.toLowerCase().includes(q))
+    )
+  }
+
+  return rows
+})
+
+let searchTimeout = null
+function onSearch() {
+  clearTimeout(searchTimeout)
+  searchTimeout = setTimeout(() => {
+    // filteredRows is computed, no explicit action needed
+  }, 150)
+}
+
+function onFilterChange() {
+  // filteredRows is computed, updates automatically
+}
 </script>

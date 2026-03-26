@@ -87,9 +87,12 @@
         <div v-else class="py-8 text-center text-sm text-ink-gray-5">Loading settings...</div>
       </template>
       <template #actions>
-        <div class="flex w-full justify-end gap-2">
-          <Button @click="showDialog = false">Cancel</Button>
-          <Button appearance="primary" :loading="saveAction.loading" @click="saveSettings">Save</Button>
+        <div class="w-full space-y-2">
+          <ErrorMessage :message="saveAction.error" />
+          <div class="flex justify-end gap-2">
+            <Button @click="showDialog = false">Cancel</Button>
+            <Button appearance="primary" :loading="saveAction.loading" @click="saveSettings">Save</Button>
+          </div>
         </div>
       </template>
     </Dialog>
@@ -99,7 +102,7 @@
 <script setup>
 import { ref, reactive, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { createResource, Dialog, FormControl, Button } from 'frappe-ui'
+import { createResource, Dialog, FormControl, Button, ErrorMessage } from 'frappe-ui'
 
 const router = useRouter()
 const showDialog = ref(true)

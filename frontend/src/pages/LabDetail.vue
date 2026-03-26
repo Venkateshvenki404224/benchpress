@@ -54,6 +54,11 @@
       </div>
     </div>
 
+    <ErrorMessage class="mb-4" :message="deployAction.error" />
+    <ErrorMessage class="mb-4" :message="benchAction.error" />
+    <ErrorMessage class="mb-4" :message="redeployAction.error" />
+    <ErrorMessage class="mb-4" :message="createSiteAction.error" />
+
     <!-- Tabs -->
     <Tabs :tabs="tabs" v-model="activeTab">
       <template #tab-panel="{ tab }">
@@ -87,6 +92,19 @@
                   </div>
                 </div>
               </div>
+
+              <!-- Copy alert -->
+              <Teleport to="body">
+                <Transition name="slide-in">
+                  <Alert
+                    v-if="copyAlert"
+                    title="Copied to clipboard"
+                    description="Connection info has been copied. You can paste it in your terminal."
+                    theme="green"
+                    class="fixed right-4 top-4 z-50 w-80 shadow-lg"
+                  />
+                </Transition>
+              </Teleport>
 
               <!-- Connection Info -->
               <div v-if="activeBench" class="rounded-lg border border-outline-gray-1 bg-surface-white p-5">
@@ -246,6 +264,17 @@
             </template>
           </Dialog>
         </div>
+
+        <!-- Build Log Tab -->
+        <div v-if="tab.label === 'Build Log'" class="p-4">
+          <div v-if="buildLogs.data?.length">
+            <LogViewer :rawLog="buildLogs.data[0].message" mode="build" />
+          </div>
+          <div v-else-if="buildLogs.loading" class="text-base text-ink-gray-5">Loading build log...</div>
+          <div v-else class="rounded-lg border border-outline-gray-1 bg-surface-white p-8 text-center">
+            <div class="text-sm text-ink-gray-5">No build logs available for this lab.</div>
+          </div>
+        </div>
       </template>
     </Tabs>
   </div>
@@ -259,7 +288,8 @@
 <script setup>
 import { computed, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import { createResource, Badge, Button, Tabs, ListView, Dialog, FormControl } from 'frappe-ui'
+import { createResource, Badge, Button, Tabs, ListView, Dialog, FormControl, ErrorMessage, Alert } from 'frappe-ui'
+import LogViewer from '@/components/LogViewer.vue'
 
 const route = useRoute()
 const labId = route.params.labId
@@ -272,6 +302,7 @@ const selectedApps = ref([])
 const tabs = [
   { label: 'Dashboard' },
   { label: 'Sites' },
+  { label: 'Build Log' },
 ]
 
 const siteColumns = [
@@ -307,6 +338,12 @@ const sites = createResource({
   url: 'benchpress.api.get_sites',
   params: { bench_name: computed(() => activeBench.value?.name || '') },
   auto: computed(() => !!activeBench.value),
+})
+
+const buildLogs = createResource({
+  url: 'benchpress.api.get_build_logs',
+  params: { lab_name: labId },
+  auto: true,
 })
 
 const deployAction = createResource({
@@ -373,8 +410,12 @@ function createSite() {
   })
 }
 
+const copyAlert = ref('')
+
 function copyText(text) {
   navigator.clipboard.writeText(text)
+  copyAlert.value = 'Copied to clipboard!'
+  setTimeout(() => { copyAlert.value = '' }, 2000)
 }
 
 function statusColor(status) {
@@ -393,3 +434,20 @@ function statusColor(status) {
   return map[status] || 'gray'
 }
 </script>
+
+<style scoped>
+.slide-in-enter-active {
+  transition: all 0.3s ease-out;
+}
+.slide-in-leave-active {
+  transition: all 0.2s ease-in;
+}
+.slide-in-enter-from {
+  transform: translateX(100%);
+  opacity: 0;
+}
+.slide-in-leave-to {
+  transform: translateX(100%);
+  opacity: 0;
+}
+</style>

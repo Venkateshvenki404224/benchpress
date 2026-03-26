@@ -10,6 +10,8 @@
       </div>
     </div>
 
+    <ErrorMessage class="mb-4" :message="lab.insert.error" />
+
     <!-- Basic Info -->
     <div class="mb-6 rounded-lg border border-outline-gray-1 bg-surface-white p-4">
       <h2 class="mb-4 text-base font-medium text-ink-gray-8">Basic Info</h2>
@@ -118,7 +120,7 @@
 <script setup>
 import { reactive } from 'vue'
 import { useRouter } from 'vue-router'
-import { createListResource, Button, FormControl } from 'frappe-ui'
+import { createListResource, Button, FormControl, ErrorMessage } from 'frappe-ui'
 
 const router = useRouter()
 
