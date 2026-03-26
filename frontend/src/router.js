@@ -21,7 +21,17 @@ const routes = [
 	{
 		path: "/labs",
 		name: "Labs",
-		component: () => import("@/pages/Home.vue"),
+		component: () => import("@/pages/Labs.vue"),
+	},
+	{
+		path: "/labs/new",
+		name: "NewLab",
+		component: () => import("@/pages/NewLab.vue"),
+	},
+	{
+		path: "/labs/:labId",
+		name: "LabDetail",
+		component: () => import("@/pages/LabDetail.vue"),
 	},
 	{
 		path: "/deploy-logs",
