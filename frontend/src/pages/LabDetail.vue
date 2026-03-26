@@ -228,6 +228,17 @@
 										</div>
 									</div>
 								</div>
+								<!-- WireGuard Config Download -->
+								<div class="flex items-center gap-4 border-t border-outline-gray-1 pt-4 mt-2">
+									<Button
+										appearance="primary"
+										icon-left="download"
+										:loading="wgConfigAction.loading"
+										@click="downloadWgConfig"
+										class="w-full"
+									>Download WireGuard Config</Button>
+								</div>
+								<ErrorMessage class="mt-2" :message="wgConfigAction.error" />
 							</div>
 						</div>
 
@@ -559,6 +570,28 @@ function createSite() {
 			apps: selectedApps.value.map((name) => ({ name })),
 		}),
 	});
+}
+
+const wgConfigAction = createResource({
+	url: "benchpress.api.get_wg_config",
+});
+
+function downloadWgConfig() {
+	if (!activeBench.value) return;
+	wgConfigAction.submit(
+		{ bench_name: activeBench.value.name },
+		{
+			onSuccess(data) {
+				const blob = new Blob([data], { type: "text/plain" });
+				const url = URL.createObjectURL(blob);
+				const a = document.createElement("a");
+				a.href = url;
+				a.download = `benchpress-${labId}.conf`;
+				a.click();
+				URL.revokeObjectURL(url);
+			},
+		}
+	);
 }
 
 const copyAlert = ref("");
