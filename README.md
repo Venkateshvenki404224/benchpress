@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="benchpress/public/images/logo/logo.png" alt="BenchPress Logo" width="80" />
+<img src="benchpress/public/images/logo/logo.png" alt="BenchPress Logo" width="600" />
 
 # BenchPress
 
