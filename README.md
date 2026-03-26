@@ -14,7 +14,33 @@
 [![Docker](https://img.shields.io/badge/Docker-Powered-2496ED.svg)](https://docker.com)
 [![WireGuard](https://img.shields.io/badge/WireGuard-VPN-88171A.svg)](https://wireguard.com)
 
+*A self-hosted alternative to Frappe Cloud, built entirely as a Frappe app.*
+
 </div>
+
+---
+
+## Table of Contents
+
+- [The Problem](#the-problem)
+- [The Solution](#the-solution)
+- [Architecture](#architecture)
+- [Tech Stack](#tech-stack)
+- [Features](#features)
+- [Screenshots](#screenshots)
+- [Data Model](#data-model-doctypes)
+- [API Reference](#api-reference)
+- [Prerequisites](#prerequisites)
+- [Installation](#installation)
+- [Usage Workflow](#usage-workflow)
+- [Development Setup](#development-setup)
+- [Project Structure](#project-structure)
+- [Real-Time Communication](#real-time-communication)
+- [Networking](#networking)
+- [Supported Frappe Apps](#supported-frappe-apps)
+- [Configuration Reference](#configuration-reference)
+- [Contributing](#contributing)
+- [License](#license)
 
 ---
 
@@ -46,49 +72,49 @@ BenchPress is a **self-hosted Frappe Cloud alternative** built entirely as a Fra
 ## Architecture
 
 ```
-                              +---------------------------+
-                              |       User's Browser      |
-                              |  Vue 3 SPA (frappe-ui)    |
-                              +-------------+-------------+
-                                            |
-                                   HTTPS / WebSocket
-                                            |
-                              +-------------v-------------+
-                              |      Frappe Web Server     |
-                              |  (BenchPress Frappe App)   |
-                              |                            |
-                              |  api.py ---- REST API      |
-                              |  hooks.py -- Scheduler     |
-                              |  wg_manager -- WireGuard   |
-                              +---+--------+----------+---+
-                                  |        |          |
-                   +--------------+   +----v----+  +--v--------------+
-                   |                  |  Redis   |  | deploy_manager  |
-                   |                  |  Queue   |  | (Background     |
-                   |                  |  (RQ)    |  |  Workers)       |
-                   |                  +----+-----+  +--+---------+---+
-                   |                       |           |         |
-            +------v------+         +------v------+    |   +-----v--------+
-            |  WireGuard  |         |   Docker    |<---+   | stats_       |
-            |  (wg0)      |         |   Engine    |        | collector    |
-            |  10.10.0.0  |         |   (SDK)     |        | (cron 2min) |
-            |  /24 subnet |         +------+------+        +--------------+
-            +------+------+                |
-                   |              +--------v---------+
-                   |              |  benchpress       |
-                   |              |  Docker Network   |
-                   |              |  172.30.0.0/24    |
-                   |              +---+-----+-----+--+
-                   |                  |     |     |
-               DNAT Routing     +-----v-+ +-v---+ +v-------+
-               (iptables)       | Bench | |Bench| | Bench  |
-               22,8000,9000     | Ctr 1 | |Ctr 2| | Ctr N  |
-                   |            |       | |     | |        |
-                   +----------->| MariaDB| |MariaDB|MariaDB|
-                                | Redis | |Redis| | Redis  |
-                                | SSH   | |SSH  | | SSH    |
-                                | Frappe| |Frappe| | Frappe |
-                                +-------+ +-----+ +--------+
+                                +---------------------------+
+                                |       User's Browser      |
+                                |  Vue 3 SPA (frappe-ui)    |
+                                +-------------+-------------+
+                                              |
+                                     HTTPS / WebSocket
+                                              |
+                                +-------------v-------------+
+                                |      Frappe Web Server     |
+                                |  (BenchPress Frappe App)   |
+                                |                            |
+                                |  api.py ---- REST API      |
+                                |  hooks.py -- Scheduler     |
+                                |  wg_manager -- WireGuard   |
+                                +---+--------+----------+---+
+                                    |        |          |
+                     +--------------+   +----v----+  +--v--------------+
+                     |                  |  Redis   |  | deploy_manager  |
+                     |                  |  Queue   |  | (Background     |
+                     |                  |  (RQ)    |  |  Workers)       |
+                     |                  +----+-----+  +--+---------+---+
+                     |                       |           |         |
+              +------v------+         +------v------+    |   +-----v--------+
+              |  WireGuard  |         |   Docker    |<---+   | stats_       |
+              |  (wg0)      |         |   Engine    |        | collector    |
+              |  10.10.0.0  |         |   (SDK)     |        | (cron 2min) |
+              |  /24 subnet |         +------+------+        +--------------+
+              +------+------+                |
+                     |              +--------v---------+
+                     |              |  benchpress       |
+                     |              |  Docker Network   |
+                     |              |  172.30.0.0/24    |
+                     |              +---+-----+-----+--+
+                     |                  |     |     |
+                 DNAT Routing     +-----v-+ +-v---+ +v-------+
+                 (iptables)       | Bench | |Bench| | Bench  |
+                 22,8000,9000     | Ctr 1 | |Ctr 2| | Ctr N  |
+                     |            |       | |     | |        |
+                     +----------->|MariaDB| |Maria| |MariaDB |
+                                  | Redis | |Redis| | Redis  |
+                                  | SSH   | |SSH  | | SSH    |
+                                  | Frappe| |Frapp| | Frappe |
+                                  +-------+ +-----+ +--------+
 ```
 
 ### How the Pieces Fit Together
@@ -137,6 +163,7 @@ BenchPress is a **self-hosted Frappe Cloud alternative** built entirely as a Fra
 | **Cache/Queue** | Redis + RQ (per container + host) | Background job processing and caching |
 | **Real-time** | Socket.io via Frappe | Live log streaming during builds and deployments |
 | **Routing** | iptables DNAT | Routes WireGuard peer IPs to container Docker IPs |
+| **Linting** | Ruff (Python) + Biome (JS) | Code quality enforcement |
 
 ---
 
@@ -153,10 +180,50 @@ BenchPress is a **self-hosted Frappe Cloud alternative** built entirely as a Fra
 - **Stats Monitoring** -- CPU and memory usage polled every 2 minutes from Docker stats API, displayed as progress bars
 - **Connection Info Panel** -- Shows VPN IP, SSH command, username, and password with one-click copy to clipboard
 - **Search & Filters** -- Filter labs by status, Frappe version, or search by lab ID, title, and app name
+- **Dark Mode** -- Toggle between light and dark themes from the sidebar menu
+
+---
+
+## Screenshots
+
+The frontend is a Vue 3 Single Page Application built with Vite, TailwindCSS, and the `frappe-ui` component library. It features a sidebar navigation with Lucide icons and a clean, professional design.
+
+### Labs List (`/frontend/labs`)
+
+Searchable, filterable list of all lab templates. Each row shows the Lab ID, title, Frappe version, status badge (Draft/Building/Ready/Error), memory limit, and CPU cores. Filter by status or Frappe version, or search by lab ID, title, or app name.
+
+### New Lab (`/frontend/labs/new`)
+
+Form to create a lab: set Lab ID, title, Frappe version, resource limits (memory, CPU cores), and dynamically add apps with their Git URL and branch.
+
+### Lab Detail (`/frontend/labs/:labId`)
+
+Tabbed view with three panels:
+- **Dashboard** -- Lab info card, installed apps badges, connection info panel (VPN IP, SSH command, username, password with show/hide toggle and copy-to-clipboard), and container status card with CPU/memory progress bars
+- **Sites** -- List of Frappe sites in the bench with create-site dialog (site name + app selection checkboxes)
+- **Build Log** -- Collapsible step viewer (GitHub Actions-style) parsing Docker build output into expandable steps with success/error/running indicators
+
+### Bench Instances (`/frontend/bench-instances`)
+
+Table of all bench containers showing bench name, lab, Frappe version, status badge (colored: green=Running, orange=Deploying, red=Error/Stopped, gray=Draft), WireGuard IP address, CPU %, and memory %.
+
+### Deploy Logs (`/frontend/deploy-logs`)
+
+Select a bench to view its deployment log. Logs are parsed into collapsible phases (e.g., "Building lab image...", "Creating container...", "Configuring WireGuard VPN...") with step-by-step progress indicators.
+
+### Build Logs (`/frontend/build-logs`)
+
+Expandable list of image build logs. Click a log entry to reveal the full Docker build output parsed into collapsible steps, each with a colored status dot.
+
+### Settings (`/frontend/settings`)
+
+Modal dialog to configure Docker (socket path, base domain, default image, Traefik network), WireGuard (server IP, subnet, port, endpoint, public key), and container resource defaults (memory limit, CPU quota).
 
 ---
 
 ## Data Model (DocTypes)
+
+BenchPress uses 9 DocTypes to model the complete bench lifecycle:
 
 | DocType | Type | Purpose | Key Fields |
 |---------|------|---------|------------|
@@ -170,11 +237,28 @@ BenchPress is a **self-hosted Frappe Cloud alternative** built entirely as a Fra
 | **Deploy Log** | Log | Deployment event log | `bench`, `message`, `log_type`, `timestamp` |
 | **Build Log** | Log | Image build log | `lab`, `message`, `log_type`, `timestamp` |
 
+### Entity Relationship
+
+```
+Lab (template)
+ |-- Lab App[] (child table: apps to install)
+ |
+ +---> Bench Instance (deployed container)
+        |-- Bench App[] (child table: installed apps)
+        |-- Bench Site[] (linked: Frappe sites)
+        |    |-- Site App[] (child table: apps on site)
+        |-- Deploy Log[] (linked: deployment events)
+        |
+Lab ----> Build Log[] (linked: image build events)
+
+BenchPress Settings (singleton: global config)
+```
+
 ---
 
 ## API Reference
 
-All endpoints require authentication and use `@frappe.whitelist()`.
+All endpoints require authentication and use `@frappe.whitelist()`. Long-running operations are dispatched to background workers via `frappe.enqueue()` on the `"long"` queue.
 
 ### Lab Endpoints
 
@@ -215,29 +299,16 @@ All endpoints require authentication and use `@frappe.whitelist()`.
 | `benchpress.api.health_check` | GET | Check Docker and WireGuard connectivity status |
 | `benchpress.wg_manager.setup_wg_server` | POST | One-time WireGuard server initialization |
 
----
+### Bench Instance Document Methods
 
-## Frontend Pages
+These are called via `frappe.client.run_doc_method` on a Bench Instance document:
 
-The frontend is a Vue 3 Single Page Application built with Vite, TailwindCSS, and the `frappe-ui` component library.
-
-| Page | Route | Description |
-|------|-------|-------------|
-| **Labs** | `/frontend/labs` | Searchable, filterable list of lab templates with status badges. Create new labs, trigger builds. |
-| **New Lab** | `/frontend/labs/new` | Form to create a lab: set Lab ID, title, Frappe version, resource limits, and add apps with Git URL and branch. |
-| **Lab Detail** | `/frontend/labs/:labId` | Tabbed view with Dashboard (lab info, connection panel, container stats), Sites (create/manage Frappe sites), and Build Log (collapsible step viewer). |
-| **Bench Instances** | `/frontend/bench-instances` | Table of all bench containers with status badges, WG IPs, CPU/memory percentages. |
-| **Deploy Logs** | `/frontend/deploy-logs` | Select a bench to view deployment log steps with success/error/running indicators. |
-| **Build Logs** | `/frontend/build-logs` | Expandable list of image build logs with collapsible Docker build steps. |
-| **Settings** | `/frontend/settings` | Configure Docker socket, base domain, Traefik network, WireGuard server parameters, and container resource defaults. |
-
-### Key Components
-
-| Component | Description |
-|-----------|-------------|
-| `LogViewer` | Parses raw build logs or structured deploy logs into collapsible steps with status indicators |
-| `LogStep` | Single collapsible log step with colored status dot (green/amber/red), chevron toggle, monospace output, and auto-scroll |
-| `Sidebar` | App navigation with Lucide icons: Labs, Bench Instances, Deploy Logs, Build Logs, Settings |
+| Method | Description |
+|--------|-------------|
+| `enqueue_deploy` | Enqueue deployment as background job (queue: long, timeout: 1800s) |
+| `enqueue_stop` | Stop the container and clean up WireGuard routing |
+| `enqueue_redeploy` | Stop, remove, and redeploy the container from scratch |
+| `enqueue_start` | Start a stopped container |
 
 ---
 
@@ -247,7 +318,7 @@ Before installing BenchPress, ensure your host machine has:
 
 | Requirement | Version | Purpose |
 |------------|---------|---------|
-| Frappe Bench | v15+ | The bench environment to install BenchPress into |
+| Frappe Bench | v16 | The bench environment to install BenchPress into |
 | Python | 3.14+ | Backend runtime |
 | Node.js | 24+ | Frontend build toolchain |
 | Docker Engine | 20+ | Container management (must be running) |
@@ -312,7 +383,7 @@ bench build --app benchpress
 
 ### 4. Initialize WireGuard Server
 
-From the Frappe console or via the Settings page, run the one-time WireGuard server setup:
+From the Frappe console, run the one-time WireGuard server setup:
 
 ```bash
 bench --site your-site.localhost console
@@ -430,12 +501,12 @@ bench --site your-site.localhost clear-cache
 # Run migrations after DocType JSON changes
 bench --site your-site.localhost migrate
 
-# Run linters
+# Run Python linters
 cd apps/benchpress
 python -m ruff check .
 python -m ruff format .
 
-# Frontend linting
+# Run frontend linter
 cd frontend
 yarn lint
 ```
@@ -484,6 +555,8 @@ benchpress/
         +-- App.vue               # Root component with sidebar navigation
         +-- router.js             # Vue Router with 8 routes
         +-- socket.js             # Socket.io client for real-time events
+        +-- main.js               # App bootstrap with frappe-ui plugins
+        +-- theme.css             # Custom theme variables (light + dark)
         +-- pages/
         |   +-- Labs.vue          # Lab list with search, status/version filters
         |   +-- NewLab.vue        # Lab creation form
@@ -496,6 +569,17 @@ benchpress/
             +-- LogViewer.vue     # Parses logs into collapsible steps
             +-- LogStep.vue       # Single log step with status dot and auto-scroll
 ```
+
+### Backend File Responsibilities
+
+| File | Lines | What It Does |
+|------|-------|--------------|
+| `api.py` | ~500 | REST API layer with 20 endpoints. All `@frappe.whitelist()`. Long-running ops enqueued to `"long"` queue. |
+| `deploy_manager.py` | ~300 | Orchestration brain. Coordinates image builds, container creation, WireGuard setup, SSH config, and real-time log streaming. |
+| `docker_manager.py` | ~190 | Docker SDK wrapper. Builds images, creates/starts/stops containers, executes commands inside containers, collects stats. |
+| `wg_manager.py` | ~210 | WireGuard VPN management. Generates keypairs, allocates IPs, manages peers, configures iptables DNAT routing for ports 22/8000/9000. |
+| `stats_collector.py` | ~35 | Cron job (every 2 min). Polls Docker stats for running containers, updates CPU/memory fields. |
+| `hooks.py` | ~240 | App configuration: routes, scheduler events, `add_to_apps_screen`, `ignore_links_on_delete`. |
 
 ---
 
@@ -530,16 +614,30 @@ socket.on("bench_deploy_log", (data) => {
 
 | Network | Subnet | Purpose |
 |---------|--------|---------|
-| `benchpress` (Docker bridge) | `172.30.0.0/24` | Internal communication between containers |
+| `benchpress` (Docker bridge) | `172.30.0.0/24` | Internal communication between host and containers |
 | WireGuard (`wg0`) | `10.10.0.0/24` | VPN subnet for user access (server: `10.10.0.1`, clients: `10.10.0.2`-`10.10.0.254`) |
 
-**DNAT port mapping** (per bench, via iptables):
+### DNAT Port Mapping
+
+For each bench, iptables PREROUTING rules on the `wg0` interface route traffic to the container's Docker IP:
 
 | WireGuard IP Port | Container Port | Service |
 |-------------------|----------------|---------|
 | `10.10.0.X:22` | `container:22` | SSH |
 | `10.10.0.X:8000` | `container:8000` | Frappe Web Server |
 | `10.10.0.X:9000` | `container:9000` | Frappe Socket.io |
+
+### Container Internals
+
+Each container runs as a single self-contained unit with all services:
+
+| Service | Port | Started By |
+|---------|------|------------|
+| MariaDB | 3306 | `entry.sh` (on boot) |
+| Redis | 6379 | `entry.sh` (on boot) |
+| SSH Server | 22 | `entry.sh` (on boot) |
+| Frappe Web | 8000 | User runs `bench start` |
+| Socket.io | 9000 | User runs `bench start` |
 
 ---
 
@@ -564,23 +662,29 @@ You can also add **any custom Frappe app** by providing its Git URL and branch w
 
 ## Configuration Reference
 
-### BenchPress Settings
+### BenchPress Settings (Singleton DocType)
 
 | Field | Default | Description |
 |-------|---------|-------------|
 | `docker_socket` | `unix:///var/run/docker.sock` | Docker Engine socket URL |
-| `default_image` | `frappe/bench:latest` | Base Docker image |
-| `base_domain` | -- | Base domain for bench instances |
-| `traefik_network` | -- | Docker network for Traefik (if used) |
+| `default_image` | `frappe/bench:latest` | Base Docker image for lab builds |
+| `base_domain` | *(required)* | Base domain for bench instances |
+| `traefik_network` | `traefik-public` | Docker network for Traefik (if used) |
 | `wg_server_ip` | `10.10.0.1` | WireGuard server IP address |
 | `wg_subnet` | `10.10.0.0/24` | WireGuard VPN subnet |
 | `wg_server_port` | `51820` | WireGuard listen port |
-| `wg_server_endpoint` | -- | Public IP/hostname for WireGuard clients to connect to |
+| `wg_server_endpoint` | *(required)* | Public IP/hostname for WireGuard clients to connect to |
 | `wg_server_public_key` | Auto-generated | Server's WireGuard public key |
 | `wg_server_private_key` | Auto-generated | Server's WireGuard private key (encrypted) |
-| `next_wg_ip` | `2` | Next IP octet to allocate (auto-increments) |
-| `container_memory_limit` | -- | Default memory limit for containers |
-| `container_cpu_quota` | -- | Default CPU quota for containers |
+| `next_wg_ip` | `2` | Next IP octet to allocate (auto-increments from 2 to 254) |
+| `container_memory_limit` | `512m` | Default memory limit for containers |
+| `container_cpu_quota` | `100000` | Default CPU quota in microseconds (100000 = 1 core) |
+
+### Scheduler Jobs
+
+| Schedule | Function | Description |
+|----------|----------|-------------|
+| Every 2 minutes | `benchpress.stats_collector.collect_all_stats` | Polls Docker stats for running containers, updates CPU/memory metrics |
 
 ---
 
@@ -618,6 +722,8 @@ MIT License. See [LICENSE](license.txt) for details.
 <div align="center">
 
 Built for **FOSS Hack 2026** by [Venkatesh](https://github.com/Venkateshvenki404224)
+
+Powered by [Frappe Framework](https://frappeframework.com)
 
 [GitHub Repository](https://github.com/Venkateshvenki404224/benchpress)
 
