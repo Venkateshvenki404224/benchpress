@@ -190,13 +190,19 @@ The frontend is a Vue 3 Single Page Application built with Vite, TailwindCSS, an
 
 ### Labs List (`/frontend/labs`)
 
+![Labs List](docs/images/labs-list.png)
+
 Searchable, filterable list of all lab templates. Each row shows the Lab ID, title, Frappe version, status badge (Draft/Building/Ready/Error), memory limit, and CPU cores. Filter by status or Frappe version, or search by lab ID, title, or app name.
 
 ### New Lab (`/frontend/labs/new`)
 
+![New Lab](docs/images/new-lab.png)
+
 Form to create a lab: set Lab ID, title, Frappe version, resource limits (memory, CPU cores), and dynamically add apps with their Git URL and branch.
 
 ### Lab Detail (`/frontend/labs/:labId`)
+
+![Lab Detail](docs/images/lab-detail.png)
 
 Tabbed view with three panels:
 - **Dashboard** -- Lab info card, installed apps badges, connection info panel (VPN IP, SSH command, username, password with show/hide toggle and copy-to-clipboard), and container status card with CPU/memory progress bars
@@ -205,17 +211,25 @@ Tabbed view with three panels:
 
 ### Bench Instances (`/frontend/bench-instances`)
 
+![Bench Instances](docs/images/bench-instances.png)
+
 Table of all bench containers showing bench name, lab, Frappe version, status badge (colored: green=Running, orange=Deploying, red=Error/Stopped, gray=Draft), WireGuard IP address, CPU %, and memory %.
 
 ### Deploy Logs (`/frontend/deploy-logs`)
+
+![Deploy Logs](docs/images/deploy-logs.png)
 
 Select a bench to view its deployment log. Logs are parsed into collapsible phases (e.g., "Building lab image...", "Creating container...", "Configuring WireGuard VPN...") with step-by-step progress indicators.
 
 ### Build Logs (`/frontend/build-logs`)
 
+![Build Logs](docs/images/build-logs.png)
+
 Expandable list of image build logs. Click a log entry to reveal the full Docker build output parsed into collapsible steps, each with a colored status dot.
 
 ### Settings (`/frontend/settings`)
+
+![Settings](docs/images/settings.png)
 
 Modal dialog to configure Docker (socket path, base domain, default image, Traefik network), WireGuard (server IP, subnet, port, endpoint, public key), and container resource defaults (memory limit, CPU quota).
 
