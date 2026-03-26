@@ -20,6 +20,7 @@ import {
 } from "frappe-ui"
 
 import "./index.css"
+import "./theme.css"
 
 const globalComponents = {
 	Button,

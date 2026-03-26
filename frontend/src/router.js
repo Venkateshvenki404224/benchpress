@@ -7,7 +7,37 @@ const routes = [
 		path: "/",
 		name: "Home",
 		component: () => import("@/pages/Home.vue"),
-	}
+	},
+	{
+		path: "/bench-instances",
+		name: "BenchInstances",
+		component: () => import("@/pages/Home.vue"),
+	},
+	{
+		path: "/bench-sites",
+		name: "BenchSites",
+		component: () => import("@/pages/Home.vue"),
+	},
+	{
+		path: "/labs",
+		name: "Labs",
+		component: () => import("@/pages/Home.vue"),
+	},
+	{
+		path: "/deploy-logs",
+		name: "DeployLogs",
+		component: () => import("@/pages/Home.vue"),
+	},
+	{
+		path: "/build-logs",
+		name: "BuildLogs",
+		component: () => import("@/pages/Home.vue"),
+	},
+	{
+		path: "/settings",
+		name: "Settings",
+		component: () => import("@/pages/Home.vue"),
+	},
 ]
 
 const router = createRouter({

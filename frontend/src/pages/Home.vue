@@ -1,37 +1,40 @@
 <template>
-  <div class="max-w-3xl py-12 mx-auto">
-    <h2 class="font-bold text-lg text-gray-600 mb-4">
-      Welcome {{ session.user }}!
-    </h2>
-
-    <Button theme="gray" variant="solid" icon-left="code" @click="ping.fetch" :loading="ping.loading">
-      Click to send 'ping' request
-    </Button>
-    <div>
-      {{ ping.data }}
+  <div class="p-4">
+    <ListView
+      v-if="deployLogs.data?.length"
+      :columns="columns"
+      :rows="deployLogs.data"
+      :options="{
+        selectable: false,
+        showTooltip: true,
+        resizeColumn: true,
+      }"
+      row-key="name"
+    />
+    <div v-else-if="deployLogs.loading" class="text-base text-ink-gray-5">
+      Loading...
     </div>
-    <pre>{{ ping }}</pre>
-
-    <div class="flex flex-row space-x-2 mt-4">
-      <Button @click="showDialog = true">Open Dialog</Button>
-      <Button @click="session.logout.submit()">Logout</Button>
+    <div v-else class="text-base text-ink-gray-5">
+      No deploy logs found.
     </div>
-
-    <!-- Dialog -->
-    <Dialog title="Title" v-model="showDialog"> Dialog content </Dialog>
   </div>
 </template>
 
 <script setup>
-import { Dialog } from "frappe-ui"
-import { createResource } from "frappe-ui"
-import { ref } from "vue"
-import { session } from "../data/session"
+import { ListView, createListResource } from 'frappe-ui'
 
-const ping = createResource({
-	url: "ping",
-	auto: true,
+const columns = [
+  { label: 'Bench', key: 'bench', width: '200px' },
+  { label: 'Log Type', key: 'log_type', width: '150px' },
+  { label: 'Message', key: 'message' },
+]
+
+let deployLogs = createListResource({
+  doctype: 'Deploy Log',
+  fields: ['name', 'bench', 'log_type', 'message'],
+  orderBy: 'creation desc',
+  start: 0,
+  pageLength: 20,
+  auto: true,
 })
-
-const showDialog = ref(false)
 </script>
