@@ -20,8 +20,15 @@
 
 ---
 
+## What is BenchPress?
+
+[![Watch the video](https://img.youtube.com/vi/6NnA6yBX0y0/maxresdefault.jpg)](https://www.youtube.com/watch?v=6NnA6yBX0y0)
+
+---
+
 ## Table of Contents
 
+- [What is BenchPress?](#what-is-benchpress)
 - [The Problem](#the-problem)
 - [The Solution](#the-solution)
 - [Architecture](#architecture)
