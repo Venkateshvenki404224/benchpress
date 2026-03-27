@@ -39,6 +39,9 @@ su frappe -c "cd /home/frappe/frappe-bench && bench new-site ${SITE_NAME} \
     --set-default \
     ${INSTALL_FLAGS}"
 
+echo "[create-site] Building assets..."
+su frappe -c "cd /home/frappe/frappe-bench && bench build"
+
 echo "[create-site] Stopping services..."
 service mariadb stop || mysqladmin -u root -pfrappe shutdown || true
 redis-cli shutdown || true
