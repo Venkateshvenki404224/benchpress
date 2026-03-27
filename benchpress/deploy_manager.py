@@ -127,41 +127,50 @@ def deploy_bench(bench_name: str) -> None:
 			append_log("=== Configuring WireGuard VPN ===")
 			ensure_wg_running()
 
-			if bench.wg_ip and bench.wg_public_key:
-				try:
-					remove_peer_from_server(bench.wg_public_key)
-				except Exception:
-					pass
-				wg_ip = bench.wg_ip
-				append_log(f"Reusing VPN IP {wg_ip}")
-			else:
-				wg_ip = allocate_ip()
+			# Remove stale peers from previous deploy
+			for old_key in [bench.wg_public_key, bench.user_wg_public_key]:
+				if old_key:
+					try:
+						remove_peer_from_server(old_key)
+					except Exception:
+						pass
 
-			keys = generate_keypair()
-			config = generate_peer_config(
-				private_key=keys["private_key"],
-				peer_ip=wg_ip,
+			# Container wg0 IP: reuse so SSH target stays the same across redeploys
+			container_wg_ip = bench.wg_ip if bench.wg_ip else allocate_ip()
+			# User VPN IP: always fresh (user re-downloads config)
+			user_wg_ip = allocate_ip()
+
+			container_keys = generate_keypair()
+			user_keys = generate_keypair()
+
+			add_peer_to_server(container_keys["public_key"], container_wg_ip)
+			add_peer_to_server(user_keys["public_key"], user_wg_ip)
+
+			setup_container_vpn(
+				container_id,
+				container_keys["private_key"],
+				container_wg_ip,
+				settings.wg_server_public_key,
+				settings.wg_server_port or 51820,
+			)
+
+			user_config = generate_peer_config(
+				private_key=user_keys["private_key"],
+				peer_ip=user_wg_ip,
 				server_public_key=settings.wg_server_public_key,
 				server_endpoint=settings.wg_server_endpoint,
 				server_port=settings.wg_server_port or 51820,
 			)
-			add_peer_to_server(keys["public_key"], wg_ip)
-			setup_container_vpn(
-				container_id,
-				keys["private_key"],
-				wg_ip,
-				settings.wg_server_public_key,
-				settings.wg_server_port or 51820,
-			)
 			sync_wg_config()
 
-			bench.wg_ip = wg_ip
-			bench.wg_private_key = keys["private_key"]
-			bench.wg_public_key = keys["public_key"]
-			bench.wg_config = config
+			bench.wg_ip = container_wg_ip
+			bench.wg_private_key = container_keys["private_key"]
+			bench.wg_public_key = container_keys["public_key"]
+			bench.wg_config = user_config
+			bench.user_wg_public_key = user_keys["public_key"]
 			bench.save(ignore_permissions=True)
 			frappe.db.commit()
-			append_log(f"VPN configured at {wg_ip}")
+			append_log(f"Container VPN: {container_wg_ip} | User VPN: {user_wg_ip}")
 		else:
 			append_log("WireGuard not configured, skipping VPN.", "warning")
 

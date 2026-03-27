@@ -38,11 +38,13 @@ class BenchInstance(Document):
 		return username
 
 	def on_trash(self):
-		if self.wg_public_key:
+		keys_to_remove = [k for k in [self.wg_public_key, self.user_wg_public_key] if k]
+		if keys_to_remove:
 			try:
 				from benchpress.wg_manager import remove_peer_from_server
 
-				remove_peer_from_server(self.wg_public_key)
+				for key in keys_to_remove:
+					remove_peer_from_server(key)
 			except Exception:
 				frappe.log_error(title=f"WG cleanup failed: {self.name}")
 
