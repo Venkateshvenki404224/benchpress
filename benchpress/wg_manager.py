@@ -129,7 +129,7 @@ def sync_wg_config() -> None:
 	subprocess.run(["sudo", "bash", "-c", f"wg-quick save {WG_INTERFACE}"], capture_output=True)
 
 
-# --- DNAT Routing: WG IP → Container Docker IP ---
+# --- Inside-Container VPN Setup ---
 
 
 def _get_container_ip(container_id: str) -> str:
@@ -143,69 +143,50 @@ def _get_container_ip(container_id: str) -> str:
 	return container.attrs["NetworkSettings"]["IPAddress"]
 
 
-def setup_wg_routing(wg_ip: str, container_id: str) -> None:
-	docker_ip = _get_container_ip(container_id)
-	if not docker_ip:
-		frappe.log_error(title=f"No Docker IP for container {container_id}")
-		return
+def _get_docker_gateway() -> str:
+	"""Get the host's gateway IP on the benchpress Docker network."""
+	from benchpress.docker_manager import get_client
 
-	for port in ["22", "8000", "9000"]:
-		subprocess.run(
-			[
-				"sudo",
-				"iptables",
-				"-t",
-				"nat",
-				"-A",
-				"PREROUTING",
-				"-i",
-				WG_INTERFACE,
-				"-d",
-				wg_ip,
-				"-p",
-				"tcp",
-				"--dport",
-				port,
-				"-j",
-				"DNAT",
-				"--to-destination",
-				f"{docker_ip}:{port}",
-			],
-			check=True,
-			capture_output=True,
-		)
-
-
-def remove_wg_routing(wg_ip: str, container_id: str) -> None:
+	client = get_client()
 	try:
-		docker_ip = _get_container_ip(container_id)
+		network = client.networks.get("benchpress")
+		ipam = network.attrs.get("IPAM", {})
+		configs = ipam.get("Config", [])
+		if configs and "Gateway" in configs[0]:
+			return configs[0]["Gateway"]
 	except Exception:
-		return
+		pass
+	return "172.30.0.1"
 
-	if not docker_ip:
-		return
 
-	for port in ["22", "8000", "9000"]:
-		subprocess.run(
-			[
-				"sudo",
-				"iptables",
-				"-t",
-				"nat",
-				"-D",
-				"PREROUTING",
-				"-i",
-				WG_INTERFACE,
-				"-d",
-				wg_ip,
-				"-p",
-				"tcp",
-				"--dport",
-				port,
-				"-j",
-				"DNAT",
-				"--to-destination",
-				f"{docker_ip}:{port}",
-			],
-			capture_output=True,
-		)
+def setup_container_vpn(
+	container_id: str,
+	private_key: str,
+	peer_ip: str,
+	server_public_key: str,
+	server_port: int,
+) -> None:
+	"""Write WireGuard config into the container and bring up wg0 inside it."""
+	from benchpress.docker_manager import exec_in_container, write_file_to_container
+
+	gateway = _get_docker_gateway()
+
+	config = (
+		f"[Interface]\n"
+		f"PrivateKey = {private_key}\n"
+		f"Address = {peer_ip}/32\n"
+		f"\n"
+		f"[Peer]\n"
+		f"PublicKey = {server_public_key}\n"
+		f"Endpoint = {gateway}:{server_port}\n"
+		f"AllowedIPs = 10.10.0.0/24\n"
+		f"PersistentKeepalive = 25\n"
+	)
+
+	exec_in_container(container_id, "mkdir -p /etc/wireguard", user="root")
+	write_file_to_container(container_id, config, "/etc/wireguard/wg0.conf")
+	exec_in_container(container_id, "chmod 600 /etc/wireguard/wg0.conf", user="root")
+
+	exit_code, output = exec_in_container(container_id, "wg-quick up wg0", user="root")
+	if exit_code != 0:
+		raise Exception(f"wg-quick up failed inside container: {output}")
