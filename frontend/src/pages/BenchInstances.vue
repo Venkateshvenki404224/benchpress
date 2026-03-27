@@ -47,7 +47,12 @@ const columns = [
 			return h(Badge, { label: row.status, theme: color, size: "sm" });
 		},
 	},
-	{ label: "IP Address", key: "wg_ip", width: "140px" },
+	{
+		label: "IP Address",
+		key: "wg_ip",
+		width: "140px",
+		getLabel: ({ row }) => row.wg_ip || row.container_ip || "—",
+	},
 	{ label: "CPU %", key: "cpu_usage", width: "80px" },
 	{ label: "Memory %", key: "memory_usage", width: "100px" },
 ];

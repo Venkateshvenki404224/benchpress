@@ -20,22 +20,12 @@ import { computed } from "vue";
 import LogStep from "./LogStep.vue";
 
 const props = defineProps({
-	/** Raw log text (for build logs — single message field) */
 	rawLog: { type: String, default: "" },
-	/** Structured log entries (for deploy logs — array of {message, log_type, timestamp}) */
-	entries: { type: Array, default: () => [] },
-	/** 'build' or 'deploy' */
-	mode: { type: String, default: "build" },
 });
 
-const steps = computed(() => {
-	if (props.mode === "build") {
-		return parseBuildLog(props.rawLog);
-	}
-	return parseDeployLog(props.entries);
-});
+const steps = computed(() => parseLog(props.rawLog));
 
-function parseBuildLog(raw) {
+function parseLog(raw) {
 	if (!raw) return [];
 
 	const lines = raw.split("\n");
@@ -47,7 +37,6 @@ function parseBuildLog(raw) {
 		const headerMatch = line.match(/^===\s*(.*)/);
 
 		if (stepMatch) {
-			// New Docker build step
 			if (current) steps.push(current);
 			current = {
 				title: `Step ${stepMatch[1]} : ${stepMatch[2]}`,
@@ -61,11 +50,13 @@ function parseBuildLog(raw) {
 
 			if (
 				text.toLowerCase().includes("build complete") ||
-				text.toLowerCase().includes("build successful")
+				text.toLowerCase().includes("build successful") ||
+				text.toLowerCase().includes("deploy complete")
 			) {
 				current = { title: text, output: "", status: "success", defaultOpen: false };
 			} else if (
 				text.toLowerCase().includes("build failed") ||
+				text.toLowerCase().includes("deploy failed") ||
 				text.toLowerCase().includes("error")
 			) {
 				current = { title: text, output: "", status: "error", defaultOpen: true };
@@ -75,7 +66,6 @@ function parseBuildLog(raw) {
 		} else if (current) {
 			current.output += (current.output ? "\n" : "") + line;
 		} else {
-			// Lines before any step — create an init step
 			if (!steps.length || steps[steps.length - 1]?.title !== "Initialization") {
 				current = {
 					title: "Initialization",
@@ -92,7 +82,6 @@ function parseBuildLog(raw) {
 
 	if (current) steps.push(current);
 
-	// Mark step statuses
 	for (let i = 0; i < steps.length; i++) {
 		const s = steps[i];
 		if (s.status === "error") continue;
@@ -100,72 +89,14 @@ function parseBuildLog(raw) {
 			s.status = "error";
 			s.defaultOpen = true;
 		} else if (i < steps.length - 1) {
-			// Completed steps (not the last one)
 			if (s.status === "running") s.status = "success";
 		}
 	}
 
-	// Last step: open by default
 	if (steps.length) {
 		steps[steps.length - 1].defaultOpen = true;
 	}
 
 	return steps;
-}
-
-function parseDeployLog(entries) {
-	if (!entries?.length) return [];
-
-	const phases = [];
-	let current = null;
-
-	for (const entry of entries) {
-		const msg = entry.message || "";
-		const type = entry.log_type || "info";
-
-		// Detect phase boundaries (messages ending with "...")
-		const isPhaseStart =
-			msg.endsWith("...") ||
-			msg.startsWith("Starting") ||
-			msg.startsWith("Creating") ||
-			msg.startsWith("Configuring");
-
-		if (isPhaseStart) {
-			if (current) phases.push(current);
-			current = {
-				title: msg,
-				output: "",
-				status: type === "error" ? "error" : "running",
-				defaultOpen: type === "error",
-			};
-		} else if (current) {
-			current.output += (current.output ? "\n" : "") + msg;
-			if (type === "success") current.status = "success";
-			if (type === "error") {
-				current.status = "error";
-				current.defaultOpen = true;
-			}
-		} else {
-			current = {
-				title: msg.slice(0, 80) || "Deploy",
-				output: msg,
-				status: type === "error" ? "error" : type === "success" ? "success" : "running",
-				defaultOpen: type === "error",
-			};
-		}
-	}
-
-	if (current) phases.push(current);
-
-	// Finalize statuses
-	for (let i = 0; i < phases.length - 1; i++) {
-		if (phases[i].status === "running") phases[i].status = "success";
-	}
-
-	if (phases.length) {
-		phases[phases.length - 1].defaultOpen = true;
-	}
-
-	return phases;
 }
 </script>

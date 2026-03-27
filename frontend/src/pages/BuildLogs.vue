@@ -33,7 +33,7 @@
 
 				<!-- Expanded log viewer -->
 				<div v-if="expandedLog === log.name" class="border-t border-outline-gray-1">
-					<LogViewer :rawLog="log.message" mode="build" />
+					<LogViewer :rawLog="log.message" />
 				</div>
 			</div>
 		</div>

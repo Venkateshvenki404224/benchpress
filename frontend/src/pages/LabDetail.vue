@@ -136,13 +136,13 @@
 										<div class="flex flex-1 items-center gap-2">
 											<code
 												class="flex-1 rounded bg-surface-gray-1 px-4 py-2.5 font-mono text-sm text-ink-gray-8"
-												>{{ activeBench.wg_ip || "—" }}</code
+												>{{ benchIp ?? "—" }}</code
 											>
 											<Button
 												icon="copy"
 												appearance="minimal"
 												size="sm"
-												@click="copyText(activeBench.wg_ip || '')"
+												@click="copyText(benchIp)"
 											/>
 										</div>
 									</div>
@@ -154,7 +154,7 @@
 										<div class="flex flex-1 items-center gap-2">
 											<code
 												class="flex-1 rounded bg-surface-gray-1 px-4 py-2.5 font-mono text-sm text-ink-gray-8"
-												>{{ sshCommand }}</code
+												>{{ sshCommand ?? "—" }}</code
 											>
 											<Button
 												icon="copy"
@@ -172,7 +172,7 @@
 										<div class="flex flex-1 items-center gap-2">
 											<code
 												class="flex-1 rounded bg-surface-gray-1 px-4 py-2.5 font-mono text-sm text-ink-gray-8"
-												>{{ sshUsername }}</code
+												>{{ sshUsername ?? "—" }}</code
 											>
 											<Button
 												icon="copy"
@@ -190,16 +190,8 @@
 										<div class="flex flex-1 items-center gap-2">
 											<code
 												class="flex-1 rounded bg-surface-gray-1 px-4 py-2.5 font-mono text-sm text-ink-gray-8"
-												>{{
-													showPassword ? sshPassword : "••••••••••••"
-												}}</code
+												>{{ sshPassword ? "••••••••••••" : "—" }}</code
 											>
-											<Button
-												:icon="showPassword ? 'eye-off' : 'eye'"
-												appearance="minimal"
-												size="sm"
-												@click="showPassword = !showPassword"
-											/>
 											<Button
 												icon="copy"
 												appearance="minimal"
@@ -397,8 +389,8 @@
 
 				<!-- Deploy Log Tab -->
 				<div v-if="tab.label === 'Deploy Log'" class="p-4">
-					<div v-if="liveDeployLogs.length">
-						<LogViewer :entries="liveDeployLogs" mode="deploy" />
+					<div v-if="liveDeployLog || deployLogs.data?.length">
+						<LogViewer :rawLog="liveDeployLog || deployLogs.data?.[0]?.message || ''" />
 					</div>
 					<div v-else-if="deployLogs.loading" class="text-base text-ink-gray-5">
 						Loading deploy logs...
@@ -416,7 +408,7 @@
 				<!-- Build Log Tab -->
 				<div v-if="tab.label === 'Build Log'" class="p-4">
 					<div v-if="liveBuildLog || buildLogs.data?.length">
-						<LogViewer :rawLog="liveBuildLog || buildLogs.data?.[0]?.message || ''" mode="build" />
+						<LogViewer :rawLog="liveBuildLog || buildLogs.data?.[0]?.message || ''" />
 					</div>
 					<div v-else-if="buildLogs.loading" class="text-base text-ink-gray-5">
 						Loading build log...
@@ -481,11 +473,16 @@ const siteColumns = [
 	{ label: "Status", key: "status", width: "120px" },
 ];
 
-const sshUsername = computed(() => (activeBench.value ? "frappe" : ""));
-const sshPassword = computed(() => activeBench.value?.admin_password || "admin");
+const sshUsername = computed(() => activeBench.value?.ssh_username || null);
+const sshPassword = computed(() => activeBench.value?.ssh_password || null);
+const benchIp = computed(
+	() => activeBench.value?.wg_ip || activeBench.value?.container_ip || null,
+);
 const sshCommand = computed(() => {
-	const ip = activeBench.value?.wg_ip || activeBench.value?.name || "localhost";
-	return `ssh frappe@${ip}`;
+	const ip = benchIp.value;
+	const user = sshUsername.value;
+	if (!ip || !user) return null;
+	return `ssh ${user}@${ip}`;
 });
 
 const lab = createResource({
@@ -514,7 +511,7 @@ const deployLogs = createResource({
 	url: "benchpress.api.get_deploy_logs",
 });
 
-const liveDeployLogs = ref([]);
+const liveDeployLog = ref("");
 const deployComplete = ref(false);
 let pollInterval = null;
 
@@ -527,9 +524,8 @@ function fetchDeployLogs() {
 // Sync fetched logs into live display and detect completion
 watch(() => deployLogs.data, (data) => {
 	if (data?.length) {
-		liveDeployLogs.value = [...data];
-		const hasSuccess = data.some(d => d.log_type === "success");
-		if (hasSuccess && !deployComplete.value) {
+		liveDeployLog.value = data[0].message || "";
+		if (data[0].log_type === "success" && !deployComplete.value) {
 			deployComplete.value = true;
 			if (pollInterval) {
 				clearInterval(pollInterval);
@@ -620,13 +616,10 @@ const liveBuildLog = ref("");
 
 function onDeployLog(data) {
 	if (activeBench.value && data.bench === activeBench.value.name) {
-		liveDeployLogs.value.push({
-			message: data.log,
-			log_type: data.type || "info",
-			timestamp: new Date().toISOString(),
-		});
-		if (data.type === "success") {
+		liveDeployLog.value += data.log + "\n";
+		if (data.type === "success" || data.type === "error") {
 			benches.reload();
+			deployLogs.reload();
 		}
 	}
 }
@@ -713,7 +706,8 @@ function buildLabImage() {
 const deployAction = createResource({
 	url: "benchpress.api.create_bench",
 	onSuccess() {
-		liveDeployLogs.value = [];
+		liveDeployLog.value = "";
+		deployComplete.value = false;
 		benches.reload();
 	},
 });
