@@ -39,6 +39,11 @@ const routes = [
 		component: () => import("@/pages/BuildLogs.vue"),
 	},
 	{
+		path: "/devices",
+		name: "Devices",
+		component: () => import("@/pages/Devices.vue"),
+	},
+	{
 		path: "/settings",
 		name: "Settings",
 		component: () => import("@/pages/Settings.vue"),

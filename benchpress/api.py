@@ -327,6 +327,38 @@ def get_wg_config(bench_name: str) -> str:
 	return bench.wg_config
 
 
+# --- Device endpoints ---
+
+
+@frappe.whitelist()
+def add_device(device_name: str, device_type: str, public_key: str = None) -> dict:
+	from benchpress.device_manager import register_device
+
+	return register_device(device_name, device_type, public_key or None)
+
+
+@frappe.whitelist()
+def remove_device(device_name: str) -> dict:
+	from benchpress.device_manager import unregister_device
+
+	unregister_device(device_name)
+	return {"status": "removed"}
+
+
+@frappe.whitelist()
+def list_devices() -> list[dict]:
+	from benchpress.device_manager import list_devices as _list
+
+	return _list()
+
+
+@frappe.whitelist()
+def get_device_wg_config(device_name: str) -> str:
+	from benchpress.device_manager import get_device_config
+
+	return get_device_config(device_name)
+
+
 @frappe.whitelist()
 def get_bench_stats(bench_name: str) -> dict:
 	from benchpress.docker_manager import get_container_stats

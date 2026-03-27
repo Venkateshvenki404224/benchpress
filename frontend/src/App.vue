@@ -16,6 +16,7 @@ import ServerIcon from "~icons/lucide/server";
 import FlaskConicalIcon from "~icons/lucide/flask-conical";
 import ScrollTextIcon from "~icons/lucide/scroll-text";
 import HammerIcon from "~icons/lucide/hammer";
+import ShieldIcon from "~icons/lucide/shield";
 import SettingsIcon from "~icons/lucide/settings";
 import LayoutDashboardIcon from "~icons/lucide/layout-dashboard";
 import MoonIcon from "~icons/lucide/moon";
@@ -51,6 +52,7 @@ const sidebarConfig = reactive({
 			items: [
 				{ label: "Labs", icon: FlaskConicalIcon, to: "/labs" },
 				{ label: "Bench Instances", icon: ServerIcon, to: "/bench-instances" },
+				{ label: "VPN Devices", icon: ShieldIcon, to: "/devices" },
 			],
 		},
 		{
