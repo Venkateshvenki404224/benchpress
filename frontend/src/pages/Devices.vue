@@ -24,7 +24,12 @@
 					<div>
 						<div class="font-medium text-ink-gray-9">{{ device.device_name }}</div>
 						<div class="mt-1 flex items-center gap-2">
-							<Badge :label="device.device_type" theme="blue" variant="outline" size="sm" />
+							<Badge
+								:label="device.device_type"
+								theme="blue"
+								variant="outline"
+								size="sm"
+							/>
 							<Badge
 								:label="device.status"
 								:theme="device.status === 'Active' ? 'green' : 'gray'"
@@ -68,14 +73,12 @@
 		>
 			<div class="text-sm text-ink-gray-5">No devices registered yet.</div>
 			<p class="mt-1 text-xs text-ink-gray-4">
-				Add a device to get a WireGuard config that connects you to all your lab containers.
+				Add a device to get a WireGuard config that connects you to all your lab
+				containers.
 			</p>
 		</div>
 
-		<Dialog
-			:options="{ title: 'Add Device', size: 'sm' }"
-			v-model="showAddDialog"
-		>
+		<Dialog :options="{ title: 'Add Device', size: 'sm' }" v-model="showAddDialog">
 			<template #body-content>
 				<div class="space-y-4">
 					<FormControl
@@ -93,8 +96,14 @@
 						:required="true"
 					/>
 					<div>
-						<label class="mb-1 flex items-center gap-2 text-xs font-medium text-ink-gray-6">
-							<input type="checkbox" v-model="autoGenKey" class="accent-surface-blue-2" />
+						<label
+							class="mb-1 flex items-center gap-2 text-xs font-medium text-ink-gray-6"
+						>
+							<input
+								type="checkbox"
+								v-model="autoGenKey"
+								class="accent-surface-blue-2"
+							/>
 							Auto Generate Keypair
 						</label>
 						<FormControl
@@ -105,7 +114,8 @@
 							placeholder="Paste your WireGuard public key"
 						/>
 						<p v-else class="text-xs text-ink-gray-4">
-							A keypair will be generated automatically. Download your config after adding.
+							A keypair will be generated automatically. Download your config after
+							adding.
 						</p>
 					</div>
 					<ErrorMessage :message="addAction.error" />
@@ -123,15 +133,12 @@
 			</template>
 		</Dialog>
 
-		<Dialog
-			:options="{ title: 'Remove Device', size: 'sm' }"
-			v-model="showRemoveDialog"
-		>
+		<Dialog :options="{ title: 'Remove Device', size: 'sm' }" v-model="showRemoveDialog">
 			<template #body-content>
 				<p class="text-sm text-ink-gray-6">
 					Are you sure you want to remove
-					<strong>{{ deviceToRemove?.device_name }}</strong>? This will revoke its VPN access
-					immediately.
+					<strong>{{ deviceToRemove?.device_name }}</strong
+					>? This will revoke its VPN access immediately.
 				</p>
 			</template>
 			<template #actions>
@@ -225,7 +232,11 @@ function removeDevice() {
 	removingDevice.value = deviceToRemove.value.name;
 	removeAction.submit(
 		{ device_name: deviceToRemove.value.name },
-		{ onSuccess() { removingDevice.value = null; } },
+		{
+			onSuccess() {
+				removingDevice.value = null;
+			},
+		}
 	);
 }
 
@@ -251,7 +262,7 @@ async function downloadConfig(device) {
 			onError() {
 				downloadingConfig.value = null;
 			},
-		},
+		}
 	);
 }
 </script>

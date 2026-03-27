@@ -35,11 +35,16 @@
 					size="lg"
 					:loading="buildAction.loading || lab.data.status === 'Building'"
 					@click="buildLabImage"
-					>{{ lab.data.status === 'Building' ? 'Building...' : 'Build Image' }}</Button
+					>{{ lab.data.status === "Building" ? "Building..." : "Build Image" }}</Button
 				>
 				<!-- Lab ready, no instance or instance stopped/errored: show Deploy -->
 				<Button
-					v-if="lab.data.status === 'Ready' && (!activeBench || activeBench.status === 'Stopped' || activeBench.status === 'Error')"
+					v-if="
+						lab.data.status === 'Ready' &&
+						(!activeBench ||
+							activeBench.status === 'Stopped' ||
+							activeBench.status === 'Error')
+					"
 					theme="green"
 					variant="solid"
 					size="lg"
@@ -77,11 +82,19 @@
 							<div
 								class="rounded-lg border border-outline-gray-1 bg-surface-white p-5"
 							>
-								<h2 class="mb-3 text-base font-semibold text-ink-gray-9">Lab Information</h2>
-								<p v-if="lab.data.description" class="mb-4 text-sm text-ink-gray-6">
+								<h2 class="mb-3 text-base font-semibold text-ink-gray-9">
+									Lab Information
+								</h2>
+								<p
+									v-if="lab.data.description"
+									class="mb-4 text-sm text-ink-gray-6"
+								>
 									{{ lab.data.description }}
 								</p>
-								<p v-if="!activeBench && !lab.data.description" class="mb-4 text-sm text-ink-gray-5">
+								<p
+									v-if="!activeBench && !lab.data.description"
+									class="mb-4 text-sm text-ink-gray-5"
+								>
 									This lab is not deployed yet. Click "Deploy" to start.
 								</p>
 								<div v-if="lab.data.apps?.length" class="mt-4">
@@ -118,7 +131,9 @@
 								v-if="activeBench"
 								class="rounded-lg border border-outline-gray-1 bg-surface-white p-5"
 							>
-								<h2 class="mb-3 text-base font-semibold text-ink-gray-9">Connection Information</h2>
+								<h2 class="mb-3 text-base font-semibold text-ink-gray-9">
+									Connection Information
+								</h2>
 								<p class="mb-5 text-sm leading-relaxed text-ink-gray-6">
 									This server is accessible through
 									<strong class="text-ink-gray-8">Code</strong> or
@@ -201,13 +216,16 @@
 										</div>
 									</div>
 								</div>
-								<div class="flex items-center gap-4 border-t border-outline-gray-1 pt-4 mt-2">
+								<div
+									class="flex items-center gap-4 border-t border-outline-gray-1 pt-4 mt-2"
+								>
 									<Button
 										appearance="primary"
 										icon-left="shield"
 										class="w-full"
 										@click="$router.push('/devices')"
-									>Manage VPN Devices</Button>
+										>Manage VPN Devices</Button
+									>
 								</div>
 							</div>
 						</div>
@@ -387,7 +405,9 @@
 				<!-- Deploy Log Tab -->
 				<div v-if="tab.label === 'Deploy Log'" class="p-4">
 					<div v-if="liveDeployLog || deployLogs.data?.length">
-						<LogViewer :rawLog="liveDeployLog || deployLogs.data?.[0]?.message || ''" />
+						<LogViewer
+							:rawLog="liveDeployLog || deployLogs.data?.[0]?.message || ''"
+						/>
 					</div>
 					<div v-else-if="deployLogs.loading" class="text-base text-ink-gray-5">
 						Loading deploy logs...
@@ -473,7 +493,7 @@ const siteColumns = [
 const sshUsername = computed(() => activeBench.value?.ssh_username || null);
 const sshPassword = computed(() => activeBench.value?.ssh_password || null);
 const benchIp = computed(
-	() => activeBench.value?.wg_ip || activeBench.value?.container_ip || null,
+	() => activeBench.value?.wg_ip || activeBench.value?.container_ip || null
 );
 const sshCommand = computed(() => {
 	const ip = benchIp.value;
@@ -519,29 +539,35 @@ function fetchDeployLogs() {
 }
 
 // Sync fetched logs into live display and detect completion
-watch(() => deployLogs.data, (data) => {
-	if (data?.length) {
-		liveDeployLog.value = data[0].message || "";
-		if (data[0].log_type === "success" && !deployComplete.value) {
-			deployComplete.value = true;
-			if (pollInterval) {
-				clearInterval(pollInterval);
-				pollInterval = null;
+watch(
+	() => deployLogs.data,
+	(data) => {
+		if (data?.length) {
+			liveDeployLog.value = data[0].message || "";
+			if (data[0].log_type === "success" && !deployComplete.value) {
+				deployComplete.value = true;
+				if (pollInterval) {
+					clearInterval(pollInterval);
+					pollInterval = null;
+				}
+				benches.reload();
 			}
-			benches.reload();
 		}
 	}
-});
+);
 
 // Reload logs when the actual bench changes (watch name, not object ref)
-watch(() => activeBench.value?.name, (name, oldName) => {
-	if (name && name !== oldName) {
-		deployComplete.value = false;
-		if (activeTab.value === 2) {
-			fetchDeployLogs();
+watch(
+	() => activeBench.value?.name,
+	(name, oldName) => {
+		if (name && name !== oldName) {
+			deployComplete.value = false;
+			if (activeTab.value === 2) {
+				fetchDeployLogs();
+			}
 		}
 	}
-});
+);
 
 // Poll for new logs while deploying (only on Deploy Log tab)
 watch(
@@ -555,46 +581,58 @@ watch(
 			pollInterval = setInterval(fetchDeployLogs, 3000);
 		}
 	},
-	{ immediate: true },
+	{ immediate: true }
 );
 
 // Poll for build logs while building
 let buildPollInterval = null;
 
-watch(() => lab.data?.status, (status) => {
-	if (status === "Building") {
-		buildPollInterval = setInterval(() => {
-			buildLogs.reload();
-		}, 3000);
-	} else {
-		if (buildPollInterval) {
-			clearInterval(buildPollInterval);
-			buildPollInterval = null;
+watch(
+	() => lab.data?.status,
+	(status) => {
+		if (status === "Building") {
+			buildPollInterval = setInterval(() => {
+				buildLogs.reload();
+			}, 3000);
+		} else {
+			if (buildPollInterval) {
+				clearInterval(buildPollInterval);
+				buildPollInterval = null;
+			}
+			if (status === "Ready" || status === "Error") {
+				buildLogs.reload();
+			}
 		}
-		if (status === "Ready" || status === "Error") {
-			buildLogs.reload();
-		}
-	}
-}, { immediate: true });
+	},
+	{ immediate: true }
+);
 
 // Also poll lab status while building to detect completion
 let labPollInterval = null;
 
-watch(() => lab.data?.status, (status) => {
-	if (status === "Building") {
-		labPollInterval = setInterval(() => { lab.reload(); }, 5000);
-	} else if (labPollInterval) {
-		clearInterval(labPollInterval);
-		labPollInterval = null;
+watch(
+	() => lab.data?.status,
+	(status) => {
+		if (status === "Building") {
+			labPollInterval = setInterval(() => {
+				lab.reload();
+			}, 5000);
+		} else if (labPollInterval) {
+			clearInterval(labPollInterval);
+			labPollInterval = null;
+		}
 	}
-});
+);
 
 // Sync build logs into live display
-watch(() => buildLogs.data, (data) => {
-	if (data?.length) {
-		liveBuildLog.value = data[0].message || "";
+watch(
+	() => buildLogs.data,
+	(data) => {
+		if (data?.length) {
+			liveBuildLog.value = data[0].message || "";
+		}
 	}
-});
+);
 
 // Refetch when switching to log tabs (one-time fetch, not continuous)
 watch(activeTab, (tab) => {
