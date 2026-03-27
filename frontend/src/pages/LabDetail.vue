@@ -515,6 +515,7 @@ const deployLogs = createResource({
 });
 
 const liveDeployLogs = ref([]);
+const deployComplete = ref(false);
 let pollInterval = null;
 
 // Fetch deploy logs when bench is available
@@ -527,35 +528,42 @@ function fetchDeployLogs() {
 watch(() => deployLogs.data, (data) => {
 	if (data?.length) {
 		liveDeployLogs.value = [...data];
-		// Check if deploy completed — reload bench data
 		const hasSuccess = data.some(d => d.log_type === "success");
-		if (hasSuccess) {
-			benches.reload();
+		if (hasSuccess && !deployComplete.value) {
+			deployComplete.value = true;
 			if (pollInterval) {
 				clearInterval(pollInterval);
 				pollInterval = null;
 			}
+			benches.reload();
 		}
 	}
 });
 
-// Reload logs when activeBench changes
-watch(activeBench, (bench) => {
-	if (bench) {
-		fetchDeployLogs();
+// Reload logs when the actual bench changes (watch name, not object ref)
+watch(() => activeBench.value?.name, (name, oldName) => {
+	if (name && name !== oldName) {
+		deployComplete.value = false;
+		if (activeTab.value === 2) {
+			fetchDeployLogs();
+		}
 	}
 });
 
-// Poll for new logs while deploying
-watch(() => activeBench.value?.status, (status) => {
-	if (status === "Deploying") {
-		pollInterval = setInterval(fetchDeployLogs, 3000);
-	} else if (pollInterval) {
-		clearInterval(pollInterval);
-		pollInterval = null;
-		fetchDeployLogs();
-	}
-}, { immediate: true });
+// Poll for new logs while deploying (only on Deploy Log tab)
+watch(
+	[() => activeBench.value?.status, activeTab],
+	([status, tab]) => {
+		if (pollInterval) {
+			clearInterval(pollInterval);
+			pollInterval = null;
+		}
+		if (status === "Deploying" && tab === 2 && !deployComplete.value) {
+			pollInterval = setInterval(fetchDeployLogs, 3000);
+		}
+	},
+	{ immediate: true },
+);
 
 // Poll for build logs while building
 let buildPollInterval = null;
@@ -595,12 +603,12 @@ watch(() => buildLogs.data, (data) => {
 	}
 });
 
-// Refetch when switching to log tabs
+// Refetch when switching to log tabs (one-time fetch, not continuous)
 watch(activeTab, (tab) => {
 	if (tab === 2) {
-		if (activeBench.value) {
+		if (activeBench.value && !deployComplete.value) {
 			fetchDeployLogs();
-		} else {
+		} else if (!activeBench.value) {
 			buildLogs.reload();
 		}
 	}
@@ -639,8 +647,8 @@ onMounted(() => {
 		socket.on("bench_deploy_log", onDeployLog);
 		socket.on("lab_build_log", onBuildLog);
 	}
-	// Initial fetch
-	if (activeBench.value) {
+	// Initial fetch (only if on deploy log tab)
+	if (activeBench.value && activeTab.value === 2) {
 		fetchDeployLogs();
 	}
 });
