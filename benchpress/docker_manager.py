@@ -105,6 +105,7 @@ def create_bench_container(bench_doc, lab_doc) -> str:
 		cap_add=["NET_ADMIN"],
 		volumes={
 			f"benchpress-{name}-data": {"bind": "/home/frappe", "mode": "rw"},
+			f"benchpress-{name}-mariadb": {"bind": "/var/lib/mysql", "mode": "rw"},
 		},
 		mem_limit=lab_doc.memory_limit or "512m",
 		nano_cpus=int((lab_doc.cpu_cores or 1) * 1e9),
@@ -131,7 +132,7 @@ def restart_container(container_id: str) -> None:
 
 def remove_container(container_id: str) -> None:
 	client = get_client()
-	client.containers.get(container_id).remove(force=True, v=True)
+	client.containers.get(container_id).remove(force=True)
 
 
 def exec_in_container(
