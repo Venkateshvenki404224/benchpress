@@ -40,7 +40,7 @@ RUN bench init --frappe-branch ${FRAPPE_BRANCH} \
 WORKDIR /home/frappe/frappe-bench
 
 # Write common_site_config for local MariaDB + Redis
-RUN echo '{"db_host":"127.0.0.1","db_port":3306,"redis_cache":"redis://127.0.0.1:6379","redis_queue":"redis://127.0.0.1:6379","redis_socketio":"redis://127.0.0.1:6379"}' \
+RUN echo '{"db_host":"127.0.0.1","db_port":3306,"redis_cache":"redis://127.0.0.1:6379","redis_queue":"redis://127.0.0.1:6379","redis_socketio":"redis://127.0.0.1:6379","socketio_port":9000,"webserver_port":8000}' \
     > sites/common_site_config.json
 
 # --- Layer 4: Install apps (changes when apps list changes) ---
