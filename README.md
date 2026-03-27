@@ -348,14 +348,43 @@ Before installing BenchPress, ensure your host machine has:
 | MariaDB | 10.6+ | Host database for Frappe |
 | Redis | 6+ | Host queue and cache for Frappe |
 
-The bench user (e.g., `frappe`) must be in the `docker` group:
+### Required: Docker socket access
+
+The bench user (e.g., `frappe`) must be in the `docker` group or you will get a `Permission denied` error when building images:
+
 ```bash
 sudo usermod -aG docker frappe
+# Log out and back in (or run: newgrp docker)
+
+# Verify it works:
+docker ps
 ```
 
-IP forwarding must be enabled for WireGuard routing:
+> **Common error:** `PermissionError(13, 'Permission denied')` on the Docker socket means the user is not in the `docker` group. Fix the group membership and restart the bench.
+
+### Required: IP forwarding
+
+IP forwarding must be enabled for WireGuard VPN routing between the host and containers:
+
 ```bash
+# Enable immediately
 sudo sysctl -w net.ipv4.ip_forward=1
+
+# Make it persistent across reboots
+echo "net.ipv4.ip_forward = 1" | sudo tee /etc/sysctl.d/99-benchpress.conf
+sudo sysctl -p /etc/sysctl.d/99-benchpress.conf
+```
+
+### Required: Passwordless sudo for WireGuard
+
+The bench user needs passwordless sudo for WireGuard commands (used to add/remove VPN peers):
+
+```bash
+sudo tee /etc/sudoers.d/benchpress-wg > /dev/null <<EOF
+frappe ALL=(ALL) NOPASSWD: /usr/bin/wg
+frappe ALL=(ALL) NOPASSWD: /usr/bin/wg-quick
+EOF
+sudo chmod 0440 /etc/sudoers.d/benchpress-wg
 ```
 
 ---
@@ -380,7 +409,26 @@ bench --site your-site.localhost install-app benchpress
 bench --site your-site.localhost migrate
 ```
 
-### 2. Build the frontend
+### 2. Run the setup script
+
+BenchPress ships with a setup script that handles Docker permissions, IP forwarding, sudoers, WireGuard install, and server initialization in one go:
+
+```bash
+cd /path/to/your/frappe-bench
+bash apps/benchpress/setup.sh your-site.localhost
+```
+
+The script is **idempotent** — safe to run multiple times. It will:
+- Add your bench user to the `docker` group
+- Enable IP forwarding (runtime + persistent via `/etc/sysctl.d/99-benchpress.conf`)
+- Write `/etc/sudoers.d/benchpress` for passwordless `wg` and `wg-quick`
+- Install `wireguard-tools` if missing
+- Call `setup_wg_server()` to generate keys, write `wg0.conf`, and bring up `wg0`
+- Print the **WireGuard Server Public Key** you need for BenchPress Settings
+
+> **After the script:** If the docker group was just added, log out and back in, then `bench start`.
+
+### 3. Build the frontend
 
 ```bash
 # Install frontend dependencies and build
@@ -393,29 +441,26 @@ cd /path/to/your/frappe-bench
 bench build --app benchpress
 ```
 
-### 3. Configure BenchPress Settings
+### 4. Configure BenchPress Settings
 
 1. Navigate to **BenchPress Settings** in the Frappe Desk (`/app/benchpress-settings`)
 2. Set the **Docker Socket** path (default: `unix:///var/run/docker.sock`)
 3. Set the **Base Domain** for your bench instances
-4. Configure WireGuard:
-   - **WG Server IP**: `10.10.0.1` (default)
-   - **WG Server Port**: `51820` (default)
-   - **WG Server Endpoint**: Your server's public IP or hostname
+4. Fill in WireGuard (values printed by the setup script):
+   - **WG Server Public Key**: *(from setup script output)*
+   - **WG Server Endpoint**: Your server's public IP (`curl -s ifconfig.me`)
+   - **WG Server Port**: `51820`
 
-### 4. Set Up WireGuard VPN
+### 5. Open firewall for WireGuard
 
-WireGuard is the networking layer that lets users SSH into containers and access Frappe web servers securely. Follow the complete setup guide:
+```bash
+sudo ufw allow 51820/udp
+sudo ufw reload
+```
 
-**[WireGuard Setup Guide](docs/wireguard-setup.md)**
+Also open UDP 51820 in your cloud provider's security group / firewall if applicable.
 
-The guide covers:
-1. Installing WireGuard on the host
-2. Configuring passwordless sudo for the bench user
-3. Initializing the WireGuard server (generates keys, writes `wg0.conf`, enables IP forwarding)
-4. Filling in BenchPress Settings (server public key, endpoint IP, subnet)
-5. Verifying the setup
-6. Opening firewall ports
+For a full WireGuard reference and troubleshooting, see the **[WireGuard Setup Guide](docs/wireguard-setup.md)**.
 
 **Quick start** (if you just want the minimum commands):
 
@@ -667,15 +712,23 @@ socket.on("bench_deploy_log", (data) => {
 | `benchpress` (Docker bridge) | `172.30.0.0/24` | Internal communication between host and containers |
 | WireGuard (`wg0`) | `10.10.0.0/24` | VPN subnet for user access (server: `10.10.0.1`, clients: `10.10.0.2`-`10.10.0.254`) |
 
-### DNAT Port Mapping
+### Inside-Container WireGuard VPN
 
-For each bench, iptables PREROUTING rules on the `wg0` interface route traffic to the container's Docker IP:
+Each container runs its own `wg0` WireGuard interface. On deploy, BenchPress:
 
-| WireGuard IP Port | Container Port | Service |
-|-------------------|----------------|---------|
-| `10.10.0.X:22` | `container:22` | SSH |
-| `10.10.0.X:8000` | `container:8000` | Frappe Web Server |
-| `10.10.0.X:9000` | `container:9000` | Frappe Socket.io |
+1. Allocates a VPN IP (e.g., `10.10.0.5`) from the `10.10.0.0/24` subnet
+2. Generates a key pair for the container
+3. Adds the container as a peer on the host's WireGuard server
+4. Writes `/etc/wireguard/wg0.conf` inside the container (peer config pointing back to host via Docker gateway `172.30.0.1`)
+5. Runs `wg-quick up wg0` inside the container
+
+The result: users connect to the VPN and access the container directly at its allocated IP — no iptables DNAT, no port mapping, no IP-change issues on container restart.
+
+| Access | Address | Description |
+|--------|---------|-------------|
+| SSH | `ssh user@10.10.0.X` | Direct to container SSH server |
+| Frappe Web | `http://10.10.0.X:8000` | Frappe development server |
+| Socket.io | `http://10.10.0.X:9000` | Real-time events |
 
 ### Container Internals
 

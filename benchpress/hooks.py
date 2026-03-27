@@ -81,8 +81,7 @@ add_to_apps_screen = [
 # Installation
 # ------------
 
-# before_install = "benchpress.install.before_install"
-# after_install = "benchpress.install.after_install"
+after_install = "benchpress.install.after_install"
 
 # Uninstallation
 # ------------
