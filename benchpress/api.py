@@ -121,10 +121,12 @@ def get_benches() -> list[dict]:
 			"domain",
 			"status",
 			"container_id",
+			"container_ip",
 			"wg_ip",
 			"cpu_usage",
 			"memory_usage",
 			"started_at",
+			"ssh_username",
 		],
 		order_by="creation desc",
 	)
@@ -132,6 +134,12 @@ def get_benches() -> list[dict]:
 	for bench in benches:
 		bench["app_count"] = frappe.db.count("Bench App", {"parent": bench["name"]})
 		bench["site_count"] = frappe.db.count("Bench Site", {"bench": bench["name"]})
+		try:
+			bench["ssh_password"] = frappe.utils.password.get_decrypted_password(
+				"Bench Instance", bench["name"], "ssh_password"
+			)
+		except frappe.exceptions.ValidationError:
+			bench["ssh_password"] = None
 
 	return benches
 
@@ -159,7 +167,9 @@ def get_bench(name: str) -> dict:
 		"cpu_usage": bench.cpu_usage,
 		"memory_usage": bench.memory_usage,
 		"started_at": bench.started_at,
-		"admin_password": bench.admin_password,
+		"admin_password": bench.get_password("admin_password", raise_exception=False),
+		"ssh_username": bench.ssh_username,
+		"ssh_password": bench.get_password("ssh_password", raise_exception=False),
 		"apps": apps,
 		"sites": sites,
 	}
@@ -258,6 +268,15 @@ def bench_action(bench_name: str, action: str) -> dict:
 			except Exception:
 				pass
 			remove_container(bench.container_id)
+		# Clean up named volumes — data and mariadb
+		from benchpress.docker_manager import get_client
+
+		client = get_client()
+		for suffix in ("data", "mariadb"):
+			try:
+				client.volumes.get(f"benchpress-{bench.bench_name}-{suffix}").remove(force=True)
+			except Exception:
+				pass
 		if bench.wg_public_key:
 			from benchpress.wg_manager import remove_peer_from_server
 
@@ -283,9 +302,9 @@ def get_deploy_logs(bench_name: str) -> list[dict]:
 	return frappe.get_all(
 		"Deploy Log",
 		filters={"bench": bench_name},
-		fields=["message", "log_type", "timestamp"],
-		order_by="timestamp asc",
-		limit_page_length=100,
+		fields=["name", "message", "log_type", "timestamp"],
+		order_by="timestamp desc",
+		limit_page_length=20,
 	)
 
 
