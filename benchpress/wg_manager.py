@@ -38,14 +38,13 @@ def generate_peer_config(
 ) -> str:
 	return f"""[Interface]
 PrivateKey = {private_key}
-Address = {peer_ip}/24
-DNS = 1.1.1.1
+Address = {peer_ip}/32
 
 [Peer]
 PublicKey = {server_public_key}
-Endpoint = {server_endpoint}:{server_port}
 AllowedIPs = 10.10.0.0/24
-PersistentKeepalive = 25
+Endpoint = {server_endpoint}:{server_port}
+PersistentKeepalive = 30
 """
 
 

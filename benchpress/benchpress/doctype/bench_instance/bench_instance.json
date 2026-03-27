@@ -33,8 +33,6 @@
   "wg_public_key",
   "column_break_wg",
   "wg_private_key",
-  "wg_config",
-  "user_wg_public_key",
   "apps_section",
   "apps"
  ],
@@ -192,18 +190,6 @@
    "fieldname": "wg_private_key",
    "fieldtype": "Password",
    "label": "WG Private Key"
-  },
-  {
-   "fieldname": "wg_config",
-   "fieldtype": "Code",
-   "label": "WG Config",
-   "read_only": 1
-  },
-  {
-   "fieldname": "user_wg_public_key",
-   "fieldtype": "Data",
-   "label": "User WG Public Key",
-   "read_only": 1
   },
   {
    "fieldname": "apps_section",
