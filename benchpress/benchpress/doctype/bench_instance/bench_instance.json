@@ -7,16 +7,23 @@
  "engine": "InnoDB",
  "field_order": [
   "bench_name",
-  "frappe_version",
-  "domain",
+  "lab",
   "column_break_basic",
   "status",
+  "frappe_version",
+  "site_name",
+  "ssh_access_section",
+  "ssh_username",
+  "ssh_password",
+  "column_break_ssh",
+  "admin_password",
+  "domain",
   "container_section",
   "container_id",
   "container_image",
   "column_break_container",
+  "container_ip",
   "started_at",
-  "admin_password",
   "stats_section",
   "cpu_usage",
   "column_break_stats",
@@ -27,8 +34,6 @@
   "column_break_wg",
   "wg_private_key",
   "wg_config",
-  "site_name",
-  "lab",
   "apps_section",
   "apps"
  ],
@@ -36,20 +41,18 @@
   {
    "fieldname": "bench_name",
    "fieldtype": "Data",
+   "in_list_view": 1,
    "label": "Bench Name",
    "read_only": 1,
    "unique": 1
   },
   {
-   "fieldname": "frappe_version",
-   "fieldtype": "Data",
-   "label": "Frappe Version",
-   "read_only": 1
-  },
-  {
-   "fieldname": "domain",
-   "fieldtype": "Data",
-   "label": "Domain"
+   "fieldname": "lab",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Lab",
+   "options": "Lab",
+   "reqd": 1
   },
   {
    "fieldname": "column_break_basic",
@@ -65,6 +68,50 @@
    "read_only": 1
   },
   {
+   "fieldname": "frappe_version",
+   "fieldtype": "Data",
+   "label": "Frappe Version",
+   "read_only": 1
+  },
+  {
+   "description": "Auto-generated UUID.localhost",
+   "fieldname": "site_name",
+   "fieldtype": "Data",
+   "label": "Site Name",
+   "read_only": 1
+  },
+  {
+   "fieldname": "ssh_access_section",
+   "fieldtype": "Section Break",
+   "label": "SSH Access"
+  },
+  {
+   "fieldname": "ssh_username",
+   "fieldtype": "Data",
+   "label": "SSH Username",
+   "read_only": 1
+  },
+  {
+   "fieldname": "ssh_password",
+   "fieldtype": "Password",
+   "label": "SSH Password"
+  },
+  {
+   "fieldname": "column_break_ssh",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "admin_password",
+   "fieldtype": "Password",
+   "label": "Admin Password"
+  },
+  {
+   "fieldname": "domain",
+   "fieldtype": "Data",
+   "label": "Domain"
+  },
+  {
+   "collapsible": 1,
    "fieldname": "container_section",
    "fieldtype": "Section Break",
    "label": "Container Details"
@@ -86,15 +133,16 @@
    "fieldtype": "Column Break"
   },
   {
+   "fieldname": "container_ip",
+   "fieldtype": "Data",
+   "label": "Container IP",
+   "read_only": 1
+  },
+  {
    "fieldname": "started_at",
    "fieldtype": "Datetime",
    "label": "Started At",
    "read_only": 1
-  },
-  {
-   "fieldname": "admin_password",
-   "fieldtype": "Password",
-   "label": "Admin Password"
   },
   {
    "fieldname": "stats_section",
@@ -151,21 +199,6 @@
    "read_only": 1
   },
   {
-   "fieldname": "lab",
-   "fieldtype": "Link",
-   "in_list_view": 1,
-   "label": "Lab",
-   "options": "Lab",
-   "reqd": 1
-  },
-  {
-   "description": "Auto-generated UUID.localhost",
-   "fieldname": "site_name",
-   "fieldtype": "Data",
-   "label": "Site Name",
-   "read_only": 1
-  },
-  {
    "fieldname": "apps_section",
    "fieldtype": "Section Break",
    "label": "Apps"
@@ -180,7 +213,7 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-03-22 21:00:00.000000",
+ "modified": "2026-03-27 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Benchpress",
  "name": "Bench Instance",

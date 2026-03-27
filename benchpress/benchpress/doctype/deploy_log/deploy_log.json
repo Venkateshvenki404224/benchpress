@@ -34,10 +34,11 @@
   },
   {
    "fieldname": "message",
-   "fieldtype": "Small Text",
+   "fieldtype": "Code",
+   "hidden": 1,
    "in_list_view": 1,
    "label": "Message",
-   "reqd": 1
+   "options": "Shell"
   },
   {
    "default": "Now",

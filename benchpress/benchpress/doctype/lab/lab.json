@@ -13,14 +13,18 @@
   "frappe_version",
   "status",
   "description",
-  "image_section",
-  "image_tag",
-  "resources_section",
-  "memory_limit",
-  "column_break_resources",
-  "cpu_cores",
   "apps_section",
   "apps",
+  "resources_section",
+  "memory_limit",
+  "cpu_cores",
+  "column_break_resources",
+  "enable_ssh",
+  "shell",
+  "container_section",
+  "mount_target",
+  "image_section",
+  "image_tag",
   "build_log_section",
   "build_log_html",
   "build_log"
@@ -64,38 +68,6 @@
    "label": "Description"
   },
   {
-   "fieldname": "image_section",
-   "fieldtype": "Section Break",
-   "label": "Docker Image"
-  },
-  {
-   "fieldname": "image_tag",
-   "fieldtype": "Data",
-   "label": "Image Tag",
-   "read_only": 1
-  },
-  {
-   "fieldname": "resources_section",
-   "fieldtype": "Section Break",
-   "label": "Resource Limits"
-  },
-  {
-   "default": "512m",
-   "fieldname": "memory_limit",
-   "fieldtype": "Data",
-   "label": "Memory Limit"
-  },
-  {
-   "fieldname": "column_break_resources",
-   "fieldtype": "Column Break"
-  },
-  {
-   "default": "1",
-   "fieldname": "cpu_cores",
-   "fieldtype": "Int",
-   "label": "CPU Cores"
-  },
-  {
    "fieldname": "apps_section",
    "fieldtype": "Section Break",
    "label": "Apps"
@@ -105,6 +77,64 @@
    "fieldtype": "Table",
    "label": "Apps",
    "options": "Lab App"
+  },
+  {
+   "fieldname": "resources_section",
+   "fieldtype": "Section Break",
+   "label": "Resources & Access"
+  },
+  {
+   "default": "512m",
+   "fieldname": "memory_limit",
+   "fieldtype": "Data",
+   "label": "Memory Limit"
+  },
+  {
+   "default": "1",
+   "fieldname": "cpu_cores",
+   "fieldtype": "Int",
+   "label": "CPU Cores"
+  },
+  {
+   "fieldname": "column_break_resources",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "1",
+   "fieldname": "enable_ssh",
+   "fieldtype": "Check",
+   "label": "Enable SSH User Provisioning"
+  },
+  {
+   "default": "/bin/bash",
+   "depends_on": "eval:doc.enable_ssh",
+   "fieldname": "shell",
+   "fieldtype": "Data",
+   "label": "Default Shell"
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "container_section",
+   "fieldtype": "Section Break",
+   "label": "Container Settings"
+  },
+  {
+   "default": "/home/frappe",
+   "fieldname": "mount_target",
+   "fieldtype": "Data",
+   "label": "Mount Target"
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "image_section",
+   "fieldtype": "Section Break",
+   "label": "Docker Image"
+  },
+  {
+   "fieldname": "image_tag",
+   "fieldtype": "Data",
+   "label": "Image Tag",
+   "read_only": 1
   },
   {
    "collapsible": 1,
@@ -137,7 +167,7 @@
    "link_fieldname": "lab"
   }
  ],
- "modified": "2026-03-18 00:39:18.027821",
+ "modified": "2026-03-27 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Benchpress",
  "name": "Lab",

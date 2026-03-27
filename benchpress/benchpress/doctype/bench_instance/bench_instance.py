@@ -1,6 +1,8 @@
 # Copyright (c) 2026, Venkatesh and contributors
 # For license information, please see license.txt
 
+import re
+
 import frappe
 from frappe.model.document import Document
 
@@ -12,9 +14,28 @@ class BenchInstance(Document):
 		instance_id = get_instance_id(frappe.session.user, self.lab)
 		self.bench_name = instance_id
 		self.site_name = f"{instance_id}.localhost"
+		self.ssh_username = self._derive_username()
 
 	def autoname(self):
 		self.name = self.bench_name
+
+	def _derive_username(self):
+		"""Derive a valid Linux username from the Frappe user email.
+
+		Takes the part before @, lowercases, strips invalid chars, caps at 32 chars.
+		e.g., John.Doe@example.com -> johndoe
+		"""
+		email = frappe.session.user
+		username = email.split("@")[0].lower()
+		# Keep only valid Linux username characters
+		username = re.sub(r"[^a-z0-9_.-]", "", username)
+		# Must start with a letter or digit
+		username = re.sub(r"^[^a-z0-9]+", "", username)
+		username = username[:32]
+		# If empty or purely numeric, prefix with 'user'
+		if not username or username.isdigit():
+			username = "user" + username
+		return username
 
 	def on_trash(self):
 		if self.wg_public_key:
@@ -24,13 +45,6 @@ class BenchInstance(Document):
 				remove_peer_from_server(self.wg_public_key)
 			except Exception:
 				frappe.log_error(title=f"WG cleanup failed: {self.name}")
-		if self.wg_ip and self.container_id:
-			try:
-				from benchpress.wg_manager import remove_wg_routing
-
-				remove_wg_routing(self.wg_ip, self.container_id)
-			except Exception:
-				frappe.log_error(title=f"WG routing cleanup failed: {self.name}")
 
 	@frappe.whitelist()
 	def enqueue_deploy(self):
