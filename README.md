@@ -22,7 +22,7 @@
 
 ## What is BenchPress?
 
-[![Watch the video](https://img.youtube.com/vi/6NnA6yBX0y0/maxresdefault.jpg)](https://www.youtube.com/watch?v=6MDBg4SNKnw)
+[![Watch the video](https://img.youtube.com/vi/6NnA6yBX0y0/maxresdefault.jpg)](https://www.youtube.com/watch?v=DzTNwA39PqA)
 
 ---
 
