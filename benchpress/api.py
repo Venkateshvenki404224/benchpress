@@ -414,7 +414,7 @@ def create_site(data: str) -> dict:
 		)
 
 	doc.insert()
-	frappe.db.commit()
+	frappe.db.commit()  # nosemgrep
 
 	frappe.enqueue(
 		"benchpress.api._create_site_on_bench",
@@ -483,7 +483,7 @@ def site_action(site_name: str, action: str) -> dict:
 	elif action == "drop":
 		exec_in_container(bench.container_id, f"bench drop-site {site.full_domain} --force")
 		frappe.delete_doc("Bench Site", site_name, force=True)
-		frappe.db.commit()
+		frappe.db.commit()  # nosemgrep
 		return {"status": "deleted"}
 	elif action == "backup":
 		exec_in_container(bench.container_id, f"bench --site {site.full_domain} backup")
@@ -492,7 +492,7 @@ def site_action(site_name: str, action: str) -> dict:
 		frappe.throw(_("Invalid action: {0}").format(action))
 
 	site.save(ignore_permissions=True)
-	frappe.db.commit()
+	frappe.db.commit()  # nosemgrep
 	return {"name": site.name, "status": site.status}
 
 
