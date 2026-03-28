@@ -9,6 +9,9 @@ app_home = "/desk/benchpress"
 
 # required_apps = []
 
+# Fixtures
+fixtures = [{"dt": "Role", "filters": [["role_name", "in", ["BenchPress Admin", "BenchPress User"]]]}]
+
 # Apps screen entry
 add_to_apps_screen = [
 	{
@@ -113,10 +116,10 @@ after_install = "benchpress.install.after_install"
 # -----------
 # Permissions evaluated in scripted ways
 
-# permission_query_conditions = {
-# 	"Event": "frappe.desk.doctype.event.event.get_permission_query_conditions",
-# }
-#
+permission_query_conditions = {
+	"Bench Instance": "benchpress.permissions.bench_instance_query_conditions",
+}
+
 # has_permission = {
 # 	"Event": "frappe.desk.doctype.event.event.has_permission",
 # }

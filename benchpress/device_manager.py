@@ -4,6 +4,8 @@
 import frappe
 from frappe import _
 
+from benchpress.permissions import is_admin
+
 DEVICE_TYPES = ["Mobile", "Laptop", "Desktop", "Tablet", "Server", "IoT", "Embedded"]
 
 
@@ -65,7 +67,7 @@ def register_device(device_name: str, device_type: str, public_key: str | None =
 def unregister_device(device_name: str) -> bool:
 	doc = frappe.get_doc("Bench Device", device_name)
 
-	if doc.owner != frappe.session.user and "System Manager" not in frappe.get_roles():
+	if doc.owner != frappe.session.user and not is_admin():
 		frappe.throw(_("You do not have permission to remove this device."), frappe.PermissionError)
 
 	if doc.wg_public_key:
@@ -98,7 +100,7 @@ def list_devices() -> list[dict]:
 def get_device_config(device_name: str) -> str:
 	doc = frappe.get_doc("Bench Device", device_name)
 
-	if doc.owner != frappe.session.user and "System Manager" not in frappe.get_roles():
+	if doc.owner != frappe.session.user and not is_admin():
 		frappe.throw(_("You do not have permission to access this device."), frappe.PermissionError)
 
 	if not doc.wg_config:

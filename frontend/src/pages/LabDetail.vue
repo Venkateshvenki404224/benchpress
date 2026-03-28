@@ -23,9 +23,8 @@
 				</div>
 			</div>
 			<div class="flex gap-2">
-				<!-- Lab not ready: show Build Image (regardless of bench state) -->
 				<Button
-					v-if="lab.doc.status !== 'Ready'"
+					v-if="lab.doc.status !== 'Ready' && userContext.isAdmin"
 					theme="blue"
 					variant="solid"
 					size="lg"
@@ -515,6 +514,7 @@ import {
 	Alert,
 } from "frappe-ui";
 import LogViewer from "@/components/LogViewer.vue";
+import { userContext } from "@/data/userContext";
 
 const route = useRoute();
 const labId = route.params.labId;
@@ -529,7 +529,7 @@ const tabs = computed(() => {
 	const base = [{ label: "Dashboard" }, { label: "Sites" }];
 	if (lab.doc?.status === "Ready" || activeBench.value) {
 		base.push({ label: "Deploy Log" });
-	} else {
+	} else if (userContext.isAdmin) {
 		base.push({ label: "Build Log" });
 	}
 	return base;

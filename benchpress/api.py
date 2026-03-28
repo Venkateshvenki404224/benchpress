@@ -4,9 +4,13 @@
 import frappe
 from frappe import _
 
-
-def has_app_permission() -> bool:
-	return "System Manager" in frappe.get_roles(frappe.session.user)
+from benchpress.permissions import (
+	get_bench_owner_filter,
+	has_app_permission,
+	is_admin,
+	require_admin,
+	require_bench_access,
+)
 
 
 @frappe.whitelist()
@@ -62,6 +66,7 @@ def get_lab(name: str) -> dict:
 @frappe.whitelist()
 def build_lab_image(lab_name: str) -> dict:
 	"""Trigger lab image build as a background job."""
+	require_admin()
 	frappe.enqueue(
 		"benchpress.deploy_manager.build_lab",
 		lab_name=lab_name,
@@ -75,6 +80,7 @@ def build_lab_image(lab_name: str) -> dict:
 def get_benches() -> list[dict]:
 	benches = frappe.get_all(
 		"Bench Instance",
+		filters=get_bench_owner_filter(),
 		fields=[
 			"name",
 			"bench_name",
@@ -177,6 +183,10 @@ def bench_action(bench_name: str, action: str) -> dict:
 		stop_container,
 	)
 
+	require_bench_access(bench_name)
+	if action == "delete" and not is_admin():
+		frappe.throw(_("Only admins can delete bench instances."), frappe.PermissionError)
+
 	bench = frappe.get_doc("Bench Instance", bench_name)
 
 	if action == "start":
@@ -226,6 +236,7 @@ def bench_action(bench_name: str, action: str) -> dict:
 
 @frappe.whitelist()
 def get_deploy_logs(bench_name: str) -> list[dict]:
+	require_bench_access(bench_name)
 	return frappe.get_all(
 		"Deploy Log",
 		filters={"bench": bench_name},
@@ -233,6 +244,9 @@ def get_deploy_logs(bench_name: str) -> list[dict]:
 		order_by="timestamp desc",
 		limit_page_length=20,
 	)
+
+
+# --- Device endpoints ---
 
 
 @frappe.whitelist()
@@ -264,15 +278,22 @@ def get_device_wg_config(device_name: str) -> str:
 	return get_device_config(device_name)
 
 
+# --- Site endpoints ---
+
+
 @frappe.whitelist()
 def create_site(data: str) -> dict:
 	data = frappe.parse_json(data)
+
+	bench_name = data.get("bench")
+	if bench_name:
+		require_bench_access(bench_name)
 
 	doc = frappe.get_doc(
 		{
 			"doctype": "Bench Site",
 			"site_name": data.get("site_name"),
-			"bench": data.get("bench"),
+			"bench": bench_name,
 		}
 	)
 
@@ -286,7 +307,7 @@ def create_site(data: str) -> dict:
 		)
 
 	doc.insert()
-	frappe.db.commit()
+	frappe.db.commit()  # nosemgrep
 
 	frappe.enqueue(
 		"benchpress.api._create_site_on_bench",
@@ -336,3 +357,13 @@ def _create_site_on_bench(site_doc_name: str) -> None:
 			title=f"Site creation failed: {site_doc_name}",
 			message=frappe.get_traceback(),
 		)
+
+
+@frappe.whitelist()
+def get_user_context() -> dict:
+	"""Return the current user's role context for the frontend."""
+	return {
+		"is_admin": is_admin(),
+		"user": frappe.session.user,
+		"roles": frappe.get_roles(frappe.session.user),
+	}

@@ -1,6 +1,9 @@
 import { userResource } from "@/data/user";
 import { createRouter, createWebHistory } from "vue-router";
 import { session } from "./data/session";
+import { userContext, waitForUserContext } from "./data/userContext";
+
+const ADMIN_ONLY_ROUTES = new Set(["NewLab", "Settings", "BuildLogs"]);
 
 const routes = [
 	{
@@ -65,6 +68,13 @@ router.beforeEach(async (to, from, next) => {
 
 	if (!isLoggedIn) {
 		window.location.href = "/login";
+	} else if (ADMIN_ONLY_ROUTES.has(to.name)) {
+		await waitForUserContext().catch(() => {});
+		if (!userContext.isAdmin) {
+			next({ name: "Labs" });
+		} else {
+			next();
+		}
 	} else {
 		next();
 	}
