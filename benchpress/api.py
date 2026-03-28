@@ -12,6 +12,7 @@ from benchpress.permissions import (
 	require_bench_access,
 )
 
+
 @frappe.whitelist()
 def get_labs() -> list[dict]:
 	labs = frappe.get_all(
