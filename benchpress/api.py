@@ -71,7 +71,6 @@ def build_lab_image(lab_name: str) -> dict:
 	return {"name": lab_name, "status": "Building"}
 
 
-
 @frappe.whitelist()
 def get_benches() -> list[dict]:
 	benches = frappe.get_all(
@@ -337,4 +336,3 @@ def _create_site_on_bench(site_doc_name: str) -> None:
 			title=f"Site creation failed: {site_doc_name}",
 			message=frappe.get_traceback(),
 		)
-

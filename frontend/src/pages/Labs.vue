@@ -88,7 +88,16 @@ const columns = [
 
 const labs = createListResource({
 	doctype: "Lab",
-	fields: ["name", "lab_id", "title", "description", "frappe_version", "status", "memory_limit", "cpu_cores"],
+	fields: [
+		"name",
+		"lab_id",
+		"title",
+		"description",
+		"frappe_version",
+		"status",
+		"memory_limit",
+		"cpu_cores",
+	],
 	orderBy: "creation desc",
 	pageLength: 100,
 	auto: true,
@@ -122,5 +131,4 @@ const filteredRows = computed(() => {
 
 	return rows;
 });
-
 </script>

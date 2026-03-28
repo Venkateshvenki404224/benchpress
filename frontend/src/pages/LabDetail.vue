@@ -18,11 +18,7 @@
 				</p>
 				<div class="mt-3 flex gap-3">
 					<Badge :label="lab.doc.frappe_version" theme="blue" variant="outline" />
-					<Badge
-						:label="`${lab.doc.memory_limit} RAM`"
-						theme="gray"
-						variant="outline"
-					/>
+					<Badge :label="`${lab.doc.memory_limit} RAM`" theme="gray" variant="outline" />
 					<Badge :label="`${lab.doc.cpu_cores} CPU`" theme="gray" variant="outline" />
 				</div>
 			</div>
@@ -85,10 +81,7 @@
 								<h2 class="mb-3 text-base font-semibold text-ink-gray-9">
 									Lab Information
 								</h2>
-								<p
-									v-if="lab.doc.description"
-									class="mb-4 text-sm text-ink-gray-6"
-								>
+								<p v-if="lab.doc.description" class="mb-4 text-sm text-ink-gray-6">
 									{{ lab.doc.description }}
 								</p>
 								<p
@@ -464,7 +457,10 @@
 					variant="solid"
 					theme="green"
 					:loading="deployAction.loading"
-					@click="deployLab(); close()"
+					@click="
+						deployLab();
+						close();
+					"
 					>Deploy</Button
 				>
 				<Button variant="outline" @click="close">Cancel</Button>
@@ -479,8 +475,8 @@
 		</template>
 		<template #body-content>
 			<p class="text-sm text-ink-gray-6">
-				This will stop the running container. The bench will go offline until
-				redeployed. Continue?
+				This will stop the running container. The bench will go offline until redeployed.
+				Continue?
 			</p>
 		</template>
 		<template #actions="{ close }">
@@ -489,7 +485,10 @@
 					variant="solid"
 					theme="red"
 					:loading="benchAction.loading"
-					@click="doBenchAction('stop'); close()"
+					@click="
+						doBenchAction('stop');
+						close();
+					"
 					>Stop</Button
 				>
 				<Button variant="outline" @click="close">Cancel</Button>
