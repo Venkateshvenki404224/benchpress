@@ -79,7 +79,7 @@ def create_test_users():
 			f"  [created] {user_data['email']} with roles: {', '.join(user_data['roles'])} (password: admin)"
 		)
 
-	frappe.db.commit()
+	frappe.db.commit()  # nosemgrep: intentional commit to persist test users created outside request cycle
 
 
 def _print_manual_instructions(site: str) -> None:
