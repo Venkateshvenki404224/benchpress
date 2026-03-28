@@ -31,11 +31,11 @@ apps/benchpress/
 │   │   ├── setup-site.sh      # Site creation post-deploy
 │   │   └── install-apps.sh    # App installation script
 │   └── benchpress/doctype/    # 9 DocTypes (data model)
-└── dashboard/                 # Vue 3 SPA (frontend)
+└── frontend/                  # Vue 3 SPA (frontend)
     └── src/
         ├── main.js            # App bootstrap
         ├── router/index.js    # Routes
-        ├── pages/             # 5 pages
+        ├── pages/             # 8 pages
         └── components/        # Shared UI components
 ```
 
@@ -54,12 +54,13 @@ apps/benchpress/
 | **BenchPress Settings** | Global config (singleton) | `docker_socket`, `wg_server_*` keys, `base_domain`, `next_wg_ip` |
 | **Deploy Log** | Deployment event logs | `bench`, `message`, `log_type`, `timestamp` |
 | **Build Log** | Image build logs | `lab`, `message`, `log_type`, `timestamp` |
+| **VPN Device** | Persistent VPN device | `device_name`, `device_type`, `owner`, `wg_public_key`, `wg_ip`, `wg_config` |
 
 ---
 
 ## Backend Files — What Each Does
 
-### `api.py` (476 lines) — REST API Layer
+### `api.py` (~300 lines) — REST API Layer
 
 All endpoints use `@frappe.whitelist()`. Long-running ops are enqueued to the `"long"` queue.
 
@@ -67,21 +68,16 @@ All endpoints use `@frappe.whitelist()`. Long-running ops are enqueued to the `"
 |----------|--------|--------------|
 | `get_labs()` | GET | List all labs with app_count, bench_count |
 | `get_lab(name)` | GET | Single lab with apps list |
-| `create_lab(data)` | POST | Create lab + Lab App children |
 | `build_lab_image(lab_name)` | POST | Enqueue background Docker image build |
 | `get_benches()` | GET | All benches with CPU/memory stats |
-| `get_bench(name)` | GET | Single bench with apps, sites, WG config |
 | `create_bench(data)` | POST | Create bench from lab, enqueue deploy |
 | `bench_action(bench_name, action)` | POST | start / stop / restart / delete |
-| `get_sites(bench_name)` | GET | All sites in a bench |
-| `create_site(data)` | POST | Create site, enqueue setup in container |
-| `site_action(site_name, action)` | POST | enable / disable / drop / backup scheduler |
 | `get_deploy_logs(bench_name)` | GET | Last 100 deploy log entries |
-| `get_wg_config(bench_name)` | GET | WireGuard client .conf file |
-| `get_bench_stats(bench_name)` | GET | Live CPU/memory from Docker |
-| `get_available_apps()` | GET | Hardcoded list of 8 Frappe apps |
-| `get_settings()` | GET | Global BenchPress settings |
-| `health_check()` | GET | Docker ping + WireGuard status |
+| `create_site(data)` | POST | Create site, enqueue setup in container |
+| `add_device(data)` | POST | Register a persistent VPN device |
+| `remove_device(device_name)` | POST | Remove a VPN device and its peer |
+| `list_devices()` | GET | List all VPN devices for the current user |
+| `get_device_wg_config(device_name)` | GET | WireGuard client .conf for a device |
 
 ### `deploy_manager.py` (302 lines) — Orchestration
 
@@ -136,7 +132,7 @@ Runs every 2 minutes. Polls Docker stats for all running benches, updates `cpu_u
 
 ### `hooks.py` (39 lines) — App Configuration
 
-- Registers `/dashboard/<path>` route for Vue SPA
+- Registers `/frontend/<path>` route for Vue SPA
 - Schedules stats collector cron
 - Sets `ignore_links_on_delete` for Deploy Log and Build Log
 
@@ -172,26 +168,27 @@ Layer 5: Create site (create-site.sh)
 
 ## Frontend (Vue 3 Dashboard)
 
-**Tech**: Vue 3 + Vite + TailwindCSS + socket.io (via doppio)
+**Tech**: Vue 3 + Vite + TailwindCSS + frappe-ui + socket.io (via doppio)
 
 ### Pages
 
 | Page | Route | What It Shows |
 |------|-------|---------------|
-| **LabsPage** | `/` | Grid of lab templates. Status badges. "Build Image" and "Deploy" buttons. |
-| **BenchListPage** | `/benches` | List of benches with status dots, WG IPs, CPU/RAM bars |
-| **DeployPage** | `/deploy/:lab` | Deploy wizard + live terminal streaming deploy logs |
-| **BenchDetailPage** | `/bench/:id` | Stats cards, action buttons (start/stop/restart), VPN config download, delete |
-| **Login** | `/login` | Username/password form |
+| **Labs** | `/labs` | Searchable list of lab templates with status/version filters |
+| **NewLab** | `/labs/new` | Form to create a lab with apps |
+| **LabDetail** | `/labs/:labId` | Tabbed: Dashboard, Sites, Deploy/Build Log. Confirmation dialogs for Deploy/Stop |
+| **BenchInstances** | `/bench-instances` | Table of all bench containers with status, IP, CPU/memory |
+| **DeployLogs** | `/deploy-logs` | Deploy log list with expandable entries |
+| **BuildLogs** | `/build-logs` | Build log list with expandable entries |
+| **Devices** | `/devices` | VPN device management: add, remove, download config |
+| **Settings** | `/settings` | Global settings dialog using createDocumentResource |
 
 ### Components
 
 | Component | Purpose |
 |-----------|---------|
-| **GlassCard** | Glassmorphism card wrapper with optional shimmer border |
-| **StatusDot** | Colored circle: green (running), red (error), amber (deploying), gray (stopped) |
-| **StatBar** | CPU/memory bar graph (green < 60%, amber < 80%, red > 80%) |
-| **Terminal** | Real-time log viewer with auto-scroll, color-coded by log type |
+| **LogViewer** | Parses raw logs into collapsible steps |
+| **LogStep** | Single log step with status indicator |
 
 ### Real-Time Communication
 
@@ -278,6 +275,8 @@ this.$socket.on("bench_deploy_log", (data) => { this.logs.push(data) })
 | `frappe.publish_realtime(event, message, after_commit=False)` | Live log streaming |
 | `frappe.parse_json(data)` | Input parsing (never `json.loads`) |
 | `frappe.get_cached_doc(doctype, name)` | Cached reads |
+| `createDocumentResource` | Settings, Lab detail fetch |
+| `createListResource` | Labs list, Bench list, Sites, Build logs |
 | `ignore_links_on_delete` | Deploy Log, Build Log (safe to delete parent) |
 
 ## Networking
