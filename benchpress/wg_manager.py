@@ -9,6 +9,26 @@ from frappe import _
 WG_INTERFACE = "wg0"
 
 
+def get_peer_transfer_stats() -> dict:
+	"""Parse `wg show wg0 dump` and return {public_key: {rx_bytes, tx_bytes}}."""
+	result = subprocess.run(
+		["sudo", "wg", "show", WG_INTERFACE, "dump"],
+		capture_output=True,
+		text=True,
+	)
+	if result.returncode != 0:
+		return {}
+	stats = {}
+	for line in result.stdout.strip().split("\n")[1:]:
+		parts = line.split("\t")
+		if len(parts) >= 7:
+			stats[parts[0]] = {
+				"rx_bytes": int(parts[5]),
+				"tx_bytes": int(parts[6]),
+			}
+	return stats
+
+
 def generate_keypair() -> dict:
 	private = subprocess.run(["wg", "genkey"], capture_output=True, text=True, check=True).stdout.strip()
 	public = subprocess.run(

@@ -170,7 +170,7 @@ scheduler_events = {
 	# 	"benchpress.tasks.monthly"
 	# ],
 	"cron": {
-		"*/2 * * * *": [
+		"*/1 * * * *": [
 			"benchpress.stats_collector.collect_all_stats",
 		],
 	},

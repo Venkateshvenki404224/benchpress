@@ -17,7 +17,10 @@
   "wg_public_key",
   "wg_private_key",
   "column_break_wg",
-  "wg_config"
+  "wg_config",
+  "transfer_section",
+  "wg_rx_bytes",
+  "wg_tx_bytes"
  ],
  "fields": [
   {
@@ -81,6 +84,26 @@
    "fieldtype": "Code",
    "label": "WG Config",
    "read_only": 1
+  },
+  {
+   "fieldname": "transfer_section",
+   "fieldtype": "Section Break",
+   "label": "Transfer Stats",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "wg_rx_bytes",
+   "fieldtype": "Int",
+   "label": "Received Bytes",
+   "read_only": 1,
+   "default": "0"
+  },
+  {
+   "fieldname": "wg_tx_bytes",
+   "fieldtype": "Int",
+   "label": "Sent Bytes",
+   "read_only": 1,
+   "default": "0"
   }
  ],
  "grid_page_length": 50,

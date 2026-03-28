@@ -91,7 +91,7 @@ def list_devices() -> list[dict]:
 	return frappe.get_all(
 		"Bench Device",
 		filters={"owner": frappe.session.user},
-		fields=["name", "device_name", "device_type", "status", "wg_ip", "wg_public_key"],
+		fields=["name", "device_name", "device_type", "status", "wg_ip", "wg_public_key", "wg_rx_bytes", "wg_tx_bytes"],
 		order_by="creation desc",
 		limit_page_length=100,
 	)
