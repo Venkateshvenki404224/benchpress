@@ -2,7 +2,12 @@
 	<div class="p-4">
 		<div class="mb-4 flex items-center justify-between">
 			<h1 class="text-xl font-semibold text-ink-gray-9">Labs</h1>
-			<Button appearance="primary" icon-left="plus" @click="$router.push('/labs/new')">
+			<Button
+				v-if="userContext.isAdmin"
+				appearance="primary"
+				icon-left="plus"
+				@click="$router.push('/labs/new')"
+			>
 				New Lab
 			</Button>
 		</div>
@@ -59,6 +64,7 @@
 <script setup>
 import { ref, computed } from "vue";
 import { ListView, Button, FormControl, createResource } from "frappe-ui";
+import { userContext } from "@/data/userContext";
 
 const searchQuery = ref("");
 const statusFilter = ref("All");
@@ -117,7 +123,7 @@ const filteredRows = computed(() => {
 				(r.lab_id || "").toLowerCase().includes(q) ||
 				(r.title || "").toLowerCase().includes(q) ||
 				(r.description || "").toLowerCase().includes(q) ||
-				(r.app_names || []).some((app) => app.toLowerCase().includes(q))
+				(r.app_names || []).some((app) => app.toLowerCase().includes(q)),
 		);
 	}
 

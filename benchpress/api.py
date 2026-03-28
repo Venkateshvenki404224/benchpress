@@ -4,10 +4,13 @@
 import frappe
 from frappe import _
 
-
-def has_app_permission() -> bool:
-	return "System Manager" in frappe.get_roles(frappe.session.user)
-
+from benchpress.permissions import (
+	get_bench_owner_filter,
+	has_app_permission,
+	is_admin,
+	require_admin,
+	require_bench_access,
+)
 
 # --- Lab endpoints ---
 
@@ -64,6 +67,7 @@ def get_lab(name: str) -> dict:
 
 @frappe.whitelist()
 def create_lab(data: str) -> dict:
+	require_admin()
 	data = frappe.parse_json(data)
 
 	doc = frappe.get_doc(
@@ -97,6 +101,7 @@ def create_lab(data: str) -> dict:
 @frappe.whitelist()
 def build_lab_image(lab_name: str) -> dict:
 	"""Trigger lab image build as a background job."""
+	require_admin()
 	frappe.enqueue(
 		"benchpress.deploy_manager.build_lab",
 		lab_name=lab_name,
@@ -113,6 +118,7 @@ def build_lab_image(lab_name: str) -> dict:
 def get_benches() -> list[dict]:
 	benches = frappe.get_all(
 		"Bench Instance",
+		filters=get_bench_owner_filter(),
 		fields=[
 			"name",
 			"bench_name",
@@ -146,6 +152,7 @@ def get_benches() -> list[dict]:
 
 @frappe.whitelist()
 def get_bench(name: str) -> dict:
+	require_bench_access(name)
 	bench = frappe.get_cached_doc("Bench Instance", name)
 	apps = [{"app_name": a.app_name, "app_label": a.app_label} for a in bench.apps]
 	sites = frappe.get_all(
@@ -249,6 +256,10 @@ def bench_action(bench_name: str, action: str) -> dict:
 		stop_container,
 	)
 
+	require_bench_access(bench_name)
+	if action == "delete" and not is_admin():
+		frappe.throw(_("Only admins can delete bench instances."), frappe.PermissionError)
+
 	bench = frappe.get_doc("Bench Instance", bench_name)
 
 	if action == "start":
@@ -299,6 +310,7 @@ def bench_action(bench_name: str, action: str) -> dict:
 
 @frappe.whitelist()
 def get_deploy_logs(bench_name: str) -> list[dict]:
+	require_bench_access(bench_name)
 	return frappe.get_all(
 		"Deploy Log",
 		filters={"bench": bench_name},
@@ -321,6 +333,7 @@ def get_build_logs(lab_name: str) -> list[dict]:
 
 @frappe.whitelist()
 def get_wg_config(bench_name: str) -> str:
+	require_bench_access(bench_name)
 	bench = frappe.get_cached_doc("Bench Instance", bench_name)
 	if not bench.wg_config:
 		frappe.throw(_("WireGuard config not yet generated for this bench."))
@@ -363,6 +376,7 @@ def get_device_wg_config(device_name: str) -> str:
 def get_bench_stats(bench_name: str) -> dict:
 	from benchpress.docker_manager import get_container_stats
 
+	require_bench_access(bench_name)
 	container_id = frappe.db.get_value("Bench Instance", bench_name, "container_id")
 	if not container_id:
 		frappe.throw(_("No container found for this bench."))
@@ -374,6 +388,7 @@ def get_bench_stats(bench_name: str) -> dict:
 
 @frappe.whitelist()
 def get_sites(bench_name: str) -> list[dict]:
+	require_bench_access(bench_name)
 	return frappe.get_all(
 		"Bench Site",
 		filters={"bench": bench_name},
@@ -386,11 +401,15 @@ def get_sites(bench_name: str) -> list[dict]:
 def create_site(data: str) -> dict:
 	data = frappe.parse_json(data)
 
+	bench_name = data.get("bench")
+	if bench_name:
+		require_bench_access(bench_name)
+
 	doc = frappe.get_doc(
 		{
 			"doctype": "Bench Site",
 			"site_name": data.get("site_name"),
-			"bench": data.get("bench"),
+			"bench": bench_name,
 		}
 	)
 
@@ -461,6 +480,7 @@ def site_action(site_name: str, action: str) -> dict:
 	from benchpress.docker_manager import exec_in_container
 
 	site = frappe.get_doc("Bench Site", site_name)
+	require_bench_access(site.bench)
 	bench = frappe.get_doc("Bench Instance", site.bench)
 
 	if action == "enable":
@@ -530,6 +550,7 @@ def get_available_apps() -> list[dict]:
 
 @frappe.whitelist()
 def get_settings() -> dict:
+	require_admin()
 	settings = frappe.get_cached_doc("BenchPress Settings")
 	return {
 		"base_domain": settings.base_domain,
@@ -541,6 +562,7 @@ def get_settings() -> dict:
 
 @frappe.whitelist()
 def health_check() -> dict:
+	require_admin()
 	result = {"docker": False, "wireguard": False}
 
 	try:
@@ -566,3 +588,13 @@ def health_check() -> dict:
 		pass
 
 	return result
+
+
+@frappe.whitelist()
+def get_user_context() -> dict:
+	"""Return the current user's role context for the frontend."""
+	return {
+		"is_admin": is_admin(),
+		"user": frappe.session.user,
+		"roles": frappe.get_roles(frappe.session.user),
+	}

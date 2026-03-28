@@ -9,8 +9,9 @@
 
 <script setup>
 import { Sidebar } from "frappe-ui";
-import { reactive } from "vue";
+import { reactive, computed, watchEffect } from "vue";
 import { session } from "@/data/session";
+import { userContext } from "@/data/userContext";
 
 import ServerIcon from "~icons/lucide/server";
 import FlaskConicalIcon from "~icons/lucide/flask-conical";
@@ -40,13 +41,29 @@ const sidebarConfig = reactive({
 		title: "Benchpress",
 		subtitle: session.user || "",
 		logo: "/assets/benchpress/images/logo/favicon.svg",
-		menuItems: [
-			{ label: "Switch to Desk", icon: LayoutDashboardIcon, onClick: switchToDesk },
-			{ label: "Toggle Theme", icon: MoonIcon, onClick: toggleTheme },
-			{ label: "Logout", icon: LogOutIcon, onClick: logout },
-		],
+		menuItems: [],
 	},
-	sections: [
+	sections: [],
+});
+
+watchEffect(() => {
+	const isAdmin = userContext.isAdmin;
+
+	// Menu items — only show "Switch to Desk" for admins (users have no desk access)
+	const menuItems = [];
+	if (isAdmin) {
+		menuItems.push({
+			label: "Switch to Desk",
+			icon: LayoutDashboardIcon,
+			onClick: switchToDesk,
+		});
+	}
+	menuItems.push({ label: "Toggle Theme", icon: MoonIcon, onClick: toggleTheme });
+	menuItems.push({ label: "Logout", icon: LogOutIcon, onClick: logout });
+	sidebarConfig.header.menuItems = menuItems;
+
+	// Sidebar sections — hide admin-only items for regular users
+	const sections = [
 		{
 			label: "",
 			items: [
@@ -55,18 +72,21 @@ const sidebarConfig = reactive({
 				{ label: "VPN Devices", icon: ShieldIcon, to: "/devices" },
 			],
 		},
-		{
-			label: "Logs",
-			collapsible: true,
-			items: [
-				{ label: "Deploy Logs", icon: ScrollTextIcon, to: "/deploy-logs" },
-				{ label: "Build Logs", icon: HammerIcon, to: "/build-logs" },
-			],
-		},
-		{
+	];
+
+	const logItems = [{ label: "Deploy Logs", icon: ScrollTextIcon, to: "/deploy-logs" }];
+	if (isAdmin) {
+		logItems.push({ label: "Build Logs", icon: HammerIcon, to: "/build-logs" });
+	}
+	sections.push({ label: "Logs", collapsible: true, items: logItems });
+
+	if (isAdmin) {
+		sections.push({
 			label: "",
 			items: [{ label: "Settings", icon: SettingsIcon, to: "/settings" }],
-		},
-	],
+		});
+	}
+
+	sidebarConfig.sections = sections;
 });
 </script>

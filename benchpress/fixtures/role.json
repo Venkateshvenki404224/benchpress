@@ -1,0 +1,16 @@
+[
+  {
+    "doctype": "Role",
+    "name": "BenchPress Admin",
+    "role_name": "BenchPress Admin",
+    "desk_access": 1,
+    "is_custom": 0
+  },
+  {
+    "doctype": "Role",
+    "name": "BenchPress User",
+    "role_name": "BenchPress User",
+    "desk_access": 0,
+    "is_custom": 0
+  }
+]

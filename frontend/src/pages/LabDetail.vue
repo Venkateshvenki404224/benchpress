@@ -27,9 +27,9 @@
 				</div>
 			</div>
 			<div class="flex gap-2">
-				<!-- Lab not ready: show Build Image (regardless of bench state) -->
+				<!-- Lab not ready: show Build Image (admin only) -->
 				<Button
-					v-if="lab.data.status !== 'Ready'"
+					v-if="lab.data.status !== 'Ready' && userContext.isAdmin"
 					theme="blue"
 					variant="solid"
 					size="lg"
@@ -260,7 +260,7 @@
 												:style="{
 													width: `${Math.min(
 														activeBench.cpu_usage || 0,
-														100
+														100,
 													)}%`,
 												}"
 											/>
@@ -279,7 +279,7 @@
 												:style="{
 													width: `${Math.min(
 														activeBench.memory_usage || 0,
-														100
+														100,
 													)}%`,
 												}"
 											/>
@@ -465,6 +465,7 @@ import {
 	Alert,
 } from "frappe-ui";
 import LogViewer from "@/components/LogViewer.vue";
+import { userContext } from "@/data/userContext";
 
 const route = useRoute();
 const labId = route.params.labId;
@@ -478,7 +479,7 @@ const tabs = computed(() => {
 	const base = [{ label: "Dashboard" }, { label: "Sites" }];
 	if (lab.data?.status === "Ready" || activeBench.value) {
 		base.push({ label: "Deploy Log" });
-	} else {
+	} else if (userContext.isAdmin) {
 		base.push({ label: "Build Log" });
 	}
 	return base;
@@ -493,7 +494,7 @@ const siteColumns = [
 const sshUsername = computed(() => activeBench.value?.ssh_username || null);
 const sshPassword = computed(() => activeBench.value?.ssh_password || null);
 const benchIp = computed(
-	() => activeBench.value?.wg_ip || activeBench.value?.container_ip || null
+	() => activeBench.value?.wg_ip || activeBench.value?.container_ip || null,
 );
 const sshCommand = computed(() => {
 	const ip = benchIp.value;
@@ -553,7 +554,7 @@ watch(
 				benches.reload();
 			}
 		}
-	}
+	},
 );
 
 // Reload logs when the actual bench changes (watch name, not object ref)
@@ -566,7 +567,7 @@ watch(
 				fetchDeployLogs();
 			}
 		}
-	}
+	},
 );
 
 // Poll for new logs while deploying (only on Deploy Log tab)
@@ -581,7 +582,7 @@ watch(
 			pollInterval = setInterval(fetchDeployLogs, 3000);
 		}
 	},
-	{ immediate: true }
+	{ immediate: true },
 );
 
 // Poll for build logs while building
@@ -604,7 +605,7 @@ watch(
 			}
 		}
 	},
-	{ immediate: true }
+	{ immediate: true },
 );
 
 // Also poll lab status while building to detect completion
@@ -621,7 +622,7 @@ watch(
 			clearInterval(labPollInterval);
 			labPollInterval = null;
 		}
-	}
+	},
 );
 
 // Sync build logs into live display
@@ -631,7 +632,7 @@ watch(
 		if (data?.length) {
 			liveBuildLog.value = data[0].message || "";
 		}
-	}
+	},
 );
 
 // Refetch when switching to log tabs (one-time fetch, not continuous)
