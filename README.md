@@ -46,6 +46,7 @@
 - [Networking](#networking)
 - [WireGuard Setup Guide](docs/wireguard-setup.md)
 - [Supported Frappe Apps](#supported-frappe-apps)
+- [VPN Device Management](#vpn-device-management)
 - [Configuration Reference](#configuration-reference)
 - [Contributing](#contributing)
 - [License](#license)
@@ -185,6 +186,8 @@ BenchPress is a **self-hosted Frappe Cloud alternative** built entirely as a Fra
 - **Resource Controls** -- CPU cores and memory limits per lab, enforced by Docker `--cpus` and `--memory` flags
 - **Container Management** -- Start, stop, restart, redeploy, and delete benches from the dashboard
 - **Multi-Site Support** -- Create multiple Frappe sites per bench container, each with its own set of installed apps
+- **VPN Device Management** -- Register persistent devices (Laptop, Mobile, etc.), generate WireGuard configs per device, and manage device lifecycle from a dedicated page
+- **Confirmation Dialogs** -- Destructive actions (deploy, stop, delete) require explicit confirmation before execution
 - **Stats Monitoring** -- CPU and memory usage polled every 2 minutes from Docker stats API, displayed as progress bars
 - **Connection Info Panel** -- Shows VPN IP, SSH command, username, and password with one-click copy to clipboard
 - **Search & Filters** -- Filter labs by status, Frappe version, or search by lab ID, title, and app name
@@ -235,6 +238,12 @@ Select a bench to view its deployment log. Logs are parsed into collapsible phas
 
 Expandable list of image build logs. Click a log entry to reveal the full Docker build output parsed into collapsible steps, each with a colored status dot.
 
+### Devices (`/frontend/devices`)
+
+![Devices](docs/images/devices.png)
+
+Device management page for registering and managing VPN devices. Users add devices (Laptop, Mobile, etc.) and download WireGuard configuration files per device. Each device gets a persistent VPN identity.
+
 ### Settings (`/frontend/settings`)
 
 ![Settings](docs/images/settings.png)
@@ -245,7 +254,7 @@ Modal dialog to configure Docker (socket path, base domain, default image, Traef
 
 ## Data Model (DocTypes)
 
-BenchPress uses 9 DocTypes to model the complete bench lifecycle:
+BenchPress uses 10 DocTypes to model the complete bench lifecycle:
 
 | DocType | Type | Purpose | Key Fields |
 |---------|------|---------|------------|
@@ -256,6 +265,7 @@ BenchPress uses 9 DocTypes to model the complete bench lifecycle:
 | **Bench Site** | Document | Frappe site inside a bench | `site_name`, `bench`, `status` (Creating/Active/Inactive/Error), `full_domain`, `admin_password` |
 | **Site App** | Child Table | Apps installed on a Site | `app_name`, `app_label` |
 | **BenchPress Settings** | Single | Global configuration | `docker_socket`, `base_domain`, `wg_server_*` keys, `next_wg_ip`, `container_memory_limit`, `container_cpu_quota` |
+| **Bench Device** | Document | Persistent VPN device | `device_name`, `device_type` (Laptop/Mobile/etc.), `user`, `wg_public_key`, `wg_private_key`, `wg_ip` |
 | **Deploy Log** | Log | Deployment event log | `bench`, `message`, `log_type`, `timestamp` |
 | **Build Log** | Log | Image build log | `lab`, `message`, `log_type`, `timestamp` |
 
@@ -274,6 +284,8 @@ Lab (template)
 Lab ----> Build Log[] (linked: image build events)
 
 BenchPress Settings (singleton: global config)
+
+Bench Device (user's registered VPN devices)
 ```
 
 ---
@@ -288,38 +300,41 @@ All endpoints require authentication and use `@frappe.whitelist()`. Long-running
 |----------|--------|-------------|
 | `benchpress.api.get_labs` | GET | List all labs with app count and bench count |
 | `benchpress.api.get_lab` | GET | Get single lab with full apps list |
-| `benchpress.api.create_lab` | POST | Create a new lab with apps as child rows |
 | `benchpress.api.build_lab_image` | POST | Enqueue background Docker image build (queue: long, timeout: 3600s) |
+
+> **Note:** Lab creation uses `createListResource.insert` from `frappe-ui` directly (no custom API endpoint needed).
 
 ### Bench Endpoints
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `benchpress.api.get_benches` | GET | List all benches with CPU/memory stats |
-| `benchpress.api.get_bench` | GET | Get single bench with apps, sites, and WireGuard config |
 | `benchpress.api.create_bench` | POST | Create bench from lab template and enqueue deploy |
 | `benchpress.api.bench_action` | POST | Execute action: `start`, `stop`, `restart`, `delete` |
-| `benchpress.api.get_deploy_logs` | GET | Get last 100 deploy log entries for a bench |
-| `benchpress.api.get_build_logs` | GET | Get last 20 build log entries for a lab |
-| `benchpress.api.get_wg_config` | GET | Download WireGuard client `.conf` file |
-| `benchpress.api.get_bench_stats` | GET | Get live CPU/memory stats from Docker |
+| `benchpress.api.get_deploy_logs` | GET | Get last 20 deploy log entries for a bench |
 
 ### Site Endpoints
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `benchpress.api.get_sites` | GET | List all sites in a bench |
 | `benchpress.api.create_site` | POST | Create a new site and enqueue setup inside the container |
-| `benchpress.api.site_action` | POST | Execute action: `enable`, `disable`, `drop`, `backup` |
+
+### Device Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `benchpress.api.add_device` | POST | Register a new VPN device (Laptop, Mobile, etc.) and generate WireGuard config |
+| `benchpress.api.remove_device` | POST | Remove a registered VPN device and clean up WireGuard peer |
+| `benchpress.api.list_devices` | GET | List all VPN devices for the current user |
+| `benchpress.api.get_device_wg_config` | GET | Get WireGuard client config for a specific device |
 
 ### System Endpoints
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `benchpress.api.get_available_apps` | GET | Returns list of 8 supported Frappe ecosystem apps |
-| `benchpress.api.get_settings` | GET | Get global BenchPress settings |
-| `benchpress.api.health_check` | GET | Check Docker and WireGuard connectivity status |
 | `benchpress.wg_manager.setup_wg_server` | POST | One-time WireGuard server initialization |
+
+> **Note:** Settings are accessed via `createDocumentResource` from `frappe-ui` (no custom API endpoint needed). Labs, bench instances, sites, and build logs use `createListResource` / `createDocumentResource` for native Frappe data fetching.
 
 ### Bench Instance Document Methods
 
@@ -617,10 +632,11 @@ bench --site your-site.localhost run-tests --app benchpress
 ```
 benchpress/
 +-- benchpress/
-|   +-- api.py                    # REST API layer (~20 endpoints)
+|   +-- api.py                    # REST API layer (~12 endpoints)
 |   +-- deploy_manager.py         # Build & deploy orchestration (brain of BenchPress)
 |   +-- docker_manager.py         # Docker SDK wrapper (build, create, exec, stats)
 |   +-- wg_manager.py             # WireGuard VPN management (keys, peers, routing)
+|   +-- device_manager.py         # VPN device registration and config generation
 |   +-- stats_collector.py        # Cron job: poll Docker stats every 2 minutes
 |   +-- hooks.py                  # App config: routes, scheduler, ignore_links_on_delete
 |   +-- lab-templates/
@@ -641,12 +657,15 @@ benchpress/
 |   |       +-- benchpress_settings/  # Global config singleton
 |   |       +-- deploy_log/       # Deployment log DocType
 |   |       +-- build_log/        # Build log DocType
+|   +-- device_management/
+|   |   +-- doctype/
+|   |       +-- bench_device/     # VPN device DocType
 |   +-- public/
 |       +-- images/               # App logos, favicons, Frappe ecosystem app icons
 +-- frontend/
     +-- src/
         +-- App.vue               # Root component with sidebar navigation
-        +-- router.js             # Vue Router with 8 routes
+        +-- router.js             # Vue Router with 9 routes
         +-- socket.js             # Socket.io client for real-time events
         +-- main.js               # App bootstrap with frappe-ui plugins
         +-- theme.css             # Custom theme variables (light + dark)
@@ -657,6 +676,7 @@ benchpress/
         |   +-- BenchInstances.vue # Bench instance table
         |   +-- DeployLogs.vue    # Deploy log viewer per bench
         |   +-- BuildLogs.vue     # Build log viewer with expandable entries
+        |   +-- Devices.vue       # VPN device management page
         |   +-- Settings.vue      # Global settings dialog
         +-- components/
             +-- LogViewer.vue     # Parses logs into collapsible steps
@@ -667,10 +687,11 @@ benchpress/
 
 | File | Lines | What It Does |
 |------|-------|--------------|
-| `api.py` | ~500 | REST API layer with 20 endpoints. All `@frappe.whitelist()`. Long-running ops enqueued to `"long"` queue. |
+| `api.py` | ~300 | REST API layer with 12 endpoints. All `@frappe.whitelist()`. Long-running ops enqueued to `"long"` queue. Frontend uses `frappe-ui` native data fetching (`createDocumentResource`, `createListResource`) for most reads. |
 | `deploy_manager.py` | ~300 | Orchestration brain. Coordinates image builds, container creation, WireGuard setup, SSH config, and real-time log streaming. |
 | `docker_manager.py` | ~190 | Docker SDK wrapper. Builds images, creates/starts/stops containers, executes commands inside containers, collects stats. |
 | `wg_manager.py` | ~210 | WireGuard VPN management. Generates keypairs, allocates IPs, manages peers, configures iptables DNAT routing for ports 22/8000/9000. |
+| `device_manager.py` | ~110 | VPN device registration. Creates Bench Device docs, generates WireGuard keypairs, allocates IPs, and builds client configs. |
 | `stats_collector.py` | ~35 | Cron job (every 2 min). Polls Docker stats for running containers, updates CPU/memory fields. |
 | `hooks.py` | ~240 | App configuration: routes, scheduler events, `add_to_apps_screen`, `ignore_links_on_delete`. |
 
@@ -746,20 +767,19 @@ Each container runs as a single self-contained unit with all services:
 
 ## Supported Frappe Apps
 
-BenchPress comes pre-configured with support for the Frappe ecosystem:
+BenchPress works with **any Frappe app** -- there is no hardcoded app list. When creating a Lab, provide the Git URL and branch for each app you want to install (e.g., ERPNext, HRMS, CRM, LMS, Helpdesk, Wiki, Webshop, or your own custom app).
 
-| App | Repository | Default Branch |
-|-----|-----------|----------------|
-| Frappe Framework | `github.com/frappe/frappe` | version-15 |
-| ERPNext | `github.com/frappe/erpnext` | version-15 |
-| HRMS | `github.com/frappe/hrms` | version-15 |
-| LMS | `github.com/frappe/lms` | develop |
-| Helpdesk | `github.com/frappe/helpdesk` | develop |
-| Wiki | `github.com/frappe/wiki` | develop |
-| Webshop | `github.com/frappe/webshop` | version-15 |
-| CRM | `github.com/frappe/crm` | develop |
+---
 
-You can also add **any custom Frappe app** by providing its Git URL and branch when creating a Lab.
+## VPN Device Management
+
+BenchPress supports persistent VPN device registration so users can maintain stable WireGuard identities across sessions:
+
+1. **Register a device** -- Navigate to `/frontend/devices` and add a device with a name and type (Laptop, Mobile, Tablet, Desktop, Other)
+2. **Get WireGuard config** -- Each device receives a dedicated WireGuard configuration file with its own keypair and IP allocation
+3. **Manage devices** -- View all registered devices, download configs, or remove devices when no longer needed
+
+Device management uses the **Bench Device** DocType and is exposed through four API endpoints (`add_device`, `remove_device`, `list_devices`, `get_device_wg_config`).
 
 ---
 
