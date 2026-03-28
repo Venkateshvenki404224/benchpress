@@ -100,7 +100,7 @@ def create_bench_container(bench_doc, lab_doc) -> str:
 		name=name,
 		labels=labels,
 		detach=True,
-		hostname=name,
+		hostname=lab_doc.lab_id,
 		privileged=True,
 		cap_add=["NET_ADMIN"],
 		volumes={
