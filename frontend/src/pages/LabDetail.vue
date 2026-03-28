@@ -260,7 +260,7 @@
 												:style="{
 													width: `${Math.min(
 														activeBench.cpu_usage || 0,
-														100,
+														100
 													)}%`,
 												}"
 											/>
@@ -279,7 +279,7 @@
 												:style="{
 													width: `${Math.min(
 														activeBench.memory_usage || 0,
-														100,
+														100
 													)}%`,
 												}"
 											/>
@@ -494,7 +494,7 @@ const siteColumns = [
 const sshUsername = computed(() => activeBench.value?.ssh_username || null);
 const sshPassword = computed(() => activeBench.value?.ssh_password || null);
 const benchIp = computed(
-	() => activeBench.value?.wg_ip || activeBench.value?.container_ip || null,
+	() => activeBench.value?.wg_ip || activeBench.value?.container_ip || null
 );
 const sshCommand = computed(() => {
 	const ip = benchIp.value;
@@ -554,7 +554,7 @@ watch(
 				benches.reload();
 			}
 		}
-	},
+	}
 );
 
 // Reload logs when the actual bench changes (watch name, not object ref)
@@ -567,7 +567,7 @@ watch(
 				fetchDeployLogs();
 			}
 		}
-	},
+	}
 );
 
 // Poll for new logs while deploying (only on Deploy Log tab)
@@ -582,7 +582,7 @@ watch(
 			pollInterval = setInterval(fetchDeployLogs, 3000);
 		}
 	},
-	{ immediate: true },
+	{ immediate: true }
 );
 
 // Poll for build logs while building
@@ -605,7 +605,7 @@ watch(
 			}
 		}
 	},
-	{ immediate: true },
+	{ immediate: true }
 );
 
 // Also poll lab status while building to detect completion
@@ -622,7 +622,7 @@ watch(
 			clearInterval(labPollInterval);
 			labPollInterval = null;
 		}
-	},
+	}
 );
 
 // Sync build logs into live display
@@ -632,7 +632,7 @@ watch(
 		if (data?.length) {
 			liveBuildLog.value = data[0].message || "";
 		}
-	},
+	}
 );
 
 // Refetch when switching to log tabs (one-time fetch, not continuous)

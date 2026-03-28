@@ -123,7 +123,7 @@ const filteredRows = computed(() => {
 				(r.lab_id || "").toLowerCase().includes(q) ||
 				(r.title || "").toLowerCase().includes(q) ||
 				(r.description || "").toLowerCase().includes(q) ||
-				(r.app_names || []).some((app) => app.toLowerCase().includes(q)),
+				(r.app_names || []).some((app) => app.toLowerCase().includes(q))
 		);
 	}
 
