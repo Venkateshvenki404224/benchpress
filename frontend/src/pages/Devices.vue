@@ -14,7 +14,7 @@
 
 		<div v-if="devices.loading" class="text-sm text-ink-gray-5">Loading devices...</div>
 
-		<div v-else-if="devices.data?.length" class="grid gap-4">
+		<div v-else-if="devices.data?.length" class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
 			<div
 				v-for="device in devices.data"
 				:key="device.name"
@@ -42,28 +42,29 @@
 								>{{ device.wg_ip }}</code
 							>
 						</div>
+						<div
+							v-if="device.wg_rx_bytes || device.wg_tx_bytes"
+							class="mt-2 flex gap-3 text-xs text-ink-gray-5"
+						>
+							<span
+								>Received:
+								<strong class="text-ink-gray-7">{{
+									formatBytes(device.wg_rx_bytes)
+								}}</strong></span
+							>
+							<span
+								>Sent:
+								<strong class="text-ink-gray-7">{{
+									formatBytes(device.wg_tx_bytes)
+								}}</strong></span
+							>
+						</div>
 					</div>
 				</div>
-				<div class="flex items-center gap-2">
-					<Button
-						size="sm"
-						icon-left="download"
-						:loading="downloadingConfig === device.name"
-						@click="downloadConfig(device)"
-					>
-						Config
-					</Button>
-					<Button
-						size="sm"
-						theme="red"
-						variant="subtle"
-						icon-left="trash-2"
-						:loading="removingDevice === device.name"
-						@click="confirmRemove(device)"
-					>
-						Remove
-					</Button>
-				</div>
+				<Dropdown
+					:options="getDeviceActions(device)"
+					:button="{ icon: 'more-horizontal', appearance: 'minimal' }"
+				/>
 			</div>
 		</div>
 
@@ -153,12 +154,41 @@
 				</Button>
 			</template>
 		</Dialog>
+
+		<Dialog :options="{ title: configDeviceName, size: 'lg' }" v-model="showConfigDialog">
+			<template #body-content>
+				<pre
+					class="max-h-96 overflow-auto rounded-lg bg-surface-gray-1 p-4 font-mono text-xs text-ink-gray-8"
+					>{{ configText }}</pre
+				>
+			</template>
+		</Dialog>
 	</div>
 </template>
 
 <script setup>
 import { ref } from "vue";
-import { createResource, Badge, Button, Dialog, FormControl, ErrorMessage } from "frappe-ui";
+import {
+	createResource,
+	Badge,
+	Button,
+	Dialog,
+	Dropdown,
+	FormControl,
+	ErrorMessage,
+} from "frappe-ui";
+
+function formatBytes(bytes) {
+	if (!bytes) return "0 B";
+	const units = ["B", "KiB", "MiB", "GiB", "TiB"];
+	let i = 0;
+	let val = bytes;
+	while (val >= 1024 && i < units.length - 1) {
+		val /= 1024;
+		i++;
+	}
+	return `${val.toFixed(i > 0 ? 2 : 0)} ${units[i]}`;
+}
 
 const showAddDialog = ref(false);
 const showRemoveDialog = ref(false);
@@ -179,6 +209,54 @@ const deviceTypeOptions = [
 	{ label: "Embedded", value: "Embedded" },
 ];
 
+function getDeviceActions(device) {
+	return [
+		{
+			group: "Configuration",
+			items: [
+				{
+					label: "Show Configuration",
+					icon: "file-text",
+					handler: () => showConfig(device),
+				},
+				{
+					label: "Download Tunnel File",
+					icon: "download",
+					handler: () => downloadConfig(device),
+				},
+			],
+		},
+		{
+			group: "Danger",
+			items: [
+				{
+					label: "Delete",
+					icon: "trash-2",
+					theme: "red",
+					handler: () => confirmRemove(device),
+				},
+			],
+		},
+	];
+}
+
+const showConfigDialog = ref(false);
+const configText = ref("");
+const configDeviceName = ref("");
+
+async function showConfig(device) {
+	configDeviceName.value = device.device_name;
+	configAction.submit(
+		{ device_name: device.name },
+		{
+			onSuccess(data) {
+				configText.value = data;
+				showConfigDialog.value = true;
+			},
+		}
+	);
+}
+
 const devices = createResource({
 	url: "benchpress.api.list_devices",
 	auto: true,
@@ -192,15 +270,6 @@ const addAction = createResource({
 		autoGenKey.value = true;
 		devices.reload();
 
-		if (data.wg_config) {
-			const blob = new Blob([data.wg_config], { type: "text/plain" });
-			const url = URL.createObjectURL(blob);
-			const a = document.createElement("a");
-			a.href = url;
-			a.download = `${newDevice.value.name || "device"}.conf`;
-			a.click();
-			URL.revokeObjectURL(url);
-		}
 	},
 });
 

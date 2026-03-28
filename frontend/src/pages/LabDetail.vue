@@ -120,7 +120,7 @@
 
 							<!-- Connection Info -->
 							<div
-								v-if="activeBench"
+								v-if="activeBench && activeBench.status === 'Running'"
 								class="rounded-lg border border-outline-gray-1 bg-surface-white p-5"
 							>
 								<h2 class="mb-3 text-base font-semibold text-ink-gray-9">
@@ -207,17 +207,42 @@
 											/>
 										</div>
 									</div>
-								</div>
-								<div
-									class="flex items-center gap-4 border-t border-outline-gray-1 pt-4 mt-2"
-								>
-									<Button
-										appearance="primary"
-										icon-left="shield"
-										class="w-full"
-										@click="$router.push('/devices')"
-										>Manage VPN Devices</Button
-									>
+									<div class="flex items-center gap-4 py-3">
+										<label
+											class="w-36 shrink-0 text-sm font-medium text-ink-gray-9"
+											>Admin Password</label
+										>
+										<div class="flex flex-1 items-center gap-2">
+											<code
+												class="flex-1 rounded bg-surface-gray-1 px-4 py-2.5 font-mono text-sm text-ink-gray-8"
+												>{{ adminPassword ? "••••••••••••" : "—" }}</code
+											>
+											<Button
+												icon="copy"
+												appearance="minimal"
+												size="sm"
+												@click="copyText(adminPassword)"
+											/>
+										</div>
+									</div>
+									<div class="flex items-center gap-4 py-3">
+										<label
+											class="w-36 shrink-0 text-sm font-medium text-ink-gray-9"
+											>VS Port Forward</label
+										>
+										<div class="flex flex-1 items-center gap-2">
+											<code
+												class="flex-1 rounded bg-surface-gray-1 px-4 py-2.5 font-mono text-sm text-ink-gray-8"
+												>{{ siteUrl ?? "—" }}</code
+											>
+											<Button
+												icon="copy"
+												appearance="minimal"
+												size="sm"
+												@click="copyText(siteUrl)"
+											/>
+										</div>
+									</div>
 								</div>
 							</div>
 						</div>
@@ -543,6 +568,7 @@ const siteColumns = [
 
 const sshUsername = computed(() => activeBench.value?.ssh_username || null);
 const sshPassword = computed(() => activeBench.value?.ssh_password || null);
+const adminPassword = computed(() => activeBench.value?.admin_password || null);
 const benchIp = computed(
 	() => activeBench.value?.wg_ip || activeBench.value?.container_ip || null
 );
@@ -551,6 +577,11 @@ const sshCommand = computed(() => {
 	const user = sshUsername.value;
 	if (!ip || !user) return null;
 	return `ssh ${user}@${ip}`;
+});
+const siteUrl = computed(() => {
+	const ip = benchIp.value;
+	if (!ip) return null;
+	return `${ip}:8000`;
 });
 
 const lab = createDocumentResource({
