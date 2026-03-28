@@ -2,7 +2,7 @@
 	<div class="p-6">
 		<Dialog :options="{ title: 'Benchpress Settings', size: 'xl' }" v-model="showDialog">
 			<template #body-content>
-				<div v-if="settings.data" class="space-y-6">
+				<div v-if="settings.doc" class="space-y-6">
 					<!-- Docker Configuration -->
 					<div>
 						<h3 class="mb-3 text-sm font-semibold text-ink-gray-8">
@@ -89,12 +89,12 @@
 			</template>
 			<template #actions>
 				<div class="w-full space-y-2">
-					<ErrorMessage :message="saveAction.error" />
+					<ErrorMessage :message="settings.setValue.error" />
 					<div class="flex justify-end gap-2">
 						<Button @click="showDialog = false">Cancel</Button>
 						<Button
 							appearance="primary"
-							:loading="saveAction.loading"
+							:loading="settings.setValue.loading"
 							@click="saveSettings"
 							>Save</Button
 						>
@@ -108,7 +108,7 @@
 <script setup>
 import { ref, reactive, watch } from "vue";
 import { useRouter } from "vue-router";
-import { createResource, Dialog, FormControl, Button, ErrorMessage } from "frappe-ui";
+import { createDocumentResource, Dialog, FormControl, Button, ErrorMessage } from "frappe-ui";
 
 const router = useRouter();
 const showDialog = ref(true);
@@ -127,46 +127,38 @@ const form = reactive({
 	container_cpu_quota: "",
 });
 
-const settings = createResource({
-	url: "benchpress.api.get_settings",
-	auto: true,
-	onSuccess(data) {
+const settings = createDocumentResource({
+	doctype: "BenchPress Settings",
+	name: "BenchPress Settings",
+	onSuccess(doc) {
 		Object.assign(form, {
-			base_domain: data.base_domain || "",
-			default_image: data.default_image || "",
-			traefik_network: data.traefik_network || "",
-			docker_socket: data.docker_socket || "",
-			wg_server_ip: data.wg_server_ip || "",
-			wg_subnet: data.wg_subnet || "",
-			wg_server_port: data.wg_server_port || "",
-			wg_server_endpoint: data.wg_server_endpoint || "",
-			wg_server_public_key: data.wg_server_public_key || "",
-			container_memory_limit: data.container_memory_limit || "",
-			container_cpu_quota: data.container_cpu_quota || "",
+			base_domain: doc.base_domain || "",
+			default_image: doc.default_image || "",
+			traefik_network: doc.traefik_network || "",
+			docker_socket: doc.docker_socket || "",
+			wg_server_ip: doc.wg_server_ip || "",
+			wg_subnet: doc.wg_subnet || "",
+			wg_server_port: doc.wg_server_port || "",
+			wg_server_endpoint: doc.wg_server_endpoint || "",
+			wg_server_public_key: doc.wg_server_public_key || "",
+			container_memory_limit: doc.container_memory_limit || "",
+			container_cpu_quota: doc.container_cpu_quota || "",
 		});
 	},
-});
-
-const saveAction = createResource({
-	url: "frappe.client.save",
-	onSuccess() {
-		showDialog.value = false;
+	setValue: {
+		onSuccess() {
+			showDialog.value = false;
+		},
 	},
 });
 
 function saveSettings() {
-	saveAction.submit({
-		doc: JSON.stringify({
-			doctype: "BenchPress Settings",
-			name: "BenchPress Settings",
-			...form,
-		}),
-	});
+	settings.setValue.submit({ ...form });
 }
 
 watch(showDialog, (val) => {
 	if (!val) {
-		router.back();
+		router.push("/labs");
 	}
 });
 </script>

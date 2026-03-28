@@ -66,9 +66,7 @@ router.beforeEach(async (to, from, next) => {
 		isLoggedIn = false;
 	}
 
-	if (to.name === "Login" && isLoggedIn) {
-		next({ name: "Home" });
-	} else if (to.name !== "Login" && !isLoggedIn) {
+	if (!isLoggedIn) {
 		window.location.href = "/login";
 	} else if (ADMIN_ONLY_ROUTES.has(to.name)) {
 		await waitForUserContext().catch(() => {});

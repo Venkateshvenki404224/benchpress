@@ -12,9 +12,6 @@ from benchpress.permissions import (
 	require_bench_access,
 )
 
-# --- Lab endpoints ---
-
-
 @frappe.whitelist()
 def get_labs() -> list[dict]:
 	labs = frappe.get_all(
@@ -111,9 +108,6 @@ def build_lab_image(lab_name: str) -> dict:
 	return {"name": lab_name, "status": "Building"}
 
 
-# --- Bench endpoints ---
-
-
 @frappe.whitelist()
 def get_benches() -> list[dict]:
 	benches = frappe.get_all(
@@ -194,10 +188,8 @@ def create_bench(data: str) -> dict:
 
 	lab = frappe.get_cached_doc("Lab", lab_name)
 
-	# Check if instance already exists for this user + lab
 	instance_id = get_instance_id(frappe.session.user, lab_name)
 	if frappe.db.exists("Bench Instance", instance_id):
-		# Instance exists — redeploy it
 		doc = frappe.get_doc("Bench Instance", instance_id)
 		doc.status = "Deploying"
 		doc.save(ignore_permissions=True)
@@ -222,7 +214,6 @@ def create_bench(data: str) -> dict:
 		}
 	)
 
-	# Copy apps from lab to bench
 	for app in lab.apps:
 		doc.append(
 			"apps",
@@ -279,7 +270,6 @@ def bench_action(bench_name: str, action: str) -> dict:
 			except Exception:
 				pass
 			remove_container(bench.container_id)
-		# Clean up named volumes — data and mariadb
 		from benchpress.docker_manager import get_client
 
 		client = get_client()
