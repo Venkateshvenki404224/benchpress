@@ -74,7 +74,9 @@ router.beforeEach(async (to, from, next) => {
 		// Wait for user context to resolve before checking admin access
 		try {
 			await waitForUserContext();
-		} catch {}
+		} catch (e) {
+			// user context failed to load — default to non-admin
+		}
 		if (!userContext.isAdmin) {
 			next({ name: "Labs" });
 		} else {
