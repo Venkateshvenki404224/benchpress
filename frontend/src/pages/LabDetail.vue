@@ -1,46 +1,46 @@
 <template>
-	<div class="p-6" v-if="lab.data">
+	<div class="p-6" v-if="lab.doc">
 		<!-- Header -->
 		<div class="mb-6 flex items-start justify-between">
 			<div>
 				<div class="flex items-center gap-3">
-					<h1 class="text-2xl font-bold text-ink-gray-9">{{ lab.data.title }}</h1>
+					<h1 class="text-2xl font-bold text-ink-gray-9">{{ lab.doc.title }}</h1>
 				</div>
 				<div class="mt-2 flex items-center gap-2 text-sm text-ink-gray-5">
 					<span>Lab ID:</span>
 					<code
 						class="rounded bg-surface-gray-2 px-1.5 py-0.5 font-mono text-xs text-ink-gray-7"
-						>{{ lab.data.lab_id }}</code
+						>{{ lab.doc.lab_id }}</code
 					>
 				</div>
-				<p v-if="lab.data.description" class="mt-3 max-w-xl text-sm text-ink-gray-6">
-					{{ lab.data.description }}
+				<p v-if="lab.doc.description" class="mt-3 max-w-xl text-sm text-ink-gray-6">
+					{{ lab.doc.description }}
 				</p>
 				<div class="mt-3 flex gap-3">
-					<Badge :label="lab.data.frappe_version" theme="blue" variant="outline" />
+					<Badge :label="lab.doc.frappe_version" theme="blue" variant="outline" />
 					<Badge
-						:label="`${lab.data.memory_limit} RAM`"
+						:label="`${lab.doc.memory_limit} RAM`"
 						theme="gray"
 						variant="outline"
 					/>
-					<Badge :label="`${lab.data.cpu_cores} CPU`" theme="gray" variant="outline" />
+					<Badge :label="`${lab.doc.cpu_cores} CPU`" theme="gray" variant="outline" />
 				</div>
 			</div>
 			<div class="flex gap-2">
 				<!-- Lab not ready: show Build Image (regardless of bench state) -->
 				<Button
-					v-if="lab.data.status !== 'Ready'"
+					v-if="lab.doc.status !== 'Ready'"
 					theme="blue"
 					variant="solid"
 					size="lg"
-					:loading="buildAction.loading || lab.data.status === 'Building'"
+					:loading="buildAction.loading || lab.doc.status === 'Building'"
 					@click="buildLabImage"
-					>{{ lab.data.status === "Building" ? "Building..." : "Build Image" }}</Button
+					>{{ lab.doc.status === "Building" ? "Building..." : "Build Image" }}</Button
 				>
 				<!-- Lab ready, no instance or instance stopped/errored: show Deploy -->
 				<Button
 					v-if="
-						lab.data.status === 'Ready' &&
+						lab.doc.status === 'Ready' &&
 						(!activeBench ||
 							activeBench.status === 'Stopped' ||
 							activeBench.status === 'Error')
@@ -49,7 +49,7 @@
 					variant="solid"
 					size="lg"
 					:loading="deployAction.loading"
-					@click="deployLab"
+					@click="showDeployConfirm = true"
 					>Deploy</Button
 				>
 				<!-- Instance running: show Stop -->
@@ -59,7 +59,7 @@
 					variant="solid"
 					size="lg"
 					:loading="benchAction.loading"
-					@click="doBenchAction('stop')"
+					@click="showStopConfirm = true"
 					>Stop</Button
 				>
 			</div>
@@ -86,24 +86,24 @@
 									Lab Information
 								</h2>
 								<p
-									v-if="lab.data.description"
+									v-if="lab.doc.description"
 									class="mb-4 text-sm text-ink-gray-6"
 								>
-									{{ lab.data.description }}
+									{{ lab.doc.description }}
 								</p>
 								<p
-									v-if="!activeBench && !lab.data.description"
+									v-if="!activeBench && !lab.doc.description"
 									class="mb-4 text-sm text-ink-gray-5"
 								>
 									This lab is not deployed yet. Click "Deploy" to start.
 								</p>
-								<div v-if="lab.data.apps?.length" class="mt-4">
+								<div v-if="lab.doc.apps?.length" class="mt-4">
 									<h3 class="mb-2 text-sm font-medium text-ink-gray-7">
 										Installed Apps
 									</h3>
 									<div class="flex flex-wrap gap-2">
 										<Badge
-											v-for="app in lab.data.apps"
+											v-for="app in lab.doc.apps"
 											:key="app.app_name"
 											:label="app.app_label || app.app_name"
 											theme="blue"
@@ -363,13 +363,13 @@
 									placeholder="e.g. mysite"
 									:required="true"
 								/>
-								<div v-if="lab.data.apps?.length">
+								<div v-if="lab.doc.apps?.length">
 									<label class="mb-2 block text-xs font-medium text-ink-gray-6"
 										>Apps to Install</label
 									>
 									<div class="flex flex-wrap gap-2">
 										<label
-											v-for="app in lab.data.apps"
+											v-for="app in lab.doc.apps"
 											:key="app.app_name"
 											class="flex cursor-pointer items-center gap-2 rounded border border-outline-gray-1 px-3 py-2 text-sm"
 											:class="
@@ -447,6 +447,55 @@
 	<div v-else class="flex items-center justify-center p-12">
 		<div class="text-base text-ink-gray-5">Loading lab details...</div>
 	</div>
+
+	<!-- Deploy Confirmation Dialog -->
+	<Dialog v-model="showDeployConfirm">
+		<template #body-title>
+			<h3 class="text-lg font-semibold text-ink-gray-9">Deploy Lab</h3>
+		</template>
+		<template #body-content>
+			<p class="text-sm text-ink-gray-6">
+				This will create a container and set up a Frappe bench. Continue?
+			</p>
+		</template>
+		<template #actions="{ close }">
+			<div class="flex flex-row-reverse gap-2">
+				<Button
+					variant="solid"
+					theme="green"
+					:loading="deployAction.loading"
+					@click="deployLab(); close()"
+					>Deploy</Button
+				>
+				<Button variant="outline" @click="close">Cancel</Button>
+			</div>
+		</template>
+	</Dialog>
+
+	<!-- Stop Confirmation Dialog -->
+	<Dialog v-model="showStopConfirm">
+		<template #body-title>
+			<h3 class="text-lg font-semibold text-ink-gray-9">Stop Bench</h3>
+		</template>
+		<template #body-content>
+			<p class="text-sm text-ink-gray-6">
+				This will stop the running container. The bench will go offline until
+				redeployed. Continue?
+			</p>
+		</template>
+		<template #actions="{ close }">
+			<div class="flex flex-row-reverse gap-2">
+				<Button
+					variant="solid"
+					theme="red"
+					:loading="benchAction.loading"
+					@click="doBenchAction('stop'); close()"
+					>Stop</Button
+				>
+				<Button variant="outline" @click="close">Cancel</Button>
+			</div>
+		</template>
+	</Dialog>
 </template>
 
 <script setup>
@@ -455,6 +504,8 @@ import { useRoute } from "vue-router";
 import { useSocket } from "@/socket";
 import {
 	createResource,
+	createDocumentResource,
+	createListResource,
 	Badge,
 	Button,
 	Tabs,
@@ -468,15 +519,16 @@ import LogViewer from "@/components/LogViewer.vue";
 
 const route = useRoute();
 const labId = route.params.labId;
-const showPassword = ref(false);
 const activeTab = ref(0);
 const showNewSite = ref(false);
+const showDeployConfirm = ref(false);
+const showStopConfirm = ref(false);
 const newSiteName = ref("");
 const selectedApps = ref([]);
 
 const tabs = computed(() => {
 	const base = [{ label: "Dashboard" }, { label: "Sites" }];
-	if (lab.data?.status === "Ready" || activeBench.value) {
+	if (lab.doc?.status === "Ready" || activeBench.value) {
 		base.push({ label: "Deploy Log" });
 	} else {
 		base.push({ label: "Build Log" });
@@ -502,10 +554,9 @@ const sshCommand = computed(() => {
 	return `ssh ${user}@${ip}`;
 });
 
-const lab = createResource({
-	url: "benchpress.api.get_lab",
-	params: { name: labId },
-	auto: true,
+const lab = createDocumentResource({
+	doctype: "Lab",
+	name: labId,
 });
 
 const benches = createResource({
@@ -518,9 +569,11 @@ const activeBench = computed(() => {
 	return benches.data.find((b) => b.lab === labId) || null;
 });
 
-const sites = createResource({
-	url: "benchpress.api.get_sites",
-	params: { bench_name: computed(() => activeBench.value?.name || "") },
+const sites = createListResource({
+	doctype: "Bench Site",
+	fields: ["name", "site_name", "full_domain", "status"],
+	filters: computed(() => ({ bench: activeBench.value?.name || "" })),
+	orderBy: "creation desc",
 	auto: computed(() => !!activeBench.value),
 });
 
@@ -588,7 +641,7 @@ watch(
 let buildPollInterval = null;
 
 watch(
-	() => lab.data?.status,
+	() => lab.doc?.status,
 	(status) => {
 		if (status === "Building") {
 			buildPollInterval = setInterval(() => {
@@ -611,7 +664,7 @@ watch(
 let labPollInterval = null;
 
 watch(
-	() => lab.data?.status,
+	() => lab.doc?.status,
 	(status) => {
 		if (status === "Building") {
 			labPollInterval = setInterval(() => {
@@ -697,9 +750,12 @@ onUnmounted(() => {
 	}
 });
 
-const buildLogs = createResource({
-	url: "benchpress.api.get_build_logs",
-	params: { lab_name: labId },
+const buildLogs = createListResource({
+	doctype: "Build Log",
+	fields: ["name", "message", "log_type", "timestamp"],
+	filters: { lab: labId },
+	orderBy: "timestamp desc",
+	pageLength: 20,
 	auto: true,
 });
 

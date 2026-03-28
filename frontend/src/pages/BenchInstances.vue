@@ -23,7 +23,7 @@
 </template>
 
 <script setup>
-import { ListView, Badge, createResource } from "frappe-ui";
+import { ListView, Badge, createListResource } from "frappe-ui";
 import { h } from "vue";
 
 const columns = [
@@ -57,8 +57,24 @@ const columns = [
 	{ label: "Memory %", key: "memory_usage", width: "100px" },
 ];
 
-let benches = createResource({
-	url: "benchpress.api.get_benches",
+let benches = createListResource({
+	doctype: "Bench Instance",
+	fields: [
+		"name",
+		"bench_name",
+		"lab",
+		"frappe_version",
+		"domain",
+		"status",
+		"container_id",
+		"container_ip",
+		"wg_ip",
+		"cpu_usage",
+		"memory_usage",
+		"started_at",
+	],
+	orderBy: "creation desc",
+	pageLength: 100,
 	auto: true,
 });
 </script>

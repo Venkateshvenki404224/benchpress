@@ -14,21 +14,18 @@
 				type="text"
 				placeholder="Search by Lab ID, title, or app name..."
 				v-model="searchQuery"
-				@input="onSearch"
 				icon-left="search"
 			/>
 			<FormControl
 				type="select"
 				:options="statusOptions"
 				v-model="statusFilter"
-				@change="onFilterChange"
 				class="w-40"
 			/>
 			<FormControl
 				type="select"
 				:options="versionOptions"
 				v-model="versionFilter"
-				@change="onFilterChange"
 				class="w-44"
 			/>
 		</div>
@@ -58,7 +55,7 @@
 
 <script setup>
 import { ref, computed } from "vue";
-import { ListView, Button, FormControl, createResource } from "frappe-ui";
+import { ListView, Button, FormControl, createListResource } from "frappe-ui";
 
 const searchQuery = ref("");
 const statusFilter = ref("All");
@@ -89,8 +86,11 @@ const columns = [
 	{ label: "CPU", key: "cpu_cores", width: "80px" },
 ];
 
-const labs = createResource({
-	url: "benchpress.api.get_labs",
+const labs = createListResource({
+	doctype: "Lab",
+	fields: ["name", "lab_id", "title", "description", "frappe_version", "status", "memory_limit", "cpu_cores"],
+	orderBy: "creation desc",
+	pageLength: 100,
 	auto: true,
 });
 
@@ -116,23 +116,11 @@ const filteredRows = computed(() => {
 			(r) =>
 				(r.lab_id || "").toLowerCase().includes(q) ||
 				(r.title || "").toLowerCase().includes(q) ||
-				(r.description || "").toLowerCase().includes(q) ||
-				(r.app_names || []).some((app) => app.toLowerCase().includes(q))
+				(r.description || "").toLowerCase().includes(q)
 		);
 	}
 
 	return rows;
 });
 
-let searchTimeout = null;
-function onSearch() {
-	clearTimeout(searchTimeout);
-	searchTimeout = setTimeout(() => {
-		// filteredRows is computed, no explicit action needed
-	}, 150);
-}
-
-function onFilterChange() {
-	// filteredRows is computed, updates automatically
-}
 </script>
