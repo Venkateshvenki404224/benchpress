@@ -49,7 +49,6 @@ const sidebarConfig = reactive({
 watchEffect(() => {
 	const isAdmin = userContext.isAdmin;
 
-	// Menu items — only show "Switch to Desk" for admins (users have no desk access)
 	const menuItems = [];
 	if (isAdmin) {
 		menuItems.push({
@@ -62,7 +61,6 @@ watchEffect(() => {
 	menuItems.push({ label: "Logout", icon: LogOutIcon, onClick: logout });
 	sidebarConfig.header.menuItems = menuItems;
 
-	// Sidebar sections — hide admin-only items for regular users
 	const sections = [
 		{
 			label: "",

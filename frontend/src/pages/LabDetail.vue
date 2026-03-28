@@ -27,7 +27,6 @@
 				</div>
 			</div>
 			<div class="flex gap-2">
-				<!-- Lab not ready: show Build Image (admin only) -->
 				<Button
 					v-if="lab.data.status !== 'Ready' && userContext.isAdmin"
 					theme="blue"

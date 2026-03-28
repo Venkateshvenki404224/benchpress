@@ -71,12 +71,7 @@ router.beforeEach(async (to, from, next) => {
 	} else if (to.name !== "Login" && !isLoggedIn) {
 		window.location.href = "/login";
 	} else if (ADMIN_ONLY_ROUTES.has(to.name)) {
-		// Wait for user context to resolve before checking admin access
-		try {
-			await waitForUserContext();
-		} catch (e) {
-			// user context failed to load — default to non-admin
-		}
+		await waitForUserContext().catch(() => {});
 		if (!userContext.isAdmin) {
 			next({ name: "Labs" });
 		} else {
