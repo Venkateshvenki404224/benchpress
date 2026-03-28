@@ -118,6 +118,7 @@ after_install = "benchpress.install.after_install"
 
 permission_query_conditions = {
 	"Bench Instance": "benchpress.permissions.bench_instance_query_conditions",
+	"Deploy Log": "benchpress.permissions.deploy_log_query_conditions",
 }
 
 # has_permission = {
