@@ -60,7 +60,7 @@
 
 <script setup>
 import { ref, computed } from "vue";
-import { ListView, Button, FormControl, createResource } from "frappe-ui";
+import { ListView, Button, FormControl, createListResource } from "frappe-ui";
 import { userContext } from "@/data/userContext";
 
 const searchQuery = ref("");

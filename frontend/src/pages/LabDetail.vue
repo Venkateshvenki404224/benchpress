@@ -24,7 +24,7 @@
 			</div>
 			<div class="flex gap-2">
 				<Button
-					v-if="lab.data.status !== 'Ready' && userContext.isAdmin"
+					v-if="lab.doc.status !== 'Ready' && userContext.isAdmin"
 					theme="blue"
 					variant="solid"
 					size="lg"
