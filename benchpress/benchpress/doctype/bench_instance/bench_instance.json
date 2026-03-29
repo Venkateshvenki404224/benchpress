@@ -24,6 +24,7 @@
   "column_break_container",
   "container_ip",
   "started_at",
+  "database_server",
   "stats_section",
   "cpu_usage",
   "column_break_stats",
@@ -141,6 +142,13 @@
    "fieldname": "started_at",
    "fieldtype": "Datetime",
    "label": "Started At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "database_server",
+   "fieldtype": "Link",
+   "label": "Database Server",
+   "options": "Database Server",
    "read_only": 1
   },
   {

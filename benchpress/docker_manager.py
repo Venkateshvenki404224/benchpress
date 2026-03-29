@@ -17,16 +17,8 @@ def get_lab_template_dir() -> str:
 	return os.path.join(app_path, "lab-templates")
 
 
-def build_lab_image(lab_doc, site_name: str, admin_password: str, log_fn=None, no_cache: bool = False) -> str:
-	"""Build Docker image with bench + apps + site baked in via layered Dockerfile.
-
-	Layer caching means only changed layers rebuild:
-	  Layer 1: System deps (apt) — rarely changes
-	  Layer 2: Service configs — rarely changes
-	  Layer 3: bench init — changes when FRAPPE_BRANCH changes
-	  Layer 4: Apps — changes when app list changes
-	  Layer 5: Site creation — changes when site name/apps change
-	"""
+def build_lab_image(lab_doc, log_fn=None, no_cache: bool = False) -> str:
+	"""Build Docker image with bench + apps (site created at runtime against shared MariaDB)."""
 	import json
 
 	template_dir = get_lab_template_dir()
@@ -38,8 +30,6 @@ def build_lab_image(lab_doc, site_name: str, admin_password: str, log_fn=None, n
 	build_args = {
 		"FRAPPE_BRANCH": version_branch,
 		"APPS_JSON": json.dumps(apps),
-		"SITE_NAME": site_name,
-		"ADMIN_PASSWORD": admin_password,
 	}
 
 	if log_fn:
@@ -105,7 +95,6 @@ def create_bench_container(bench_doc, lab_doc) -> str:
 		cap_add=["NET_ADMIN"],
 		volumes={
 			f"benchpress-{name}-data": {"bind": "/home/frappe", "mode": "rw"},
-			f"benchpress-{name}-mariadb": {"bind": "/var/lib/mysql", "mode": "rw"},
 		},
 		mem_limit=lab_doc.memory_limit or "512m",
 		nano_cpus=int((lab_doc.cpu_cores or 1) * 1e9),
@@ -136,7 +125,11 @@ def remove_container(container_id: str) -> None:
 
 
 def exec_in_container(
-	container_id: str, command: str, user: str = "frappe", workdir: str = "/home/frappe"
+	container_id: str,
+	command: str,
+	user: str = "frappe",
+	workdir: str = "/home/frappe",
+	environment: dict | None = None,
 ) -> tuple[int, str]:
 	client = get_client()
 	container = client.containers.get(container_id)
@@ -144,6 +137,7 @@ def exec_in_container(
 		cmd=["bash", "-c", command],
 		user=user,
 		workdir=workdir,
+		environment=environment,
 	)
 	return exit_code, output.decode("utf-8", errors="replace")
 

@@ -1,16 +1,16 @@
 #!/bin/bash
 
-SITE_NAME=$1
-ADMIN_PASSWORD=$2
-APPS=$3
-
 cd /home/frappe/frappe-bench
 
 echo "[*] Creating site ${SITE_NAME}..."
+
 bench new-site "${SITE_NAME}" \
     --admin-password "${ADMIN_PASSWORD}" \
-    --db-root-password frappe \
-    --no-mariadb-socket
+    --db-host "${DB_HOST}" \
+    --db-name "${DB_NAME}" \
+    --mariadb-root-username "${MARIADB_ROOT_USERNAME}" \
+    --mariadb-root-password "${MARIADB_ROOT_PASSWORD}" \
+    --mariadb-user-host-login-scope='%'
 
 if [ -n "${APPS}" ]; then
     IFS=',' read -ra APP_LIST <<< "${APPS}"
