@@ -99,24 +99,16 @@ def get_benches() -> list[dict]:
 		order_by="creation desc",
 	)
 
+	from frappe.utils.password import get_decrypted_password
+
 	for bench in benches:
 		bench["app_count"] = frappe.db.count("Bench App", {"parent": bench["name"]})
 		bench["site_count"] = frappe.db.count("Bench Site", {"bench": bench["name"]})
-		try:
-			bench["ssh_password"] = frappe.utils.password.get_decrypted_password(
-				"Bench Instance", bench["name"], "ssh_password"
-			)
-		except frappe.exceptions.ValidationError:
-			bench["ssh_password"] = None
-		try:
-			bench["admin_password"] = (
-				frappe.utils.password.get_decrypted_password(
-					"Bench Instance", bench["name"], "admin_password"
-				)
-				or "admin"
-			)
-		except frappe.exceptions.ValidationError:
-			bench["admin_password"] = "admin"
+		for field in ("ssh_password", "admin_password"):
+			try:
+				bench[field] = get_decrypted_password("Bench Instance", bench["name"], field)
+			except frappe.exceptions.ValidationError:
+				bench[field] = None
 
 	return benches
 
@@ -209,20 +201,35 @@ def bench_action(bench_name: str, action: str) -> dict:
 		restart_container(bench.container_id)
 		bench.status = "Running"
 	elif action == "delete":
+		if bench.database_server:
+			from benchpress.mariadb_manager import drop_site_database
+
+			sites = frappe.get_all(
+				"Bench Site", filters={"bench": bench.name}, fields=["site_name", "full_domain"]
+			)
+			for s in sites:
+				try:
+					drop_site_database(bench.database_server, s.full_domain or s.site_name)
+				except Exception:
+					frappe.log_error(
+						title=f"Failed to drop DB for {s.site_name}", message=frappe.get_traceback()
+					)
+
 		if bench.container_id:
 			try:
 				stop_container(bench.container_id)
 			except Exception:
 				pass
 			remove_container(bench.container_id)
+
 		from benchpress.docker_manager import get_client
 
 		client = get_client()
-		for suffix in ("data", "mariadb"):
-			try:
-				client.volumes.get(f"benchpress-{bench.bench_name}-{suffix}").remove(force=True)
-			except Exception:
-				pass
+		try:
+			client.volumes.get(f"benchpress-{bench.bench_name}-data").remove(force=True)
+		except Exception:
+			pass
+
 		if bench.wg_public_key:
 			from benchpress.wg_manager import remove_peer_from_server
 
@@ -330,27 +337,42 @@ def create_site(data: str) -> dict:
 
 def _create_site_on_bench(site_doc_name: str) -> None:
 	"""Background job to create a site inside a bench container."""
-	import secrets
-
 	from benchpress.docker_manager import exec_in_container
+	from benchpress.mariadb_manager import create_mariadb_user, drop_mariadb_user
 
 	site = frappe.get_doc("Bench Site", site_doc_name)
 	bench = frappe.get_doc("Bench Instance", site.bench)
+	db_server = frappe.get_doc("Database Server", bench.database_server)
 
 	try:
-		admin_password = secrets.token_urlsafe(16)
+		admin_password = "admin"
 		site.admin_password = admin_password
+		site_name = site.full_domain or site.site_name
+		apps_csv = ",".join(a.app_name for a in site.apps_installed if a.app_name.lower() != "frappe")
 
-		apps_csv = ",".join(a.app_name for a in site.apps_installed)
-		exit_code, output = exec_in_container(
-			bench.container_id,
-			f"bash /var/labsdata/scripts/setup-site.sh {site.full_domain} {admin_password} {apps_csv}",
-		)
+		db_name, temp_user, temp_password = create_mariadb_user(db_server.name, site_name)
+		try:
+			exit_code, output = exec_in_container(
+				bench.container_id,
+				"bash /opt/benchpress/scripts/setup-site.sh",
+				environment={
+					"SITE_NAME": site_name,
+					"ADMIN_PASSWORD": admin_password,
+					"APPS": apps_csv,
+					"DB_HOST": db_server.container_name,
+					"DB_NAME": db_name,
+					"MARIADB_ROOT_USERNAME": temp_user,
+					"MARIADB_ROOT_PASSWORD": temp_password,
+				},
+			)
+		finally:
+			drop_mariadb_user(db_server.name, site_name, db_name)
+
 		if exit_code != 0:
 			site.status = "Error"
 			site.save(ignore_permissions=True)
 			frappe.db.commit()
-			frappe.log_error(title=f"Site creation failed: {site.full_domain}", message=output[:500])
+			frappe.log_error(title=f"Site creation failed: {site_name}", message=output[:500])
 			return
 
 		site.status = "Active"

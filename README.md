@@ -115,12 +115,11 @@ BenchPress is a **self-hosted Frappe Cloud alternative** built entirely as a Fra
                      |              |  172.30.0.0/24    |
                      |              +---+-----+-----+--+
                      |                  |     |     |
-                 DNAT Routing     +-----v-+ +-v---+ +v-------+
-                 (iptables)       | Bench | |Bench| | Bench  |
-                 22,8000,9000     | Ctr 1 | |Ctr 2| | Ctr N  |
-                     |            |       | |     | |        |
-                     +----------->|MariaDB| |Maria| |MariaDB |
-                                  | Redis | |Redis| | Redis  |
+                 DNAT Routing     +-----v-+ +-v---+ +v-------+   +------------------+
+                 (iptables)       | Bench | |Bench| | Bench  |   | benchpress-      |
+                 22,8000,9000     | Ctr 1 | |Ctr 2| | Ctr N  +-->| mariadb          |
+                     |            |       | |     | |        |   | (shared MariaDB) |
+                     +----------->| Redis | |Redis| | Redis  |   +------------------+
                                   | SSH   | |SSH  | | SSH    |
                                   | Frappe| |Frapp| | Frappe |
                                   +-------+ +-----+ +--------+
@@ -134,8 +133,9 @@ BenchPress is a **self-hosted Frappe Cloud alternative** built entirely as a Fra
 | **Redis Queue (RQ)** | Processes long-running background jobs: Docker image builds (up to 60 min) and container deployments |
 | **Docker Engine** | Builds images from the 5-layer Dockerfile template, creates and manages containers with CPU/memory limits |
 | **WireGuard (wg0)** | Kernel-level VPN on the host. Each bench gets a unique IP (10.10.0.X). iptables DNAT rules route ports 22, 8000, and 9000 from the WG IP to the container |
+| **Shared MariaDB** | A single `benchpress-mariadb` container shared across all bench containers. Each site gets its own database (named by SHA1 hash of the site name). Managed via the Database Server DocType |
 | **Stats Collector** | Cron job running every 2 minutes that polls Docker stats API for all running containers and updates CPU/memory metrics |
-| **Each Container** | A self-contained Frappe bench with MariaDB, Redis, SSH server, and all pre-installed apps. Users SSH in and run `bench start` |
+| **Each Container** | A Frappe bench with Redis, SSH server, and all pre-installed apps. MariaDB is provided by the shared container. Users SSH in and run `bench start` |
 
 ---
 
@@ -168,7 +168,7 @@ BenchPress is a **self-hosted Frappe Cloud alternative** built entirely as a Fra
 | **Frontend** | Vue 3 + Vite + TailwindCSS + frappe-ui | Modern SPA dashboard with real-time updates |
 | **Containers** | Docker Engine (Python SDK) | Image builds, container lifecycle, resource limits |
 | **VPN** | WireGuard (kernel-level) | Secure SSH/web access to containers without exposed ports |
-| **Database** | MariaDB (per container) | Each bench has its own isolated database |
+| **Database** | MariaDB (shared container) | Single MariaDB container shared across all benches; each site gets its own database |
 | **Cache/Queue** | Redis + RQ (per container + host) | Background job processing and caching |
 | **Real-time** | Socket.io via Frappe | Live log streaming during builds and deployments |
 | **Routing** | iptables DNAT | Routes WireGuard peer IPs to container Docker IPs |
@@ -180,7 +180,7 @@ BenchPress is a **self-hosted Frappe Cloud alternative** built entirely as a Fra
 
 - **Lab Templates** -- Define reusable bench configurations with apps, Frappe version (v14, v15, v16, develop), and resource limits
 - **5-Layer Cached Docker Builds** -- System deps, SSH config, bench init, app install, and site creation each cached separately. Only changed layers rebuild.
-- **One-Click Deploy** -- Background job handles image build, container creation, WireGuard setup, SSH password, and site configuration
+- **One-Click Deploy** -- Background job handles image build, container creation, WireGuard setup, SSH password, and site creation against the shared MariaDB. Admin password is `admin` for easy access
 - **Live Build & Deploy Logs** -- GitHub Actions-style collapsible log viewer with status indicators (success/error/running), streamed in real-time via WebSocket
 - **WireGuard VPN** -- Auto-generates keypair, allocates IP from 10.10.0.2-254 pool, adds peer to wg0, configures iptables DNAT routing
 - **Resource Controls** -- CPU cores and memory limits per lab, enforced by Docker `--cpus` and `--memory` flags
@@ -254,7 +254,7 @@ Modal dialog to configure Docker (socket path, base domain, default image, Traef
 
 ## Data Model (DocTypes)
 
-BenchPress uses 10 DocTypes to model the complete bench lifecycle:
+BenchPress uses 11 DocTypes to model the complete bench lifecycle:
 
 | DocType | Type | Purpose | Key Fields |
 |---------|------|---------|------------|
@@ -264,6 +264,7 @@ BenchPress uses 10 DocTypes to model the complete bench lifecycle:
 | **Bench App** | Child Table | Apps installed in a Bench | `app_name`, `app_label`, `git_url`, `branch` |
 | **Bench Site** | Document | Frappe site inside a bench | `site_name`, `bench`, `status` (Creating/Active/Inactive/Error), `full_domain`, `admin_password` |
 | **Site App** | Child Table | Apps installed on a Site | `app_name`, `app_label` |
+| **Database Server** | Document | Shared MariaDB container | `container_name`, `container_id`, `status`, `port`, `volume_name`, `image_tag`, `memory_limit` |
 | **BenchPress Settings** | Single | Global configuration | `docker_socket`, `base_domain`, `wg_server_*` keys, `next_wg_ip`, `container_memory_limit`, `container_cpu_quota` |
 | **Bench Device** | Document | Persistent VPN device | `device_name`, `device_type` (Laptop/Mobile/etc.), `user`, `wg_public_key`, `wg_private_key`, `wg_ip` |
 | **Deploy Log** | Log | Deployment event log | `bench`, `message`, `log_type`, `timestamp` |

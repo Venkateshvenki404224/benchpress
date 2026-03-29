@@ -1,6 +1,7 @@
 # Copyright (c) 2026, Venkatesh and contributors
 # For license information, please see license.txt
 
+import json
 import secrets
 import time
 
@@ -9,9 +10,17 @@ import frappe
 from benchpress.docker_manager import (
 	build_lab_image,
 	create_bench_container,
+	exec_in_container,
 	remove_container,
 	start_container,
 	stop_container,
+	write_file_to_container,
+)
+from benchpress.mariadb_manager import (
+	create_mariadb_user,
+	drop_mariadb_user,
+	ensure_database_server,
+	wait_for_mariadb,
 )
 
 
@@ -36,11 +45,7 @@ def _remove_stale_container(bench) -> None:
 
 
 def deploy_bench(bench_name: str) -> None:
-	"""Deploy pipeline. Image already has bench + apps + site baked in.
-
-	Step 1: Build lab image if not ready (layered Dockerfile with caching)
-	Step 2: Create and start container — everything is ready to go
-	"""
+	"""Deploy pipeline — shared MariaDB, site created at runtime via press agent pattern."""
 	bench = frappe.get_doc("Bench Instance", bench_name)
 	lab = frappe.get_doc("Lab", bench.lab)
 
@@ -74,31 +79,29 @@ def deploy_bench(bench_name: str) -> None:
 		bench.save(ignore_permissions=True)
 		frappe.db.commit()
 
-		admin_password = bench.admin_password or "admin"
+		admin_password = "admin"
+		bench.admin_password = admin_password
 
 		# Step 1: Build lab image if not ready
 		if lab.status != "Ready" or not lab.image_tag:
 			append_log(f"=== Building lab image for {lab.title} ===")
-			_build_lab_with_logs(lab, bench.site_name, admin_password, append_log)
+			_build_lab_with_logs(lab, append_log)
 		else:
 			append_log(f"Using cached lab image: {lab.image_tag}")
 
-		# Step 2: Create and start container (remove stale container by name if exists)
+		# Step 2: Create and start container
 		_remove_stale_container(bench)
-
 		append_log("=== Creating container ===")
-		append_log(f"Memory: {lab.memory_limit}, CPU: {lab.cpu_cores}")
 		container_id = create_bench_container(bench, lab)
 		bench.container_id = container_id
 		bench.container_image = lab.image_tag
 		bench.save(ignore_permissions=True)
 		frappe.db.commit()
 
-		append_log("Starting container...")
 		start_container(container_id)
 		time.sleep(5)
 
-		# Step 3: Capture container IP (eth0 / Docker network IP)
+		# Step 3: Capture container IP
 		from benchpress.wg_manager import _get_container_ip
 
 		container_ip = _get_container_ip(container_id)
@@ -107,7 +110,7 @@ def deploy_bench(bench_name: str) -> None:
 			bench.save(ignore_permissions=True)
 			frappe.db.commit()
 
-		# Step 4: WireGuard VPN setup (container peer only)
+		# Step 4: WireGuard VPN setup
 		settings = frappe.get_cached_doc("BenchPress Settings")
 		if settings.wg_server_public_key and settings.wg_server_endpoint:
 			from benchpress.wg_manager import (
@@ -123,19 +126,15 @@ def deploy_bench(bench_name: str) -> None:
 			append_log("=== Configuring WireGuard VPN ===")
 			ensure_wg_running()
 
-			# Remove stale container peer from previous deploy
 			if bench.wg_public_key:
 				try:
 					remove_peer_from_server(bench.wg_public_key)
 				except Exception:
 					pass
 
-			# Container wg0 IP: reuse so SSH target stays the same across redeploys
 			container_wg_ip = bench.wg_ip if bench.wg_ip else allocate_ip()
 			container_keys = generate_keypair()
-
 			add_peer_to_server(container_keys["public_key"], container_wg_ip)
-
 			setup_container_vpn(
 				container_id,
 				container_keys["private_key"],
@@ -154,15 +153,71 @@ def deploy_bench(bench_name: str) -> None:
 		else:
 			append_log("WireGuard not configured, skipping VPN.", "warning")
 
-		# Step 5: User provisioning via linkuser.sh
-		from benchpress.docker_manager import exec_in_container
+		# Step 5: Ensure shared MariaDB is running
+		append_log("=== Ensuring shared MariaDB is running ===")
+		db_server_name = ensure_database_server()
+		db_server = frappe.get_doc("Database Server", db_server_name)
+		wait_for_mariadb(db_server_name, timeout=60)
+		append_log(f"MariaDB ready at {db_server.container_name}:{db_server.port or 3306}")
 
+		bench.database_server = db_server_name
+		bench.save(ignore_permissions=True)
+		frappe.db.commit()
+
+		# Step 6: Write common_site_config.json with Docker DNS host
+		bench_dir = f"{lab.mount_target or '/home/frappe'}/frappe-bench"
+		site_name = bench.site_name
+		config = {
+			"db_host": db_server.container_name,
+			"db_port": db_server.port or 3306,
+			"redis_cache": "redis://127.0.0.1:6379",
+			"redis_queue": "redis://127.0.0.1:6379",
+			"redis_socketio": "redis://127.0.0.1:6379",
+			"socketio_port": 9000,
+			"webserver_port": 8000,
+			"default_site": site_name,
+		}
+		write_file_to_container(
+			container_id, json.dumps(config, indent=2), f"{bench_dir}/sites/common_site_config.json"
+		)
+		append_log("common_site_config.json written")
+
+		# Step 7: Create site via temp user pattern (press agent/bench.py:194-206)
+		append_log(f"=== Creating site {site_name} ===")
+
+		db_name, temp_user, temp_password = create_mariadb_user(db_server_name, site_name)
+		try:
+			apps_csv = ",".join(a.app_name for a in lab.apps if a.app_name.lower() != "frappe")
+			exit_code, output = exec_in_container(
+				container_id,
+				"bash /opt/benchpress/scripts/setup-site.sh",
+				user="frappe",
+				workdir=bench_dir,
+				environment={
+					"SITE_NAME": site_name,
+					"ADMIN_PASSWORD": admin_password,
+					"APPS": apps_csv,
+					"DB_HOST": db_server.container_name,
+					"DB_NAME": db_name,
+					"MARIADB_ROOT_USERNAME": temp_user,
+					"MARIADB_ROOT_PASSWORD": temp_password,
+				},
+			)
+			if exit_code != 0:
+				raise Exception(f"bench new-site failed (exit {exit_code}): {output}")
+			append_log("Site created successfully")
+		finally:
+			drop_mariadb_user(db_server_name, site_name, db_name)
+
+		append_log("Building assets...")
+		exec_in_container(container_id, "bench build", user="frappe", workdir=bench_dir)
+
+		# Step 8: User provisioning via linkuser.sh
 		if not bench.ssh_username:
 			bench.ssh_username = bench.owner.split("@")[0].lower()[:32] or "frappe"
 
 		ssh_password = secrets.token_urlsafe(12)
 		settings = frappe.get_cached_doc("BenchPress Settings")
-
 		linkuser_args = [
 			bench.ssh_username,
 			bench.owner,
@@ -173,7 +228,6 @@ def deploy_bench(bench_name: str) -> None:
 			settings.base_domain or "localhost",
 			lab.mount_target or "/home/frappe",
 		]
-
 		append_log(f"=== Provisioning SSH user '{bench.ssh_username}' ===")
 		linkuser_cmd = "bash /opt/benchpress/scripts/linkuser.sh " + " ".join(f"'{a}'" for a in linkuser_args)
 		exit_code, output = exec_in_container(container_id, linkuser_cmd, user="root")
@@ -183,59 +237,6 @@ def deploy_bench(bench_name: str) -> None:
 			raise Exception(f"linkuser.sh failed (exit {exit_code}): {output}")
 
 		bench.ssh_password = ssh_password
-		append_log(f"SSH user '{bench.ssh_username}' provisioned.")
-
-		# Step 6: Set Frappe admin password
-		append_log("=== Setting admin password ===")
-		bench_dir = f"{lab.mount_target or '/home/frappe'}/frappe-bench"
-
-		for _attempt in range(30):
-			exit_code, _ = exec_in_container(
-				container_id, "mariadb -u root -pfrappe -e 'SELECT 1'", user="root"
-			)
-			if exit_code == 0:
-				break
-			time.sleep(1)
-
-		_, site_output = exec_in_container(
-			container_id,
-			f"ls {bench_dir}/sites/ | grep '\\.localhost' | head -1",
-			user="root",
-		)
-		site_name_str = site_output.strip()
-
-		if site_name_str:
-			# Ensure currentsite.txt exists so localhost:8000 resolves correctly
-			exec_in_container(
-				container_id,
-				f"echo '{site_name_str}' > {bench_dir}/sites/currentsite.txt",
-				user="root",
-			)
-
-			# Mark setup wizard as complete in DB to prevent password reset on first access
-			exec_in_container(
-				container_id,
-				f"bench --site {site_name_str} execute"
-				f" frappe.db.set_single_value"
-				f' --args \'"System Settings","setup_complete",1\'',
-				user=bench.ssh_username,
-				workdir=bench_dir,
-			)
-
-			exit_code, output = exec_in_container(
-				container_id,
-				f"bench --site {site_name_str} set-admin-password '{admin_password}' 2>&1",
-				user=bench.ssh_username,
-				workdir=bench_dir,
-			)
-			if exit_code == 0:
-				append_log("Admin password set.")
-			else:
-				append_log(f"Failed to set admin password: {output}", "warning")
-		else:
-			append_log("Skipped admin password (no site found)", "warning")
-
-		# Done — user will SSH in and run bench start
 		bench.status = "Running"
 		bench.started_at = frappe.utils.now_datetime()
 		bench.save(ignore_permissions=True)
@@ -271,6 +272,25 @@ def redeploy_bench(bench_name: str) -> None:
 		except Exception:
 			pass
 
+	# Remove the data volume so bench new-site runs clean on redeploy
+	from benchpress.docker_manager import get_client
+
+	client = get_client()
+	try:
+		vol = client.volumes.get(f"benchpress-{bench_name}-data")
+		vol.remove(force=True)
+	except Exception:
+		pass
+
+	# Drop the site database from shared MariaDB so bench new-site can recreate it
+	if bench.database_server and bench.site_name:
+		from benchpress.mariadb_manager import drop_site_database
+
+		try:
+			drop_site_database(bench.database_server, bench.site_name)
+		except Exception:
+			pass
+
 	bench.container_id = None
 	bench.container_image = None
 	bench.status = "Draft"
@@ -281,13 +301,13 @@ def redeploy_bench(bench_name: str) -> None:
 	deploy_bench(bench_name)
 
 
-def _build_lab_with_logs(lab, site_name, admin_password, log_fn) -> None:
-	"""Build image with bench + apps + site baked in via layered Dockerfile."""
+def _build_lab_with_logs(lab, log_fn) -> None:
+	"""Build image with bench + apps (site created at runtime)."""
 	lab.status = "Building"
 	lab.save(ignore_permissions=True)
 	frappe.db.commit()
 
-	image_tag = build_lab_image(lab, site_name, admin_password, log_fn=log_fn)
+	image_tag = build_lab_image(lab, log_fn=log_fn)
 
 	lab.reload()
 	lab.image_tag = image_tag
@@ -328,13 +348,7 @@ def build_lab(lab_name: str) -> None:
 		frappe.db.commit()
 
 	try:
-		# Generate a default site name and password for the baked-in site
-		from benchpress.benchpress.doctype.bench_instance import get_instance_id
-
-		site_name = f"{get_instance_id('default', lab_name)}.localhost"
-		admin_password = secrets.token_urlsafe(16)
-
-		_build_lab_with_logs(lab, site_name, admin_password, append_log)
+		_build_lab_with_logs(lab, append_log)
 
 		append_log(f"=== Build complete: {lab.image_tag} ===", "success")
 		frappe.db.set_value("Build Log", build_log_name, "log_type", "success")

@@ -1,0 +1,196 @@
+{
+ "actions": [],
+ "autoname": "hash",
+ "creation": "2026-03-29 12:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "basic_section",
+  "container_name",
+  "status",
+  "column_break_basic",
+  "mariadb_version",
+  "image_tag",
+  "port",
+  "credentials_section",
+  "mariadb_root_password",
+  "container_section",
+  "container_id",
+  "container_ip",
+  "column_break_container",
+  "memory_limit",
+  "volume_name",
+  "created_at",
+  "configuration_section",
+  "max_connections",
+  "custom_config",
+  "error_section",
+  "error_message"
+ ],
+ "fields": [
+  {
+   "fieldname": "basic_section",
+   "fieldtype": "Section Break",
+   "label": "Basic"
+  },
+  {
+   "default": "benchpress-mariadb",
+   "fieldname": "container_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Container Name",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "default": "Pending",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Status",
+   "options": "Pending\nActive\nStopped\nError",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_basic",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "10.6",
+   "fieldname": "mariadb_version",
+   "fieldtype": "Data",
+   "label": "MariaDB Version"
+  },
+  {
+   "fieldname": "image_tag",
+   "fieldtype": "Data",
+   "label": "Image Tag",
+   "read_only": 1
+  },
+  {
+   "default": "3306",
+   "fieldname": "port",
+   "fieldtype": "Int",
+   "label": "Port"
+  },
+  {
+   "fieldname": "credentials_section",
+   "fieldtype": "Section Break",
+   "label": "Credentials"
+  },
+  {
+   "fieldname": "mariadb_root_password",
+   "fieldtype": "Password",
+   "label": "MariaDB Root Password"
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "container_section",
+   "fieldtype": "Section Break",
+   "label": "Container Details"
+  },
+  {
+   "fieldname": "container_id",
+   "fieldtype": "Data",
+   "label": "Container ID",
+   "read_only": 1
+  },
+  {
+   "fieldname": "container_ip",
+   "fieldtype": "Data",
+   "label": "Container IP",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_container",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "1g",
+   "fieldname": "memory_limit",
+   "fieldtype": "Data",
+   "label": "Memory Limit"
+  },
+  {
+   "fieldname": "volume_name",
+   "fieldtype": "Data",
+   "label": "Volume Name",
+   "read_only": 1
+  },
+  {
+   "fieldname": "created_at",
+   "fieldtype": "Datetime",
+   "label": "Created At",
+   "read_only": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "configuration_section",
+   "fieldtype": "Section Break",
+   "label": "MariaDB Configuration"
+  },
+  {
+   "default": "500",
+   "fieldname": "max_connections",
+   "fieldtype": "Int",
+   "label": "Max Connections"
+  },
+  {
+   "fieldname": "custom_config",
+   "fieldtype": "Code",
+   "label": "Custom Config",
+   "options": "INI"
+  },
+  {
+   "collapsible": 1,
+   "depends_on": "eval:doc.status === 'Error'",
+   "fieldname": "error_section",
+   "fieldtype": "Section Break",
+   "label": "Error Details"
+  },
+  {
+   "fieldname": "error_message",
+   "fieldtype": "Small Text",
+   "label": "Error Message",
+   "read_only": 1
+  }
+ ],
+ "issingle": 0,
+ "links": [],
+ "modified": "2026-03-29 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Benchpress",
+ "name": "Database Server",
+ "naming_rule": "Random",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "BenchPress Admin",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

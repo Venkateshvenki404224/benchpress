@@ -7,23 +7,21 @@ USER root
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# --- Layer 1: System deps (rarely changes, always cached) ---
+# --- Layer 1: System deps (mariadb-client only, no server) ---
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    mariadb-server mariadb-client \
+    mariadb-client \
     redis-server \
     openssh-server \
     sudo nano htop \
     net-tools iproute2 wireguard-tools \
     && rm -rf /var/lib/apt/lists/*
 
-# --- Layer 2: Service configs (rarely changes) ---
-RUN mkdir -p /run/mysqld && chown mysql:mysql /run/mysqld \
-    && mkdir -p /var/run/sshd \
+# --- Layer 2: Service configs ---
+RUN mkdir -p /var/run/sshd \
     && sed -ri 's/^#?PermitRootLogin\s+.*/PermitRootLogin no/' /etc/ssh/sshd_config \
     && sed -ri 's/^#?PasswordAuthentication\s+.*/PasswordAuthentication yes/' /etc/ssh/sshd_config \
     && echo "frappe ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers.d/frappe
 
-# Copy all scripts (entry.sh, install-apps.sh, create-site.sh, setup-site.sh)
 RUN mkdir -p /opt/benchpress/scripts
 COPY scripts/ /opt/benchpress/scripts/
 RUN chmod +x /opt/benchpress/scripts/*
@@ -39,22 +37,9 @@ RUN bench init --frappe-branch ${FRAPPE_BRANCH} \
 
 WORKDIR /home/frappe/frappe-bench
 
-# Write common_site_config for local MariaDB + Redis
-RUN echo '{"db_host":"127.0.0.1","db_port":3306,"redis_cache":"redis://127.0.0.1:6379","redis_queue":"redis://127.0.0.1:6379","redis_socketio":"redis://127.0.0.1:6379","socketio_port":9000,"webserver_port":8000}' \
-    > sites/common_site_config.json
-
 # --- Layer 4: Install apps (changes when apps list changes) ---
 ARG APPS_JSON=[]
 RUN /opt/benchpress/scripts/install-apps.sh "$APPS_JSON"
-
-# --- Layer 5: Create site (needs MariaDB + Redis running in-layer) ---
-ARG SITE_NAME=test.localhost
-ARG ADMIN_PASSWORD=admin#@123
-
-USER root
-RUN /opt/benchpress/scripts/create-site.sh "$SITE_NAME" "$ADMIN_PASSWORD" "$APPS_JSON"
-
-WORKDIR /home/frappe/frappe-bench
 
 EXPOSE 8000 9000 22
 

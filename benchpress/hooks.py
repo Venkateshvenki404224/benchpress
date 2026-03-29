@@ -173,6 +173,12 @@ scheduler_events = {
 		"*/1 * * * *": [
 			"benchpress.stats_collector.collect_all_stats",
 		],
+		"*/5 * * * *": [
+			"benchpress.mariadb_manager.scheduled_health_check",
+		],
+		"0 2 * * *": [
+			"benchpress.mariadb_manager.scheduled_backup",
+		],
 	},
 }
 
@@ -200,7 +206,7 @@ scheduler_events = {
 # auto_cancel_exempted_doctypes = ["Auto Repeat"]
 
 # Ignore links to specified DocTypes when deleting documents
-ignore_links_on_delete = ["Deploy Log", "Build Log"]
+ignore_links_on_delete = ["Deploy Log", "Build Log", "Database Server"]
 
 # Request Events
 # ----------------
