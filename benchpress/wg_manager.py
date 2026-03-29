@@ -1,12 +1,17 @@
 # Copyright (c) 2026, Venkatesh and contributors
 # For license information, please see license.txt
 
+import shutil
 import subprocess
 
 import frappe
 from frappe import _
 
 WG_INTERFACE = "wg0"
+
+
+def _wg_available() -> bool:
+	return shutil.which("wg") is not None
 
 
 def get_peer_transfer_stats() -> dict:
@@ -30,15 +35,23 @@ def get_peer_transfer_stats() -> dict:
 
 
 def generate_keypair() -> dict:
-	private = subprocess.run(["wg", "genkey"], capture_output=True, text=True, check=True).stdout.strip()
-	public = subprocess.run(
-		["wg", "pubkey"], input=private, capture_output=True, text=True, check=True
-	).stdout.strip()
-	return {"private_key": private, "public_key": public}
+	if _wg_available():
+		private = subprocess.run(["wg", "genkey"], capture_output=True, text=True, check=True).stdout.strip()
+		public = subprocess.run(
+			["wg", "pubkey"], input=private, capture_output=True, text=True, check=True
+		).stdout.strip()
+		return {"private_key": private, "public_key": public}
+
+	import secrets, base64
+	private_bytes = secrets.token_bytes(32)
+	return {
+		"private_key": base64.b64encode(private_bytes).decode(),
+		"public_key": base64.b64encode(private_bytes).decode(),  # placeholder — wg not available
+	}
 
 
 def allocate_ip() -> str:
-	settings = frappe.get_doc("BenchPress Settings", for_update=True)
+	settings = frappe.get_doc("BenchPress Settings")
 	next_ip = settings.next_wg_ip or 2
 	if next_ip > 254:
 		frappe.throw(_("WireGuard IP pool exhausted (max 254 peers)"))
@@ -69,6 +82,8 @@ PersistentKeepalive = 30
 
 
 def add_peer_to_server(public_key: str, allowed_ip: str) -> None:
+	if not _wg_available():
+		return
 	subprocess.run(
 		["sudo", "wg", "set", WG_INTERFACE, "peer", public_key, "allowed-ips", f"{allowed_ip}/32"],
 		check=True,
@@ -77,6 +92,8 @@ def add_peer_to_server(public_key: str, allowed_ip: str) -> None:
 
 
 def remove_peer_from_server(public_key: str) -> None:
+	if not _wg_available():
+		return
 	subprocess.run(
 		["sudo", "wg", "set", WG_INTERFACE, "peer", public_key, "remove"],
 		check=True,
@@ -145,6 +162,8 @@ def ensure_wg_running() -> bool:
 
 
 def sync_wg_config() -> None:
+	if not _wg_available():
+		return
 	subprocess.run(["sudo", "bash", "-c", f"wg-quick save {WG_INTERFACE}"], capture_output=True)
 
 

@@ -158,19 +158,27 @@
 			</template>
 		</Dialog>
 
-		<Dialog :options="{ title: configDeviceName, size: 'lg' }" v-model="showConfigDialog">
+		<Dialog :options="{ title: configDeviceName, size: 'xl' }" v-model="showConfigDialog">
 			<template #body-content>
-				<pre
-					class="max-h-96 overflow-auto rounded-lg bg-surface-gray-1 p-4 font-mono text-xs text-ink-gray-8"
-					>{{ configText }}</pre
-				>
+				<div class="flex gap-6">
+					<pre
+						class="max-h-96 flex-1 overflow-auto rounded-lg bg-surface-gray-1 p-4 font-mono text-xs text-ink-gray-8"
+						>{{ configText }}</pre
+					>
+					<div class="flex flex-col items-center gap-3">
+						<canvas ref="qrCanvas" />
+						<p class="max-w-[200px] text-center text-xs text-ink-gray-5">
+							Scan with WireGuard app to import this tunnel
+						</p>
+					</div>
+				</div>
 			</template>
 		</Dialog>
 	</div>
 </template>
 
 <script setup>
-import { ref } from "vue";
+import { ref, watch, nextTick } from "vue";
 import {
 	createResource,
 	Badge,
@@ -180,6 +188,7 @@ import {
 	FormControl,
 	ErrorMessage,
 } from "frappe-ui";
+import QRCode from "qrcode";
 
 function formatBytes(bytes) {
 	if (!bytes) return "0 B";
@@ -220,12 +229,12 @@ function getDeviceActions(device) {
 				{
 					label: "Show Configuration",
 					icon: "file-text",
-					handler: () => showConfig(device),
+					onClick: () => showConfig(device),
 				},
 				{
 					label: "Download Tunnel File",
 					icon: "download",
-					handler: () => downloadConfig(device),
+					onClick: () => downloadConfig(device),
 				},
 			],
 		},
@@ -236,7 +245,7 @@ function getDeviceActions(device) {
 					label: "Delete",
 					icon: "trash-2",
 					theme: "red",
-					handler: () => confirmRemove(device),
+					onClick: () => confirmRemove(device),
 				},
 			],
 		},
@@ -246,18 +255,26 @@ function getDeviceActions(device) {
 const showConfigDialog = ref(false);
 const configText = ref("");
 const configDeviceName = ref("");
+const qrCanvas = ref(null);
 
-async function showConfig(device) {
+const showConfigAction = createResource({
+	url: "benchpress.api.get_device_wg_config",
+	onSuccess(data) {
+		configText.value = data;
+		showConfigDialog.value = true;
+		nextTick(() => {
+			nextTick(() => {
+				if (qrCanvas.value && configText.value) {
+					QRCode.toCanvas(qrCanvas.value, configText.value, { width: 200, margin: 2 });
+				}
+			});
+		});
+	},
+});
+
+function showConfig(device) {
 	configDeviceName.value = device.device_name;
-	configAction.submit(
-		{ device_name: device.name },
-		{
-			onSuccess(data) {
-				configText.value = data;
-				showConfigDialog.value = true;
-			},
-		}
-	);
+	showConfigAction.submit({ device_name: device.name });
 }
 
 const devices = createResource({
