@@ -48,13 +48,12 @@ ARG APPS_JSON=[]
 RUN /opt/benchpress/scripts/install-apps.sh "$APPS_JSON"
 
 # --- Layer 5: Create site (needs MariaDB + Redis running in-layer) ---
-ARG SITE_NAME=site1.localhost
-ARG ADMIN_PASSWORD=admin
+ARG SITE_NAME=test.localhost
+ARG ADMIN_PASSWORD=admin#@123
 
 USER root
 RUN /opt/benchpress/scripts/create-site.sh "$SITE_NAME" "$ADMIN_PASSWORD" "$APPS_JSON"
 
-USER frappe
 WORKDIR /home/frappe/frappe-bench
 
 EXPOSE 8000 9000 22

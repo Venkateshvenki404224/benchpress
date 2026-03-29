@@ -108,6 +108,15 @@ def get_benches() -> list[dict]:
 			)
 		except frappe.exceptions.ValidationError:
 			bench["ssh_password"] = None
+		try:
+			bench["admin_password"] = (
+				frappe.utils.password.get_decrypted_password(
+					"Bench Instance", bench["name"], "admin_password"
+				)
+				or "admin"
+			)
+		except frappe.exceptions.ValidationError:
+			bench["admin_password"] = "admin"
 
 	return benches
 

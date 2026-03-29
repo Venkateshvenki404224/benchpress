@@ -1,15 +1,15 @@
 #!/bin/bash
 
 echo "[*] Starting MariaDB..."
-sudo mkdir -p /run/mysqld && sudo chown mysql:mysql /run/mysqld
+mkdir -p /run/mysqld && chown mysql:mysql /run/mysqld
 
 # Reinitialize data directory if volume was cleared (edge case)
 if [ ! -d "/var/lib/mysql/mysql" ]; then
     echo "[*] Initializing MariaDB data directory..."
-    sudo mysql_install_db --user=mysql --datadir=/var/lib/mysql
+    mysql_install_db --user=mysql --datadir=/var/lib/mysql
 fi
 
-sudo service mariadb start || sudo mysqld_safe &
+service mariadb start || mysqld_safe &
 sleep 3
 
 # Set root password on first boot (no-op on restart — fails silently if password already set)
@@ -19,11 +19,11 @@ if mariadb -u root -e "SELECT 1" &>/dev/null; then
 fi
 
 echo "[*] Starting Redis..."
-sudo redis-server --daemonize yes
+redis-server --daemonize yes
 
 echo "[*] Starting SSH..."
-sudo mkdir -p /var/run/sshd
-sudo service ssh start || sudo /usr/sbin/sshd
+mkdir -p /var/run/sshd
+service ssh start || /usr/sbin/sshd
 
 if [ -f "/etc/wireguard/wg0.conf" ]; then
     echo "[*] Starting WireGuard VPN..."

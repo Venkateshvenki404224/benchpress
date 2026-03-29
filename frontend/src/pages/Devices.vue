@@ -14,7 +14,10 @@
 
 		<div v-if="devices.loading" class="text-sm text-ink-gray-5">Loading devices...</div>
 
-		<div v-else-if="devices.data?.length" class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+		<div
+			v-else-if="devices.data?.length"
+			class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3"
+		>
 			<div
 				v-for="device in devices.data"
 				:key="device.name"
@@ -269,7 +272,6 @@ const addAction = createResource({
 		newDevice.value = { name: "", type: "Laptop", publicKey: "" };
 		autoGenKey.value = true;
 		devices.reload();
-
 	},
 });
 

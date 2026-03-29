@@ -74,13 +74,10 @@ def deploy_bench(bench_name: str) -> None:
 		bench.save(ignore_permissions=True)
 		frappe.db.commit()
 
+		admin_password = bench.admin_password or "admin"
+
 		# Step 1: Build lab image if not ready
 		if lab.status != "Ready" or not lab.image_tag:
-			admin_password = secrets.token_urlsafe(16)
-			bench.admin_password = admin_password
-			bench.save(ignore_permissions=True)
-			frappe.db.commit()
-
 			append_log(f"=== Building lab image for {lab.title} ===")
 			_build_lab_with_logs(lab, bench.site_name, admin_password, append_log)
 		else:
@@ -180,12 +177,63 @@ def deploy_bench(bench_name: str) -> None:
 		append_log(f"=== Provisioning SSH user '{bench.ssh_username}' ===")
 		linkuser_cmd = "bash /opt/benchpress/scripts/linkuser.sh " + " ".join(f"'{a}'" for a in linkuser_args)
 		exit_code, output = exec_in_container(container_id, linkuser_cmd, user="root")
+		if output:
+			append_log(output.strip())
 		if exit_code != 0:
-			append_log(f"linkuser.sh output: {output}", "warning")
 			raise Exception(f"linkuser.sh failed (exit {exit_code}): {output}")
 
 		bench.ssh_password = ssh_password
 		append_log(f"SSH user '{bench.ssh_username}' provisioned.")
+
+		# Step 6: Set Frappe admin password
+		append_log("=== Setting admin password ===")
+		bench_dir = f"{lab.mount_target or '/home/frappe'}/frappe-bench"
+
+		for _attempt in range(30):
+			exit_code, _ = exec_in_container(
+				container_id, "mariadb -u root -pfrappe -e 'SELECT 1'", user="root"
+			)
+			if exit_code == 0:
+				break
+			time.sleep(1)
+
+		_, site_output = exec_in_container(
+			container_id,
+			f"ls {bench_dir}/sites/ | grep '\\.localhost' | head -1",
+			user="root",
+		)
+		site_name_str = site_output.strip()
+
+		if site_name_str:
+			# Ensure currentsite.txt exists so localhost:8000 resolves correctly
+			exec_in_container(
+				container_id,
+				f"echo '{site_name_str}' > {bench_dir}/sites/currentsite.txt",
+				user="root",
+			)
+
+			# Mark setup wizard as complete in DB to prevent password reset on first access
+			exec_in_container(
+				container_id,
+				f"bench --site {site_name_str} execute"
+				f" frappe.db.set_single_value"
+				f' --args \'"System Settings","setup_complete",1\'',
+				user=bench.ssh_username,
+				workdir=bench_dir,
+			)
+
+			exit_code, output = exec_in_container(
+				container_id,
+				f"bench --site {site_name_str} set-admin-password '{admin_password}' 2>&1",
+				user=bench.ssh_username,
+				workdir=bench_dir,
+			)
+			if exit_code == 0:
+				append_log("Admin password set.")
+			else:
+				append_log(f"Failed to set admin password: {output}", "warning")
+		else:
+			append_log("Skipped admin password (no site found)", "warning")
 
 		# Done — user will SSH in and run bench start
 		bench.status = "Running"

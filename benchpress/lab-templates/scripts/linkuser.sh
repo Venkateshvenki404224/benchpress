@@ -1,6 +1,7 @@
 #!/bin/bash
 # linkuser.sh — User provisioning for BenchPress containers
-# Args: USERNAME EMAIL LAB_NAME WG_IP SSH_PASSWORD BENCH_NAME BASE_DOMAIN MOUNT_TARGET
+# Renames the 'frappe' user to the dynamic username instead of creating a new one.
+# Args: USERNAME EMAIL LAB_NAME WG_IP SSH_PASSWORD BENCH_NAME BASE_DOMAIN MOUNT_TARGET ADMIN_PASSWORD
 
 set -e
 
@@ -12,6 +13,7 @@ SSH_PASSWORD="$5"
 BENCH_NAME="$6"
 BASE_DOMAIN="$7"
 MOUNT_TARGET="${8:-/home/frappe}"
+ADMIN_PASSWORD="$9"
 
 if [ -z "$USERNAME" ] || [ -z "$SSH_PASSWORD" ]; then
     echo "[error] USERNAME and SSH_PASSWORD are required"
@@ -20,15 +22,14 @@ fi
 
 echo "[*] Provisioning user: $USERNAME for bench: $BENCH_NAME"
 
-if id "$USERNAME" &>/dev/null; then
-    echo "[*] User $USERNAME already exists, skipping creation"
-else
-    echo "[*] Creating user $USERNAME..."
-    adduser --disabled-password --gecos "" --force-badname "$USERNAME"
-fi
+# Rename frappe group and user to the dynamic username
+echo "[*] Renaming frappe user to $USERNAME..."
+groupmod -n "$USERNAME" frappe
+usermod --login "$USERNAME" --home "/home/$USERNAME" frappe
+ln -sfn /home/frappe "/home/$USERNAME"
 
+usermod --shell /bin/bash "$USERNAME"
 usermod -aG sudo "$USERNAME"
-getent group frappe &>/dev/null && usermod -aG frappe "$USERNAME"
 
 echo "[*] Setting SSH password..."
 echo "$USERNAME:$SSH_PASSWORD" | chpasswd
@@ -43,38 +44,25 @@ $USERNAME ALL=(ALL:ALL) NOPASSWD: /home/$USERNAME/init.sh
 SUDOEOF
 chmod 0440 "/etc/sudoers.d/$USERNAME"
 
-echo "[*] Setting up home directory..."
-mkdir -p "/home/$USERNAME"
-cp -n /etc/skel/.bashrc "/home/$USERNAME/.bashrc" 2>/dev/null || true
-cp -n /etc/skel/.profile "/home/$USERNAME/.profile" 2>/dev/null || true
-cp -n /etc/skel/.bash_logout "/home/$USERNAME/.bash_logout" 2>/dev/null || true
-
+# Fix NVM and bench paths in bashrc
 if ! grep -q "frappe-bench" "/home/$USERNAME/.bashrc" 2>/dev/null; then
-    # Find node binary path from nvm or system
-    NODE_DIR=$(dirname "$(find /home/frappe/.nvm -name node -type f 2>/dev/null | head -1)" 2>/dev/null || echo "")
-    YARN_DIR=$(dirname "$(find /home/frappe/.nvm -name yarn -type f 2>/dev/null | head -1)" 2>/dev/null || echo "")
+    NODE_DIR=$(dirname "$(find /home/$USERNAME/.nvm -name node -type f 2>/dev/null | head -1)" 2>/dev/null || echo "")
+    YARN_DIR=$(dirname "$(find /home/$USERNAME/.nvm -name yarn -type f 2>/dev/null | head -1)" 2>/dev/null || echo "")
 
     cat >> "/home/$USERNAME/.bashrc" << BASHEOF
 
-export NVM_DIR="/home/frappe/.nvm"
+export NVM_DIR="/home/$USERNAME/.nvm"
 [ -s "\$NVM_DIR/nvm.sh" ] && . "\$NVM_DIR/nvm.sh"
-export PATH="\$PATH:/home/frappe/frappe-bench/env/bin${NODE_DIR:+:$NODE_DIR}${YARN_DIR:+:$YARN_DIR}"
-if [ -d "/home/frappe/frappe-bench" ]; then
-    cd /home/frappe/frappe-bench
+export PATH="\$PATH:/home/$USERNAME/frappe-bench/env/bin${NODE_DIR:+:$NODE_DIR}${YARN_DIR:+:$YARN_DIR}"
+if [ -d "/home/$USERNAME/frappe-bench" ]; then
+    cd /home/$USERNAME/frappe-bench
 fi
 BASHEOF
 fi
 
-chown -R "$USERNAME:$USERNAME" "/home/$USERNAME"
+chown -R "$USERNAME:$USERNAME" /home/frappe
 
-BENCH_DIR="$MOUNT_TARGET/frappe-bench"
-if [ -d "$BENCH_DIR" ]; then
-    echo "[*] Setting bench directory ownership to $USERNAME..."
-    chown -R "$USERNAME:$USERNAME" "$BENCH_DIR"
-fi
-
-[ -d "$MOUNT_TARGET" ] && chown "$USERNAME:$USERNAME" "$MOUNT_TARGET"
-
+BENCH_DIR="/home/$USERNAME/frappe-bench"
 
 cat > "/.benchpress_config" << CFGEOF
 {
@@ -84,7 +72,7 @@ cat > "/.benchpress_config" << CFGEOF
     "bench_name": "$BENCH_NAME",
     "wg_ip": "$WG_IP",
     "base_domain": "$BASE_DOMAIN",
-    "mount_target": "$MOUNT_TARGET",
+    "mount_target": "/home/$USERNAME",
     "provisioned_at": "$(date -Iseconds)"
 }
 CFGEOF
