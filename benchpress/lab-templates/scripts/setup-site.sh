@@ -23,4 +23,11 @@ fi
 bench --site "${SITE_NAME}" set-config developer_mode 1
 bench use "${SITE_NAME}"
 
+# Create localhost alias so port-forwarded access works without matching Host header
+cd sites
+for alias in localhost 0.0.0.0; do
+    [ ! -e "$alias" ] && ln -sf "${SITE_NAME}" "$alias"
+done
+cd ..
+
 echo "[*] Site ${SITE_NAME} ready."

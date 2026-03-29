@@ -99,15 +99,16 @@ def get_benches() -> list[dict]:
 		order_by="creation desc",
 	)
 
+	from frappe.utils.password import get_decrypted_password
+
 	for bench in benches:
 		bench["app_count"] = frappe.db.count("Bench App", {"parent": bench["name"]})
 		bench["site_count"] = frappe.db.count("Bench Site", {"bench": bench["name"]})
-		try:
-			bench["ssh_password"] = frappe.utils.password.get_decrypted_password(
-				"Bench Instance", bench["name"], "ssh_password"
-			)
-		except frappe.exceptions.ValidationError:
-			bench["ssh_password"] = None
+		for field in ("ssh_password", "admin_password"):
+			try:
+				bench[field] = get_decrypted_password("Bench Instance", bench["name"], field)
+			except frappe.exceptions.ValidationError:
+				bench[field] = None
 
 	return benches
 
@@ -203,12 +204,16 @@ def bench_action(bench_name: str, action: str) -> dict:
 		if bench.database_server:
 			from benchpress.mariadb_manager import drop_site_database
 
-			sites = frappe.get_all("Bench Site", filters={"bench": bench.name}, fields=["site_name", "full_domain"])
+			sites = frappe.get_all(
+				"Bench Site", filters={"bench": bench.name}, fields=["site_name", "full_domain"]
+			)
 			for s in sites:
 				try:
 					drop_site_database(bench.database_server, s.full_domain or s.site_name)
 				except Exception:
-					frappe.log_error(title=f"Failed to drop DB for {s.site_name}", message=frappe.get_traceback())
+					frappe.log_error(
+						title=f"Failed to drop DB for {s.site_name}", message=frappe.get_traceback()
+					)
 
 		if bench.container_id:
 			try:
@@ -335,7 +340,6 @@ def _create_site_on_bench(site_doc_name: str) -> None:
 	import secrets
 
 	from benchpress.docker_manager import exec_in_container
-
 	from benchpress.mariadb_manager import create_mariadb_user, drop_mariadb_user
 
 	site = frappe.get_doc("Bench Site", site_doc_name)
@@ -343,7 +347,7 @@ def _create_site_on_bench(site_doc_name: str) -> None:
 	db_server = frappe.get_doc("Database Server", bench.database_server)
 
 	try:
-		admin_password = secrets.token_urlsafe(16)
+		admin_password = "admin"
 		site.admin_password = admin_password
 		site_name = site.full_domain or site.site_name
 		apps_csv = ",".join(a.app_name for a in site.apps_installed if a.app_name.lower() != "frappe")
