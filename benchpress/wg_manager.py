@@ -42,15 +42,6 @@ def generate_keypair() -> dict:
 		).stdout.strip()
 		return {"private_key": private, "public_key": public}
 
-	import base64
-	import os
-
-	raw = bytearray(os.urandom(32))
-	raw[0] &= 248
-	raw[31] &= 127
-	raw[31] |= 64
-	private = base64.b64encode(bytes(raw)).decode()
-	public = base64.b64encode(os.urandom(32)).decode()
 	return {"private_key": private, "public_key": public}
 
 
