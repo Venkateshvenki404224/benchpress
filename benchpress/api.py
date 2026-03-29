@@ -337,8 +337,6 @@ def create_site(data: str) -> dict:
 
 def _create_site_on_bench(site_doc_name: str) -> None:
 	"""Background job to create a site inside a bench container."""
-	import secrets
-
 	from benchpress.docker_manager import exec_in_container
 	from benchpress.mariadb_manager import create_mariadb_user, drop_mariadb_user
 

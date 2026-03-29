@@ -3,9 +3,9 @@
 
 import base64
 import hashlib
+import secrets
 import time
-from random import choices
-from string import ascii_letters, digits
+import uuid
 
 import frappe
 
@@ -28,7 +28,7 @@ def get_database_name(site_name: str) -> str:
 
 
 def _random_string(length: int = 16) -> str:
-	return "".join(choices(ascii_letters + digits, k=length))
+	return secrets.token_urlsafe(length)
 
 
 def execute_sql(db_server_name: str, sql: str) -> tuple[int, str]:
@@ -41,14 +41,15 @@ def execute_sql(db_server_name: str, sql: str) -> tuple[int, str]:
 	container = client.containers.get(db_server.container_id)
 	root_pw = db_server.get_root_password()
 
+	tmp = f"/tmp/_bp_query_{uuid.uuid4().hex}.sql"
 	encoded = base64.b64encode(sql.encode()).decode()
-	container.exec_run(
-		cmd=["bash", "-c", f"echo '{encoded}' | base64 -d > /tmp/_bp_query.sql"],
-	)
-	exit_code, output = container.exec_run(
-		cmd=["bash", "-c", f"mariadb -u root -p'{root_pw}' < /tmp/_bp_query.sql"],
-	)
-	container.exec_run(cmd=["rm", "-f", "/tmp/_bp_query.sql"])
+	try:
+		container.exec_run(cmd=["bash", "-c", f"echo '{encoded}' | base64 -d > {tmp}"])
+		exit_code, output = container.exec_run(
+			cmd=["bash", "-c", f"mariadb -u root -p'{root_pw}' < {tmp}"],
+		)
+	finally:
+		container.exec_run(cmd=["rm", "-f", tmp])
 	return exit_code, output.decode("utf-8", errors="replace")
 
 
@@ -200,8 +201,8 @@ def create_mariadb_user(
 	password = _random_string(16)
 	queries = [
 		f"CREATE OR REPLACE USER '{user}'@'%' IDENTIFIED BY '{password}'",
-		f"CREATE OR REPLACE DATABASE {user}",
-		f"GRANT ALL ON {user}.* TO '{user}'@'%'",
+		f"CREATE OR REPLACE DATABASE `{user}`",
+		f"GRANT ALL ON `{user}`.* TO '{user}'@'%'",
 		f"GRANT RELOAD, CREATE USER ON *.* TO '{user}'@'%'",
 		f"GRANT ALL ON `{database}`.* TO '{user}'@'%' WITH GRANT OPTION",
 		"FLUSH PRIVILEGES",
@@ -220,7 +221,7 @@ def drop_mariadb_user(db_server_name: str, site_name: str, database: str | None 
 	database = database or get_database_name(site_name)
 	user = f"{database}_limited"
 	queries = [
-		f"DROP DATABASE IF EXISTS {user}",
+		f"DROP DATABASE IF EXISTS `{user}`",
 		f"DROP USER IF EXISTS '{user}'@'%'",
 		"FLUSH PRIVILEGES",
 	]
