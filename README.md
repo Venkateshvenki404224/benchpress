@@ -769,6 +769,15 @@ Each container runs as a single self-contained unit with all services:
 
 BenchPress works with **any Frappe app** -- there is no hardcoded app list. When creating a Lab, provide the Git URL and branch for each app you want to install (e.g., ERPNext, HRMS, CRM, LMS, Helpdesk, Wiki, Webshop, or your own custom app).
 
+### Tested Configurations
+
+| Frappe Version | Base Image | Python | Status |
+|---------------|------------|--------|--------|
+| `version-15` | `frappe/build:version-15` | 3.11 | Tested |
+| `version-16` | `frappe/build:version-16` | 3.12+ | Planned |
+
+**Tested v15 apps:** Frappe CRM (`frappe/crm`, branch `main`)
+
 ---
 
 ## VPN Device Management
@@ -807,7 +816,7 @@ Device management uses the **Bench Device** DocType and is exposed through four 
 
 | Schedule | Function | Description |
 |----------|----------|-------------|
-| Every 2 minutes | `benchpress.stats_collector.collect_all_stats` | Polls Docker stats for running containers, updates CPU/memory metrics |
+| Every 1 minute | `benchpress.stats_collector.collect_all_stats` | Polls Docker and WireGuard stats, updates CPU/memory metrics and VPN transfer counters |
 
 ---
 
