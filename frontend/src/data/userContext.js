@@ -1,22 +1,32 @@
 import { createResource } from "frappe-ui";
-import { computed, reactive } from "vue";
-
-const userContextResource = createResource({
-	url: "benchpress.api.get_user_context",
-	auto: true,
-	cache: "UserContext",
-});
+import { reactive } from "vue";
 
 export const userContext = reactive({
-	isAdmin: computed(() => userContextResource.data?.is_admin ?? false),
-	user: computed(() => userContextResource.data?.user ?? ""),
-	roles: computed(() => userContextResource.data?.roles ?? []),
-	loading: computed(() => !userContextResource.data && userContextResource.loading),
-	ready: computed(() => !!userContextResource.data),
+	isAdmin: false,
+	user: "",
+	roles: [],
+	loading: true,
+	ready: false,
 });
 
-/** Wait until the user context API has resolved. Call in router guards. */
+const userContextResource = createResource({
+	url: "/api/method/benchpress.api.get_user_context",
+	auto: true,
+	cache: "UserContext",
+	onSuccess(data) {
+		const ctx = data?.message ?? data;
+		userContext.isAdmin = ctx?.is_admin ?? false;
+		userContext.user = ctx?.user ?? "";
+		userContext.roles = ctx?.roles ?? [];
+		userContext.loading = false;
+		userContext.ready = true;
+	},
+	onError() {
+		userContext.loading = false;
+	},
+});
+
 export function waitForUserContext() {
-	if (userContextResource.data) return Promise.resolve();
+	if (userContext.ready) return Promise.resolve();
 	return userContextResource.promise;
 }

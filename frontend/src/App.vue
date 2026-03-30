@@ -1,6 +1,6 @@
 <template>
 	<div class="flex h-screen">
-		<Sidebar :header="sidebarConfig.header" :sections="sidebarConfig.sections" />
+		<Sidebar :header="headerConfig" :sections="sections" />
 		<div class="flex-1 overflow-auto bg-surface-white">
 			<router-view />
 		</div>
@@ -9,7 +9,7 @@
 
 <script setup>
 import { Sidebar } from "frappe-ui";
-import { reactive, computed, watchEffect } from "vue";
+import { computed } from "vue";
 import { session } from "@/data/session";
 import { userContext } from "@/data/userContext";
 
@@ -36,21 +36,9 @@ function logout() {
 	session.logout.submit();
 }
 
-const sidebarConfig = reactive({
-	header: {
-		title: "Benchpress",
-		subtitle: session.user || "",
-		logo: "/assets/benchpress/images/logo/favicon.svg",
-		menuItems: [],
-	},
-	sections: [],
-});
-
-watchEffect(() => {
-	const isAdmin = userContext.isAdmin;
-
+const headerConfig = computed(() => {
 	const menuItems = [];
-	if (isAdmin) {
+	if (userContext.isAdmin) {
 		menuItems.push({
 			label: "Switch to Desk",
 			icon: LayoutDashboardIcon,
@@ -59,9 +47,17 @@ watchEffect(() => {
 	}
 	menuItems.push({ label: "Toggle Theme", icon: MoonIcon, onClick: toggleTheme });
 	menuItems.push({ label: "Logout", icon: LogOutIcon, onClick: logout });
-	sidebarConfig.header.menuItems = menuItems;
 
-	const sections = [
+	return {
+		title: "Benchpress",
+		subtitle: session.user || "",
+		logo: "/assets/benchpress/images/logo/favicon.svg",
+		menuItems,
+	};
+});
+
+const sections = computed(() => {
+	const items = [
 		{
 			label: "",
 			items: [
@@ -73,18 +69,18 @@ watchEffect(() => {
 	];
 
 	const logItems = [{ label: "Deploy Logs", icon: ScrollTextIcon, to: "/deploy-logs" }];
-	if (isAdmin) {
+	if (userContext.isAdmin) {
 		logItems.push({ label: "Build Logs", icon: HammerIcon, to: "/build-logs" });
 	}
-	sections.push({ label: "Logs", collapsible: true, items: logItems });
+	items.push({ label: "Logs", collapsible: true, items: logItems });
 
-	if (isAdmin) {
-		sections.push({
+	if (userContext.isAdmin) {
+		items.push({
 			label: "",
 			items: [{ label: "Settings", icon: SettingsIcon, to: "/settings" }],
 		});
 	}
 
-	sidebarConfig.sections = sections;
+	return items;
 });
 </script>
