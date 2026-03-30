@@ -41,9 +41,7 @@ def _ensure_network() -> None:
 		client.networks.create(
 			"benchpress",
 			driver="bridge",
-			ipam=docker.types.IPAMConfig(
-				pool_configs=[docker.types.IPAMPool(subnet="172.30.0.0/24")]
-			),
+			ipam=docker.types.IPAMConfig(pool_configs=[docker.types.IPAMPool(subnet="172.30.0.0/24")]),
 		)
 
 

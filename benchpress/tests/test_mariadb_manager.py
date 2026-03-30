@@ -75,9 +75,9 @@ class TestMariadbManager(IntegrationTestCase):
 		mock_container = MagicMock()
 		# Second exec_run (the actual SQL) raises an error
 		mock_container.exec_run.side_effect = [
-			(0, b""),             # write temp file
+			(0, b""),  # write temp file
 			RuntimeError("DB exploded"),  # run SQL
-			(0, b""),             # rm -f in finally
+			(0, b""),  # rm -f in finally
 		]
 		mock_get_client.return_value.containers.get.return_value = mock_container
 

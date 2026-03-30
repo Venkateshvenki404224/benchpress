@@ -42,7 +42,9 @@ def generate_keypair() -> dict:
 		).stdout.strip()
 		return {"private_key": private, "public_key": public}
 
-	import secrets, base64
+	import base64
+	import secrets
+
 	private_bytes = secrets.token_bytes(32)
 	return {
 		"private_key": base64.b64encode(private_bytes).decode(),

@@ -55,9 +55,7 @@ class TestDeployManager(IntegrationTestCase):
 	@classmethod
 	def tearDownClass(cls):
 		frappe.set_user("Administrator")
-		for name in frappe.get_all(
-			"Bench Instance", filters={"lab": cls.lab.name}, pluck="name"
-		):
+		for name in frappe.get_all("Bench Instance", filters={"lab": cls.lab.name}, pluck="name"):
 			frappe.delete_doc("Bench Instance", name, force=True, ignore_permissions=True)
 		if cls.db_server_name and frappe.db.exists("Database Server", cls.db_server_name):
 			frappe.delete_doc("Database Server", cls.db_server_name, force=True, ignore_permissions=True)
@@ -73,9 +71,7 @@ class TestDeployManager(IntegrationTestCase):
 			frappe.db.commit()
 		bench = _make_bench(self.lab.name)
 		self.addCleanup(
-			lambda n=bench.name: frappe.delete_doc(
-				"Bench Instance", n, force=True, ignore_permissions=True
-			)
+			lambda n=bench.name: frappe.delete_doc("Bench Instance", n, force=True, ignore_permissions=True)
 			if frappe.db.exists("Bench Instance", n)
 			else None
 		)
@@ -150,9 +146,7 @@ class TestDeployManager(IntegrationTestCase):
 	@patch("benchpress.deploy_manager.remove_container")
 	@patch("benchpress.deploy_manager.stop_container")
 	@patch("benchpress.docker_manager.get_client")
-	def test_redeploy_bench_removes_data_volume(
-		self, mock_client, mock_stop, mock_remove, mock_deploy
-	):
+	def test_redeploy_bench_removes_data_volume(self, mock_client, mock_stop, mock_remove, mock_deploy):
 		from benchpress.deploy_manager import redeploy_bench
 
 		bench = self._fresh_bench()
@@ -165,9 +159,7 @@ class TestDeployManager(IntegrationTestCase):
 
 		redeploy_bench(bench.name)
 
-		mock_client.return_value.volumes.get.assert_called_with(
-			f"benchpress-{bench.bench_name}-data"
-		)
+		mock_client.return_value.volumes.get.assert_called_with(f"benchpress-{bench.bench_name}-data")
 		mock_vol.remove.assert_called_once_with(force=True)
 
 	@patch("benchpress.deploy_manager.deploy_bench")
@@ -190,4 +182,3 @@ class TestDeployManager(IntegrationTestCase):
 
 		redeploy_bench(bench.name)
 		mock_drop_db.assert_called_once_with(self.db_server_name, bench.site_name)
-

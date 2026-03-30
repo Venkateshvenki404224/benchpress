@@ -21,11 +21,16 @@ def _patch_wg(func):
 
 	@functools.wraps(func)
 	def wrapper(self, *args, **kwargs):
-		with patch("benchpress.wg_manager.add_peer_to_server"), \
-		     patch("benchpress.wg_manager.allocate_ip", return_value="10.0.0.5"), \
-		     patch("benchpress.wg_manager.generate_keypair", return_value={"private_key": "priv==", "public_key": "pub=="}), \
-		     patch("benchpress.wg_manager.generate_peer_config", return_value="[Interface]\n..."), \
-		     patch("benchpress.wg_manager.sync_wg_config"):
+		with (
+			patch("benchpress.wg_manager.add_peer_to_server"),
+			patch("benchpress.wg_manager.allocate_ip", return_value="10.0.0.5"),
+			patch(
+				"benchpress.wg_manager.generate_keypair",
+				return_value={"private_key": "priv==", "public_key": "pub=="},
+			),
+			patch("benchpress.wg_manager.generate_peer_config", return_value="[Interface]\n..."),
+			patch("benchpress.wg_manager.sync_wg_config"),
+		):
 			return func(self, *args, **kwargs)
 
 	return wrapper
@@ -120,8 +125,10 @@ class IntegrationTestBenchDevice(IntegrationTestCase):
 			mock_settings.return_value = MagicMock(**_WG_SETTINGS)
 			result = register_device("My Tablet", "Tablet")
 
-		with patch("benchpress.wg_manager.remove_peer_from_server"), \
-		     patch("benchpress.wg_manager.sync_wg_config"):
+		with (
+			patch("benchpress.wg_manager.remove_peer_from_server"),
+			patch("benchpress.wg_manager.sync_wg_config"),
+		):
 			unregister_device(result["name"])
 
 		self.assertFalse(frappe.db.exists("Bench Device", result["name"]))
