@@ -89,9 +89,7 @@ def execute_sql(db_server_name: str, sql: str) -> tuple[int, str]:
 def _write_env_file(root_password: str, version: str = "10.6", mem_limit: str = "1g") -> None:
 	"""Write .env file for docker compose in the config directory."""
 	env_path = os.path.join(_get_config_dir(), ".env")
-	with open(
-		env_path, "w"
-	) as f:  # nosemgrep: frappe-semgrep-rules.rules.security.frappe-security-file-traversal
+	with open(env_path, "w") as f:  # nosemgrep: frappe-semgrep-rules.rules.security.frappe-security-file-traversal  # fmt: skip
 		f.write(f"MARIADB_ROOT_PASSWORD={root_password}\n")
 		f.write(f"MARIADB_VERSION={version}\n")
 		f.write(f"MARIADB_MEM_LIMIT={mem_limit}\n")
@@ -100,9 +98,7 @@ def _write_env_file(root_password: str, version: str = "10.6", mem_limit: str = 
 def _write_mariadb_config(custom_config: str | None = None) -> None:
 	"""Write MariaDB config to persistent path (not /tmp/)."""
 	config_path = os.path.join(_get_config_dir(), "mariadb.cnf")
-	with open(
-		config_path, "w"
-	) as f:  # nosemgrep: frappe-semgrep-rules.rules.security.frappe-security-file-traversal
+	with open(config_path, "w") as f:  # nosemgrep: frappe-semgrep-rules.rules.security.frappe-security-file-traversal  # fmt: skip
 		f.write(custom_config or DEFAULT_MARIADB_CONFIG)
 
 
