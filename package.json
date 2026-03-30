@@ -20,5 +20,8 @@
   "bugs": {
     "url": "https://github.com/Venkateshvenki404224/benchpress/issues"
   },
-  "homepage": "https://github.com/Venkateshvenki404224/benchpress#readme"
+  "homepage": "https://github.com/Venkateshvenki404224/benchpress#readme",
+  "devDependencies": {
+    "@playwright/test": "^1.58.2"
+  }
 }

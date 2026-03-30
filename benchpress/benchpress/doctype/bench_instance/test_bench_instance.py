@@ -42,9 +42,7 @@ class IntegrationTestBenchInstance(IntegrationTestCase):
 			filters={"lab": cls.lab_name},
 			pluck="name",
 		)
-		for name in frappe.get_all(
-			"Bench Instance", filters={"lab": cls.lab_name}, pluck="name"
-		):
+		for name in frappe.get_all("Bench Instance", filters={"lab": cls.lab_name}, pluck="name"):
 			frappe.delete_doc("Bench Instance", name, force=True, ignore_permissions=True)
 		cls.lab.delete(ignore_permissions=True)
 		frappe.db.commit()
@@ -64,9 +62,7 @@ class IntegrationTestBenchInstance(IntegrationTestCase):
 		).insert(ignore_permissions=True)
 		frappe.db.commit()
 		self.addCleanup(
-			lambda n=bench.name: frappe.delete_doc(
-				"Bench Instance", n, force=True, ignore_permissions=True
-			)
+			lambda n=bench.name: frappe.delete_doc("Bench Instance", n, force=True, ignore_permissions=True)
 			if frappe.db.exists("Bench Instance", n)
 			else None
 		)
