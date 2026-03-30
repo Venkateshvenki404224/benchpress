@@ -8,7 +8,7 @@ Once a bench is deployed and running, BenchPress provides all the information yo
 
 After deploying a bench, the **Dashboard** tab on the Lab Detail page shows a **Connection Information** card with everything you need:
 
-![Connection Info](../images/connection-info.png)
+![Connection Info](images/connection-info.png)
 
 ### Available connection details
 

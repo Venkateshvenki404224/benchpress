@@ -24,13 +24,13 @@ Create Lab  -->  Build Image  -->  Deploy Bench  -->  Connect & Develop
 
 From the sidebar, click **Labs**. You'll see the list of all existing labs.
 
-![Labs list](../images/labs-list.png)
+![Labs list](images/labs-list.png)
 
 ### Click "New Lab"
 
 Click the **New Lab** button in the top-right corner (visible to admin users only).
 
-![New Lab form](../images/new-lab.png)
+![New Lab form](images/new-lab.png)
 
 ### Fill in the lab details
 
@@ -69,7 +69,7 @@ You can add multiple apps. Common combinations:
 
 The lab is created in **Draft** status. You can now build its Docker image and deploy bench instances.
 
-![New Lab form filled](../images/new-lab-filled.png)
+![New Lab form filled](images/new-lab-filled.png)
 
 ---
 
@@ -93,7 +93,7 @@ Only changed layers rebuild — if you only change an app's branch, layers 1-3 a
 
 Switch to the **Build Log** tab to watch the Docker build output stream in real-time.
 
-![Build Log tab](../images/build-log-tab.png)
+![Build Log tab](images/build-log-tab.png)
 
 The build log shows:
 - Each Docker layer as a collapsible step
@@ -141,7 +141,7 @@ The deploy runs as a background job and streams progress to the **Deploy Log** t
 9. Provisions SSH user and sets password
 10. Marks the bench as **Running**
 
-![Deploy Log tab](../images/deploy-log-tab.png)
+![Deploy Log tab](images/deploy-log-tab.png)
 
 ### Bench status
 
@@ -159,7 +159,7 @@ The deploy runs as a background job and streams progress to the **Deploy Log** t
 
 ### From the Lab Detail page
 
-![Lab Detail](../images/lab-detail.png)
+![Lab Detail](images/lab-detail.png)
 
 The **Dashboard** tab shows the container status card with:
 - Current status badge
@@ -179,7 +179,7 @@ The **Dashboard** tab shows the container status card with:
 
 From the sidebar, click **Bench Instances** to see all deployed benches across all labs:
 
-![Bench Instances](../images/bench-instances.png)
+![Bench Instances](images/bench-instances.png)
 
 ---
 

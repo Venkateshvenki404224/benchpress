@@ -21,7 +21,7 @@ Instead of getting a new WireGuard config every time you deploy a bench, you reg
 
 From the sidebar, click **Devices**.
 
-![Devices page](../images/devices.png)
+![Devices page](images/devices.png)
 
 ### Click "Add Device"
 

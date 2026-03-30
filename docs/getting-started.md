@@ -59,7 +59,7 @@ yarn build
 
 ### Step 4: Configure BenchPress Settings
 
-![Settings](../images/settings.png)
+![Settings](images/settings.png)
 
 1. Start the bench: `bench start`
 2. Open BenchPress Settings in your browser: `/app/benchpress-settings`

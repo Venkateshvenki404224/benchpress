@@ -14,7 +14,7 @@ Build logs capture the Docker image build process for a lab.
 
 When building an image, switch to the **Build Log** tab on the Lab Detail page. Logs stream in real-time via WebSocket.
 
-![Build Log tab](../images/build-log-tab.png)
+![Build Log tab](images/build-log-tab.png)
 
 **Option 2: Build Logs page (sidebar)**
 
@@ -24,7 +24,7 @@ Click **Build Logs** in the sidebar to browse all build logs across all labs. Ea
 - Timestamp
 - Click to expand and see the full log
 
-![Build Logs page](../images/build-logs.png)
+![Build Logs page](images/build-logs.png)
 
 ### Understanding build steps
 
@@ -66,7 +66,7 @@ Deploy logs capture the bench container creation and setup process.
 
 When deploying a bench, switch to the **Deploy Log** tab. Logs stream in real-time.
 
-![Deploy Log tab](../images/deploy-log-tab.png)
+![Deploy Log tab](images/deploy-log-tab.png)
 
 **Option 2: Deploy Logs page (sidebar)**
 
@@ -76,7 +76,7 @@ Click **Deploy Logs** in the sidebar to browse all deployment logs across all be
 - Timestamp
 - Click to expand and see the full log
 
-![Deploy Logs page](../images/deploy-logs.png)
+![Deploy Logs page](images/deploy-logs.png)
 
 ### Understanding deployment steps
 
@@ -129,7 +129,7 @@ The card shows:
 
 The table shows CPU % and Memory % columns for all benches at a glance.
 
-![Bench Instances](../images/bench-instances.png)
+![Bench Instances](images/bench-instances.png)
 
 ### How stats are collected
 
