@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BenchPress — Self-hosted Frappe Cloud</title>
+  <link rel="icon" type="image/svg+xml" href="images-assets/logo/favicon.svg" />
+  <link rel="icon" type="image/png" sizes="32x32" href="images-assets/logo/favicon-32.png" />
+  <link rel="icon" type="image/png" sizes="64x64" href="images-assets/logo/favicon-64.png" />
+  <link rel="apple-touch-icon" href="images-assets/logo/apple-touch-icon.png" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bp-bg: #050505;
+      --bp-bg-2: #0a0a0a;
+      --bp-surface: #111111;
+      --bp-border: rgba(255,255,255,0.06);
+      --bp-text: #fafafa;
+      --bp-text-2: #a1a1aa;
+      --bp-text-3: #52525b;
+      --bp-green: #22c55e;
+      --bp-green-dim: rgba(34,197,94,0.15);
+      --bp-cyan: #06b6d4;
+      --bp-cyan-dim: rgba(6,182,212,0.15);
+      --bp-purple: #a855f7;
+      --bp-purple-dim: rgba(168,85,247,0.12);
+      --bp-radius: 16px;
+      --bp-radius-sm: 10px;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, sans-serif;
+      background: var(--bp-bg);
+      color: var(--bp-text);
+      overflow-x: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── Animated dot grid background ── */
+    .dot-grid {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      background-image: radial-gradient(rgba(255,255,255,0.03) 1px, transparent 1px);
+      background-size: 32px 32px;
+      mask-image: radial-gradient(ellipse 60% 50% at 50% 0%, black 30%, transparent 100%);
+      -webkit-mask-image: radial-gradient(ellipse 60% 50% at 50% 0%, black 30%, transparent 100%);
+    }
+
+    /* ── Radial glow spots ── */
+    .glow-spot {
+      position: fixed;
+      border-radius: 50%;
+      filter: blur(120px);
+      opacity: 0.4;
+      pointer-events: none;
+      z-index: 0;
+    }
+    .glow-green { width: 600px; height: 600px; background: var(--bp-green); top: -200px; left: 20%; opacity: 0.07; }
+    .glow-cyan { width: 500px; height: 500px; background: var(--bp-cyan); top: 50%; right: -100px; opacity: 0.05; }
+    .glow-purple { width: 400px; height: 400px; background: var(--bp-purple); bottom: 10%; left: -100px; opacity: 0.04; }
+
+    .page-content { position: relative; z-index: 1; }
+    .container { max-width: 1200px; margin: 0 auto; padding: 0 24px; }
+
+    /* ── Navbar ── */
+    .navbar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 100;
+      padding: 16px 0;
+      background: rgba(5,5,5,0.6);
+      backdrop-filter: blur(20px) saturate(180%);
+      -webkit-backdrop-filter: blur(20px) saturate(180%);
+      border-bottom: 1px solid var(--bp-border);
+    }
+    .navbar .container { display: flex; align-items: center; justify-content: space-between; }
+    .navbar-brand { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+    .navbar-logo {
+      width: 32px; height: 32px;
+      background: linear-gradient(135deg, var(--bp-green), #16a34a);
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 800; font-size: 15px; color: #000;
+      box-shadow: 0 0 20px rgba(34,197,94,0.3);
+    }
+    .navbar-name { font-weight: 700; font-size: 17px; letter-spacing: -0.02em; color: var(--bp-text); }
+    .navbar-tag {
+      font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em;
+      padding: 2px 8px; border-radius: 20px;
+      background: var(--bp-green-dim); color: var(--bp-green);
+    }
+    .navbar-links { display: flex; align-items: center; gap: 8px; }
+    .navbar-links a {
+      padding: 6px 14px; border-radius: 8px;
+      font-size: 13.5px; font-weight: 500; color: var(--bp-text-2);
+      text-decoration: none; transition: all 0.2s;
+    }
+    .navbar-links a:hover { color: var(--bp-text); background: rgba(255,255,255,0.04); }
+    .btn-nav-primary {
+      background: var(--bp-green) !important; color: #000 !important;
+      font-weight: 600 !important; padding: 8px 20px !important;
+      border-radius: 8px !important;
+    }
+    .btn-nav-primary:hover { box-shadow: 0 0 24px rgba(34,197,94,0.4); }
+
+    /* ── Hero ── */
+    .hero { padding: 160px 0 100px; text-align: center; }
+    .hero-badge {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 6px 16px; border-radius: 100px;
+      background: var(--bp-surface);
+      border: 1px solid var(--bp-border);
+      font-size: 13px; font-weight: 500; color: var(--bp-text-2);
+      margin-bottom: 32px;
+      animation: fadeUp 0.8s ease both;
+    }
+    .hero-badge-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--bp-green); animation: pulse-dot 2s ease infinite; }
+
+    @keyframes pulse-dot {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(34,197,94,0.4); }
+      50% { box-shadow: 0 0 0 6px rgba(34,197,94,0); }
+    }
+
+    .hero h1 {
+      font-size: clamp(3rem, 7vw, 5.5rem);
+      font-weight: 900;
+      letter-spacing: -0.04em;
+      line-height: 1.05;
+      margin-bottom: 24px;
+      animation: fadeUp 0.8s ease 0.1s both;
+    }
+    .hero h1 .shimmer {
+      background: linear-gradient(90deg, var(--bp-green), var(--bp-cyan), var(--bp-green));
+      background-size: 200% auto;
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+      animation: shimmer 3s linear infinite;
+    }
+    @keyframes shimmer { to { background-position: 200% center; } }
+
+    .hero-sub {
+      font-size: 18px; line-height: 1.7; color: var(--bp-text-2);
+      max-width: 560px; margin: 0 auto 40px;
+      animation: fadeUp 0.8s ease 0.2s both;
+    }
+    .hero-actions {
+      display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;
+      animation: fadeUp 0.8s ease 0.3s both;
+    }
+
+    /* ── Buttons ── */
+    .btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 14px 28px; border-radius: 12px;
+      font-size: 15px; font-weight: 600; text-decoration: none;
+      transition: all 0.25s; cursor: pointer; border: none;
+    }
+    .btn-primary {
+      background: var(--bp-green); color: #000;
+      box-shadow: 0 0 0 0 rgba(34,197,94,0), 0 1px 2px rgba(0,0,0,0.2);
+    }
+    .btn-primary:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 0 40px rgba(34,197,94,0.3), 0 8px 24px rgba(0,0,0,0.3);
+    }
+    .btn-ghost {
+      background: var(--bp-surface); color: var(--bp-text);
+      border: 1px solid var(--bp-border);
+    }
+    .btn-ghost:hover { border-color: rgba(255,255,255,0.12); background: rgba(255,255,255,0.04); }
+
+    .hero-trust {
+      display: flex; gap: 32px; justify-content: center;
+      margin-top: 48px; animation: fadeUp 0.8s ease 0.4s both;
+    }
+    .hero-trust span {
+      display: flex; align-items: center; gap: 6px;
+      font-size: 13px; color: var(--bp-text-3); font-weight: 500;
+    }
+    .hero-trust .dot { width: 5px; height: 5px; border-radius: 50%; }
+    .dot-green { background: var(--bp-green); }
+    .dot-cyan { background: var(--bp-cyan); }
+    .dot-purple { background: var(--bp-purple); }
+
+    /* ── Terminal mockup ── */
+    .terminal-section { padding: 0 0 100px; animation: fadeUp 0.8s ease 0.5s both; }
+    .terminal-window {
+      max-width: 800px; margin: 0 auto;
+      background: var(--bp-surface);
+      border: 1px solid var(--bp-border);
+      border-radius: var(--bp-radius);
+      overflow: hidden;
+      box-shadow: 0 40px 80px rgba(0,0,0,0.5), 0 0 60px rgba(34,197,94,0.03);
+    }
+    .terminal-header {
+      display: flex; align-items: center; gap: 8px;
+      padding: 14px 18px;
+      background: rgba(255,255,255,0.02);
+      border-bottom: 1px solid var(--bp-border);
+    }
+    .terminal-dot { width: 12px; height: 12px; border-radius: 50%; }
+    .terminal-dot.red { background: #ef4444; }
+    .terminal-dot.yellow { background: #f59e0b; }
+    .terminal-dot.green { background: #22c55e; }
+    .terminal-title { margin-left: 8px; font-size: 12px; color: var(--bp-text-3); font-family: 'JetBrains Mono', monospace; }
+    .terminal-body {
+      padding: 24px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px; line-height: 2;
+      color: var(--bp-text-2);
+      min-height: 220px;
+    }
+    .terminal-body .prompt { color: var(--bp-green); }
+    .terminal-body .cmd { color: var(--bp-text); }
+    .terminal-body .out { color: var(--bp-text-3); }
+    .terminal-body .success { color: var(--bp-green); }
+    .terminal-body .cyan { color: var(--bp-cyan); }
+    .terminal-cursor {
+      display: inline-block; width: 8px; height: 16px;
+      background: var(--bp-green); margin-left: 2px;
+      animation: blink 1s step-end infinite; vertical-align: text-bottom;
+    }
+    @keyframes blink { 50% { opacity: 0; } }
+
+    /* ── Bento grid (features) ── */
+    .section { padding: 100px 0; }
+    .section-label {
+      text-align: center; margin-bottom: 16px;
+      font-size: 13px; font-weight: 600; text-transform: uppercase;
+      letter-spacing: 0.12em; color: var(--bp-green);
+    }
+    .section-title {
+      text-align: center; font-size: clamp(2rem, 4vw, 2.8rem);
+      font-weight: 800; letter-spacing: -0.03em; margin-bottom: 16px;
+    }
+    .section-sub {
+      text-align: center; font-size: 16px; color: var(--bp-text-2);
+      max-width: 500px; margin: 0 auto 60px; line-height: 1.6;
+    }
+
+    .bento-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+    }
+    .bento-card {
+      background: var(--bp-surface);
+      border: 1px solid var(--bp-border);
+      border-radius: var(--bp-radius);
+      padding: 32px;
+      transition: all 0.3s;
+      position: relative;
+      overflow: hidden;
+    }
+    .bento-card::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(400px circle at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(255,255,255,0.03), transparent 50%);
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+    .bento-card:hover::before { opacity: 1; }
+    .bento-card:hover { border-color: rgba(255,255,255,0.1); transform: translateY(-2px); }
+    .bento-wide { grid-column: span 2; }
+    .bento-icon {
+      width: 44px; height: 44px; border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px; margin-bottom: 20px;
+    }
+    .bento-icon.green { background: var(--bp-green-dim); color: var(--bp-green); }
+    .bento-icon.cyan { background: var(--bp-cyan-dim); color: var(--bp-cyan); }
+    .bento-icon.purple { background: var(--bp-purple-dim); color: var(--bp-purple); }
+    .bento-card h3 { font-size: 17px; font-weight: 700; margin-bottom: 8px; letter-spacing: -0.01em; }
+    .bento-card p { font-size: 14px; color: var(--bp-text-2); line-height: 1.7; }
+
+    /* ── Steps ── */
+    .steps { display: flex; gap: 24px; justify-content: center; flex-wrap: wrap; }
+    .step-card {
+      flex: 1; min-width: 280px; max-width: 360px;
+      text-align: center; padding: 40px 32px;
+      background: var(--bp-surface);
+      border: 1px solid var(--bp-border);
+      border-radius: var(--bp-radius);
+      position: relative;
+    }
+    .step-number {
+      width: 48px; height: 48px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px; font-weight: 800; margin: 0 auto 20px;
+      background: linear-gradient(135deg, var(--bp-green-dim), transparent);
+      border: 1px solid rgba(34,197,94,0.2);
+      color: var(--bp-green);
+    }
+    .step-card h3 { font-size: 16px; font-weight: 700; margin-bottom: 8px; }
+    .step-card p { font-size: 14px; color: var(--bp-text-2); line-height: 1.7; }
+    .step-connector {
+      display: flex; align-items: center;
+      color: var(--bp-text-3); font-size: 20px; padding-top: 10px;
+    }
+
+    /* ── CTA ── */
+    .cta-section {
+      text-align: center;
+      padding: 100px 0;
+    }
+    .cta-card {
+      max-width: 640px; margin: 0 auto;
+      padding: 64px 48px;
+      background: var(--bp-surface);
+      border: 1px solid var(--bp-border);
+      border-radius: 24px;
+      position: relative;
+      overflow: hidden;
+    }
+    .cta-card::before {
+      content: '';
+      position: absolute;
+      top: -1px; left: 30%; right: 30%;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, var(--bp-green), transparent);
+    }
+    .cta-card h2 { font-size: 2rem; font-weight: 800; margin-bottom: 12px; letter-spacing: -0.03em; }
+    .cta-card p { color: var(--bp-text-2); margin-bottom: 32px; font-size: 15px; }
+
+    /* ── Footer ── */
+    .footer {
+      padding: 32px 0;
+      border-top: 1px solid var(--bp-border);
+      font-size: 13px; color: var(--bp-text-3);
+    }
+    .footer .container { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
+    .footer a { color: var(--bp-text-2); text-decoration: none; }
+    .footer a:hover { color: var(--bp-text); }
+
+    /* ── Animations ── */
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .reveal { opacity: 0; transform: translateY(20px); transition: all 0.6s cubic-bezier(0.16, 1, 0.3, 1); }
+    .reveal.visible { opacity: 1; transform: translateY(0); }
+
+    /* ── Orbit ring (hero decoration) ── */
+    .orbit-container {
+      position: absolute;
+      width: 500px; height: 500px;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+      opacity: 0.15;
+    }
+    .orbit-ring {
+      position: absolute; inset: 0;
+      border: 1px solid var(--bp-border);
+      border-radius: 50%;
+      animation: spin 30s linear infinite;
+    }
+    .orbit-ring:nth-child(2) { inset: 40px; animation-duration: 25s; animation-direction: reverse; }
+    .orbit-ring:nth-child(3) { inset: 80px; animation-duration: 20s; }
+    .orbit-dot {
+      position: absolute; top: 0; left: 50%;
+      width: 6px; height: 6px; border-radius: 50%;
+      transform: translate(-50%, -50%);
+    }
+    .orbit-dot.g { background: var(--bp-green); box-shadow: 0 0 10px var(--bp-green); }
+    .orbit-dot.c { background: var(--bp-cyan); box-shadow: 0 0 10px var(--bp-cyan); }
+    .orbit-dot.p { background: var(--bp-purple); box-shadow: 0 0 10px var(--bp-purple); }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Responsive ── */
+    @media (max-width: 768px) {
+      .bento-grid { grid-template-columns: 1fr; }
+      .bento-wide { grid-column: span 1; }
+      .navbar-links { display: none; }
+      .hero { padding: 130px 0 60px; }
+      .hero-trust { flex-direction: column; gap: 8px; align-items: center; }
+      .step-connector { display: none; }
+      .cta-card { padding: 40px 24px; }
+    }
+
+    /* ── Marquee strip ── */
+    .marquee-strip {
+      padding: 20px 0;
+      overflow: hidden;
+      border-top: 1px solid var(--bp-border);
+      border-bottom: 1px solid var(--bp-border);
+      background: rgba(255,255,255,0.01);
+    }
+    .marquee-inner {
+      display: flex; gap: 48px;
+      animation: marquee 25s linear infinite;
+      width: max-content;
+    }
+    .marquee-inner span {
+      font-size: 14px; font-weight: 600; color: var(--bp-text-3);
+      white-space: nowrap; letter-spacing: 0.02em;
+      display: inline-flex; align-items: center; gap: 8px;
+    }
+    .marquee-inner span img {
+      width: 22px; height: 22px; border-radius: 5px;
+      object-fit: contain; background: rgba(255,255,255,0.08);
+    }
+    .app-icon {
+      width: 22px; height: 22px; border-radius: 5px;
+      display: inline-flex; align-items: center; justify-content: center;
+      font-size: 11px; font-weight: 700; color: #fff; flex-shrink: 0;
+    }
+    @keyframes marquee { to { transform: translateX(-50%); } }
+  </style>
+</head>
+<body>
+
+<div class="dot-grid"></div>
+<div class="glow-spot glow-green"></div>
+<div class="glow-spot glow-cyan"></div>
+<div class="glow-spot glow-purple"></div>
+
+<div class="page-content">
+
+<!-- Navbar -->
+<nav class="navbar">
+  <div class="container">
+    <a href="/home" class="navbar-brand">
+      <img src="images-assets/logo/favicon.svg" alt="BenchPress" class="navbar-logo" style="background:none;box-shadow:none;" />
+      <span class="navbar-name">BenchPress</span>
+      <span class="navbar-tag">Beta</span>
+    </a>
+    <div class="navbar-links">
+      <a href="#features">Features</a>
+      <a href="#how-it-works">How it Works</a>
+      <a href="https://github.com/Venkateshvenki404224/benchpress" target="_blank">GitHub</a>
+      <a href="/frontend" class="btn-nav-primary">Dashboard</a>
+    </div>
+  </div>
+</nav>
+
+<!-- Hero -->
+<section class="hero">
+  <div class="container" style="position:relative;">
+    <div class="orbit-container">
+      <div class="orbit-ring"><div class="orbit-dot g"></div></div>
+      <div class="orbit-ring"><div class="orbit-dot c"></div></div>
+      <div class="orbit-ring"><div class="orbit-dot p"></div></div>
+    </div>
+    <div class="hero-badge">
+      <span class="hero-badge-dot"></span>
+      FOSS Hack 2026 Project
+    </div>
+    <h1>Deploy Frappe.<br><span class="shimmer">Zero friction.</span></h1>
+    <p class="hero-sub">
+      Spin up isolated Frappe benches with pre-configured apps in one click.
+      Docker containers, WireGuard VPN access, real-time build logs.
+      Self-hosted. Open source.
+    </p>
+    <div class="hero-actions">
+      <a href="/frontend" class="btn btn-primary">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 1v14M1 8h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        Get Started
+      </a>
+      <a href="https://github.com/Venkateshvenki404224/benchpress" target="_blank" class="btn btn-ghost">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+        Star on GitHub
+      </a>
+    </div>
+    <div class="hero-trust">
+      <span><span class="dot dot-green"></span> Open Source</span>
+      <span><span class="dot dot-cyan"></span> Docker Native</span>
+      <span><span class="dot dot-purple"></span> WireGuard VPN</span>
+    </div>
+  </div>
+</section>
+
+<!-- Terminal demo -->
+<section class="terminal-section">
+  <div class="container">
+    <div class="terminal-window">
+      <div class="terminal-header">
+        <div class="terminal-dot red"></div>
+        <div class="terminal-dot yellow"></div>
+        <div class="terminal-dot green"></div>
+        <span class="terminal-title">benchpress deploy</span>
+      </div>
+      <div class="terminal-body" id="terminal">
+        <div><span class="prompt">$</span> <span class="cmd">benchpress deploy crm-lab</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Marquee -->
+<div class="marquee-strip">
+  <div class="marquee-inner">
+    <span><img src="images-assets/apps/erpnext.svg" alt="">ERPNext</span>
+    <span><img src="images-assets/apps/crm.svg" alt="">CRM</span>
+    <span><img src="images-assets/apps/hrms.svg" alt="">HRMS</span>
+    <span><img src="images-assets/apps/lms.png" alt="">LMS</span>
+    <span><img src="images-assets/apps/wiki.png" alt="">Wiki</span>
+    <span><img src="images-assets/apps/helpdesk.svg" alt="">Helpdesk</span>
+
+    <span><img src="images-assets/apps/print_designer.svg" alt="">Print Designer</span>
+    <span><img src="images-assets/apps/builder.png" alt="">Builder</span>
+    <span><img src="images-assets/apps/erpnext.svg" alt="">ERPNext</span>
+    <span><img src="images-assets/apps/crm.svg" alt="">CRM</span>
+    <span><img src="images-assets/apps/hrms.svg" alt="">HRMS</span>
+    <span><img src="images-assets/apps/lms.png" alt="">LMS</span>
+    <span><img src="images-assets/apps/wiki.png" alt="">Wiki</span>
+    <span><img src="images-assets/apps/helpdesk.svg" alt="">Helpdesk</span>
+
+    <span><img src="images-assets/apps/print_designer.svg" alt="">Print Designer</span>
+    <span><img src="images-assets/apps/builder.png" alt="">Builder</span>
+  </div>
+</div>
+
+<!-- Features (Bento grid) -->
+<section id="features" class="section">
+  <div class="container">
+    <div class="section-label reveal">Features</div>
+    <h2 class="section-title reveal">Everything you need.<br>Nothing you don't.</h2>
+    <p class="section-sub reveal">No vendor lock-in. No monthly bills. Your infrastructure, your control.</p>
+    <div class="bento-grid">
+      <div class="bento-card bento-wide reveal">
+        <div class="bento-icon green">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><rect x="2" y="2" width="16" height="16" rx="3" stroke="currentColor" stroke-width="1.5"/><path d="M7 10l2 2 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+        <h3>Lab Templates</h3>
+        <p>Define reusable bench configurations — pick your Frappe version, apps, CPU and memory limits. Build the Docker image once, deploy instantly every time after that.</p>
+      </div>
+      <div class="bento-card reveal">
+        <div class="bento-icon cyan">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><rect x="3" y="6" width="14" height="10" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M6 6V4a4 4 0 018 0v2" stroke="currentColor" stroke-width="1.5"/></svg>
+        </div>
+        <h3>WireGuard VPN</h3>
+        <p>Every bench gets a VPN config. Download it, SSH into the container. No exposed ports, no complexity.</p>
+      </div>
+      <div class="bento-card reveal">
+        <div class="bento-icon purple">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M3 15l4-4 3 3 7-7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+        <h3>Resource Monitoring</h3>
+        <p>CPU and memory stats polled every 2 minutes. Know what each bench is consuming at a glance.</p>
+      </div>
+      <div class="bento-card reveal">
+        <div class="bento-icon green">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><rect x="2" y="3" width="16" height="14" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M6 9l2 2 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+        <h3>Live Build Logs</h3>
+        <p>Watch Docker image builds and deployments stream in real-time. GitHub CI-style terminal right in the browser.</p>
+      </div>
+      <div class="bento-card bento-wide reveal">
+        <div class="bento-icon cyan">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="7" stroke="currentColor" stroke-width="1.5"/><path d="M10 6v4l3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        </div>
+        <h3>One-Click Lifecycle</h3>
+        <p>Start, stop, restart, or delete any bench from the dashboard. Background jobs handle everything. No SSH, no terminal commands needed.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- How it works -->
+<section id="how-it-works" class="section" style="background: var(--bp-bg-2);">
+  <div class="container">
+    <div class="section-label reveal">How it works</div>
+    <h2 class="section-title reveal">Three steps. That's it.</h2>
+    <p class="section-sub reveal">From zero to a running Frappe site in minutes.</p>
+    <div class="steps">
+      <div class="step-card reveal">
+        <div class="step-number">1</div>
+        <h3>Create a Lab</h3>
+        <p>Pick your Frappe version, add the apps you need (ERPNext, CRM, HRMS), set resource limits.</p>
+      </div>
+      <div class="step-connector reveal">&rarr;</div>
+      <div class="step-card reveal">
+        <div class="step-number">2</div>
+        <h3>Build & Deploy</h3>
+        <p>Docker image built with apps baked in. Container spins up with MariaDB, Redis, SSH — all inside.</p>
+      </div>
+      <div class="step-connector reveal">&rarr;</div>
+      <div class="step-card reveal">
+        <div class="step-number">3</div>
+        <h3>Access & Code</h3>
+        <p>Download WireGuard config, SSH in, run bench start. Your fully isolated Frappe environment is ready.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CTA -->
+<section class="cta-section">
+  <div class="container">
+    <div class="cta-card reveal">
+      <h2>Ready to deploy?</h2>
+      <p>BenchPress is open source, MIT licensed, and built for the Frappe community.</p>
+      <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;">
+        <a href="/frontend" class="btn btn-primary">Open Dashboard</a>
+        <a href="https://github.com/Venkateshvenki404224/benchpress" target="_blank" class="btn btn-ghost">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+          View Source
+        </a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Footer -->
+<footer class="footer">
+  <div class="container">
+    <div style="display:flex;align-items:center;gap:8px;">
+      <img src="images-assets/logo/favicon.svg" alt="BenchPress" style="width:20px;height:20px;" />
+      <span>BenchPress</span>
+      <span style="margin:0 4px;">&middot;</span>
+      <span>Built with <a href="https://frappe.io" target="_blank">Frappe Framework</a></span>
+    </div>
+    <div style="display:flex;gap:16px;align-items:center;">
+      <a href="https://github.com/Venkateshvenki404224/benchpress" target="_blank">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+      </a>
+      <a href="https://fossunited.org/fosshack/2026" target="_blank">FOSS Hack 2026</a>
+    </div>
+  </div>
+</footer>
+
+</div><!-- /page-content -->
+
+<script>
+  // Scroll reveal
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('visible'); } });
+  }, { threshold: 0.1 });
+  document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+
+  // Bento card mouse tracking
+  document.querySelectorAll('.bento-card').forEach(card => {
+    card.addEventListener('mousemove', e => {
+      const r = card.getBoundingClientRect();
+      card.style.setProperty('--mouse-x', ((e.clientX - r.left) / r.width * 100) + '%');
+      card.style.setProperty('--mouse-y', ((e.clientY - r.top) / r.height * 100) + '%');
+    });
+  });
+
+  // Terminal typing animation
+  const lines = [
+    { delay: 800, html: '<span class="out">Creating bench instance from crm-lab...</span>' },
+    { delay: 600, html: '<span class="out">Pulling image benchpress/crm-lab:latest</span>' },
+    { delay: 400, html: '<span class="success">&#10003;</span> <span class="out">Image ready (cached)</span>' },
+    { delay: 500, html: '<span class="out">Starting container benchpress-a3f8c2...</span>' },
+    { delay: 700, html: '<span class="success">&#10003;</span> <span class="out">MariaDB started</span>' },
+    { delay: 300, html: '<span class="success">&#10003;</span> <span class="out">Redis started</span>' },
+    { delay: 400, html: '<span class="success">&#10003;</span> <span class="out">WireGuard peer configured (10.10.0.3)</span>' },
+    { delay: 600, html: '<span class="success">&#10003;</span> <span class="out">Site a3f8c2.localhost created</span>' },
+    { delay: 500, html: '' },
+    { delay: 100, html: '<span class="success">Deploy complete!</span> <span class="cyan">SSH: ssh frappe@10.10.0.3</span>' },
+    { delay: 100, html: '<span class="prompt">$</span> <span class="terminal-cursor"></span>' },
+  ];
+  let i = 0;
+  function typeLine() {
+    if (i >= lines.length) return;
+    const term = document.getElementById('terminal');
+    const div = document.createElement('div');
+    div.innerHTML = lines[i].html;
+    term.appendChild(div);
+    term.scrollTop = term.scrollHeight;
+    i++;
+    if (i < lines.length) setTimeout(typeLine, lines[i-1].delay);
+  }
+  const termObs = new IntersectionObserver((entries) => {
+    if (entries[0].isIntersecting) { setTimeout(typeLine, 600); termObs.disconnect(); }
+  }, { threshold: 0.3 });
+  termObs.observe(document.querySelector('.terminal-window'));
+</script>
+</body>
+</html>
