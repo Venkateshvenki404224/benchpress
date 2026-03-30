@@ -19,7 +19,7 @@ from benchpress.docker_manager import (
 from benchpress.mariadb_manager import (
 	create_mariadb_user,
 	drop_mariadb_user,
-	ensure_database_server,
+	ensure_infrastructure,
 	wait_for_mariadb,
 )
 
@@ -153,9 +153,9 @@ def deploy_bench(bench_name: str) -> None:
 		else:
 			append_log("WireGuard not configured, skipping VPN.", "warning")
 
-		# Step 5: Ensure shared MariaDB is running
-		append_log("=== Ensuring shared MariaDB is running ===")
-		db_server_name = ensure_database_server()
+		# Step 5: Ensure shared infrastructure (MariaDB + Redis) is running
+		append_log("=== Ensuring shared infrastructure is running ===")
+		db_server_name = ensure_infrastructure()
 		db_server = frappe.get_doc("Database Server", db_server_name)
 		wait_for_mariadb(db_server_name, timeout=60)
 		append_log(f"MariaDB ready at {db_server.container_name}:{db_server.port or 3306}")
@@ -170,9 +170,9 @@ def deploy_bench(bench_name: str) -> None:
 		config = {
 			"db_host": db_server.container_name,
 			"db_port": db_server.port or 3306,
-			"redis_cache": "redis://127.0.0.1:6379",
-			"redis_queue": "redis://127.0.0.1:6379",
-			"redis_socketio": "redis://127.0.0.1:6379",
+			"redis_cache": "redis://benchpress-redis:6379/0",
+			"redis_queue": "redis://benchpress-redis:6379/1",
+			"redis_socketio": "redis://benchpress-redis:6379/2",
 			"socketio_port": 9000,
 			"webserver_port": 8000,
 			"default_site": site_name,

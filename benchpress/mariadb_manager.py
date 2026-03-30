@@ -3,7 +3,9 @@
 
 import base64
 import hashlib
+import os
 import secrets
+import subprocess
 import time
 import uuid
 
@@ -18,6 +20,39 @@ innodb_buffer_pool_size=536870912
 max_connections=500
 wait_timeout=28800
 """
+
+
+def _get_config_dir() -> str:
+	return os.path.join(frappe.get_app_path("benchpress"), "config")
+
+
+def _get_compose_path() -> str:
+	return os.path.join(_get_config_dir(), "docker-compose.yml")
+
+
+def _ensure_network() -> None:
+	"""Create the benchpress Docker network if it does not exist."""
+	client = get_client()
+	try:
+		client.networks.get("benchpress")
+	except Exception:
+		import docker
+
+		client.networks.create(
+			"benchpress",
+			driver="bridge",
+			ipam=docker.types.IPAMConfig(
+				pool_configs=[docker.types.IPAMPool(subnet="172.30.0.0/24")]
+			),
+		)
+
+
+def _compose_cmd(*args: str) -> tuple[int, str]:
+	"""Run docker compose command in the config directory."""
+	cmd = ["docker", "compose", "-f", _get_compose_path(), *args]
+	result = subprocess.run(cmd, capture_output=True, text=True, cwd=_get_config_dir())
+	output = result.stdout + result.stderr
+	return result.returncode, output
 
 
 def get_database_name(site_name: str) -> str:
@@ -53,60 +88,58 @@ def execute_sql(db_server_name: str, sql: str) -> tuple[int, str]:
 	return exit_code, output.decode("utf-8", errors="replace")
 
 
-def setup_database_server(db_server_name: str) -> None:
-	"""Full setup: pull image, create container with custom config, start, wait for ready."""
-	import tempfile
+def _write_env_file(root_password: str, version: str = "10.6", mem_limit: str = "1g") -> None:
+	"""Write .env file for docker compose in the config directory."""
+	env_path = os.path.join(_get_config_dir(), ".env")
+	with open(env_path, "w") as f:
+		f.write(f"MARIADB_ROOT_PASSWORD={root_password}\n")
+		f.write(f"MARIADB_VERSION={version}\n")
+		f.write(f"MARIADB_MEM_LIMIT={mem_limit}\n")
 
+
+def _write_mariadb_config(custom_config: str | None = None) -> None:
+	"""Write MariaDB config to persistent path (not /tmp/)."""
+	config_path = os.path.join(_get_config_dir(), "mariadb.cnf")
+	with open(config_path, "w") as f:
+		f.write(custom_config or DEFAULT_MARIADB_CONFIG)
+
+
+def setup_database_server(db_server_name: str) -> None:
+	"""Full setup: write config, bring up MariaDB via docker compose, wait for ready."""
 	db_server = frappe.get_doc("Database Server", db_server_name)
 
 	try:
-		client = get_client()
 		root_password = db_server.get_root_password()
+		version = (db_server.mariadb_version or "10.6").strip()
+		mem_limit = db_server.memory_limit or "1g"
 
-		# Ensure benchpress network exists
+		_write_mariadb_config(db_server.custom_config)
+		_write_env_file(root_password, version, mem_limit)
+		_ensure_network()
+
+		# Ensure named volume exists (marked external in compose)
+		client = get_client()
 		try:
-			client.networks.get("benchpress")
+			client.volumes.get(db_server.volume_name or "benchpress-mariadb-data")
 		except Exception:
-			import docker
+			client.volumes.create(name=db_server.volume_name or "benchpress-mariadb-data")
 
-			client.networks.create(
-				"benchpress",
-				driver="bridge",
-				ipam=docker.types.IPAMConfig(pool_configs=[docker.types.IPAMPool(subnet="172.30.0.0/24")]),
-			)
-
-		# Write custom config for bind-mount
-		custom_config = db_server.custom_config or DEFAULT_MARIADB_CONFIG
-		config_file = tempfile.NamedTemporaryFile(mode="w", suffix=".cnf", delete=False)
-		config_file.write(custom_config)
-		config_file.close()
-
-		# Remove existing container if any
+		# Remove existing container if any (clean slate for compose)
 		try:
+			client = get_client()
 			old = client.containers.get(db_server.container_name)
 			old.remove(force=True)
 		except Exception:
 			pass
 
-		container = client.containers.create(
-			image=db_server.image_tag,
-			name=db_server.container_name,
-			labels={"benchpress.managed": "true", "benchpress.role": "mariadb"},
-			detach=True,
-			environment={"MARIADB_ROOT_PASSWORD": root_password},
-			volumes={
-				db_server.volume_name: {"bind": "/var/lib/mysql", "mode": "rw"},
-				config_file.name: {"bind": "/etc/mysql/conf.d/benchpress.cnf", "mode": "ro"},
-			},
-			mem_limit=db_server.memory_limit or "1g",
-			network="benchpress",
-			restart_policy={"Name": "unless-stopped"},
-		)
+		exit_code, output = _compose_cmd("up", "-d", "mariadb")
+		if exit_code != 0:
+			raise Exception(f"docker compose up failed: {output}")
 
-		container.start()
+		client = get_client()
+		container = client.containers.get(db_server.container_name)
 		wait_for_mariadb(db_server_name, container=container, root_pw=root_password, timeout=60)
 
-		# Get container IP (informational only — connections use Docker DNS)
 		container.reload()
 		networks = container.attrs.get("NetworkSettings", {}).get("Networks", {})
 		container_ip = networks.get("benchpress", {}).get("IPAddress", "")
@@ -130,24 +163,26 @@ def setup_database_server(db_server_name: str) -> None:
 
 
 def start_database_server(db_server_name: str) -> None:
-	"""Start a stopped MariaDB container."""
+	"""Start a stopped MariaDB container via docker compose."""
 	db_server = frappe.get_doc("Database Server", db_server_name)
-	client = get_client()
-	container = client.containers.get(db_server.container_id)
-	container.start()
 
+	exit_code, output = _compose_cmd("start", "mariadb")
+	if exit_code != 0:
+		raise Exception(f"docker compose start failed: {output}")
+
+	client = get_client()
+	container = client.containers.get(db_server.container_name)
+	db_server.container_id = container.id
 	db_server.status = "Active"
 	db_server.save(ignore_permissions=True)
 	frappe.db.commit()
 
 
 def stop_database_server(db_server_name: str) -> None:
-	"""Stop the MariaDB container."""
-	db_server = frappe.get_doc("Database Server", db_server_name)
-	client = get_client()
-	container = client.containers.get(db_server.container_id)
-	container.stop(timeout=30)
+	"""Stop the MariaDB container via docker compose."""
+	_compose_cmd("stop", "mariadb")
 
+	db_server = frappe.get_doc("Database Server", db_server_name)
 	db_server.status = "Stopped"
 	db_server.save(ignore_permissions=True)
 	frappe.db.commit()
@@ -355,3 +390,19 @@ def scheduled_backup():
 				title=f"MariaDB backup failed: {s.name}",
 				message=frappe.get_traceback(),
 			)
+
+
+def setup_redis() -> None:
+	"""Bring up shared Redis container via docker compose."""
+	_ensure_network()
+	exit_code, output = _compose_cmd("up", "-d", "redis")
+	if exit_code != 0:
+		raise Exception(f"docker compose up redis failed: {output}")
+
+
+def ensure_infrastructure() -> str:
+	"""Ensure both MariaDB and Redis shared containers are running.
+	Returns the Database Server doc name.
+	"""
+	setup_redis()
+	return ensure_database_server()
