@@ -1,0 +1,38 @@
+services:
+  mariadb:
+    image: mariadb:${MARIADB_VERSION:-10.6}
+    container_name: benchpress-mariadb
+    hostname: benchpress-mariadb
+    restart: always
+    environment:
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD}
+    volumes:
+      - mariadb-data:/var/lib/mysql
+      - ./mariadb.cnf:/etc/mysql/conf.d/benchpress.cnf:ro
+    mem_limit: ${MARIADB_MEM_LIMIT:-1g}
+    networks:
+      - benchpress
+
+  redis:
+    image: redis:7-alpine
+    container_name: benchpress-redis
+    hostname: benchpress-redis
+    restart: always
+    command: redis-server /usr/local/etc/redis/redis.conf
+    volumes:
+      - redis-data:/data
+      - ./redis.conf:/usr/local/etc/redis/redis.conf:ro
+    networks:
+      - benchpress
+
+volumes:
+  mariadb-data:
+    name: benchpress-mariadb-data
+    external: true
+  redis-data:
+    name: benchpress-redis-data
+
+networks:
+  benchpress:
+    name: benchpress
+    external: true

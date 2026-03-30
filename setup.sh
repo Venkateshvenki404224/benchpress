@@ -47,7 +47,7 @@ echo ""
 
 # --- Step 1: Docker group ---
 
-info "Step 1/5: Docker group"
+info "Step 1/6: Docker group"
 
 if groups "$BENCH_USER" | grep -q '\bdocker\b'; then
     success "User '$BENCH_USER' is already in the docker group"
@@ -68,9 +68,81 @@ fi
 
 echo ""
 
-# --- Step 2: IP forwarding ---
+# --- Step 2: Shared infrastructure (MariaDB + Redis) ---
 
-info "Step 2/5: IP forwarding"
+info "Step 2/6: Shared infrastructure (MariaDB + Redis)"
+
+COMPOSE_DIR="$BENCH_DIR/apps/benchpress/benchpress/config"
+COMPOSE_FILE="$COMPOSE_DIR/docker-compose.yml"
+ENV_FILE="$COMPOSE_DIR/.env"
+
+if [ ! -f "$COMPOSE_FILE" ]; then
+    error "docker-compose.yml not found at $COMPOSE_FILE"
+fi
+
+# Generate .env if it doesn't exist
+if [ ! -f "$ENV_FILE" ]; then
+    info "Generating .env file for shared infrastructure..."
+    MARIADB_ROOT_PASSWORD=$(openssl rand -hex 16)
+    cat > "$ENV_FILE" <<EOF
+MARIADB_ROOT_PASSWORD=$MARIADB_ROOT_PASSWORD
+MARIADB_VERSION=10.6
+MARIADB_MEM_LIMIT=1g
+EOF
+    success "Generated .env with random root password"
+else
+    success ".env file already exists"
+    MARIADB_ROOT_PASSWORD=$(grep MARIADB_ROOT_PASSWORD "$ENV_FILE" | cut -d= -f2)
+fi
+
+# Ensure benchpress Docker network exists
+if docker network inspect benchpress &>/dev/null; then
+    success "Docker network 'benchpress' already exists"
+else
+    info "Creating Docker network 'benchpress'..."
+    docker network create --driver bridge --subnet 172.30.0.0/24 benchpress
+    success "Docker network 'benchpress' created"
+fi
+
+# Ensure MariaDB data volume exists (marked external in compose)
+if docker volume inspect benchpress-mariadb-data &>/dev/null; then
+    success "Volume 'benchpress-mariadb-data' already exists"
+else
+    info "Creating volume 'benchpress-mariadb-data'..."
+    docker volume create benchpress-mariadb-data
+    success "Volume created"
+fi
+
+# Bring up MariaDB + Redis
+info "Starting shared MariaDB and Redis containers..."
+docker compose -f "$COMPOSE_FILE" up -d
+success "Shared infrastructure is running"
+
+# Wait for MariaDB to be ready
+info "Waiting for MariaDB to accept connections..."
+for i in $(seq 1 30); do
+    if docker exec benchpress-mariadb mariadb -u root -p"$MARIADB_ROOT_PASSWORD" -e "SELECT 1" &>/dev/null; then
+        success "MariaDB is ready"
+        break
+    fi
+    if [ "$i" -eq 30 ]; then
+        error "MariaDB did not become ready in 60 seconds"
+    fi
+    sleep 2
+done
+
+# Verify Redis
+if docker exec benchpress-redis redis-cli ping 2>/dev/null | grep -q PONG; then
+    success "Redis is ready"
+else
+    warn "Redis not responding — check 'docker logs benchpress-redis'"
+fi
+
+echo ""
+
+# --- Step 3: IP forwarding ---
+
+info "Step 3/6: IP forwarding"
 
 SYSCTL_CONF="/etc/sysctl.d/99-benchpress.conf"
 
@@ -93,9 +165,9 @@ fi
 
 echo ""
 
-# --- Step 3: Sudoers for WireGuard ---
+# --- Step 4: Sudoers for WireGuard ---
 
-info "Step 3/5: Sudoers (WireGuard + Docker socket)"
+info "Step 4/6: Sudoers (WireGuard + Docker socket)"
 
 SUDOERS_FILE="/etc/sudoers.d/benchpress"
 
@@ -122,9 +194,9 @@ fi
 
 echo ""
 
-# --- Step 4: WireGuard install check ---
+# --- Step 5: WireGuard install check ---
 
-info "Step 4/5: WireGuard tools"
+info "Step 5/6: WireGuard tools"
 
 if command -v wg &>/dev/null && command -v wg-quick &>/dev/null; then
     success "WireGuard tools already installed ($(wg --version 2>/dev/null || echo 'wg found'))"
@@ -137,9 +209,9 @@ fi
 
 echo ""
 
-# --- Step 5: WireGuard server init ---
+# --- Step 6: WireGuard server init ---
 
-info "Step 5/5: WireGuard server initialization"
+info "Step 6/6: WireGuard server initialization"
 
 if sudo wg show wg0 &>/dev/null 2>&1; then
     success "wg0 interface is already running"
@@ -176,8 +248,7 @@ echo ""
 echo "  1. If group change was needed: log out, log back in, then restart bench"
 echo "     $ bench start"
 echo ""
-echo "  2. Open BenchPress Settings in Frappe Desk:"
-echo "     /app/benchpress-settings"
+echo "  2. Open BenchPress Settings DocType in Frappe Desk:"
 echo ""
 echo "  3. Fill in:"
 echo "     - WG Server Public Key  : (shown above)"

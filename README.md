@@ -22,7 +22,7 @@
 
 ## What is BenchPress?
 
-[![Watch the video](https://img.youtube.com/vi/6NnA6yBX0y0/maxresdefault.jpg)](https://www.youtube.com/watch?v=DzTNwA39PqA)
+[![Watch the video](https://img.youtube.com/vi/DzTNwA39PqA/maxresdefault.jpg)](https://www.youtube.com/watch?v=DzTNwA39PqA)
 
 ---
 
@@ -44,12 +44,20 @@
 - [Project Structure](#project-structure)
 - [Real-Time Communication](#real-time-communication)
 - [Networking](#networking)
-- [WireGuard Setup Guide](docs/wireguard-setup.md)
 - [Supported Frappe Apps](#supported-frappe-apps)
 - [VPN Device Management](#vpn-device-management)
 - [Configuration Reference](#configuration-reference)
 - [Contributing](#contributing)
 - [License](#license)
+
+### Detailed Guides
+
+- [Getting Started](docs/getting-started.md) -- Installation and first setup
+- [Creating Labs & Deploying](docs/creating-labs.md) -- Labs, builds, and deployments
+- [Connecting to Benches](docs/connecting-to-benches.md) -- SSH, VPN, and connection info
+- [Logs & Monitoring](docs/logs-and-monitoring.md) -- Build logs, deploy logs, and stats
+- [VPN Device Management](docs/device-management.md) -- Register devices for WireGuard access
+- [WireGuard Setup](docs/wireguard-setup.md) -- Detailed WireGuard configuration
 
 ---
 
@@ -119,10 +127,13 @@ BenchPress is a **self-hosted Frappe Cloud alternative** built entirely as a Fra
                  (iptables)       | Bench | |Bench| | Bench  |   | benchpress-      |
                  22,8000,9000     | Ctr 1 | |Ctr 2| | Ctr N  +-->| mariadb          |
                      |            |       | |     | |        |   | (shared MariaDB) |
-                     +----------->| Redis | |Redis| | Redis  |   +------------------+
-                                  | SSH   | |SSH  | | SSH    |
+                     +----------->| SSH   | |SSH  | | SSH    |   +------------------+
                                   | Frappe| |Frapp| | Frappe |
-                                  +-------+ +-----+ +--------+
+                                  +---+---+ +--+--+ +---+----+   +------------------+
+                                      |        |        |         | benchpress-      |
+                                      +--------+--------+-------->| redis            |
+                                                                  | (shared Redis)   |
+                                                                  +------------------+
 ```
 
 ### How the Pieces Fit Together
@@ -133,9 +144,10 @@ BenchPress is a **self-hosted Frappe Cloud alternative** built entirely as a Fra
 | **Redis Queue (RQ)** | Processes long-running background jobs: Docker image builds (up to 60 min) and container deployments |
 | **Docker Engine** | Builds images from the 5-layer Dockerfile template, creates and manages containers with CPU/memory limits |
 | **WireGuard (wg0)** | Kernel-level VPN on the host. Each bench gets a unique IP (10.10.0.X). iptables DNAT rules route ports 22, 8000, and 9000 from the WG IP to the container |
-| **Shared MariaDB** | A single `benchpress-mariadb` container shared across all bench containers. Each site gets its own database (named by SHA1 hash of the site name). Managed via the Database Server DocType |
+| **Shared MariaDB** | A `benchpress-mariadb` container shared across all benches, managed via `docker-compose.yml`. Each site gets its own database (named by SHA1 hash). Managed via the Database Server DocType |
+| **Shared Redis** | A `benchpress-redis` container shared across all benches. DB 0 = cache, DB 1 = queue, DB 2 = socketio. Also managed via `docker-compose.yml` with `restart: always` |
 | **Stats Collector** | Cron job running every 2 minutes that polls Docker stats API for all running containers and updates CPU/memory metrics |
-| **Each Container** | A Frappe bench with Redis, SSH server, and all pre-installed apps. MariaDB is provided by the shared container. Users SSH in and run `bench start` |
+| **Each Container** | A Frappe bench with SSH server and all pre-installed apps. MariaDB and Redis are provided by the shared containers. Users SSH in and run `bench start` |
 
 ---
 
@@ -147,10 +159,11 @@ BenchPress is a **self-hosted Frappe Cloud alternative** built entirely as a Fra
  +-----------+     +------------------+     +---------------------+     +-------------+
  |           |     |                  |     |                     |     |             |
  | Lab ID    |     | Layer 1: apt     |     | 1. Check image      |     | WireGuard   |
- | Frappe v  +---->| Layer 2: SSH     +---->| 2. Create container +---->| client .conf|
- | Apps[]    |     | Layer 3: bench   |     | 3. Start container  |     |             |
- | CPU/Mem   |     | Layer 4: apps    |     | 4. Setup WireGuard  |     | ssh frappe@ |
- |           |     | Layer 5: site    |     | 5. Set SSH password |     | 10.10.0.X   |
+ | Frappe v  +---->| Layer 2: SSH     +---->| 2. Ensure shared    +---->| client .conf|
+ | Apps[]    |     | Layer 3: bench   |     |    MariaDB + Redis  |     |             |
+ | CPU/Mem   |     | Layer 4: apps    |     | 3. Create container |     | ssh frappe@ |
+ |           |     | Layer 5: site    |     | 4. Setup WireGuard  |     | 10.10.0.X   |
+ |           |     |                  |     | 5. Set SSH password |     |             |
  +-----------+     +------------------+     +---------------------+     +-------------+
    Status:            Cached layers            Logs streamed via          Ports:
    Draft              rebuild only             WebSocket in               22   -> SSH
@@ -168,8 +181,8 @@ BenchPress is a **self-hosted Frappe Cloud alternative** built entirely as a Fra
 | **Frontend** | Vue 3 + Vite + TailwindCSS + frappe-ui | Modern SPA dashboard with real-time updates |
 | **Containers** | Docker Engine (Python SDK) | Image builds, container lifecycle, resource limits |
 | **VPN** | WireGuard (kernel-level) | Secure SSH/web access to containers without exposed ports |
-| **Database** | MariaDB (shared container) | Single MariaDB container shared across all benches; each site gets its own database |
-| **Cache/Queue** | Redis + RQ (per container + host) | Background job processing and caching |
+| **Database** | MariaDB (shared container) | Single `benchpress-mariadb` container shared across all benches via docker-compose |
+| **Cache/Queue** | Redis (shared container) + RQ | Single `benchpress-redis` container shared across all benches; RQ for background jobs on host |
 | **Real-time** | Socket.io via Frappe | Live log streaming during builds and deployments |
 | **Routing** | iptables DNAT | Routes WireGuard peer IPs to container Docker IPs |
 | **Linting** | Ruff (Python) + Biome (JS) | Code quality enforcement |
@@ -360,9 +373,10 @@ Before installing BenchPress, ensure your host machine has:
 | Python | 3.14+ | Backend runtime |
 | Node.js | 24+ | Frontend build toolchain |
 | Docker Engine | 20+ | Container management (must be running) |
+| Docker Compose | v2+ | Manages shared MariaDB + Redis infrastructure |
 | WireGuard | Any | VPN (`wg` and `wg-quick` commands available) |
-| MariaDB | 10.6+ | Host database for Frappe |
-| Redis | 6+ | Host queue and cache for Frappe |
+
+> **Note:** MariaDB and Redis for bench containers are managed automatically via Docker Compose (`benchpress-mariadb` and `benchpress-redis` containers). You only need MariaDB and Redis on the host for Frappe itself.
 
 ### Required: Docker socket access
 
@@ -407,6 +421,22 @@ sudo chmod 0440 /etc/sudoers.d/benchpress-wg
 
 ## Installation
 
+### Quick Setup (TL;DR)
+
+```bash
+cd /path/to/your/frappe-bench
+bench get-app https://github.com/Venkateshvenki404224/benchpress --branch develop
+bench pip install docker
+bench --site your-site.localhost install-app benchpress
+bench --site your-site.localhost migrate
+bash apps/benchpress/setup.sh your-site.localhost
+cd apps/benchpress/frontend && yarn install && yarn build
+bench start
+# Open http://your-site.localhost:8000/frontend
+```
+
+### Detailed Steps
+
 ### 1. Get the app and install dependencies
 
 ```bash
@@ -427,7 +457,7 @@ bench --site your-site.localhost migrate
 
 ### 2. Run the setup script
 
-BenchPress ships with a setup script that handles Docker permissions, IP forwarding, sudoers, WireGuard install, and server initialization in one go:
+BenchPress ships with a setup script that handles everything in 6 steps:
 
 ```bash
 cd /path/to/your/frappe-bench
@@ -435,12 +465,15 @@ bash apps/benchpress/setup.sh your-site.localhost
 ```
 
 The script is **idempotent** — safe to run multiple times. It will:
-- Add your bench user to the `docker` group
-- Enable IP forwarding (runtime + persistent via `/etc/sysctl.d/99-benchpress.conf`)
-- Write `/etc/sudoers.d/benchpress` for passwordless `wg` and `wg-quick`
-- Install `wireguard-tools` if missing
-- Call `setup_wg_server()` to generate keys, write `wg0.conf`, and bring up `wg0`
-- Print the **WireGuard Server Public Key** you need for BenchPress Settings
+
+1. **Docker group** — Add your bench user to the `docker` group
+2. **Shared infrastructure** — Start `benchpress-mariadb` and `benchpress-redis` containers via docker-compose (generates a random root password, creates the Docker network and volumes, waits for services to be ready)
+3. **IP forwarding** — Enable via sysctl (runtime + persistent)
+4. **Sudoers** — Write `/etc/sudoers.d/benchpress` for passwordless `wg` and `wg-quick`
+5. **WireGuard tools** — Install `wireguard-tools` if missing
+6. **WireGuard server** — Generate keys, write `wg0.conf`, bring up `wg0`
+
+The script prints the **WireGuard Server Public Key** you need for BenchPress Settings.
 
 > **After the script:** If the docker group was just added, log out and back in, then `bench start`.
 
@@ -640,6 +673,13 @@ benchpress/
 |   +-- device_manager.py         # VPN device registration and config generation
 |   +-- stats_collector.py        # Cron job: poll Docker stats every 2 minutes
 |   +-- hooks.py                  # App config: routes, scheduler, ignore_links_on_delete
+|   +-- mariadb_manager.py        # Shared MariaDB + Redis lifecycle (docker compose)
+|   +-- config/
+|   |   +-- docker-compose.yml    # Shared infrastructure (MariaDB + Redis)
+|   |   +-- mariadb.cnf           # MariaDB custom configuration
+|   |   +-- redis.conf            # Redis custom configuration
+|   |   +-- .env.example          # Environment variable template
+|   |   +-- benchpress-infra.service  # Systemd unit for auto-start on boot
 |   +-- lab-templates/
 |   |   +-- Dockerfile            # 5-layer cached image build
 |   |   +-- scripts/
@@ -693,6 +733,7 @@ benchpress/
 | `docker_manager.py` | ~190 | Docker SDK wrapper. Builds images, creates/starts/stops containers, executes commands inside containers, collects stats. |
 | `wg_manager.py` | ~210 | WireGuard VPN management. Generates keypairs, allocates IPs, manages peers, configures iptables DNAT routing for ports 22/8000/9000. |
 | `device_manager.py` | ~110 | VPN device registration. Creates Bench Device docs, generates WireGuard keypairs, allocates IPs, and builds client configs. |
+| `mariadb_manager.py` | ~400 | Shared MariaDB + Redis lifecycle via docker-compose. Setup, start, stop, health checks, backups, SQL execution. |
 | `stats_collector.py` | ~35 | Cron job (every 2 min). Polls Docker stats for running containers, updates CPU/memory fields. |
 | `hooks.py` | ~240 | App configuration: routes, scheduler events, `add_to_apps_screen`, `ignore_links_on_delete`. |
 
@@ -752,17 +793,26 @@ The result: users connect to the VPN and access the container directly at its al
 | Frappe Web | `http://10.10.0.X:8000` | Frappe development server |
 | Socket.io | `http://10.10.0.X:9000` | Real-time events |
 
+### Shared Infrastructure (Docker Compose)
+
+Managed via `benchpress/config/docker-compose.yml` with `restart: always`:
+
+| Container | Image | Purpose |
+|-----------|-------|---------|
+| `benchpress-mariadb` | `mariadb:10.6` | Shared database for all bench sites. Each site gets its own DB (SHA1-named) |
+| `benchpress-redis` | `redis:7-alpine` | Shared cache (DB 0), queue (DB 1), and socketio (DB 2) for all benches |
+
 ### Container Internals
 
-Each container runs as a single self-contained unit with all services:
+Each bench container connects to the shared infrastructure over the `benchpress` Docker network:
 
-| Service | Port | Started By |
-|---------|------|------------|
-| MariaDB | 3306 | `entry.sh` (on boot) |
-| Redis | 6379 | `entry.sh` (on boot) |
-| SSH Server | 22 | `entry.sh` (on boot) |
+| Service | Port | Details |
+|---------|------|---------|
+| SSH Server | 22 | Started by `entry.sh` on boot |
 | Frappe Web | 8000 | User runs `bench start` |
 | Socket.io | 9000 | User runs `bench start` |
+| MariaDB | -- | External: `benchpress-mariadb:3306` via Docker DNS |
+| Redis | -- | External: `benchpress-redis:6379` via Docker DNS |
 
 ---
 
@@ -818,6 +868,8 @@ Device management uses the **Bench Device** DocType and is exposed through four 
 | Schedule | Function | Description |
 |----------|----------|-------------|
 | Every 1 minute | `benchpress.stats_collector.collect_all_stats` | Polls Docker and WireGuard stats, updates CPU/memory metrics and VPN transfer counters |
+| Every 5 minutes | `benchpress.mariadb_manager.scheduled_health_check` | Checks shared MariaDB health, attempts restart if down |
+| Daily at 2 AM | `benchpress.mariadb_manager.scheduled_backup` | Full MariaDB backup with 7-day retention |
 
 ---
 
