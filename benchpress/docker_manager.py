@@ -1,10 +1,33 @@
 # Copyright (c) 2026, Venkatesh and contributors
 # For license information, please see license.txt
 
+import json
 import os
+import subprocess
 
 import docker
 import frappe
+
+DEFAULT_PIDS_LIMIT = 500
+DEFAULT_IOPS = 1000
+DEFAULT_BPS = 40 * 1024 * 1024
+
+
+def _get_host_block_devices() -> list[str]:
+	try:
+		result = subprocess.run(
+			["lsblk", "--json", "-d", "-o", "NAME,TYPE"],
+			capture_output=True,
+			text=True,
+			timeout=5,
+			check=False,
+		)
+		if result.returncode != 0:
+			return []
+		data = json.loads(result.stdout)
+		return [f"/dev/{blk['name']}" for blk in data.get("blockdevices", []) if blk.get("type") == "disk"]
+	except (subprocess.SubprocessError, json.JSONDecodeError, OSError):
+		return []
 
 
 def get_client() -> docker.DockerClient:
@@ -19,8 +42,6 @@ def get_lab_template_dir() -> str:
 
 def build_lab_image(lab_doc, log_fn=None, no_cache: bool = False) -> str:
 	"""Build Docker image with bench + apps (site created at runtime against shared MariaDB)."""
-	import json
-
 	template_dir = get_lab_template_dir()
 	image_tag = f"benchpress/{lab_doc.lab_id}:latest"
 	version_branch = lab_doc.frappe_version
@@ -85,6 +106,15 @@ def create_bench_container(bench_doc, lab_doc) -> str:
 		"benchpress.lab": lab_doc.lab_id,
 	}
 
+	pids_limit = int(getattr(lab_doc, "pids_limit", None) or DEFAULT_PIDS_LIMIT)
+	iops = int(getattr(lab_doc, "iops_limit", None) or DEFAULT_IOPS)
+	bps = int(getattr(lab_doc, "bps_limit", None) or DEFAULT_BPS)
+
+	device_read_iops = [{"Path": dev, "Rate": iops} for dev in _get_host_block_devices()]
+	device_write_iops = [{"Path": dev, "Rate": iops} for dev in _get_host_block_devices()]
+	device_read_bps = [{"Path": dev, "Rate": bps} for dev in _get_host_block_devices()]
+	device_write_bps = [{"Path": dev, "Rate": bps} for dev in _get_host_block_devices()]
+
 	container = client.containers.create(
 		image=lab_doc.image_tag,
 		name=name,
@@ -98,6 +128,11 @@ def create_bench_container(bench_doc, lab_doc) -> str:
 		},
 		mem_limit=lab_doc.memory_limit or "512m",
 		nano_cpus=int((lab_doc.cpu_cores or 1) * 1e9),
+		pids_limit=pids_limit,
+		device_read_iops=device_read_iops or None,
+		device_write_iops=device_write_iops or None,
+		device_read_bps=device_read_bps or None,
+		device_write_bps=device_write_bps or None,
 		network="benchpress",
 	)
 

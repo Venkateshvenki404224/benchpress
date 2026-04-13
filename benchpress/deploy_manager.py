@@ -79,17 +79,25 @@ def deploy_bench(bench_name: str) -> None:
 		bench.save(ignore_permissions=True)
 		frappe.db.commit()
 
-		admin_password = "admin"
+		admin_password = secrets.token_urlsafe(10)
 		bench.admin_password = admin_password
 
-		# Step 1: Build lab image if not ready
+		append_log("=== Checking shared infrastructure (MariaDB + Redis) ===")
+		db_server_name = ensure_infrastructure()
+		db_server = frappe.get_doc("Database Server", db_server_name)
+		wait_for_mariadb(db_server_name, timeout=60)
+		append_log(f"MariaDB reachable at {db_server.container_name}:{db_server.port or 3306}")
+
+		bench.database_server = db_server_name
+		bench.save(ignore_permissions=True)
+		frappe.db.commit()
+
 		if lab.status != "Ready" or not lab.image_tag:
 			append_log(f"=== Building lab image for {lab.title} ===")
 			_build_lab_with_logs(lab, append_log)
 		else:
 			append_log(f"Using cached lab image: {lab.image_tag}")
 
-		# Step 2: Create and start container
 		_remove_stale_container(bench)
 		append_log("=== Creating container ===")
 		container_id = create_bench_container(bench, lab)
@@ -101,7 +109,6 @@ def deploy_bench(bench_name: str) -> None:
 		start_container(container_id)
 		time.sleep(5)
 
-		# Step 3: Capture container IP
 		from benchpress.wg_manager import _get_container_ip
 
 		container_ip = _get_container_ip(container_id)
@@ -110,7 +117,6 @@ def deploy_bench(bench_name: str) -> None:
 			bench.save(ignore_permissions=True)
 			frappe.db.commit()
 
-		# Step 4: WireGuard VPN setup
 		settings = frappe.get_cached_doc("BenchPress Settings")
 		if settings.wg_server_public_key and settings.wg_server_endpoint:
 			from benchpress.wg_manager import (
@@ -153,18 +159,6 @@ def deploy_bench(bench_name: str) -> None:
 		else:
 			append_log("WireGuard not configured, skipping VPN.", "warning")
 
-		# Step 5: Ensure shared infrastructure (MariaDB + Redis) is running
-		append_log("=== Ensuring shared infrastructure is running ===")
-		db_server_name = ensure_infrastructure()
-		db_server = frappe.get_doc("Database Server", db_server_name)
-		wait_for_mariadb(db_server_name, timeout=60)
-		append_log(f"MariaDB ready at {db_server.container_name}:{db_server.port or 3306}")
-
-		bench.database_server = db_server_name
-		bench.save(ignore_permissions=True)
-		frappe.db.commit()
-
-		# Step 6: Write common_site_config.json with Docker DNS host
 		bench_dir = f"{lab.mount_target or '/home/frappe'}/frappe-bench"
 		site_name = bench.site_name
 		config = {
@@ -182,7 +176,6 @@ def deploy_bench(bench_name: str) -> None:
 		)
 		append_log("common_site_config.json written")
 
-		# Step 7: Create site via temp user pattern (press agent/bench.py:194-206)
 		append_log(f"=== Creating site {site_name} ===")
 
 		db_name, temp_user, temp_password = create_mariadb_user(db_server_name, site_name)
@@ -212,7 +205,6 @@ def deploy_bench(bench_name: str) -> None:
 		append_log("Building assets...")
 		exec_in_container(container_id, "bench build", user="frappe", workdir=bench_dir)
 
-		# Step 8: User provisioning via linkuser.sh
 		if not bench.ssh_username:
 			bench.ssh_username = bench.owner.split("@")[0].lower()[:32] or "frappe"
 
@@ -272,7 +264,6 @@ def redeploy_bench(bench_name: str) -> None:
 		except Exception:
 			pass
 
-	# Remove the data volume so bench new-site runs clean on redeploy
 	from benchpress.docker_manager import get_client
 
 	client = get_client()
@@ -282,7 +273,6 @@ def redeploy_bench(bench_name: str) -> None:
 	except Exception:
 		pass
 
-	# Drop the site database from shared MariaDB so bench new-site can recreate it
 	if bench.database_server and bench.site_name:
 		from benchpress.mariadb_manager import drop_site_database
 
