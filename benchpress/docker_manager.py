@@ -23,10 +23,15 @@ def _get_host_block_devices() -> list[str]:
 			check=False,
 		)
 		if result.returncode != 0:
+			frappe.log_error(
+				title="lsblk enumeration failed",
+				message=f"exit={result.returncode} stderr={result.stderr}",
+			)
 			return []
 		data = json.loads(result.stdout)
 		return [f"/dev/{blk['name']}" for blk in data.get("blockdevices", []) if blk.get("type") == "disk"]
-	except (subprocess.SubprocessError, json.JSONDecodeError, OSError):
+	except (subprocess.SubprocessError, json.JSONDecodeError, OSError) as e:
+		frappe.log_error(title="lsblk enumeration failed", message=str(e))
 		return []
 
 
@@ -110,17 +115,18 @@ def create_bench_container(bench_doc, lab_doc) -> str:
 	iops = int(getattr(lab_doc, "iops_limit", None) or DEFAULT_IOPS)
 	bps = int(getattr(lab_doc, "bps_limit", None) or DEFAULT_BPS)
 
-	device_read_iops = [{"Path": dev, "Rate": iops} for dev in _get_host_block_devices()]
-	device_write_iops = [{"Path": dev, "Rate": iops} for dev in _get_host_block_devices()]
-	device_read_bps = [{"Path": dev, "Rate": bps} for dev in _get_host_block_devices()]
-	device_write_bps = [{"Path": dev, "Rate": bps} for dev in _get_host_block_devices()]
+	devices = _get_host_block_devices()
+	device_read_iops = [{"Path": dev, "Rate": iops} for dev in devices]
+	device_write_iops = [{"Path": dev, "Rate": iops} for dev in devices]
+	device_read_bps = [{"Path": dev, "Rate": bps} for dev in devices]
+	device_write_bps = [{"Path": dev, "Rate": bps} for dev in devices]
 
 	container = client.containers.create(
 		image=lab_doc.image_tag,
 		name=name,
 		labels=labels,
 		detach=True,
-		hostname=lab_doc.lab_id,
+		hostname=name,
 		privileged=True,
 		cap_add=["NET_ADMIN"],
 		volumes={
