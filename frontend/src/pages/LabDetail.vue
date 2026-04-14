@@ -288,7 +288,9 @@
 										<div class="flex flex-1 items-center gap-2">
 											<code
 												class="flex-1 rounded bg-surface-gray-1 px-4 py-2.5 font-mono text-sm text-ink-gray-8"
-												>{{ codeServerPassword ? "••••••••••••" : "—" }}</code
+												>{{
+													codeServerPassword ? "••••••••••••" : "—"
+												}}</code
 											>
 											<Button
 												icon="copy"
