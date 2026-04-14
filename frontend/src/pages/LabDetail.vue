@@ -47,6 +47,19 @@
 					@click="showDeployConfirm = true"
 					>Deploy</Button
 				>
+				<Button
+					v-if="
+						activeBench &&
+						activeBench.status === 'Running' &&
+						lab.doc.enable_code_server &&
+						codeServerUrl
+					"
+					theme="blue"
+					variant="solid"
+					size="lg"
+					@click="openCodeServer"
+					>Open VS Code</Button
+				>
 				<!-- Instance running: show Stop -->
 				<Button
 					v-if="activeBench && activeBench.status === 'Running'"
@@ -240,6 +253,50 @@
 												appearance="minimal"
 												size="sm"
 												@click="copyText(siteUrl)"
+											/>
+										</div>
+									</div>
+									<div
+										v-if="lab.doc.enable_code_server && codeServerUrl"
+										class="flex items-center gap-4 py-3"
+									>
+										<label
+											class="w-36 shrink-0 text-sm font-medium text-ink-gray-9"
+											>VS Code URL</label
+										>
+										<div class="flex flex-1 items-center gap-2">
+											<code
+												class="flex-1 rounded bg-surface-gray-1 px-4 py-2.5 font-mono text-sm text-ink-gray-8"
+												>{{ codeServerUrl }}</code
+											>
+											<Button
+												icon="copy"
+												appearance="minimal"
+												size="sm"
+												@click="copyText(codeServerUrl)"
+											/>
+										</div>
+									</div>
+									<div
+										v-if="lab.doc.enable_code_server && codeServerPassword"
+										class="flex items-center gap-4 py-3"
+									>
+										<label
+											class="w-36 shrink-0 text-sm font-medium text-ink-gray-9"
+											>VS Code Password</label
+										>
+										<div class="flex flex-1 items-center gap-2">
+											<code
+												class="flex-1 rounded bg-surface-gray-1 px-4 py-2.5 font-mono text-sm text-ink-gray-8"
+												>{{
+													codeServerPassword ? "••••••••••••" : "—"
+												}}</code
+											>
+											<Button
+												icon="copy"
+												appearance="minimal"
+												size="sm"
+												@click="copyText(codeServerPassword)"
 											/>
 										</div>
 									</div>
@@ -569,6 +626,8 @@ const siteColumns = [
 const sshUsername = computed(() => activeBench.value?.ssh_username || null);
 const sshPassword = computed(() => activeBench.value?.ssh_password || null);
 const adminPassword = computed(() => activeBench.value?.admin_password || null);
+const codeServerUrl = computed(() => activeBench.value?.code_server_url || null);
+const codeServerPassword = computed(() => activeBench.value?.code_server_password || null);
 const benchIp = computed(
 	() => activeBench.value?.wg_ip || activeBench.value?.container_ip || null
 );
@@ -823,6 +882,13 @@ const benchAction = createResource({
 		benches.reload();
 	},
 });
+
+function openCodeServer() {
+	const url = codeServerUrl.value;
+	if (url) {
+		window.open(url, "_blank");
+	}
+}
 
 function doBenchAction(action) {
 	if (!activeBench.value) return;

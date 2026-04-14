@@ -283,13 +283,36 @@ def check_mariadb_health(db_server_name: str) -> bool:
 		return False
 
 
+PASSWORD_MISMATCH_MSG = (
+	"MariaDB root password mismatch: the data volume was initialized with a "
+	"different password than the one in the Database Server doc. Remove the "
+	"volume (docker volume rm benchpress-mariadb-data) and re-run setup to "
+	"reinitialize, or update the doc password to match the volume."
+)
+
+
+def _detect_password_mismatch(container) -> bool:
+	try:
+		logs = container.logs(tail=50).decode("utf-8", errors="replace")
+		return logs.count("Access denied for user 'root'") >= 3
+	except Exception:
+		return False
+
+
+def _resolve_poll_container(db_server_name: str):
+	try:
+		db_server = frappe.get_doc("Database Server", db_server_name)
+		return get_client().containers.get(db_server.container_name)
+	except Exception:
+		return None
+
+
 def wait_for_mariadb(
 	db_server_name: str = "",
 	timeout: int = 60,
 	container=None,
 	root_pw: str = "",
 ) -> None:
-	"""Poll until MariaDB is ready. Raise on timeout."""
 	if container and root_pw:
 		for _ in range(timeout // 2):
 			exit_code, _ = container.exec_run(
@@ -297,12 +320,19 @@ def wait_for_mariadb(
 			)
 			if exit_code == 0:
 				return
+			if _detect_password_mismatch(container):
+				raise Exception(PASSWORD_MISMATCH_MSG)
 			time.sleep(2)
 		raise Exception(f"MariaDB not ready after {timeout}s")
 
+	poll_container = None
 	for _ in range(timeout // 2):
 		if check_mariadb_health(db_server_name):
 			return
+		if poll_container is None and db_server_name:
+			poll_container = _resolve_poll_container(db_server_name)
+		if poll_container and _detect_password_mismatch(poll_container):
+			raise Exception(PASSWORD_MISMATCH_MSG)
 		time.sleep(2)
 	raise Exception(f"MariaDB not ready after {timeout}s")
 

@@ -20,6 +20,7 @@
   "cpu_cores",
   "column_break_resources",
   "enable_ssh",
+  "enable_code_server",
   "shell",
   "container_section",
   "mount_target",
@@ -153,6 +154,12 @@
    "label": "Raw Build Log",
    "options": "Shell",
    "read_only": 1
+  },
+  {
+   "default": "1",
+   "fieldname": "enable_code_server",
+   "fieldtype": "Check",
+   "label": "Enable Code Server"
   }
  ],
  "grid_page_length": 50,
@@ -167,7 +174,7 @@
    "link_fieldname": "lab"
   }
  ],
- "modified": "2026-03-27 12:00:00.000000",
+ "modified": "2026-04-14 02:51:00.304485",
  "modified_by": "Administrator",
  "module": "Benchpress",
  "name": "Lab",
