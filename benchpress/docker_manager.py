@@ -53,9 +53,11 @@ def build_lab_image(lab_doc, log_fn=None, no_cache: bool = False) -> str:
 
 	apps = [{"app_name": a.app_name.lower(), "git_url": a.git_url, "branch": a.branch} for a in lab_doc.apps]
 
+	settings = frappe.get_cached_doc("BenchPress Settings")
 	build_args = {
 		"FRAPPE_BRANCH": version_branch,
 		"APPS_JSON": json.dumps(apps),
+		"CODE_SERVER_VERSION": settings.code_server_version or "4.96.4",
 	}
 
 	if log_fn:
@@ -71,6 +73,7 @@ def build_lab_image(lab_doc, log_fn=None, no_cache: bool = False) -> str:
 		rm=True,
 		decode=True,
 		nocache=no_cache,
+		network_mode="host",
 	)
 
 	for chunk in stream:

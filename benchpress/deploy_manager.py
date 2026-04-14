@@ -229,6 +229,34 @@ def deploy_bench(bench_name: str) -> None:
 			raise Exception(f"linkuser.sh failed (exit {exit_code}): {output}")
 
 		bench.ssh_password = ssh_password
+
+		if getattr(lab, "enable_code_server", 0):
+			append_log("=== Provisioning code-server ===")
+			cs_user = bench.ssh_username
+			cs_home = f"/home/{cs_user}"
+			code_server_password = secrets.token_urlsafe(16)
+			config_yaml = (
+				f"bind-addr: 0.0.0.0:8080\nauth: password\npassword: {code_server_password}\ncert: false\n"
+			)
+			write_file_to_container(
+				container_id,
+				config_yaml,
+				f"{cs_home}/.config/code-server/config.yaml",
+			)
+			exec_in_container(
+				container_id,
+				f"chown -R {cs_user}:{cs_user} {cs_home}/.config && chmod 600 {cs_home}/.config/code-server/config.yaml",
+				user="root",
+			)
+			exec_in_container(
+				container_id,
+				f"sudo -u {cs_user} screen -d -m -S codeserver code-server {cs_home}/frappe-bench",
+				user="root",
+			)
+			bench.code_server_password = code_server_password
+			bench.code_server_url = f"http://{bench.wg_ip or bench.container_ip or '127.0.0.1'}:8080/"
+			append_log(f"code-server ready at {bench.code_server_url}")
+
 		bench.status = "Running"
 		bench.started_at = frappe.utils.now_datetime()
 		bench.save(ignore_permissions=True)

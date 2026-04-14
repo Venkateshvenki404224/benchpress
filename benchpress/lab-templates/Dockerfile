@@ -12,6 +12,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     mariadb-client \
     redis-server \
     openssh-server \
+    screen \
+    curl ca-certificates \
     sudo nano htop \
     net-tools iproute2 wireguard-tools \
     && rm -rf /var/lib/apt/lists/*
@@ -25,6 +27,11 @@ RUN mkdir -p /var/run/sshd \
 RUN mkdir -p /opt/benchpress/scripts
 COPY scripts/ /opt/benchpress/scripts/
 RUN chmod +x /opt/benchpress/scripts/*
+
+ARG CODE_SERVER_VERSION=4.96.4
+RUN curl -fsSL "https://github.com/coder/code-server/releases/download/v${CODE_SERVER_VERSION}/code-server_${CODE_SERVER_VERSION}_amd64.deb" -o /tmp/cs.deb \
+    && apt-get update && apt-get install -y --no-install-recommends /tmp/cs.deb \
+    && rm -rf /tmp/cs.deb /var/lib/apt/lists/*
 
 # --- Layer 3: bench init (changes only when FRAPPE_BRANCH changes) ---
 USER frappe
@@ -41,6 +48,8 @@ WORKDIR /home/frappe/frappe-bench
 ARG APPS_JSON=[]
 RUN /opt/benchpress/scripts/install-apps.sh "$APPS_JSON"
 
-EXPOSE 8000 9000 22
+USER root
+
+EXPOSE 8000 9000 22 8080
 
 CMD ["/opt/benchpress/scripts/entry.sh"]

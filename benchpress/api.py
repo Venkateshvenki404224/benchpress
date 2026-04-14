@@ -65,7 +65,6 @@ def get_lab(name: str) -> dict:
 
 @frappe.whitelist()
 def build_lab_image(lab_name: str) -> dict:
-	"""Trigger lab image build as a background job."""
 	require_admin()
 	frappe.enqueue(
 		"benchpress.deploy_manager.build_lab",
@@ -95,6 +94,7 @@ def get_benches() -> list[dict]:
 			"memory_usage",
 			"started_at",
 			"ssh_username",
+			"code_server_url",
 		],
 		order_by="creation desc",
 	)
@@ -104,7 +104,7 @@ def get_benches() -> list[dict]:
 	for bench in benches:
 		bench["app_count"] = frappe.db.count("Bench App", {"parent": bench["name"]})
 		bench["site_count"] = frappe.db.count("Bench Site", {"bench": bench["name"]})
-		for field in ("ssh_password", "admin_password"):
+		for field in ("ssh_password", "admin_password", "code_server_password"):
 			try:
 				bench[field] = get_decrypted_password("Bench Instance", bench["name"], field)
 			except frappe.exceptions.ValidationError:
@@ -262,9 +262,6 @@ def get_deploy_logs(bench_name: str) -> list[dict]:
 	)
 
 
-# --- Device endpoints ---
-
-
 @frappe.whitelist()
 def add_device(device_name: str, device_type: str, public_key: str | None = None) -> dict:
 	from benchpress.device_manager import register_device
@@ -292,9 +289,6 @@ def get_device_wg_config(device_name: str) -> str:
 	from benchpress.device_manager import get_device_config
 
 	return get_device_config(device_name)
-
-
-# --- Site endpoints ---
 
 
 @frappe.whitelist()
@@ -336,7 +330,6 @@ def create_site(data: str) -> dict:
 
 
 def _create_site_on_bench(site_doc_name: str) -> None:
-	"""Background job to create a site inside a bench container."""
 	from benchpress.docker_manager import exec_in_container
 	from benchpress.mariadb_manager import create_mariadb_user, drop_mariadb_user
 
@@ -392,9 +385,40 @@ def _create_site_on_bench(site_doc_name: str) -> None:
 
 @frappe.whitelist()
 def get_user_context() -> dict:
-	"""Return the current user's role context for the frontend."""
 	return {
 		"is_admin": is_admin(),
 		"user": frappe.session.user,
 		"roles": frappe.get_roles(frappe.session.user),
 	}
+
+
+@frappe.whitelist()
+def get_code_server_credentials(bench_name: str) -> dict:
+	require_bench_access(bench_name)
+	bench = frappe.get_cached_doc("Bench Instance", bench_name)
+	if bench.status != "Running":
+		frappe.throw(_("Bench must be running to access code-server"))
+	if not bench.code_server_url:
+		frappe.throw(_("Code-server is not enabled for this lab"))
+	from frappe.utils.password import get_decrypted_password
+
+	password = get_decrypted_password("Bench Instance", bench_name, "code_server_password")
+	return {"url": bench.code_server_url, "password": password}
+
+
+@frappe.whitelist()
+def restart_code_server(bench_name: str) -> dict:
+	require_bench_access(bench_name)
+	bench = frappe.get_cached_doc("Bench Instance", bench_name)
+	if bench.status != "Running" or not bench.container_id:
+		frappe.throw(_("Bench must be running"))
+	from benchpress.docker_manager import exec_in_container
+
+	exit_code, output = exec_in_container(
+		bench.container_id,
+		"bash /opt/benchpress/scripts/restart.sh",
+		user="root",
+	)
+	if exit_code != 0:
+		frappe.throw(_("restart failed: {0}").format(output))
+	return {"ok": True}
