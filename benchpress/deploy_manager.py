@@ -113,7 +113,10 @@ def deploy_bench(bench_name: str) -> None:
 	deploy_log_name = deploy_log.name
 
 	append_log = _make_log_appender(
-		"Deploy Log", deploy_log_name, "bench_deploy_log", {"bench": bench_name, "deploy_log": deploy_log_name}
+		"Deploy Log",
+		deploy_log_name,
+		"bench_deploy_log",
+		{"bench": bench_name, "deploy_log": deploy_log_name},
 	)
 
 	try:

@@ -269,7 +269,10 @@ function showConfig(device) {
 				showConfigDialog.value = true;
 				nextTick(() => {
 					if (qrCanvas.value && configText.value) {
-						QRCode.toCanvas(qrCanvas.value, configText.value, { width: 200, margin: 2 });
+						QRCode.toCanvas(qrCanvas.value, configText.value, {
+							width: 200,
+							margin: 2,
+						});
 					}
 				});
 			},
