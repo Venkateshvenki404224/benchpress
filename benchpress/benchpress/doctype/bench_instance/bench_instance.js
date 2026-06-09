@@ -57,39 +57,13 @@ frappe.ui.form.on("Bench Instance", {
 			);
 		}
 
-		if (frm.doc.wg_config && frm.doc.status === "Running") {
-			frm.add_custom_button(
-				__("Download VPN Config"),
-				() => {
-					const blob = new Blob([frm.doc.wg_config], { type: "text/plain" });
-					const url = URL.createObjectURL(blob);
-					const a = document.createElement("a");
-					a.href = url;
-					a.download = `${frm.doc.bench_name || frm.doc.name}.conf`;
-					a.click();
-					URL.revokeObjectURL(url);
-				},
-				__("VPN")
-			);
-
-			frm.add_custom_button(
-				__("Copy VPN Config"),
-				() => {
-					navigator.clipboard.writeText(frm.doc.wg_config).then(() => {
-						frappe.show_alert({
-							message: __("WireGuard config copied to clipboard"),
-							indicator: "green",
-						});
-					});
-				},
-				__("VPN")
-			);
+		if (!frm._realtime_bound) {
+			frm._realtime_bound = true;
+			frappe.realtime.on("bench_deploy_log", (data) => {
+				if (data.bench === frm.doc.name) {
+					frm.reload_doc();
+				}
+			});
 		}
-
-		frappe.realtime.on("bench_deploy_log", (data) => {
-			if (data.bench === frm.doc.name) {
-				frm.reload_doc();
-			}
-		});
 	},
 });

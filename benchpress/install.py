@@ -1,3 +1,6 @@
+# Copyright (c) 2026, Venkatesh and contributors
+# For license information, please see license.txt
+
 import os
 import subprocess
 

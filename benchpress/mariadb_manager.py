@@ -10,8 +10,9 @@ import time
 import uuid
 
 import frappe
+from frappe import _
 
-from benchpress.docker_manager import get_client
+from benchpress.docker_manager import ensure_network, get_client
 
 DEFAULT_MARIADB_CONFIG = """[mysqld]
 character-set-server=utf8mb4
@@ -28,21 +29,6 @@ def _get_config_dir() -> str:
 
 def _get_compose_path() -> str:
 	return os.path.join(_get_config_dir(), "docker-compose.yml")
-
-
-def _ensure_network() -> None:
-	"""Create the benchpress Docker network if it does not exist."""
-	client = get_client()
-	try:
-		client.networks.get("benchpress")
-	except Exception:
-		import docker
-
-		client.networks.create(
-			"benchpress",
-			driver="bridge",
-			ipam=docker.types.IPAMConfig(pool_configs=[docker.types.IPAMPool(subnet="172.30.0.0/24")]),
-		)
 
 
 def _compose_cmd(*args: str) -> tuple[int, str]:
@@ -113,10 +99,10 @@ def setup_database_server(db_server_name: str) -> None:
 
 		_write_mariadb_config(db_server.custom_config)
 		_write_env_file(root_password, version, mem_limit)
-		_ensure_network()
+		client = get_client()
+		ensure_network(client)
 
 		# Ensure named volume exists (marked external in compose)
-		client = get_client()
 		try:
 			client.volumes.get(db_server.volume_name or "benchpress-mariadb-data")
 		except Exception:
@@ -124,17 +110,15 @@ def setup_database_server(db_server_name: str) -> None:
 
 		# Remove existing container if any (clean slate for compose)
 		try:
-			client = get_client()
 			old = client.containers.get(db_server.container_name)
 			old.remove(force=True)
 		except Exception:
-			pass
+			pass  # best-effort
 
 		exit_code, output = _compose_cmd("up", "-d", "mariadb")
 		if exit_code != 0:
 			raise Exception(f"docker compose up failed: {output}")
 
-		client = get_client()
 		container = client.containers.get(db_server.container_name)
 		wait_for_mariadb(db_server_name, container=container, root_pw=root_password, timeout=60)
 
@@ -243,7 +227,7 @@ def create_mariadb_user(
 	for query in queries:
 		exit_code, output = execute_sql(db_server_name, query)
 		if exit_code != 0:
-			frappe.throw(f"Failed to create temp user: {output}")
+			frappe.throw(_("Failed to create temp user: {0}").format(output))
 	return database, user, password
 
 
@@ -277,10 +261,10 @@ def drop_site_database(db_server_name: str, site_name: str) -> None:
 def check_mariadb_health(db_server_name: str) -> bool:
 	"""Check if MariaDB is responding."""
 	try:
-		exit_code, _ = execute_sql(db_server_name, "SELECT 1")
+		exit_code, _output = execute_sql(db_server_name, "SELECT 1")
 		return exit_code == 0
 	except Exception:
-		return False
+		return False  # best-effort
 
 
 PASSWORD_MISMATCH_MSG = (
@@ -296,7 +280,7 @@ def _detect_password_mismatch(container) -> bool:
 		logs = container.logs(tail=50).decode("utf-8", errors="replace")
 		return logs.count("Access denied for user 'root'") >= 3
 	except Exception:
-		return False
+		return False  # best-effort
 
 
 def _resolve_poll_container(db_server_name: str):
@@ -304,7 +288,7 @@ def _resolve_poll_container(db_server_name: str):
 		db_server = frappe.get_doc("Database Server", db_server_name)
 		return get_client().containers.get(db_server.container_name)
 	except Exception:
-		return None
+		return None  # best-effort
 
 
 def wait_for_mariadb(
@@ -313,21 +297,17 @@ def wait_for_mariadb(
 	container=None,
 	root_pw: str = "",
 ) -> None:
-	if container and root_pw:
-		for _ in range(timeout // 2):
-			exit_code, _ = container.exec_run(
+	direct = bool(container and root_pw)
+	poll_container = container if direct else None
+	for _attempt in range(timeout // 2):
+		if direct:
+			exit_code, _output = container.exec_run(
 				cmd=["mariadb", "-u", "root", f"-p{root_pw}", "-e", "SELECT 1"],
 			)
-			if exit_code == 0:
-				return
-			if _detect_password_mismatch(container):
-				raise Exception(PASSWORD_MISMATCH_MSG)
-			time.sleep(2)
-		raise Exception(f"MariaDB not ready after {timeout}s")
-
-	poll_container = None
-	for _ in range(timeout // 2):
-		if check_mariadb_health(db_server_name):
+			healthy = exit_code == 0
+		else:
+			healthy = check_mariadb_health(db_server_name)
+		if healthy:
 			return
 		if poll_container is None and db_server_name:
 			poll_container = _resolve_poll_container(db_server_name)
@@ -386,7 +366,7 @@ def backup_database_server(db_server_name: str, output_path: str = "/var/lib/mys
 		],
 	)
 	if exit_code != 0:
-		frappe.throw(f"Backup failed: {output.decode()}")
+		frappe.throw(_("Backup failed: {0}").format(output.decode()))
 	return backup_file
 
 
@@ -422,7 +402,7 @@ def scheduled_backup():
 
 def setup_redis() -> None:
 	"""Bring up shared Redis container via docker compose."""
-	_ensure_network()
+	ensure_network()
 	exit_code, output = _compose_cmd("up", "-d", "redis")
 	if exit_code != 0:
 		raise Exception(f"docker compose up redis failed: {output}")

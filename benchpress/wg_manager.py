@@ -35,21 +35,13 @@ def get_peer_transfer_stats() -> dict:
 
 
 def generate_keypair() -> dict:
-	if _wg_available():
-		private = subprocess.run(["wg", "genkey"], capture_output=True, text=True, check=True).stdout.strip()
-		public = subprocess.run(
-			["wg", "pubkey"], input=private, capture_output=True, text=True, check=True
-		).stdout.strip()
-		return {"private_key": private, "public_key": public}
-
-	import base64
-	import secrets
-
-	private_bytes = secrets.token_bytes(32)
-	return {
-		"private_key": base64.b64encode(private_bytes).decode(),
-		"public_key": base64.b64encode(private_bytes).decode(),  # placeholder — wg not available
-	}
+	if not _wg_available():
+		frappe.throw(_("WireGuard tools are not installed on this server (wg command not found)."))
+	private = subprocess.run(["wg", "genkey"], capture_output=True, text=True, check=True).stdout.strip()
+	public = subprocess.run(
+		["wg", "pubkey"], input=private, capture_output=True, text=True, check=True
+	).stdout.strip()
+	return {"private_key": private, "public_key": public}
 
 
 def allocate_ip() -> str:
@@ -70,6 +62,7 @@ def generate_peer_config(
 	server_public_key: str,
 	server_endpoint: str,
 	server_port: int,
+	keepalive: int = 30,
 ) -> str:
 	return f"""[Interface]
 PrivateKey = {private_key}
@@ -79,7 +72,7 @@ Address = {peer_ip}/32
 PublicKey = {server_public_key}
 AllowedIPs = 10.10.0.0/24
 Endpoint = {server_endpoint}:{server_port}
-PersistentKeepalive = 30
+PersistentKeepalive = {keepalive}
 """
 
 
@@ -101,9 +94,6 @@ def remove_peer_from_server(public_key: str) -> None:
 		check=True,
 		capture_output=True,
 	)
-
-
-# --- Host WireGuard Server Management ---
 
 
 @frappe.whitelist()
@@ -169,9 +159,6 @@ def sync_wg_config() -> None:
 	subprocess.run(["sudo", "bash", "-c", f"wg-quick save {WG_INTERFACE}"], capture_output=True)
 
 
-# --- Inside-Container VPN Setup ---
-
-
 def _get_container_ip(container_id: str) -> str:
 	from benchpress.docker_manager import get_client
 
@@ -195,7 +182,7 @@ def _get_docker_gateway() -> str:
 		if configs and "Gateway" in configs[0]:
 			return configs[0]["Gateway"]
 	except Exception:
-		pass
+		pass  # best-effort
 	return "172.30.0.1"
 
 
@@ -211,16 +198,13 @@ def setup_container_vpn(
 
 	gateway = _get_docker_gateway()
 
-	config = (
-		f"[Interface]\n"
-		f"PrivateKey = {private_key}\n"
-		f"Address = {peer_ip}/32\n"
-		f"\n"
-		f"[Peer]\n"
-		f"PublicKey = {server_public_key}\n"
-		f"Endpoint = {gateway}:{server_port}\n"
-		f"AllowedIPs = 10.10.0.0/24\n"
-		f"PersistentKeepalive = 25\n"
+	config = generate_peer_config(
+		private_key=private_key,
+		peer_ip=peer_ip,
+		server_public_key=server_public_key,
+		server_endpoint=gateway,
+		server_port=server_port,
+		keepalive=25,
 	)
 
 	exec_in_container(container_id, "mkdir -p /etc/wireguard", user="root")

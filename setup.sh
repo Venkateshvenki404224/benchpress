@@ -188,7 +188,7 @@ else
 fi
 
 # Quick sanity check
-if sudo -n wg show &>/dev/null 2>&1 || sudo -n wg show 2>&1 | grep -qv "password"; then
+if sudo -n wg show &>/dev/null || sudo -n wg show 2>&1 | grep -qv "password"; then
     success "Passwordless sudo for wg is working"
 else
     warn "Could not verify passwordless sudo — check $SUDOERS_FILE manually"
@@ -215,7 +215,7 @@ echo ""
 
 info "Step 6/6: WireGuard server initialization"
 
-if sudo wg show wg0 &>/dev/null 2>&1; then
+if sudo wg show wg0 &>/dev/null; then
     success "wg0 interface is already running"
     WG_PUBKEY=$(sudo wg show wg0 public-key 2>/dev/null || echo "")
 else
@@ -224,7 +224,7 @@ else
     bench --site "$SITE_NAME" execute benchpress.wg_manager.setup_wg_server
     success "WireGuard server initialized"
 
-    if sudo wg show wg0 &>/dev/null 2>&1; then
+    if sudo wg show wg0 &>/dev/null; then
         WG_PUBKEY=$(sudo wg show wg0 public-key 2>/dev/null || echo "")
         success "wg0 is up"
     else
@@ -253,7 +253,6 @@ echo ""
 echo "  2. Open BenchPress Settings DocType in Frappe Desk:"
 echo ""
 echo "  3. Fill in:"
-echo "     - WG Server Public Key  : (shown above)"
 echo "     - WG Server Endpoint    : <your server's public IP>"
 echo "     - WG Server Port        : 51820"
 echo ""

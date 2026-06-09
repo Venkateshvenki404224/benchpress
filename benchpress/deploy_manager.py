@@ -34,14 +34,64 @@ def _remove_stale_container(bench) -> None:
 		try:
 			client.containers.get(bench.container_id).remove(force=True)
 		except Exception:
-			pass
+			pass  # best-effort
 		bench.container_id = None
 
 	try:
 		container = client.containers.get(bench.bench_name)
 		container.remove(force=True)
 	except Exception:
-		pass
+		pass  # best-effort
+
+
+def remove_bench_volume(bench_name: str) -> None:
+	"""Remove the bench data volume if it exists."""
+	from benchpress.docker_manager import get_client
+
+	try:
+		get_client().volumes.get(f"benchpress-{bench_name}-data").remove(force=True)
+	except Exception:
+		pass  # best-effort
+
+
+def _make_log_appender(doctype: str, log_name: str, event: str, context: dict):
+	def append_log(line: str, log_type: str = "info") -> None:
+		frappe.publish_realtime(
+			event=event,
+			message={**context, "log": line, "type": log_type},
+			after_commit=False,
+		)
+		current = frappe.db.get_value(doctype, log_name, "message") or ""
+		frappe.db.set_value(doctype, log_name, "message", current + line + "\n", update_modified=False)
+		frappe.db.commit()
+
+	return append_log
+
+
+def create_site_in_container(
+	container_id: str, db_server, lab, site_name: str, admin_password: str, apps_csv: str
+) -> tuple[int, str]:
+	"""Run setup-site.sh inside a bench container using a temporary MariaDB user."""
+	bench_dir = f"{lab.mount_target or '/home/frappe'}/frappe-bench"
+	db_name, temp_user, temp_password = create_mariadb_user(db_server.name, site_name)
+	try:
+		return exec_in_container(
+			container_id,
+			"bash /opt/benchpress/scripts/setup-site.sh",
+			user="frappe",
+			workdir=bench_dir,
+			environment={
+				"SITE_NAME": site_name,
+				"ADMIN_PASSWORD": admin_password,
+				"APPS": apps_csv,
+				"DB_HOST": db_server.container_name,
+				"DB_NAME": db_name,
+				"MARIADB_ROOT_USERNAME": temp_user,
+				"MARIADB_ROOT_PASSWORD": temp_password,
+			},
+		)
+	finally:
+		drop_mariadb_user(db_server.name, site_name, db_name)
 
 
 def deploy_bench(bench_name: str) -> None:
@@ -62,17 +112,9 @@ def deploy_bench(bench_name: str) -> None:
 	frappe.db.commit()
 	deploy_log_name = deploy_log.name
 
-	def append_log(line: str, log_type: str = "info") -> None:
-		frappe.publish_realtime(
-			event="bench_deploy_log",
-			message={"bench": bench_name, "log": line, "type": log_type, "deploy_log": deploy_log_name},
-			after_commit=False,
-		)
-		current = frappe.db.get_value("Deploy Log", deploy_log_name, "message") or ""
-		frappe.db.set_value(
-			"Deploy Log", deploy_log_name, "message", current + line + "\n", update_modified=False
-		)
-		frappe.db.commit()
+	append_log = _make_log_appender(
+		"Deploy Log", deploy_log_name, "bench_deploy_log", {"bench": bench_name, "deploy_log": deploy_log_name}
+	)
 
 	try:
 		bench.status = "Deploying"
@@ -136,7 +178,7 @@ def deploy_bench(bench_name: str) -> None:
 				try:
 					remove_peer_from_server(bench.wg_public_key)
 				except Exception:
-					pass
+					pass  # best-effort
 
 			container_wg_ip = bench.wg_ip if bench.wg_ip else allocate_ip()
 			container_keys = generate_keypair()
@@ -162,8 +204,7 @@ def deploy_bench(bench_name: str) -> None:
 		bench_dir = f"{lab.mount_target or '/home/frappe'}/frappe-bench"
 		site_name = bench.site_name
 		config = {
-			"db_host": db_server.container_name,
-			"db_port": db_server.port or 3306,
+			**db_server.get_connection_config(),
 			"redis_cache": "redis://benchpress-redis:6379/0",
 			"redis_queue": "redis://benchpress-redis:6379/1",
 			"redis_socketio": "redis://benchpress-redis:6379/2",
@@ -178,38 +219,21 @@ def deploy_bench(bench_name: str) -> None:
 
 		append_log(f"=== Creating site {site_name} ===")
 
-		db_name, temp_user, temp_password = create_mariadb_user(db_server_name, site_name)
-		try:
-			apps_csv = ",".join(a.app_name for a in lab.apps if a.app_name.lower() != "frappe")
-			exit_code, output = exec_in_container(
-				container_id,
-				"bash /opt/benchpress/scripts/setup-site.sh",
-				user="frappe",
-				workdir=bench_dir,
-				environment={
-					"SITE_NAME": site_name,
-					"ADMIN_PASSWORD": admin_password,
-					"APPS": apps_csv,
-					"DB_HOST": db_server.container_name,
-					"DB_NAME": db_name,
-					"MARIADB_ROOT_USERNAME": temp_user,
-					"MARIADB_ROOT_PASSWORD": temp_password,
-				},
-			)
-			if exit_code != 0:
-				raise Exception(f"bench new-site failed (exit {exit_code}): {output}")
-			append_log("Site created successfully")
-		finally:
-			drop_mariadb_user(db_server_name, site_name, db_name)
+		apps_csv = ",".join(a.app_name for a in lab.apps if a.app_name.lower() != "frappe")
+		exit_code, output = create_site_in_container(
+			container_id, db_server, lab, site_name, admin_password, apps_csv
+		)
+		if exit_code != 0:
+			raise Exception(f"bench new-site failed (exit {exit_code}): {output}")
+		append_log("Site created successfully")
 
 		append_log("Building assets...")
 		exec_in_container(container_id, "bench build", user="frappe", workdir=bench_dir)
 
 		if not bench.ssh_username:
-			bench.ssh_username = bench.owner.split("@")[0].lower()[:32] or "frappe"
+			bench.ssh_username = bench._derive_username(bench.owner)
 
 		ssh_password = secrets.token_urlsafe(12)
-		settings = frappe.get_cached_doc("BenchPress Settings")
 		linkuser_args = [
 			bench.ssh_username,
 			bench.owner,
@@ -248,11 +272,7 @@ def deploy_bench(bench_name: str) -> None:
 				f"chown -R {cs_user}:{cs_user} {cs_home}/.config && chmod 600 {cs_home}/.config/code-server/config.yaml",
 				user="root",
 			)
-			exec_in_container(
-				container_id,
-				f"sudo -u {cs_user} screen -d -m -S codeserver code-server {cs_home}/frappe-bench",
-				user="root",
-			)
+			exec_in_container(container_id, "bash /opt/benchpress/scripts/restart.sh", user="root")
 			bench.code_server_password = code_server_password
 			bench.code_server_url = f"http://{bench.wg_ip or bench.container_ip or '127.0.0.1'}:8080/"
 			append_log(f"code-server ready at {bench.code_server_url}")
@@ -286,20 +306,13 @@ def redeploy_bench(bench_name: str) -> None:
 		try:
 			stop_container(bench.container_id)
 		except Exception:
-			pass
+			pass  # best-effort
 		try:
 			remove_container(bench.container_id)
 		except Exception:
-			pass
+			pass  # best-effort
 
-	from benchpress.docker_manager import get_client
-
-	client = get_client()
-	try:
-		vol = client.volumes.get(f"benchpress-{bench_name}-data")
-		vol.remove(force=True)
-	except Exception:
-		pass
+	remove_bench_volume(bench_name)
 
 	if bench.database_server and bench.site_name:
 		from benchpress.mariadb_manager import drop_site_database
@@ -307,7 +320,7 @@ def redeploy_bench(bench_name: str) -> None:
 		try:
 			drop_site_database(bench.database_server, bench.site_name)
 		except Exception:
-			pass
+			pass  # best-effort
 
 	bench.container_id = None
 	bench.container_image = None
@@ -353,17 +366,9 @@ def build_lab(lab_name: str) -> None:
 	frappe.db.commit()
 	build_log_name = build_log.name
 
-	def append_log(line: str, log_type: str = "info") -> None:
-		frappe.publish_realtime(
-			event="lab_build_log",
-			message={"lab": lab_name, "log": line, "type": log_type, "build_log": build_log_name},
-			after_commit=False,
-		)
-		current = frappe.db.get_value("Build Log", build_log_name, "message") or ""
-		frappe.db.set_value(
-			"Build Log", build_log_name, "message", current + line + "\n", update_modified=False
-		)
-		frappe.db.commit()
+	append_log = _make_log_appender(
+		"Build Log", build_log_name, "lab_build_log", {"lab": lab_name, "build_log": build_log_name}
+	)
 
 	try:
 		_build_lab_with_logs(lab, append_log)

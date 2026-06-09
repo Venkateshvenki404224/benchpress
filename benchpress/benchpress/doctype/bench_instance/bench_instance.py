@@ -4,6 +4,7 @@
 import re
 
 import frappe
+from frappe import _
 from frappe.model.document import Document
 
 from benchpress.benchpress.doctype.bench_instance import get_instance_id
@@ -19,13 +20,13 @@ class BenchInstance(Document):
 	def autoname(self):
 		self.name = self.bench_name
 
-	def _derive_username(self):
+	def _derive_username(self, email: str | None = None):
 		"""Derive a valid Linux username from the Frappe user email.
 
 		Takes the part before @, lowercases, strips invalid chars, caps at 32 chars.
 		e.g., John.Doe@example.com -> johndoe
 		"""
-		email = frappe.session.user
+		email = email or frappe.session.user
 		username = email.split("@")[0].lower()
 		# Keep only valid Linux username characters
 		username = re.sub(r"[^a-z0-9_.-]", "", username)
@@ -54,14 +55,14 @@ class BenchInstance(Document):
 			queue="long",
 			timeout=1800,
 		)
-		frappe.msgprint("Deploy started. Watch the Deploy Log for progress.")
+		frappe.msgprint(_("Deploy started. Watch the Deploy Log for progress."))
 
 	@frappe.whitelist()
 	def enqueue_stop(self):
 		from benchpress.deploy_manager import stop_bench
 
 		stop_bench(self.name)
-		frappe.msgprint("Bench stopped.")
+		frappe.msgprint(_("Bench stopped."))
 
 	@frappe.whitelist()
 	def enqueue_redeploy(self):
@@ -71,16 +72,16 @@ class BenchInstance(Document):
 			queue="long",
 			timeout=1800,
 		)
-		frappe.msgprint("Redeploy started. Watch the Deploy Log for progress.")
+		frappe.msgprint(_("Redeploy started. Watch the Deploy Log for progress."))
 
 	@frappe.whitelist()
 	def enqueue_start(self):
 		from benchpress.docker_manager import start_container
 
 		if not self.container_id:
-			frappe.throw("No container to start.")
+			frappe.throw(_("No container to start."))
 		start_container(self.container_id)
 		self.status = "Running"
 		self.save(ignore_permissions=True)
 		frappe.db.commit()  # nosemgrep: intentional commit to persist status before response
-		frappe.msgprint("Bench started.")
+		frappe.msgprint(_("Bench started."))

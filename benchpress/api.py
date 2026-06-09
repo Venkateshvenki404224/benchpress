@@ -6,7 +6,6 @@ from frappe import _
 
 from benchpress.permissions import (
 	get_bench_owner_filter,
-	has_app_permission,
 	is_admin,
 	require_admin,
 	require_bench_access,
@@ -131,39 +130,31 @@ def create_bench(data: str) -> dict:
 		doc.status = "Deploying"
 		doc.save(ignore_permissions=True)
 		frappe.db.commit()
-
-		frappe.enqueue(
-			"benchpress.deploy_manager.deploy_bench",
-			bench_name=doc.name,
-			queue="long",
-			timeout=3600,
-		)
-		return {"name": doc.name, "status": "Deploying"}
-
-	doc = frappe.get_doc(
-		{
-			"doctype": "Bench Instance",
-			"bench_name": data.get("bench_name"),
-			"lab": lab_name,
-			"frappe_version": lab.frappe_version,
-			"domain": data.get("domain"),
-			"status": "Draft",
-		}
-	)
-
-	for app in lab.apps:
-		doc.append(
-			"apps",
+	else:
+		doc = frappe.get_doc(
 			{
-				"app_name": app.app_name,
-				"app_label": app.app_label,
-				"git_url": app.git_url,
-				"branch": app.branch,
-			},
+				"doctype": "Bench Instance",
+				"bench_name": data.get("bench_name"),
+				"lab": lab_name,
+				"frappe_version": lab.frappe_version,
+				"domain": data.get("domain"),
+				"status": "Draft",
+			}
 		)
 
-	doc.insert()
-	frappe.db.commit()
+		for app in lab.apps:
+			doc.append(
+				"apps",
+				{
+					"app_name": app.app_name,
+					"app_label": app.app_label,
+					"git_url": app.git_url,
+					"branch": app.branch,
+				},
+			)
+
+		doc.insert()
+		frappe.db.commit()
 
 	frappe.enqueue(
 		"benchpress.deploy_manager.deploy_bench",
@@ -219,26 +210,13 @@ def bench_action(bench_name: str, action: str) -> dict:
 			try:
 				stop_container(bench.container_id)
 			except Exception:
-				pass
+				pass  # best-effort
 			remove_container(bench.container_id)
 
-		from benchpress.docker_manager import get_client
+		from benchpress.deploy_manager import remove_bench_volume
 
-		client = get_client()
-		try:
-			client.volumes.get(f"benchpress-{bench.bench_name}-data").remove(force=True)
-		except Exception:
-			pass
+		remove_bench_volume(bench.bench_name)
 
-		if bench.wg_public_key:
-			from benchpress.wg_manager import remove_peer_from_server
-
-			try:
-				remove_peer_from_server(bench.wg_public_key)
-			except Exception:
-				pass
-		bench.status = "Stopped"
-		bench.save(ignore_permissions=True)
 		frappe.delete_doc("Bench Instance", bench_name, force=True)
 		frappe.db.commit()
 		return {"status": "deleted"}
@@ -330,36 +308,22 @@ def create_site(data: str) -> dict:
 
 
 def _create_site_on_bench(site_doc_name: str) -> None:
-	from benchpress.docker_manager import exec_in_container
-	from benchpress.mariadb_manager import create_mariadb_user, drop_mariadb_user
+	from benchpress.deploy_manager import create_site_in_container
 
 	site = frappe.get_doc("Bench Site", site_doc_name)
 	bench = frappe.get_doc("Bench Instance", site.bench)
 	db_server = frappe.get_doc("Database Server", bench.database_server)
+	lab = frappe.get_cached_doc("Lab", bench.lab)
 
 	try:
-		admin_password = "admin"
+		admin_password = bench.get_password("admin_password")
 		site.admin_password = admin_password
 		site_name = site.full_domain or site.site_name
 		apps_csv = ",".join(a.app_name for a in site.apps_installed if a.app_name.lower() != "frappe")
 
-		db_name, temp_user, temp_password = create_mariadb_user(db_server.name, site_name)
-		try:
-			exit_code, output = exec_in_container(
-				bench.container_id,
-				"bash /opt/benchpress/scripts/setup-site.sh",
-				environment={
-					"SITE_NAME": site_name,
-					"ADMIN_PASSWORD": admin_password,
-					"APPS": apps_csv,
-					"DB_HOST": db_server.container_name,
-					"DB_NAME": db_name,
-					"MARIADB_ROOT_USERNAME": temp_user,
-					"MARIADB_ROOT_PASSWORD": temp_password,
-				},
-			)
-		finally:
-			drop_mariadb_user(db_server.name, site_name, db_name)
+		exit_code, output = create_site_in_container(
+			bench.container_id, db_server, lab, site_name, admin_password, apps_csv
+		)
 
 		if exit_code != 0:
 			site.status = "Error"
