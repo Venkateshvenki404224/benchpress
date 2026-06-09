@@ -36,7 +36,9 @@ if [ -z "$SITE_NAME" ]; then
     error "Site name required. Usage: bash apps/benchpress/setup.sh <site-name>"
 fi
 
-if [ ! -f "$BENCH_DIR/Procfile" ]; then
+# apps/frappe exists in every valid bench (dev or Docker); Procfile is
+# dev-mode only and never written in containerised installs.
+if [ ! -d "$BENCH_DIR/apps/frappe" ]; then
     error "Run this script from inside your frappe-bench directory. Found: $BENCH_DIR"
 fi
 
