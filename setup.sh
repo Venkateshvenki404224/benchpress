@@ -36,6 +36,14 @@ if [ -z "$SITE_NAME" ]; then
     error "Site name required. Usage: bash apps/benchpress/setup.sh <site-name>"
 fi
 
+# Every step needs host-level access (docker group, sysctl, sudoers,
+# wireguard kernel module) — none of it works inside a container.
+if [ -f "/.dockerenv" ]; then
+    warn "Running inside a Docker container — host setup must be run on the host."
+    warn "  bash apps/benchpress/setup.sh $SITE_NAME"
+    exit 0
+fi
+
 # apps/frappe exists in every valid bench (dev or Docker); Procfile is
 # dev-mode only and never written in containerised installs.
 if [ ! -d "$BENCH_DIR/apps/frappe" ]; then

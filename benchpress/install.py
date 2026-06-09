@@ -13,22 +13,26 @@ def after_install():
 	print("  BenchPress — Running post-install setup")
 	print("=" * 60 + "\n")
 
-	if not os.path.exists(script):
+	# setup.sh requires host-level access (docker group, sysctl, sudoers,
+	# wireguard). Skip it when running inside a container.
+	if os.path.exists("/.dockerenv"):
+		print("[!] Running inside Docker — skipping host setup script.")
 		_print_manual_instructions(site)
-		return
-
-	try:
-		result = subprocess.run(
-			["bash", script, site],
-			cwd=bench_dir,
-			check=False,
-		)
-		if result.returncode != 0:
-			print(f"\n[!] setup.sh exited with code {result.returncode}")
+	elif not os.path.exists(script):
+		_print_manual_instructions(site)
+	else:
+		try:
+			result = subprocess.run(
+				["bash", script, site],
+				cwd=bench_dir,
+				check=False,
+			)
+			if result.returncode != 0:
+				print(f"\n[!] setup.sh exited with code {result.returncode}")
+				_print_manual_instructions(site)
+		except Exception as e:
+			print(f"\n[!] Could not run setup.sh: {e}")
 			_print_manual_instructions(site)
-	except Exception as e:
-		print(f"\n[!] Could not run setup.sh: {e}")
-		_print_manual_instructions(site)
 
 	# Create test users in developer mode
 	if frappe.conf.get("developer_mode"):
