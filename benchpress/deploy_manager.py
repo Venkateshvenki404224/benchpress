@@ -56,7 +56,7 @@ def remove_bench_volume(bench_name: str) -> None:
 
 def _make_log_appender(doctype: str, log_name: str, event: str, context: dict):
 	def append_log(line: str, log_type: str = "info") -> None:
-		frappe.publish_realtime(
+		frappe.publish_realtime(  # nosemgrep -- the SPA listens via raw socket.io without doc-room subscription; room-scoping would drop its events
 			event=event,
 			message={**context, "log": line, "type": log_type},
 			after_commit=False,
