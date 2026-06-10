@@ -23,6 +23,8 @@ add_to_apps_screen = [
 	}
 ]
 
+extend_bootinfo = "benchpress.boot.extend_bootinfo"
+
 # Includes in <head>
 # ------------------
 
@@ -117,7 +119,6 @@ after_install = "benchpress.install.after_install"
 # Permissions evaluated in scripted ways
 
 permission_query_conditions = {
-	"Bench Instance": "benchpress.permissions.bench_instance_query_conditions",
 	"Deploy Log": "benchpress.permissions.deploy_log_query_conditions",
 }
 

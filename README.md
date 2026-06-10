@@ -312,8 +312,6 @@ All endpoints require authentication and use `@frappe.whitelist()`. Long-running
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `benchpress.api.get_labs` | GET | List all labs with app count and bench count |
-| `benchpress.api.get_lab` | GET | Get single lab with full apps list |
 | `benchpress.api.build_lab_image` | POST | Enqueue background Docker image build (queue: long, timeout: 3600s) |
 
 > **Note:** Lab creation uses `createListResource.insert` from `frappe-ui` directly (no custom API endpoint needed).
