@@ -120,7 +120,7 @@
 <script setup>
 import { reactive } from "vue";
 import { useRouter } from "vue-router";
-import { createListResource, Button, FormControl, ErrorMessage } from "frappe-ui";
+import { createListResource, toast, Button, FormControl, ErrorMessage } from "frappe-ui";
 
 const router = useRouter();
 
@@ -159,7 +159,7 @@ const lab = createListResource({
 
 async function createLab() {
 	if (!form.lab_id || !form.title || !form.frappe_version) {
-		frappe.toast({ message: "Please fill all required fields", indicator: "red" });
+		toast.error("Please fill all required fields");
 		return;
 	}
 
@@ -176,7 +176,7 @@ async function createLab() {
 		});
 		router.push("/labs");
 	} catch (err) {
-		// error is handled by frappe-ui resource
+		// lab.insert.error is rendered by the ErrorMessage above
 	}
 }
 </script>

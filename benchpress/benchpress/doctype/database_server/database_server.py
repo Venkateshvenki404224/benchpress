@@ -2,6 +2,7 @@
 # For license information, please see license.txt
 
 import frappe
+from frappe import _
 from frappe.model.document import Document
 
 from benchpress.mariadb_manager import DEFAULT_MARIADB_CONFIG
@@ -47,7 +48,7 @@ class DatabaseServer(Document):
 			queue="long",
 			timeout=600,
 		)
-		frappe.msgprint("MariaDB setup started.")
+		frappe.msgprint(_("MariaDB setup started."))
 
 	@frappe.whitelist()
 	def stop_mariadb(self):

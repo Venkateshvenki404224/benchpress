@@ -1,9 +1,8 @@
 # Copyright (c) 2026, Venkatesh and Contributors
 # See license.txt
 
-import base64
 import hashlib
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
 import frappe
 from frappe.tests import IntegrationTestCase
@@ -123,7 +122,7 @@ class TestMariadbManager(IntegrationTestCase):
 
 	@patch("benchpress.mariadb_manager.execute_sql")
 	def test_drop_mariadb_user_runs_drop_queries(self, mock_exec):
-		from benchpress.mariadb_manager import drop_mariadb_user, get_database_name
+		from benchpress.mariadb_manager import drop_mariadb_user
 
 		mock_exec.return_value = (0, "")
 		drop_mariadb_user("db-server", "site.localhost")

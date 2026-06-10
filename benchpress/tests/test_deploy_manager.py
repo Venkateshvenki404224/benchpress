@@ -137,10 +137,17 @@ class TestDeployManager(IntegrationTestCase):
 
 		mock_client.return_value.volumes.get.return_value = MagicMock()
 
+		status_at_deploy = {}
+
+		def capture_status(bench_name):
+			status_at_deploy["status"] = frappe.db.get_value("Bench Instance", bench_name, "status")
+
+		mock_deploy.side_effect = capture_status
+
 		redeploy_bench(bench.name)
 
-		# deploy_bench is called, which sets status back — but before that it was "Draft"
 		mock_deploy.assert_called_once_with(bench.name)
+		self.assertEqual(status_at_deploy["status"], "Draft")
 
 	@patch("benchpress.deploy_manager.deploy_bench")
 	@patch("benchpress.deploy_manager.remove_container")

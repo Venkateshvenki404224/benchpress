@@ -70,18 +70,6 @@ def unregister_device(device_name: str) -> bool:
 	if doc.owner != frappe.session.user and not is_admin():
 		frappe.throw(_("You do not have permission to remove this device."), frappe.PermissionError)
 
-	if doc.wg_public_key:
-		from benchpress.wg_manager import remove_peer_from_server, sync_wg_config
-
-		try:
-			remove_peer_from_server(doc.wg_public_key)
-			sync_wg_config()
-		except Exception:
-			frappe.log_error(
-				title=f"Device WG peer removal failed: {device_name}",
-				message=frappe.get_traceback(),
-			)
-
 	frappe.delete_doc("Bench Device", device_name, ignore_permissions=True, force=True)
 	frappe.db.commit()
 	return True
