@@ -37,11 +37,6 @@ class IntegrationTestBenchInstance(IntegrationTestCase):
 	@classmethod
 	def tearDownClass(cls):
 		frappe.set_user("Administrator")
-		frappe.get_all(
-			"Bench Instance",
-			filters={"lab": cls.lab_name},
-			pluck="name",
-		)
 		for name in frappe.get_all("Bench Instance", filters={"lab": cls.lab_name}, pluck="name"):
 			frappe.delete_doc("Bench Instance", name, force=True, ignore_permissions=True)
 		cls.lab.delete(ignore_permissions=True)

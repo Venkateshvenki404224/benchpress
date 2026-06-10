@@ -1,14 +1,16 @@
 <template>
-	<div class="flex h-screen">
-		<Sidebar :header="headerConfig" :sections="sections" />
-		<div class="flex-1 overflow-auto bg-surface-white">
-			<router-view />
+	<FrappeUIProvider>
+		<div class="flex h-screen">
+			<Sidebar :header="headerConfig" :sections="sections" />
+			<div class="flex-1 overflow-auto bg-surface-white">
+				<router-view />
+			</div>
 		</div>
-	</div>
+	</FrappeUIProvider>
 </template>
 
 <script setup>
-import { Sidebar } from "frappe-ui";
+import { FrappeUIProvider, Sidebar } from "frappe-ui";
 import { computed } from "vue";
 import { session } from "@/data/session";
 import { userContext } from "@/data/userContext";

@@ -19,7 +19,7 @@ add_to_apps_screen = [
 		"logo": "/assets/benchpress/images/logo/logo.png",
 		"title": "BenchPress",
 		"route": "/frontend",
-		"has_permission": "benchpress.api.has_app_permission",
+		"has_permission": "benchpress.permissions.has_app_permission",
 	}
 ]
 

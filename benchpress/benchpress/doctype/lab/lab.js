@@ -17,14 +17,13 @@ frappe.ui.form.on("Lab", {
 							frappe.call({
 								method: "benchpress.api.build_lab_image",
 								args: { lab_name: frm.doc.name },
-								callback: function (r) {
+								callback: function () {
 									frappe.show_alert({
 										message: __(
 											"Image build started. Check Build Log in the sidebar."
 										),
 										indicator: "blue",
 									});
-									// Wait a moment for the Build Log to be created, then reload to show link
 									setTimeout(function () {
 										frm.reload_doc();
 									}, 2000);

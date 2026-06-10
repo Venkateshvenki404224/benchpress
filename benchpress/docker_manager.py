@@ -45,6 +45,19 @@ def get_lab_template_dir() -> str:
 	return os.path.join(app_path, "lab-templates")
 
 
+def ensure_network(client: docker.DockerClient | None = None) -> None:
+	"""Create the benchpress Docker network if it does not exist."""
+	client = client or get_client()
+	try:
+		client.networks.get("benchpress")
+	except docker.errors.NotFound:
+		client.networks.create(
+			"benchpress",
+			driver="bridge",
+			ipam=docker.types.IPAMConfig(pool_configs=[docker.types.IPAMPool(subnet="172.30.0.0/24")]),
+		)
+
+
 def build_lab_image(lab_doc, log_fn=None, no_cache: bool = False) -> str:
 	"""Build Docker image with bench + apps (site created at runtime against shared MariaDB)."""
 	template_dir = get_lab_template_dir()
@@ -95,16 +108,7 @@ def create_bench_container(bench_doc, lab_doc) -> str:
 	Does NOT start the container. Returns the container ID.
 	"""
 	client = get_client()
-
-	# Ensure benchpress network exists
-	try:
-		client.networks.get("benchpress")
-	except docker.errors.NotFound:
-		client.networks.create(
-			"benchpress",
-			driver="bridge",
-			ipam=docker.types.IPAMConfig(pool_configs=[docker.types.IPAMPool(subnet="172.30.0.0/24")]),
-		)
+	ensure_network(client)
 
 	name = bench_doc.bench_name
 
@@ -188,8 +192,6 @@ def exec_in_container(
 
 def write_file_to_container(container_id: str, content: str, path: str) -> None:
 	"""Write a file into a running container using docker exec."""
-	import shlex
-
 	client = get_client()
 	container = client.containers.get(container_id)
 	escaped = content.replace("'", "'\\''")

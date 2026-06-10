@@ -1,6 +1,8 @@
 #!/bin/bash
+set -e
 
-cd /home/frappe/frappe-bench
+# May fail under a custom mount_target, where the caller already sets workdir to the bench dir
+cd /home/frappe/frappe-bench || true
 
 echo "[*] Creating site ${SITE_NAME}..."
 

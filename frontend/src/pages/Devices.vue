@@ -178,7 +178,7 @@
 </template>
 
 <script setup>
-import { ref, watch, nextTick } from "vue";
+import { ref, nextTick } from "vue";
 import {
 	createResource,
 	Badge,
@@ -205,8 +205,6 @@ function formatBytes(bytes) {
 const showAddDialog = ref(false);
 const showRemoveDialog = ref(false);
 const deviceToRemove = ref(null);
-const downloadingConfig = ref(null);
-const removingDevice = ref(null);
 const autoGenKey = ref(true);
 
 const newDevice = ref({ name: "", type: "Laptop", publicKey: "" });
@@ -257,24 +255,29 @@ const configText = ref("");
 const configDeviceName = ref("");
 const qrCanvas = ref(null);
 
-const showConfigAction = createResource({
+const wgConfigAction = createResource({
 	url: "benchpress.api.get_device_wg_config",
-	onSuccess(data) {
-		configText.value = data;
-		showConfigDialog.value = true;
-		nextTick(() => {
-			nextTick(() => {
-				if (qrCanvas.value && configText.value) {
-					QRCode.toCanvas(qrCanvas.value, configText.value, { width: 200, margin: 2 });
-				}
-			});
-		});
-	},
 });
 
 function showConfig(device) {
 	configDeviceName.value = device.device_name;
-	showConfigAction.submit({ device_name: device.name });
+	wgConfigAction.submit(
+		{ device_name: device.name },
+		{
+			onSuccess(data) {
+				configText.value = data;
+				showConfigDialog.value = true;
+				nextTick(() => {
+					if (qrCanvas.value && configText.value) {
+						QRCode.toCanvas(qrCanvas.value, configText.value, {
+							width: 200,
+							margin: 2,
+						});
+					}
+				});
+			},
+		}
+	);
 }
 
 const devices = createResource({
@@ -317,28 +320,14 @@ function confirmRemove(device) {
 
 function removeDevice() {
 	if (!deviceToRemove.value) return;
-	removingDevice.value = deviceToRemove.value.name;
-	removeAction.submit(
-		{ device_name: deviceToRemove.value.name },
-		{
-			onSuccess() {
-				removingDevice.value = null;
-			},
-		}
-	);
+	removeAction.submit({ device_name: deviceToRemove.value.name });
 }
 
-const configAction = createResource({
-	url: "benchpress.api.get_device_wg_config",
-});
-
-async function downloadConfig(device) {
-	downloadingConfig.value = device.name;
-	configAction.submit(
+function downloadConfig(device) {
+	wgConfigAction.submit(
 		{ device_name: device.name },
 		{
 			onSuccess(data) {
-				downloadingConfig.value = null;
 				const blob = new Blob([data], { type: "text/plain" });
 				const url = URL.createObjectURL(blob);
 				const a = document.createElement("a");
@@ -346,9 +335,6 @@ async function downloadConfig(device) {
 				a.download = `${device.device_name}.conf`;
 				a.click();
 				URL.revokeObjectURL(url);
-			},
-			onError() {
-				downloadingConfig.value = null;
 			},
 		}
 	);

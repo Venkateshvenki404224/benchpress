@@ -40,8 +40,8 @@ frappe.ui.form.on("Build Log", {
 					step_count++;
 					let [, current, total] = is_step;
 					return (
-						'<div style="margin-top: 12px; padding: 8px 12px; background: #161b22; border-left: 3px solid #3b82f6; border-radius: 0 6px 6px 0; font-weight: 600; color: #58a6ff; font-size: 13px;">' +
-						'<span style="color: #8b949e; margin-right: 8px;">' +
+						'<div style="margin-top: 12px; padding: 8px 12px; background: var(--subtle-fg); border-left: 3px solid var(--blue-500); border-radius: 0 6px 6px 0; font-weight: 600; color: var(--blue-400); font-size: 13px;">' +
+						'<span style="color: var(--text-muted); margin-right: 8px;">' +
 						current +
 						"/" +
 						total +
@@ -53,7 +53,7 @@ frappe.ui.form.on("Build Log", {
 
 				if (is_success) {
 					return (
-						'<div style="margin-top: 16px; padding: 12px 16px; background: #0d1f0d; border: 1px solid #238636; border-radius: 6px; color: #3fb950; font-weight: 600; font-size: 13px;">' +
+						'<div style="margin-top: 16px; padding: 12px 16px; background: var(--bg-green); border: 1px solid var(--green-600); border-radius: 6px; color: var(--green-500); font-weight: 600; font-size: 13px;">' +
 						'<span style="margin-right: 8px;">✓</span>' +
 						frappe.utils.escape_html(line) +
 						"</div>"
@@ -62,7 +62,7 @@ frappe.ui.form.on("Build Log", {
 
 				if (is_error) {
 					return (
-						'<div style="margin-top: 16px; padding: 12px 16px; background: #2d0a0a; border: 1px solid #da3633; border-radius: 6px; color: #f85149; font-weight: 600; font-size: 13px;">' +
+						'<div style="margin-top: 16px; padding: 12px 16px; background: var(--bg-red); border: 1px solid var(--red-600); border-radius: 6px; color: var(--red-500); font-weight: 600; font-size: 13px;">' +
 						'<span style="margin-right: 8px;">✗</span>' +
 						frappe.utils.escape_html(line) +
 						"</div>"
@@ -71,7 +71,7 @@ frappe.ui.form.on("Build Log", {
 
 				if (is_header) {
 					return (
-						'<div style="padding: 6px 12px; color: #d2a8ff; font-weight: 600; font-size: 13px;">' +
+						'<div style="padding: 6px 12px; color: var(--purple-400); font-weight: 600; font-size: 13px;">' +
 						frappe.utils.escape_html(line) +
 						"</div>"
 					);
@@ -79,20 +79,20 @@ frappe.ui.form.on("Build Log", {
 
 				if (is_cached) {
 					return (
-						'<div style="padding: 2px 12px 2px 24px; color: #3fb950; font-size: 12px;">' +
+						'<div style="padding: 2px 12px 2px 24px; color: var(--green-500); font-size: 12px;">' +
 						'<span style="margin-right: 6px;">●</span>cached</div>'
 					);
 				}
 
 				if (is_arrow) {
 					return (
-						'<div style="padding: 2px 12px 2px 24px; color: #8b949e; font-size: 12px;">' +
+						'<div style="padding: 2px 12px 2px 24px; color: var(--text-muted); font-size: 12px;">' +
 						frappe.utils.escape_html(line) +
 						"</div>"
 					);
 				}
 
-				let color = "#c9d1d9";
+				let color = "var(--text-color)";
 				return (
 					'<div style="padding: 2px 12px 2px 24px; color: ' +
 					color +
@@ -103,39 +103,56 @@ frappe.ui.form.on("Build Log", {
 			})
 			.join("");
 
+		let make_status_bar = function (bg, border, icon_html, label, label_color) {
+			return (
+				'<div style="padding: 10px 16px; background: ' +
+				bg +
+				"; border-bottom: 1px solid " +
+				border +
+				'; border-radius: 6px 6px 0 0; display: flex; align-items: center; gap: 8px;">' +
+				icon_html +
+				'<span style="color: ' +
+				label_color +
+				'; font-weight: 600; font-size: 13px;">' +
+				label +
+				"</span>" +
+				'<span style="color: var(--text-muted); font-size: 12px; margin-left: auto;">' +
+				(frm.doc.lab || "") +
+				"</span>" +
+				"</div>"
+			);
+		};
+
 		let status_bar = "";
 		if (frm.doc.log_type === "info") {
-			status_bar =
-				'<div style="padding: 10px 16px; background: #161b22; border-bottom: 1px solid #30363d; border-radius: 6px 6px 0 0; display: flex; align-items: center; gap: 8px;">' +
-				'<div style="width: 10px; height: 10px; border-radius: 50%; background: #d29922; animation: pulse 1.5s infinite;"></div>' +
-				'<span style="color: #d29922; font-weight: 600; font-size: 13px;">Building...</span>' +
-				'<span style="color: #8b949e; font-size: 12px; margin-left: auto;">' +
-				(frm.doc.lab || "") +
-				"</span>" +
-				"</div>";
+			status_bar = make_status_bar(
+				"var(--subtle-fg)",
+				"var(--border-color)",
+				'<div style="width: 10px; height: 10px; border-radius: 50%; background: var(--yellow-500); animation: pulse 1.5s infinite;"></div>',
+				"Building...",
+				"var(--yellow-500)"
+			);
 		} else if (frm.doc.log_type === "success") {
-			status_bar =
-				'<div style="padding: 10px 16px; background: #0d1f0d; border-bottom: 1px solid #238636; border-radius: 6px 6px 0 0; display: flex; align-items: center; gap: 8px;">' +
-				'<span style="color: #3fb950; font-size: 16px;">✓</span>' +
-				'<span style="color: #3fb950; font-weight: 600; font-size: 13px;">Build succeeded</span>' +
-				'<span style="color: #8b949e; font-size: 12px; margin-left: auto;">' +
-				(frm.doc.lab || "") +
-				"</span>" +
-				"</div>";
+			status_bar = make_status_bar(
+				"var(--bg-green)",
+				"var(--green-600)",
+				'<span style="color: var(--green-500); font-size: 16px;">✓</span>',
+				"Build succeeded",
+				"var(--green-500)"
+			);
 		} else if (frm.doc.log_type === "error") {
-			status_bar =
-				'<div style="padding: 10px 16px; background: #2d0a0a; border-bottom: 1px solid #da3633; border-radius: 6px 6px 0 0; display: flex; align-items: center; gap: 8px;">' +
-				'<span style="color: #f85149; font-size: 16px;">✗</span>' +
-				'<span style="color: #f85149; font-weight: 600; font-size: 13px;">Build failed</span>' +
-				'<span style="color: #8b949e; font-size: 12px; margin-left: auto;">' +
-				(frm.doc.lab || "") +
-				"</span>" +
-				"</div>";
+			status_bar = make_status_bar(
+				"var(--bg-red)",
+				"var(--red-600)",
+				'<span style="color: var(--red-500); font-size: 16px;">✗</span>',
+				"Build failed",
+				"var(--red-500)"
+			);
 		}
 
 		let container =
 			"<style>@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }</style>" +
-			"<div style=\"background: #0d1117; border: 1px solid #30363d; border-radius: 6px; font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace; margin-top: 8px;\">" +
+			"<div style=\"background: var(--bg-color); border: 1px solid var(--border-color); border-radius: 6px; font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace; margin-top: 8px;\">" +
 			status_bar +
 			'<div id="build-log-output" style="padding: 12px 0; max-height: 600px; overflow-y: auto;">' +
 			html_lines +

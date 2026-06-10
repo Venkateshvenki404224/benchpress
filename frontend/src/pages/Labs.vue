@@ -114,17 +114,14 @@ const filteredRows = computed(() => {
 
 	let rows = labs.data;
 
-	// Status filter
 	if (statusFilter.value !== "All") {
 		rows = rows.filter((r) => r.status === statusFilter.value);
 	}
 
-	// Version filter
 	if (versionFilter.value !== "All") {
 		rows = rows.filter((r) => r.frappe_version === versionFilter.value);
 	}
 
-	// Search filter (lab_id, title, or app names via app_count context)
 	if (searchQuery.value) {
 		const q = searchQuery.value.toLowerCase();
 		rows = rows.filter(
