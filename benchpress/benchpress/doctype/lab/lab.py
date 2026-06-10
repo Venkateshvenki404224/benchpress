@@ -4,6 +4,9 @@
 # import frappe
 from frappe.model.document import Document
 
+from benchpress.docker_manager import validate_lab_id
+
 
 class Lab(Document):
-	pass
+	def validate(self):
+		validate_lab_id(self.lab_id)

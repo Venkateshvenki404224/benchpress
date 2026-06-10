@@ -3,14 +3,29 @@
 
 import json
 import os
+import re
 import subprocess
 
 import docker
 import frappe
+from frappe import _
 
 DEFAULT_PIDS_LIMIT = 500
 DEFAULT_IOPS = 1000
 DEFAULT_BPS = 40 * 1024 * 1024
+
+LAB_ID_MAX_LENGTH = 64
+LAB_ID_RE = re.compile(r"^[a-z0-9]+([._-][a-z0-9]+)*$")
+
+
+def validate_lab_id(lab_id: str) -> None:
+	"""Reject lab IDs that would produce an invalid Docker image tag."""
+	if not lab_id or not LAB_ID_RE.match(lab_id) or len(lab_id) > LAB_ID_MAX_LENGTH:
+		frappe.throw(
+			_(
+				"Lab ID '{0}' is not valid: use only lowercase letters, numbers and single '.', '_' or '-' separators (max {1} characters), e.g. 'crm-lab' or 'dev-v15'."
+			).format(lab_id or "", LAB_ID_MAX_LENGTH)
+		)
 
 
 def _get_host_block_devices() -> list[str]:
@@ -60,6 +75,7 @@ def ensure_network(client: docker.DockerClient | None = None) -> None:
 
 def build_lab_image(lab_doc, log_fn=None, no_cache: bool = False) -> str:
 	"""Build Docker image with bench + apps (site created at runtime against shared MariaDB)."""
+	validate_lab_id(lab_doc.lab_id)
 	template_dir = get_lab_template_dir()
 	image_tag = f"benchpress/{lab_doc.lab_id}:latest"
 	version_branch = lab_doc.frappe_version
