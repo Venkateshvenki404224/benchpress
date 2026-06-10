@@ -4,62 +4,13 @@
 import frappe
 from frappe import _
 
+from benchpress.boot import get_bootinfo
 from benchpress.permissions import (
 	get_bench_owner_filter,
 	is_admin,
 	require_admin,
 	require_bench_access,
 )
-
-
-@frappe.whitelist()
-def get_labs() -> list[dict]:
-	labs = frappe.get_all(
-		"Lab",
-		fields=[
-			"name",
-			"lab_id",
-			"title",
-			"description",
-			"frappe_version",
-			"status",
-			"image_tag",
-			"memory_limit",
-			"cpu_cores",
-		],
-		order_by="creation desc",
-	)
-	for lab in labs:
-		apps = frappe.get_all(
-			"Lab App",
-			filters={"parent": lab["name"]},
-			fields=["app_name"],
-			limit_page_length=50,
-		)
-		lab["app_names"] = [a["app_name"] for a in apps]
-		lab["app_count"] = len(apps)
-		lab["bench_count"] = frappe.db.count("Bench Instance", {"lab": lab["name"]})
-	return labs
-
-
-@frappe.whitelist()
-def get_lab(name: str) -> dict:
-	lab = frappe.get_cached_doc("Lab", name)
-	return {
-		"name": lab.name,
-		"lab_id": lab.lab_id,
-		"title": lab.title,
-		"description": lab.description,
-		"frappe_version": lab.frappe_version,
-		"status": lab.status,
-		"image_tag": lab.image_tag,
-		"memory_limit": lab.memory_limit,
-		"cpu_cores": lab.cpu_cores,
-		"apps": [
-			{"app_name": a.app_name, "app_label": a.app_label, "git_url": a.git_url, "branch": a.branch}
-			for a in lab.apps
-		],
-	}
 
 
 @frappe.whitelist()
@@ -112,7 +63,7 @@ def get_benches() -> list[dict]:
 	return benches
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def create_bench(data: str) -> dict:
 	from benchpress.benchpress.doctype.bench_instance import get_instance_id
 
@@ -166,7 +117,7 @@ def create_bench(data: str) -> dict:
 	return {"name": doc.name, "status": "Deploying"}
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def bench_action(bench_name: str, action: str) -> dict:
 	from benchpress.docker_manager import (
 		remove_container,
@@ -218,13 +169,11 @@ def bench_action(bench_name: str, action: str) -> dict:
 		remove_bench_volume(bench.bench_name)
 
 		frappe.delete_doc("Bench Instance", bench_name, force=True)
-		frappe.db.commit()
 		return {"status": "deleted"}
 	else:
 		frappe.throw(_("Invalid action: {0}").format(action))
 
 	bench.save(ignore_permissions=True)
-	frappe.db.commit()
 	return {"name": bench.name, "status": bench.status}
 
 
@@ -269,7 +218,7 @@ def get_device_wg_config(device_name: str) -> str:
 	return get_device_config(device_name)
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def create_site(data: str) -> dict:
 	data = frappe.parse_json(data)
 
@@ -349,11 +298,7 @@ def _create_site_on_bench(site_doc_name: str) -> None:
 
 @frappe.whitelist()
 def get_user_context() -> dict:
-	return {
-		"is_admin": is_admin(),
-		"user": frappe.session.user,
-		"roles": frappe.get_roles(frappe.session.user),
-	}
+	return get_bootinfo()
 
 
 @frappe.whitelist()

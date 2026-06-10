@@ -4,6 +4,33 @@
 import frappe
 from frappe.tests import IntegrationTestCase
 
+from benchpress.benchpress.doctype.bench_instance import get_instance_id
+
+
+def _make_lab(lab_id="test-lab-perms"):
+	if frappe.db.exists("Lab", lab_id):
+		return frappe.get_doc("Lab", lab_id)
+	return frappe.get_doc(
+		{
+			"doctype": "Lab",
+			"lab_id": lab_id,
+			"title": "Test Lab (Permissions)",
+			"frappe_version": "version-15",
+		}
+	).insert(ignore_permissions=True)
+
+
+def _make_bench(lab_name):
+	existing = get_instance_id(frappe.session.user, lab_name)
+	if frappe.db.exists("Bench Instance", existing):
+		return frappe.get_doc("Bench Instance", existing)
+	return frappe.get_doc(
+		{
+			"doctype": "Bench Instance",
+			"lab": lab_name,
+		}
+	).insert(ignore_permissions=True)
+
 
 class TestPermissions(IntegrationTestCase):
 	@classmethod
@@ -36,10 +63,19 @@ class TestPermissions(IntegrationTestCase):
 			).insert(ignore_permissions=True)
 		cls.regular_user = "perm-user@example.com"
 		cls.admin_user = "perm-admin@example.com"
+		cls.lab = _make_lab()
+		frappe.set_user(cls.regular_user)
+		cls.user_bench = _make_bench(cls.lab.name).name
+		frappe.set_user("Administrator")
+		cls.admin_bench = _make_bench(cls.lab.name).name
 
 	@classmethod
 	def tearDownClass(cls):
 		frappe.set_user("Administrator")
+		for name in [cls.user_bench, cls.admin_bench]:
+			if frappe.db.exists("Bench Instance", name):
+				frappe.delete_doc("Bench Instance", name, force=True, ignore_permissions=True)
+		cls.lab.delete(ignore_permissions=True)
 		for email in [cls.regular_user, cls.admin_user]:
 			if frappe.db.exists("User", email):
 				frappe.delete_doc("User", email, force=True, ignore_permissions=True)
@@ -103,24 +139,23 @@ class TestPermissions(IntegrationTestCase):
 		result = get_bench_owner_filter()
 		self.assertEqual(result, {"owner": self.regular_user})
 
-	def test_bench_instance_query_conditions_empty_for_administrator(self):
-		from benchpress.permissions import bench_instance_query_conditions
+	def test_bench_list_shows_only_own_benches_for_regular_user(self):
+		frappe.set_user(self.regular_user)
+		names = frappe.get_list("Bench Instance", pluck="name", limit_page_length=0)
+		self.assertIn(self.user_bench, names)
+		self.assertNotIn(self.admin_bench, names)
 
-		result = bench_instance_query_conditions("Administrator")
-		self.assertEqual(result, "")
+	def test_bench_list_shows_all_benches_for_benchpress_admin(self):
+		frappe.set_user(self.admin_user)
+		names = frappe.get_list("Bench Instance", pluck="name", limit_page_length=0)
+		self.assertIn(self.user_bench, names)
+		self.assertIn(self.admin_bench, names)
 
-	def test_bench_instance_query_conditions_empty_for_benchpress_admin(self):
-		from benchpress.permissions import bench_instance_query_conditions
-
-		result = bench_instance_query_conditions(self.admin_user)
-		self.assertEqual(result, "")
-
-	def test_bench_instance_query_conditions_has_owner_clause_for_user(self):
-		from benchpress.permissions import bench_instance_query_conditions
-
-		result = bench_instance_query_conditions(self.regular_user)
-		self.assertIn("owner", result)
-		self.assertIn("tabBench Instance", result)
+	def test_bench_list_shows_all_benches_for_administrator(self):
+		frappe.set_user("Administrator")
+		names = frappe.get_list("Bench Instance", pluck="name", limit_page_length=0)
+		self.assertIn(self.user_bench, names)
+		self.assertIn(self.admin_bench, names)
 
 	def test_deploy_log_query_conditions_empty_for_administrator(self):
 		from benchpress.permissions import deploy_log_query_conditions

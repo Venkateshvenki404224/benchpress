@@ -29,16 +29,6 @@ def get_bench_owner_filter() -> dict:
 	return {"owner": frappe.session.user}
 
 
-def bench_instance_query_conditions(user):
-	if not user:
-		user = frappe.session.user
-	if user == "Administrator":
-		return ""
-	if not set(frappe.get_roles(user)).isdisjoint(ADMIN_ROLES):
-		return ""
-	return f"`tabBench Instance`.owner = {frappe.db.escape(user)}"
-
-
 def deploy_log_query_conditions(user):
 	if not user:
 		user = frappe.session.user

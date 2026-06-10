@@ -66,8 +66,6 @@ All endpoints use `@frappe.whitelist()`. Long-running ops are enqueued to the `"
 
 | Endpoint | Method | What It Does |
 |----------|--------|--------------|
-| `get_labs()` | GET | List all labs with app_count, bench_count |
-| `get_lab(name)` | GET | Single lab with apps list |
 | `build_lab_image(lab_name)` | POST | Enqueue background Docker image build |
 | `get_benches()` | GET | All benches with CPU/memory stats |
 | `create_bench(data)` | POST | Create bench from lab, enqueue deploy |
