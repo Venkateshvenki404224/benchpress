@@ -5,14 +5,43 @@ on:
     branches:
       - develop
   pull_request:
+  schedule:
+    - cron: '0 0 * * *'
+  workflow_dispatch:
 
 concurrency:
-  group: develop-benchpress-${{ github.event.number }}
+  group: develop-benchpress-${{ github.event.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
+  # Job-level filtering instead of workflow-level paths-ignore: Server and
+  # Frontend are required checks on develop, and a workflow that never runs
+  # leaves them pending forever, while a skipped job counts as passing.
+  changes:
+    runs-on: ubuntu-latest
+    name: Detect Changes
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+    steps:
+      - uses: dorny/paths-filter@v4
+        id: filter
+        if: github.event_name == 'pull_request'
+        with:
+          predicate-quantifier: 'every'
+          filters: |
+            backend:
+              - '**'
+              - '!frontend/**'
+              - '!**/*.md'
+            frontend:
+              - '{frontend/**,.github/workflows/ci.yml}'
+
   tests:
     runs-on: ubuntu-latest
+    needs: changes
+    if: github.event_name != 'pull_request' || needs.changes.outputs.backend == 'true'
+    timeout-minutes: 60
     strategy:
       fail-fast: false
     name: Server
@@ -47,6 +76,14 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: '3.14'
+
+      - name: Check for valid Python & merge conflicts
+        run: |
+          python -m compileall -f "${GITHUB_WORKSPACE}"
+          if grep -lr --exclude-dir=node_modules "^<<<<<<< " "${GITHUB_WORKSPACE}"
+              then echo "Found merge conflicts"
+              exit 1
+          fi
 
       - name: Setup Node
         uses: actions/setup-node@v6
@@ -107,6 +144,8 @@ jobs:
 
   frontend:
     runs-on: ubuntu-latest
+    needs: changes
+    if: github.event_name != 'pull_request' || needs.changes.outputs.frontend == 'true'
     name: Frontend
 
     steps:
