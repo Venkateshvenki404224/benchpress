@@ -381,9 +381,7 @@ def build_lab(lab_name: str) -> None:
 		frappe.db.commit()
 
 	except Exception as e:
-		lab.reload()
-		lab.status = "Error"
-		lab.save(ignore_permissions=True)
+		frappe.db.set_value("Lab", lab_name, "status", "Error")
 		frappe.db.commit()
 
 		append_log(f"=== Build failed: {e!s} ===", "error")

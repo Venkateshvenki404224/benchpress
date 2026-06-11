@@ -21,6 +21,7 @@
 					v-model="form.lab_id"
 					type="text"
 					placeholder="e.g. crm-lab"
+					description="Lowercase letters, numbers and single '.', '_' or '-' separators"
 					:required="true"
 				/>
 				<FormControl

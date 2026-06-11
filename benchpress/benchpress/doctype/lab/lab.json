@@ -32,6 +32,7 @@
  ],
  "fields": [
   {
+   "description": "Lowercase letters, numbers and single '.', '_' or '-' separators, e.g. crm-lab",
    "fieldname": "lab_id",
    "fieldtype": "Data",
    "label": "Lab ID",
