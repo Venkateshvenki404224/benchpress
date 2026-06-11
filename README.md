@@ -6,6 +6,8 @@
 
 **Press a button. Get a Frappe bench. Self-hosted, Docker-powered, VPN-secured.**
 
+[![CI](https://github.com/Venkateshvenki404224/benchpress/actions/workflows/ci.yml/badge.svg?branch=develop)](https://github.com/Venkateshvenki404224/benchpress/actions/workflows/ci.yml)
+[![Linters](https://github.com/Venkateshvenki404224/benchpress/actions/workflows/linter.yml/badge.svg)](https://github.com/Venkateshvenki404224/benchpress/actions/workflows/linter.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
 [![Frappe Framework](https://img.shields.io/badge/Built%20on-Frappe%20v16-blue)](https://frappeframework.com)
 [![FOSS Hack 2026](https://img.shields.io/badge/FOSS%20Hack-2026-orange)](https://fossunited.org)

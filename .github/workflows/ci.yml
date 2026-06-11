@@ -104,3 +104,35 @@ jobs:
           bench --site test_site run-tests --app benchpress
         env:
           TYPE: server
+
+  frontend:
+    runs-on: ubuntu-latest
+    name: Frontend
+
+    steps:
+      - name: Clone
+        uses: actions/checkout@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          check-latest: true
+          cache: yarn
+          cache-dependency-path: frontend/yarn.lock
+
+      # socket.js resolves sites/common_site_config.json from the bench root
+      # (two directories above the app) at build time, so the build only works
+      # in a bench-shaped tree. Stub it here; remove this step once #28 lands.
+      - name: Stub bench site config
+        run: |
+          mkdir -p "${GITHUB_WORKSPACE}/../../sites"
+          echo '{"socketio_port": 9000}' > "${GITHUB_WORKSPACE}/../../sites/common_site_config.json"
+
+      - name: Install
+        working-directory: frontend
+        run: yarn install --frozen-lockfile
+
+      - name: Build
+        working-directory: frontend
+        run: yarn build
