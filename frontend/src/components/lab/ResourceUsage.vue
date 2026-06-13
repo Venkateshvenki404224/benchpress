@@ -2,7 +2,14 @@
 	<div class="rounded-lg border border-outline-gray-1 bg-surface-white p-5">
 		<div class="mb-4 flex items-center justify-between">
 			<h2 class="text-base font-semibold text-ink-gray-9">Container Status</h2>
-			<Badge :label="bench.status" :theme="statusColor(bench.status)" />
+			<div class="flex items-center gap-2">
+				<Badge
+					v-if="bench.health_status"
+					:label="bench.health_status"
+					:theme="healthColor(bench.health_status)"
+				/>
+				<Badge :label="bench.status" :theme="statusColor(bench.status)" />
+			</div>
 		</div>
 		<div class="grid grid-cols-2 gap-4">
 			<div class="rounded-lg border border-outline-gray-1 p-4">
@@ -47,5 +54,10 @@ function statusColor(status) {
 		Inactive: "gray",
 	};
 	return map[status] || "gray";
+}
+
+function healthColor(health) {
+	const map = { Healthy: "green", Unhealthy: "red", Unknown: "gray" };
+	return map[health] || "gray";
 }
 </script>

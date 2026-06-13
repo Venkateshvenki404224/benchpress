@@ -22,7 +22,7 @@ from benchpress.mariadb_manager import (
 	ensure_infrastructure,
 	wait_for_mariadb,
 )
-from benchpress.traefik_manager import ensure_traefik
+from benchpress.traefik_manager import ensure_traefik, routing_enabled
 
 
 def _remove_stale_container(bench) -> None:
@@ -189,7 +189,7 @@ def _provision_running_container(bench, lab, settings, container_id, db_server, 
 			raise Exception(f"bench new-site failed (exit {exit_code}): {output}")
 		append_log("Site created successfully")
 
-	if settings.base_domain:
+	if routing_enabled(settings):
 		public_host = f"https://{bench.bench_name}.{settings.base_domain}"
 		exec_in_container(
 			container_id,
@@ -291,7 +291,7 @@ def deploy_bench(bench_name: str) -> None:
 		wait_for_mariadb(db_server_name, timeout=60)
 		append_log(f"MariaDB reachable at {db_server.container_name}:{db_server.port or 3306}")
 
-		if settings.base_domain:
+		if routing_enabled(settings):
 			append_log("=== Ensuring Traefik reverse proxy ===")
 			ensure_traefik()
 
@@ -323,7 +323,7 @@ def deploy_bench(bench_name: str) -> None:
 
 		_provision_running_container(bench, lab, settings, container_id, db_server, append_log)
 
-		if settings.base_domain:
+		if routing_enabled(settings):
 			bench.public_url = f"https://{bench.bench_name}.{settings.base_domain}"
 
 		bench.status = "Running"

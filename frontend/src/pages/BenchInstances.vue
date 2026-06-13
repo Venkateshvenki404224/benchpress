@@ -48,6 +48,48 @@ const columns = [
 		},
 	},
 	{
+		label: "Public",
+		key: "is_public",
+		width: "140px",
+		getLabel: ({ row }) => (row.is_public ? "Public" : "Private"),
+		prefix: ({ row }) => {
+			const badge = h(Badge, {
+				label: row.is_public ? "Public" : "Private",
+				theme: row.is_public ? "green" : "gray",
+				size: "sm",
+			});
+			return row.public_url
+				? h(
+						"a",
+						{
+							href: row.public_url,
+							target: "_blank",
+							rel: "noopener",
+							onClick: (e) => e.stopPropagation(),
+						},
+						[badge]
+				  )
+				: badge;
+		},
+	},
+	{
+		label: "Health",
+		key: "health_status",
+		width: "120px",
+		getLabel: ({ row }) => row.health_status || "—",
+		prefix: ({ row }) =>
+			row.health_status
+				? h(Badge, {
+						label: row.health_status,
+						theme:
+							{ Healthy: "green", Unhealthy: "red", Unknown: "gray" }[
+								row.health_status
+							] || "gray",
+						size: "sm",
+				  })
+				: null,
+	},
+	{
 		label: "IP Address",
 		key: "wg_ip",
 		width: "140px",
@@ -66,6 +108,9 @@ const benches = useList({
 		"frappe_version",
 		"domain",
 		"status",
+		"is_public",
+		"public_url",
+		"health_status",
 		"container_id",
 		"container_ip",
 		"wg_ip",

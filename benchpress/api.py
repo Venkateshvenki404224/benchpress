@@ -88,6 +88,7 @@ def get_benches() -> list[dict]:
 			"public_url",
 			"is_public",
 			"public_username",
+			"health_status",
 			"status",
 			"container_id",
 			"container_ip",

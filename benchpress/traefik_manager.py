@@ -160,10 +160,15 @@ def _decrypt_public_password(bench) -> str:
 	return bench.get("public_password") or ""
 
 
+def routing_enabled(settings) -> bool:
+	"""Public routing is active only when the master switch and a base domain are both set."""
+	return bool(settings.enable_public_routing and settings.base_domain)
+
+
 def compute_bench_labels(bench, lab, settings) -> dict[str, str]:
 	"""Single source of truth for a bench container's Docker labels.
 
-	Traefik routing labels are added only when a base_domain is configured.
+	Traefik routing labels are added only when public routing is enabled.
 	"""
 	labels = {
 		"benchpress.managed": "true",
@@ -171,7 +176,7 @@ def compute_bench_labels(bench, lab, settings) -> dict[str, str]:
 		"benchpress.lab": lab.lab_id,
 	}
 
-	if settings.base_domain:
+	if routing_enabled(settings):
 		name = bench.bench_name
 		host = f"{name}.{settings.base_domain}"
 		labels.update(
@@ -194,3 +199,42 @@ def compute_bench_labels(bench, lab, settings) -> dict[str, str]:
 			labels[f"traefik.http.routers.{name}.middlewares"] = f"{name}-auth"
 
 	return labels
+
+
+def scheduled_bench_health_check():
+	"""Cron — probe each routed running bench's web process and store its Public Health."""
+	import frappe
+	import requests
+
+	settings = frappe.get_cached_doc("BenchPress Settings")
+	if not routing_enabled(settings):
+		return
+
+	from benchpress.wg_manager import _get_container_ip
+
+	benches = frappe.get_all(
+		"Bench Instance",
+		filters={"status": "Running"},
+		fields=["name", "bench_name", "container_id"],
+	)
+	for bench in benches:
+		if not bench.container_id:
+			continue
+		try:
+			ip = _get_container_ip(bench.container_id)
+			host = f"{bench.bench_name}.{settings.base_domain}"
+			try:
+				resp = requests.get(
+					f"http://{ip}:8000/api/method/ping",
+					headers={"Host": host},
+					timeout=3,
+				)
+				status = "Healthy" if resp.status_code == 200 else "Unhealthy"
+			except requests.RequestException:
+				status = "Unhealthy"
+			frappe.db.set_value("Bench Instance", bench.name, "health_status", status, update_modified=False)
+		except Exception:
+			frappe.log_error(
+				title=f"Bench health check failed: {bench.name}",
+				message=frappe.get_traceback(),
+			)

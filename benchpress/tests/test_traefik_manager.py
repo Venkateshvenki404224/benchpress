@@ -9,6 +9,7 @@ from benchpress.traefik_manager import (
 	_render_traefik_config,
 	compute_bench_labels,
 	make_basicauth_users,
+	routing_enabled,
 )
 
 BENCH = frappe._dict(bench_name="abc123", is_public=1)
@@ -29,8 +30,16 @@ class TestComputeBenchLabels(IntegrationTestCase):
 		labels = compute_bench_labels(BENCH, LAB, frappe._dict(base_domain=""))
 		self.assertFalse(any(k.startswith("traefik.") for k in labels))
 
+	def test_no_traefik_labels_when_master_switch_off(self):
+		labels = compute_bench_labels(
+			BENCH, LAB, frappe._dict(base_domain="lab.test", enable_public_routing=0)
+		)
+		self.assertFalse(any(k.startswith("traefik.") for k in labels))
+
 	def test_traefik_labels_with_base_domain(self):
-		labels = compute_bench_labels(BENCH, LAB, frappe._dict(base_domain="lab.test"))
+		labels = compute_bench_labels(
+			BENCH, LAB, frappe._dict(base_domain="lab.test", enable_public_routing=1)
+		)
 		self.assertEqual(labels["traefik.enable"], "true")
 		self.assertEqual(labels["traefik.docker.network"], "benchpress")
 		self.assertEqual(labels["traefik.http.routers.abc123.rule"], "Host(`abc123.lab.test`)")
@@ -41,12 +50,16 @@ class TestComputeBenchLabels(IntegrationTestCase):
 		self.assertEqual(labels["traefik.http.services.abc123-svc.loadbalancer.server.port"], "8000")
 
 	def test_public_bench_has_no_basicauth_middleware(self):
-		labels = compute_bench_labels(BENCH, LAB, frappe._dict(base_domain="lab.test"))
+		labels = compute_bench_labels(
+			BENCH, LAB, frappe._dict(base_domain="lab.test", enable_public_routing=1)
+		)
 		self.assertNotIn("traefik.http.routers.abc123.middlewares", labels)
 		self.assertFalse(any(".basicauth." in k for k in labels))
 
 	def test_private_bench_adds_basicauth_middleware(self):
-		labels = compute_bench_labels(PRIVATE_BENCH, LAB, frappe._dict(base_domain="lab.test"))
+		labels = compute_bench_labels(
+			PRIVATE_BENCH, LAB, frappe._dict(base_domain="lab.test", enable_public_routing=1)
+		)
 		self.assertEqual(labels["traefik.http.routers.abc123.middlewares"], "abc123-auth")
 		users = labels["traefik.http.middlewares.abc123-auth.basicauth.users"]
 		self.assertTrue(users.startswith("lab:$apr1$"))
@@ -83,3 +96,11 @@ class TestRenderTraefikConfig(IntegrationTestCase):
 	def test_blank_email_when_unset(self):
 		config = _render_traefik_config(frappe._dict(le_use_staging=1, acme_email=None))
 		self.assertIn('email: ""', config)
+
+
+class TestRoutingEnabled(IntegrationTestCase):
+	def test_requires_switch_and_domain(self):
+		self.assertTrue(routing_enabled(frappe._dict(enable_public_routing=1, base_domain="lab.test")))
+		self.assertFalse(routing_enabled(frappe._dict(enable_public_routing=0, base_domain="lab.test")))
+		self.assertFalse(routing_enabled(frappe._dict(enable_public_routing=1, base_domain="")))
+		self.assertFalse(routing_enabled(frappe._dict(enable_public_routing=0, base_domain="")))
