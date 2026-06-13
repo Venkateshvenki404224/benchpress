@@ -471,7 +471,7 @@ def _build_lab_with_logs(lab, log_fn) -> None:
 	lab.image_tag = image_tag
 	lab.status = "Ready"
 	lab.save(ignore_permissions=True)
-	frappe.db.commit()  # nosemgrep -- background job: persist built image result
+	frappe.db.commit()
 	if log_fn:
 		log_fn(f"Lab image ready: {image_tag}")
 
@@ -490,7 +490,7 @@ def build_lab(lab_name: str) -> None:
 		}
 	)
 	build_log.insert(ignore_permissions=True)
-	frappe.db.commit()  # nosemgrep -- background job: persist log row before streaming
+	frappe.db.commit()
 	build_log_name = build_log.name
 
 	append_log = _make_log_appender(
@@ -526,3 +526,4 @@ def stop_bench(bench_name: str) -> None:
 
 	bench.status = "Stopped"
 	bench.save(ignore_permissions=True)
+	frappe.db.commit()
