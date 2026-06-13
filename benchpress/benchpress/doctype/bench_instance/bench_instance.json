@@ -25,6 +25,7 @@
   "is_public",
   "public_username",
   "public_password",
+  "health_status",
   "container_section",
   "container_id",
   "container_image",
@@ -145,6 +146,13 @@
    "fieldname": "public_password",
    "fieldtype": "Password",
    "label": "Public Password",
+   "read_only": 1
+  },
+  {
+   "fieldname": "health_status",
+   "fieldtype": "Select",
+   "label": "Public Health",
+   "options": "\nHealthy\nUnhealthy\nUnknown",
    "read_only": 1
   },
   {

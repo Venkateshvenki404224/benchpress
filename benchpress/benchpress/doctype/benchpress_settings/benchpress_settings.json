@@ -10,6 +10,7 @@
   "docker_socket",
   "default_image",
   "column_break_docker",
+  "enable_public_routing",
   "base_domain",
   "traefik_network",
   "acme_email",
@@ -52,6 +53,13 @@
    "fieldtype": "Column Break"
   },
   {
+   "default": "0",
+   "description": "Master switch. When off, deployed benches are not routed through Traefik and get no public URL.",
+   "fieldname": "enable_public_routing",
+   "fieldtype": "Check",
+   "label": "Enable Public Routing"
+  },
+  {
    "fieldname": "base_domain",
    "fieldtype": "Data",
    "in_list_view": 1,
@@ -59,7 +67,7 @@
    "reqd": 1
   },
   {
-   "default": "traefik-public",
+   "default": "benchpress",
    "fieldname": "traefik_network",
    "fieldtype": "Data",
    "label": "Traefik Network"

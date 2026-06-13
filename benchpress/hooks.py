@@ -175,6 +175,7 @@ scheduler_events = {
 		],
 		"*/5 * * * *": [
 			"benchpress.mariadb_manager.scheduled_health_check",
+			"benchpress.traefik_manager.scheduled_bench_health_check",
 		],
 		"0 2 * * *": [
 			"benchpress.mariadb_manager.scheduled_backup",

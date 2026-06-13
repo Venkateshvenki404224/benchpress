@@ -57,7 +57,7 @@ echo ""
 
 # --- Step 1: Docker group ---
 
-info "Step 1/6: Docker group"
+info "Step 1/7: Docker group"
 
 if groups "$BENCH_USER" | grep -q '\bdocker\b'; then
     success "User '$BENCH_USER' is already in the docker group"
@@ -80,7 +80,7 @@ echo ""
 
 # --- Step 2: Shared infrastructure (MariaDB + Redis) ---
 
-info "Step 2/6: Shared infrastructure (MariaDB + Redis)"
+info "Step 2/7: Shared infrastructure (MariaDB + Redis)"
 
 COMPOSE_DIR="$BENCH_DIR/apps/benchpress/benchpress/config"
 COMPOSE_FILE="$COMPOSE_DIR/docker-compose.yml"
@@ -150,9 +150,57 @@ fi
 
 echo ""
 
-# --- Step 3: IP forwarding ---
+# --- Step 3: Traefik reverse proxy ---
 
-info "Step 3/6: IP forwarding"
+info "Step 3/7: Traefik reverse proxy"
+
+# traefik.yml is rendered from BenchPress Settings at first deploy; these .env
+# defaults document the ACME intent and pin the Let's Encrypt staging CA so
+# host setup never burns the production rate limit.
+if ! grep -q '^ACME_EMAIL=' "$ENV_FILE" 2>/dev/null; then
+    echo "ACME_EMAIL=" >> "$ENV_FILE"
+    warn "Added empty ACME_EMAIL to $ENV_FILE — set a real address before issuing production certs"
+fi
+if ! grep -q '^ACME_CA_SERVER=' "$ENV_FILE" 2>/dev/null; then
+    echo "ACME_CA_SERVER=https://acme-staging-v02.api.letsencrypt.org/directory" >> "$ENV_FILE"
+    success "Defaulted ACME_CA_SERVER to the Let's Encrypt staging endpoint"
+fi
+
+# Warn (do not fail) if something else already owns the HTTP/HTTPS ports.
+if command -v ss &>/dev/null; then
+    for port in 80 443; do
+        if ss -ltn 2>/dev/null | grep -qE "[:.]$port[[:space:]]"; then
+            warn "Host port :$port is already in use — Traefik may fail to bind it"
+        fi
+    done
+fi
+
+info "Starting Traefik reverse proxy..."
+docker compose -f "$COMPOSE_FILE" up -d traefik
+success "Traefik container is up"
+
+if docker exec benchpress-traefik traefik version &>/dev/null; then
+    success "Traefik responding ($(docker exec benchpress-traefik traefik version 2>/dev/null | head -1))"
+else
+    warn "Could not run 'traefik version' — check 'docker logs benchpress-traefik'"
+fi
+
+if curl -fsS http://127.0.0.1:8090/api/overview &>/dev/null; then
+    success "Traefik dashboard reachable at http://127.0.0.1:8090/"
+else
+    warn "Traefik dashboard not reachable on 127.0.0.1:8090 yet — give it a few seconds"
+fi
+
+warn "DNS: point a WILDCARD record  *.<base_domain>  →  this host's public IP"
+warn "     (set <base_domain> in BenchPress Settings, e.g. *.labs.example.com)"
+info "TLS: Traefik uses the Let's Encrypt STAGING CA by default (untrusted certs, high limits)."
+info "     Turn off 'Use Let's Encrypt Staging' in BenchPress Settings for production certs."
+
+echo ""
+
+# --- Step 4: IP forwarding ---
+
+info "Step 4/7: IP forwarding"
 
 SYSCTL_CONF="/etc/sysctl.d/99-benchpress.conf"
 
@@ -175,9 +223,9 @@ fi
 
 echo ""
 
-# --- Step 4: Sudoers for WireGuard ---
+# --- Step 5: Sudoers for WireGuard ---
 
-info "Step 4/6: Sudoers (WireGuard + Docker socket)"
+info "Step 5/7: Sudoers (WireGuard + Docker socket)"
 
 SUDOERS_FILE="/etc/sudoers.d/benchpress"
 
@@ -204,9 +252,9 @@ fi
 
 echo ""
 
-# --- Step 5: WireGuard install check ---
+# --- Step 6: WireGuard install check ---
 
-info "Step 5/6: WireGuard tools"
+info "Step 6/7: WireGuard tools"
 
 if command -v wg &>/dev/null && command -v wg-quick &>/dev/null; then
     success "WireGuard tools already installed ($(wg --version 2>/dev/null || echo 'wg found'))"
@@ -219,9 +267,9 @@ fi
 
 echo ""
 
-# --- Step 6: WireGuard server init ---
+# --- Step 7: WireGuard server init ---
 
-info "Step 6/6: WireGuard server initialization"
+info "Step 7/7: WireGuard server initialization"
 
 if sudo wg show wg0 &>/dev/null; then
     success "wg0 interface is already running"

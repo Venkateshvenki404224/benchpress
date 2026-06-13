@@ -406,10 +406,17 @@
 									<h2 class="text-base font-semibold text-ink-gray-9">
 										Container Status
 									</h2>
-									<Badge
-										:label="activeBench.status"
-										:theme="statusColor(activeBench.status)"
-									/>
+									<div class="flex items-center gap-2">
+										<Badge
+											v-if="activeBench.health_status"
+											:label="activeBench.health_status"
+											:theme="healthColor(activeBench.health_status)"
+										/>
+										<Badge
+											:label="activeBench.status"
+											:theme="statusColor(activeBench.status)"
+										/>
+									</div>
 								</div>
 								<div class="grid grid-cols-2 gap-4">
 									<div class="rounded-lg border border-outline-gray-1 p-4">
@@ -1057,6 +1064,11 @@ function statusColor(status) {
 		Inactive: "gray",
 	};
 	return map[status] || "gray";
+}
+
+function healthColor(health) {
+	const map = { Healthy: "green", Unhealthy: "red", Unknown: "gray" };
+	return map[health] || "gray";
 }
 </script>
 
