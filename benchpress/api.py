@@ -232,7 +232,7 @@ def bench_action(bench_name: str, action: str) -> dict:
 
 
 @frappe.whitelist()
-def set_bench_visibility(bench_name: str, is_public, username: str | None = None) -> dict:
+def set_bench_visibility(bench_name: str, is_public: bool | str | int, username: str | None = None) -> dict:
 	require_bench_access(bench_name)
 
 	if isinstance(is_public, str):
