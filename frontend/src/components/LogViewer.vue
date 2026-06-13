@@ -1,5 +1,5 @@
 <template>
-	<div class="space-y-2 rounded-lg bg-gray-950 p-3">
+	<div class="space-y-2 rounded-lg bg-surface-gray-7 p-3">
 		<LogStep
 			v-for="(step, idx) in steps"
 			:key="idx"
@@ -9,7 +9,7 @@
 			:duration="step.duration"
 			:defaultOpen="step.defaultOpen"
 		/>
-		<div v-if="!steps.length" class="py-8 text-center text-sm text-gray-500">
+		<div v-if="!steps.length" class="py-8 text-center text-sm text-ink-gray-5">
 			No log output yet.
 		</div>
 	</div>
