@@ -276,9 +276,9 @@ import { computed, ref, watch, onMounted, onUnmounted } from "vue";
 import { useRoute } from "vue-router";
 import { useSocket } from "@/socket";
 import {
-	createResource,
-	createDocumentResource,
-	createListResource,
+	useDoc,
+	useCall,
+	useList,
 	Badge,
 	Button,
 	Tabs,
@@ -329,14 +329,14 @@ const siteUrl = computed(() => {
 	return `${ip}:8000`;
 });
 
-const lab = createDocumentResource({
+const lab = useDoc({
 	doctype: "Lab",
 	name: labId,
 });
 
-const benches = createResource({
-	url: "benchpress.api.get_benches",
-	auto: true,
+const benches = useCall({
+	url: "/api/v2/method/benchpress.api.get_benches",
+	immediate: true,
 });
 
 const activeBench = computed(() => {
@@ -344,16 +344,33 @@ const activeBench = computed(() => {
 	return benches.data.find((b) => b.lab === labId) || null;
 });
 
-const sites = createListResource({
+const sites = useList({
 	doctype: "Bench Site",
 	fields: ["name", "site_name", "full_domain", "status"],
-	filters: computed(() => ({ bench: activeBench.value?.name || "" })),
+	filters: () => ({ bench: activeBench.value?.name || "" }),
 	orderBy: "creation desc",
-	auto: computed(() => !!activeBench.value),
+	immediate: false,
+	refetch: false,
 });
 
-const deployLogs = createResource({
-	url: "benchpress.api.get_deploy_logs",
+watch(
+	() => activeBench.value?.name,
+	(n) => n && sites.reload(),
+	{ immediate: true }
+);
+
+const deployLogs = useCall({
+	url: "/api/v2/method/benchpress.api.get_deploy_logs",
+	immediate: false,
+});
+
+const buildLogs = useList({
+	doctype: "Build Log",
+	fields: ["name", "message", "log_type", "timestamp"],
+	filters: { lab: labId },
+	orderBy: "timestamp desc",
+	limit: 20,
+	immediate: true,
 });
 
 const liveDeployLog = ref("");
@@ -525,17 +542,10 @@ onUnmounted(() => {
 	}
 });
 
-const buildLogs = createListResource({
-	doctype: "Build Log",
-	fields: ["name", "message", "log_type", "timestamp"],
-	filters: { lab: labId },
-	orderBy: "timestamp desc",
-	pageLength: 20,
-	auto: true,
-});
-
-const buildAction = createResource({
-	url: "benchpress.api.build_lab_image",
+const buildAction = useCall({
+	url: "/api/v2/method/benchpress.api.build_lab_image",
+	method: "POST",
+	immediate: false,
 	onSuccess() {
 		lab.reload();
 		buildLogs.reload();
@@ -547,8 +557,10 @@ function buildLabImage() {
 	buildAction.submit({ lab_name: labId });
 }
 
-const deployAction = createResource({
-	url: "benchpress.api.create_bench",
+const deployAction = useCall({
+	url: "/api/v2/method/benchpress.api.create_bench",
+	method: "POST",
+	immediate: false,
 	onSuccess() {
 		liveDeployLog.value = "";
 		deployComplete.value = false;
@@ -562,8 +574,10 @@ function deployLab() {
 	});
 }
 
-const benchAction = createResource({
-	url: "benchpress.api.bench_action",
+const benchAction = useCall({
+	url: "/api/v2/method/benchpress.api.bench_action",
+	method: "POST",
+	immediate: false,
 	onSuccess() {
 		benches.reload();
 	},
@@ -584,8 +598,10 @@ function doBenchAction(action) {
 	});
 }
 
-const visibilityAction = createResource({
-	url: "benchpress.api.set_bench_visibility",
+const visibilityAction = useCall({
+	url: "/api/v2/method/benchpress.api.set_bench_visibility",
+	method: "POST",
+	immediate: false,
 	onSuccess() {
 		liveDeployLog.value = "";
 		deployComplete.value = false;
@@ -593,7 +609,7 @@ const visibilityAction = createResource({
 		toast.success("Updating bench visibility — this re-creates the container.");
 	},
 	onError(err) {
-		toast.error(err?.messages?.[0] || "Failed to update visibility");
+		toast.error(err?.message || "Failed to update visibility");
 	},
 });
 
@@ -605,8 +621,10 @@ function onVisibilityChange(value) {
 	});
 }
 
-const createSiteAction = createResource({
-	url: "benchpress.api.create_site",
+const createSiteAction = useCall({
+	url: "/api/v2/method/benchpress.api.create_site",
+	method: "POST",
+	immediate: false,
 	onSuccess() {
 		showNewSite.value = false;
 		sites.reload();

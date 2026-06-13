@@ -8,9 +8,13 @@ export {}
 /* prettier-ignore */
 declare module 'vue' {
   export interface GlobalComponents {
+    ConnectionInfo: typeof import('./src/components/lab/ConnectionInfo.vue')['default']
+    CopyableField: typeof import('./src/components/CopyableField.vue')['default']
     LogStep: typeof import('./src/components/LogStep.vue')['default']
     LogViewer: typeof import('./src/components/LogViewer.vue')['default']
+    ResourceUsage: typeof import('./src/components/lab/ResourceUsage.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
+    SitesTab: typeof import('./src/components/lab/SitesTab.vue')['default']
   }
 }
