@@ -520,5 +520,12 @@ def run(as_json: bool = False, strict: bool = False):
 		"bench": _bench_dir(),
 		"in_container": _in_docker(),
 	}
-	print(_format_report(results, env, tty=sys.stdout.isatty()))
+
+	if as_json:
+		print(frappe.as_json(results))
+	else:
+		print(_format_report(results, env, tty=sys.stdout.isatty()))
+
+	if strict and _summary(results)["fail"]:
+		raise SystemExit(1)
 	return None

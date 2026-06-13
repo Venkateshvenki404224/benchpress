@@ -1,8 +1,14 @@
 # Copyright (c) 2026, Venkatesh and Contributors
 # See license.txt
 
+import contextlib
+import io
+import json
+from unittest.mock import patch
+
 from frappe.tests import IntegrationTestCase
 
+from benchpress import doctor
 from benchpress.doctor import (
 	FAIL,
 	MIN_CPU_CORES,
@@ -27,6 +33,7 @@ from benchpress.doctor import (
 	_result,
 	_skipped,
 	_summary,
+	run,
 )
 
 UBUNTU = {"ID": "ubuntu", "ID_LIKE": "debian", "PRETTY_NAME": "Ubuntu 22.04.4 LTS"}
@@ -228,6 +235,30 @@ class TestEvaluatePorts(IntegrationTestCase):
 		result = _evaluate_wg_port(51820, False)
 		self.assertEqual(result["status"], WARN)
 		self.assertIn("51820", result["fix"])
+
+
+class TestRun(IntegrationTestCase):
+	def _run_capturing(self, checks, **kwargs):
+		buf = io.StringIO()
+		with patch.object(doctor, "CHECKS", checks), contextlib.redirect_stdout(buf):
+			run(**kwargs)
+		return buf.getvalue()
+
+	def test_json_output_is_valid_results_array(self):
+		checks = [lambda: [_result(PASS, "A", "ok"), _result(WARN, "B", "borderline", "fix it")]]
+		parsed = json.loads(self._run_capturing(checks, as_json=True))
+		self.assertEqual([r["name"] for r in parsed], ["A", "B"])
+		self.assertEqual(parsed[1]["fix"], "fix it")
+
+	def test_strict_exits_nonzero_on_fail(self):
+		checks = [lambda: [_result(FAIL, "A", "bad", "do x")]]
+		with self.assertRaises(SystemExit) as ctx:
+			self._run_capturing(checks, strict=True)
+		self.assertEqual(ctx.exception.code, 1)
+
+	def test_strict_exits_zero_without_fail(self):
+		checks = [lambda: [_result(PASS, "A", "ok"), _result(WARN, "B", "meh")]]
+		self._run_capturing(checks, strict=True)
 
 
 class TestParseListeningPorts(IntegrationTestCase):
