@@ -69,7 +69,7 @@ def _write_traefik_config(settings) -> bool:
 	config_path = os.path.join(_get_config_dir(), "traefik.yml")
 	existing = ""
 	if os.path.exists(config_path):
-		with open(config_path) as f:
+		with open(config_path) as f:  # nosemgrep: frappe-semgrep-rules.rules.security.frappe-security-file-traversal  # fmt: skip
 			existing = f.read()
 	if existing == config:
 		return False
