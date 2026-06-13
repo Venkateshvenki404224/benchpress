@@ -93,3 +93,6 @@ def _print_manual_instructions(site: str) -> None:
 	print("\nRun the setup script manually to configure Docker, WireGuard, and permissions:")
 	print(f"\n  bash apps/benchpress/setup.sh {site}\n")
 	print("Or follow the manual steps in: apps/benchpress/docs/wireguard-setup.md\n")
+	print("Then check host readiness with the doctor:")
+	print(f"\n  bench --site {site} execute benchpress.doctor.run")
+	print("  bench benchpress doctor\n")

@@ -84,6 +84,46 @@ http://your-site.localhost:8000/frontend
 
 ---
 
+## Troubleshooting
+
+If any step above failed — or a deploy errors out with a cryptic message — **run the doctor first**. It inspects the same host surface `setup.sh` configures (Docker, WireGuard, IP forwarding, sudoers, ports, shared infrastructure) and prints a `pass / warn / fail` report with the exact command to fix each problem. Its output is redaction-safe, so you can paste it straight into a GitHub issue.
+
+Two equivalent ways to run it:
+
+```bash
+bench --site your-site.localhost execute benchpress.doctor.run
+bench benchpress doctor --site your-site.localhost
+```
+
+> `bench benchpress doctor` is registered at app load; if bench does not recognise it yet, run `bench restart` once.
+
+Flags (on either path):
+
+| Flag | Effect |
+|------|--------|
+| `--json` | Emit the results as machine-readable JSON instead of the text report. With `execute`: `--kwargs "{'as_json': 1}"`. |
+| `--strict` | Exit non-zero when any check is `FAIL` — use it as a CI / pre-deploy gate. With `execute`: `--kwargs "{'strict': 1}"`. |
+
+Sample report:
+
+```
+BenchPress readiness check
+site: frontend  bench: /home/frappe/frappe-bench  running on: host
+
+[PASS] Operating system: Ubuntu 22.04.4 LTS
+[PASS] Docker daemon: reachable, server version 24.0.7
+[WARN] WireGuard interface: wg0 is not up
+        fix: sudo wg-quick up wg0
+[FAIL] IP forwarding: net.ipv4.ip_forward = 0
+        fix: sudo sysctl -w net.ipv4.ip_forward=1
+
+Summary: 9 pass, 1 warn, 1 fail
+```
+
+Host-only checks (IP forwarding, sudoers, the `wg0` interface, listening ports) need direct host access. Run the doctor **on the host bench**, not inside a container — in a container those rows degrade to `[WARN] skipped (run on the host)` rather than failing.
+
+---
+
 ## Your First Lab and Bench
 
 Once BenchPress is running, follow the [Creating Labs](creating-labs.md) guide to create your first lab template and deploy a bench instance.
