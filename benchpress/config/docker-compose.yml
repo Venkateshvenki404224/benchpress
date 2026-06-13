@@ -1,4 +1,21 @@
 services:
+  traefik:
+    image: traefik:v3.1
+    container_name: benchpress-traefik
+    hostname: benchpress-traefik
+    restart: always
+    command: --configfile=/etc/traefik/traefik.yml
+    ports:
+      - "80:80"
+      - "443:443"
+      - "127.0.0.1:8090:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./traefik.yml:/etc/traefik/traefik.yml:ro
+      - traefik-acme:/etc/traefik/acme
+    networks:
+      - benchpress
+
   mariadb:
     image: mariadb:${MARIADB_VERSION:-10.6}
     container_name: benchpress-mariadb
@@ -31,6 +48,8 @@ volumes:
     external: true
   redis-data:
     name: benchpress-redis-data
+  traefik-acme:
+    name: benchpress-traefik-acme
 
 networks:
   benchpress:

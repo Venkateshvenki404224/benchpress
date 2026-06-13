@@ -151,6 +151,97 @@
 									<div class="flex items-center gap-4 py-3">
 										<label
 											class="w-36 shrink-0 text-sm font-medium text-ink-gray-9"
+											>Public Access</label
+										>
+										<div class="flex flex-1 items-center gap-3">
+											<Switch
+												:modelValue="!!activeBench.is_public"
+												:disabled="visibilityAction.loading"
+												@update:modelValue="onVisibilityChange"
+											/>
+											<span class="text-sm text-ink-gray-6">{{
+												activeBench.is_public
+													? "Anyone with the link can open this bench"
+													: "Visitors must sign in with the credentials below"
+											}}</span>
+										</div>
+									</div>
+									<div
+										v-if="
+											!activeBench.is_public && activeBench.public_username
+										"
+										class="flex items-center gap-4 py-3"
+									>
+										<label
+											class="w-36 shrink-0 text-sm font-medium text-ink-gray-9"
+											>Access Username</label
+										>
+										<div class="flex flex-1 items-center gap-2">
+											<code
+												class="flex-1 rounded bg-surface-gray-1 px-4 py-2.5 font-mono text-sm text-ink-gray-8"
+												>{{ activeBench.public_username }}</code
+											>
+											<Button
+												icon="copy"
+												appearance="minimal"
+												size="sm"
+												@click="copyText(activeBench.public_username)"
+											/>
+										</div>
+									</div>
+									<div
+										v-if="
+											!activeBench.is_public && activeBench.public_password
+										"
+										class="flex items-center gap-4 py-3"
+									>
+										<label
+											class="w-36 shrink-0 text-sm font-medium text-ink-gray-9"
+											>Access Password</label
+										>
+										<div class="flex flex-1 items-center gap-2">
+											<code
+												class="flex-1 rounded bg-surface-gray-1 px-4 py-2.5 font-mono text-sm text-ink-gray-8"
+												>{{
+													activeBench.public_password
+														? "••••••••••••"
+														: "—"
+												}}</code
+											>
+											<Button
+												icon="copy"
+												appearance="minimal"
+												size="sm"
+												@click="copyText(activeBench.public_password)"
+											/>
+										</div>
+									</div>
+									<div
+										v-if="activeBench.public_url"
+										class="flex items-center gap-4 py-3"
+									>
+										<label
+											class="w-36 shrink-0 text-sm font-medium text-ink-gray-9"
+											>Public URL</label
+										>
+										<div class="flex flex-1 items-center gap-2">
+											<a
+												:href="activeBench.public_url"
+												target="_blank"
+												class="flex-1 truncate rounded bg-surface-gray-1 px-4 py-2.5 font-mono text-sm text-ink-blue-3 hover:underline"
+												>{{ activeBench.public_url }}</a
+											>
+											<Button
+												icon="copy"
+												appearance="minimal"
+												size="sm"
+												@click="copyText(activeBench.public_url)"
+											/>
+										</div>
+									</div>
+									<div class="flex items-center gap-4 py-3">
+										<label
+											class="w-36 shrink-0 text-sm font-medium text-ink-gray-9"
 											>Device IP</label
 										>
 										<div class="flex flex-1 items-center gap-2">
@@ -588,12 +679,14 @@ import {
 	createListResource,
 	Badge,
 	Button,
+	Switch,
 	Tabs,
 	ListView,
 	Dialog,
 	FormControl,
 	ErrorMessage,
 	Alert,
+	toast,
 } from "frappe-ui";
 import LogViewer from "@/components/LogViewer.vue";
 import { userContext } from "@/data/userContext";
@@ -895,6 +988,27 @@ function doBenchAction(action) {
 	benchAction.submit({
 		bench_name: activeBench.value.name,
 		action,
+	});
+}
+
+const visibilityAction = createResource({
+	url: "benchpress.api.set_bench_visibility",
+	onSuccess() {
+		liveDeployLog.value = "";
+		deployComplete.value = false;
+		benches.reload();
+		toast.success("Updating bench visibility — this re-creates the container.");
+	},
+	onError(err) {
+		toast.error(err?.messages?.[0] || "Failed to update visibility");
+	},
+});
+
+function onVisibilityChange(value) {
+	if (!activeBench.value) return;
+	visibilityAction.submit({
+		bench_name: activeBench.value.name,
+		is_public: value ? 1 : 0,
 	});
 }
 

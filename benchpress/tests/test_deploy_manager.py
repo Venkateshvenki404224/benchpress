@@ -189,3 +189,57 @@ class TestDeployManager(IntegrationTestCase):
 
 		redeploy_bench(bench.name)
 		mock_drop_db.assert_called_once_with(self.db_server_name, bench.site_name)
+
+	# --- apply_public_visibility ---
+
+	def _deployed_bench(self):
+		bench = self._fresh_bench()
+		frappe.db.set_value("Bench Instance", bench.name, "database_server", self.db_server_name)
+		frappe.db.set_value("Bench Instance", bench.name, "container_id", "old-container")
+		frappe.db.commit()
+		bench.reload()
+		return bench
+
+	@patch("benchpress.deploy_manager.time.sleep")
+	@patch("benchpress.deploy_manager._provision_running_container")
+	@patch("benchpress.deploy_manager.start_container")
+	@patch("benchpress.deploy_manager.create_bench_container")
+	@patch("benchpress.deploy_manager._remove_stale_container")
+	def test_apply_public_visibility_private_generates_creds(
+		self, mock_rm, mock_create, mock_start, mock_prov, mock_sleep
+	):
+		from benchpress.deploy_manager import apply_public_visibility
+
+		mock_create.return_value = "new-container"
+		bench = self._deployed_bench()
+
+		apply_public_visibility(bench.name, is_public=False)
+
+		bench.reload()
+		self.assertEqual(bench.is_public, 0)
+		self.assertEqual(bench.public_username, "lab")
+		self.assertTrue(bench.get_password("public_password"))
+		self.assertEqual(bench.status, "Running")
+		self.assertEqual(bench.container_id, "new-container")
+		mock_rm.assert_called_once()
+		mock_prov.assert_called_once()
+
+	@patch("benchpress.deploy_manager.time.sleep")
+	@patch("benchpress.deploy_manager._provision_running_container")
+	@patch("benchpress.deploy_manager.start_container")
+	@patch("benchpress.deploy_manager.create_bench_container")
+	@patch("benchpress.deploy_manager._remove_stale_container")
+	def test_apply_public_visibility_public_recreates_container(
+		self, mock_rm, mock_create, mock_start, mock_prov, mock_sleep
+	):
+		from benchpress.deploy_manager import apply_public_visibility
+
+		mock_create.return_value = "new-container"
+		bench = self._deployed_bench()
+
+		apply_public_visibility(bench.name, is_public=True)
+
+		bench.reload()
+		self.assertEqual(bench.is_public, 1)
+		self.assertEqual(bench.status, "Running")
+		mock_create.assert_called_once()
