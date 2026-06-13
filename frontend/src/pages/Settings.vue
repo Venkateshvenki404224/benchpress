@@ -91,9 +91,10 @@
 				<div class="w-full space-y-2">
 					<ErrorMessage :message="settings.setValue.error" />
 					<div class="flex justify-end gap-2">
-						<Button @click="showDialog = false">Cancel</Button>
+						<Button variant="ghost" @click="showDialog = false">Cancel</Button>
 						<Button
-							appearance="primary"
+							variant="solid"
+							theme="gray"
 							:loading="settings.setValue.loading"
 							@click="saveSettings"
 							>Save</Button
@@ -108,7 +109,7 @@
 <script setup>
 import { ref, reactive, watch } from "vue";
 import { useRouter } from "vue-router";
-import { createDocumentResource, Dialog, FormControl, Button, ErrorMessage } from "frappe-ui";
+import { useDoc, Dialog, FormControl, Button, ErrorMessage } from "frappe-ui";
 
 const router = useRouter();
 const showDialog = ref(true);
@@ -127,33 +128,35 @@ const form = reactive({
 	container_cpu_quota: "",
 });
 
-const settings = createDocumentResource({
+function fillForm(doc) {
+	Object.assign(form, {
+		base_domain: doc.base_domain || "",
+		default_image: doc.default_image || "",
+		traefik_network: doc.traefik_network || "",
+		docker_socket: doc.docker_socket || "",
+		wg_server_ip: doc.wg_server_ip || "",
+		wg_subnet: doc.wg_subnet || "",
+		wg_server_port: doc.wg_server_port || "",
+		wg_server_endpoint: doc.wg_server_endpoint || "",
+		wg_server_public_key: doc.wg_server_public_key || "",
+		container_memory_limit: doc.container_memory_limit || "",
+		container_cpu_quota: doc.container_cpu_quota || "",
+	});
+}
+
+const settings = useDoc({
 	doctype: "BenchPress Settings",
 	name: "BenchPress Settings",
-	onSuccess(doc) {
-		Object.assign(form, {
-			base_domain: doc.base_domain || "",
-			default_image: doc.default_image || "",
-			traefik_network: doc.traefik_network || "",
-			docker_socket: doc.docker_socket || "",
-			wg_server_ip: doc.wg_server_ip || "",
-			wg_subnet: doc.wg_subnet || "",
-			wg_server_port: doc.wg_server_port || "",
-			wg_server_endpoint: doc.wg_server_endpoint || "",
-			wg_server_public_key: doc.wg_server_public_key || "",
-			container_memory_limit: doc.container_memory_limit || "",
-			container_cpu_quota: doc.container_cpu_quota || "",
-		});
-	},
-	setValue: {
-		onSuccess() {
-			showDialog.value = false;
-		},
-	},
 });
 
-function saveSettings() {
-	settings.setValue.submit({ ...form });
+settings.onSuccess(fillForm);
+if (settings.doc) fillForm(settings.doc);
+
+async function saveSettings() {
+	const saved = await settings.setValue.submit({ ...form });
+	if (saved) {
+		showDialog.value = false;
+	}
 }
 
 watch(showDialog, (val) => {
