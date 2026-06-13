@@ -4,9 +4,17 @@
 import frappe
 from frappe.tests import IntegrationTestCase
 
-from benchpress.traefik_manager import _render_traefik_config, compute_bench_labels
+from benchpress.traefik_manager import (
+	_apr1_crypt,
+	_render_traefik_config,
+	compute_bench_labels,
+	make_basicauth_users,
+)
 
-BENCH = frappe._dict(bench_name="abc123")
+BENCH = frappe._dict(bench_name="abc123", is_public=1)
+PRIVATE_BENCH = frappe._dict(
+	bench_name="abc123", is_public=0, public_username="lab", public_password="secret123"
+)
 LAB = frappe._dict(lab_id="crm-lab")
 
 
@@ -31,6 +39,33 @@ class TestComputeBenchLabels(IntegrationTestCase):
 		self.assertEqual(labels["traefik.http.routers.abc123.tls.certresolver"], "letsencrypt")
 		self.assertEqual(labels["traefik.http.routers.abc123.service"], "abc123-svc")
 		self.assertEqual(labels["traefik.http.services.abc123-svc.loadbalancer.server.port"], "8000")
+
+	def test_public_bench_has_no_basicauth_middleware(self):
+		labels = compute_bench_labels(BENCH, LAB, frappe._dict(base_domain="lab.test"))
+		self.assertNotIn("traefik.http.routers.abc123.middlewares", labels)
+		self.assertFalse(any(".basicauth." in k for k in labels))
+
+	def test_private_bench_adds_basicauth_middleware(self):
+		labels = compute_bench_labels(PRIVATE_BENCH, LAB, frappe._dict(base_domain="lab.test"))
+		self.assertEqual(labels["traefik.http.routers.abc123.middlewares"], "abc123-auth")
+		users = labels["traefik.http.middlewares.abc123-auth.basicauth.users"]
+		self.assertTrue(users.startswith("lab:$apr1$"))
+
+
+class TestMakeBasicauthUsers(IntegrationTestCase):
+	def test_apr1_entry_format_and_verifies(self):
+		entry = make_basicauth_users("lab", "s3cret-pw")
+		user, hashed = entry.split(":", 1)
+		self.assertEqual(user, "lab")
+		self.assertTrue(hashed.startswith("$apr1$"))
+		salt = hashed.split("$")[2]
+		self.assertEqual(_apr1_crypt("s3cret-pw", salt), hashed)
+
+	def test_salt_is_randomised(self):
+		self.assertNotEqual(make_basicauth_users("lab", "pw"), make_basicauth_users("lab", "pw"))
+
+	def test_apr1_matches_openssl_reference(self):
+		self.assertEqual(_apr1_crypt("secret123", "abcdEFGH"), "$apr1$abcdEFGH$GCLJFBcJTZzLNXVmhLkb91")
 
 
 class TestRenderTraefikConfig(IntegrationTestCase):

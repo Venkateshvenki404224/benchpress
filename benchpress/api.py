@@ -86,6 +86,8 @@ def get_benches() -> list[dict]:
 			"frappe_version",
 			"domain",
 			"public_url",
+			"is_public",
+			"public_username",
 			"status",
 			"container_id",
 			"container_ip",
@@ -104,7 +106,7 @@ def get_benches() -> list[dict]:
 	for bench in benches:
 		bench["app_count"] = frappe.db.count("Bench App", {"parent": bench["name"]})
 		bench["site_count"] = frappe.db.count("Bench Site", {"bench": bench["name"]})
-		for field in ("ssh_password", "admin_password", "code_server_password"):
+		for field in ("ssh_password", "admin_password", "code_server_password", "public_password"):
 			try:
 				bench[field] = get_decrypted_password("Bench Instance", bench["name"], field)
 			except frappe.exceptions.ValidationError:
@@ -227,6 +229,25 @@ def bench_action(bench_name: str, action: str) -> dict:
 	bench.save(ignore_permissions=True)
 	frappe.db.commit()
 	return {"name": bench.name, "status": bench.status}
+
+
+@frappe.whitelist()
+def set_bench_visibility(bench_name: str, is_public, username: str | None = None) -> dict:
+	require_bench_access(bench_name)
+
+	if isinstance(is_public, str):
+		is_public = is_public.strip().lower() in ("1", "true", "yes", "on")
+	is_public = bool(is_public)
+
+	frappe.enqueue(
+		"benchpress.deploy_manager.apply_public_visibility",
+		bench_name=bench_name,
+		is_public=is_public,
+		username=username or None,
+		queue="long",
+		timeout=1800,
+	)
+	return {"status": "updating"}
 
 
 @frappe.whitelist()

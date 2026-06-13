@@ -95,6 +95,161 @@ def create_site_in_container(
 		drop_mariadb_user(db_server.name, site_name, db_name)
 
 
+def _site_exists_in_container(container_id: str, bench_dir: str, site_name: str) -> bool:
+	exit_code, _ = exec_in_container(
+		container_id,
+		f"test -f {bench_dir}/sites/{site_name}/site_config.json",
+		user="frappe",
+		workdir=bench_dir,
+	)
+	return exit_code == 0
+
+
+def _provision_running_container(bench, lab, settings, container_id, db_server, append_log) -> None:
+	"""Post-start provisioning shared by deploy_bench and the visibility toggle.
+
+	Idempotent: site creation is skipped when the data volume already carries it,
+	so a non-destructive container re-create reuses the existing site and DB.
+	"""
+	from benchpress.wg_manager import _get_container_ip
+
+	container_ip = _get_container_ip(container_id)
+	if container_ip:
+		bench.container_ip = container_ip
+		bench.save(ignore_permissions=True)
+		frappe.db.commit()
+
+	if settings.wg_server_public_key and settings.wg_server_endpoint:
+		from benchpress.wg_manager import (
+			add_peer_to_server,
+			allocate_ip,
+			ensure_wg_running,
+			generate_keypair,
+			remove_peer_from_server,
+			setup_container_vpn,
+			sync_wg_config,
+		)
+
+		append_log("=== Configuring WireGuard VPN ===")
+		ensure_wg_running()
+
+		if bench.wg_public_key:
+			try:
+				remove_peer_from_server(bench.wg_public_key)
+			except Exception:
+				pass  # best-effort
+
+		container_wg_ip = bench.wg_ip if bench.wg_ip else allocate_ip()
+		container_keys = generate_keypair()
+		add_peer_to_server(container_keys["public_key"], container_wg_ip)
+		setup_container_vpn(
+			container_id,
+			container_keys["private_key"],
+			container_wg_ip,
+			settings.wg_server_public_key,
+			settings.wg_server_port or 51820,
+		)
+		sync_wg_config()
+
+		bench.wg_ip = container_wg_ip
+		bench.wg_private_key = container_keys["private_key"]
+		bench.wg_public_key = container_keys["public_key"]
+		bench.save(ignore_permissions=True)
+		frappe.db.commit()
+		append_log(f"Container VPN: {container_wg_ip}")
+	else:
+		append_log("WireGuard not configured, skipping VPN.", "warning")
+
+	bench_dir = f"{lab.mount_target or '/home/frappe'}/frappe-bench"
+	site_name = bench.site_name
+	config = {
+		**db_server.get_connection_config(),
+		"redis_cache": "redis://benchpress-redis:6379/0",
+		"redis_queue": "redis://benchpress-redis:6379/1",
+		"redis_socketio": "redis://benchpress-redis:6379/2",
+		"socketio_port": 9000,
+		"webserver_port": 8000,
+		"default_site": site_name,
+	}
+	write_file_to_container(
+		container_id, json.dumps(config, indent=2), f"{bench_dir}/sites/common_site_config.json"
+	)
+	append_log("common_site_config.json written")
+
+	if _site_exists_in_container(container_id, bench_dir, site_name):
+		append_log(f"Site {site_name} already present, skipping creation")
+	else:
+		append_log(f"=== Creating site {site_name} ===")
+		admin_password = bench.get_password("admin_password")
+		apps_csv = ",".join(a.app_name for a in lab.apps if a.app_name.lower() != "frappe")
+		exit_code, output = create_site_in_container(
+			container_id, db_server, lab, site_name, admin_password, apps_csv
+		)
+		if exit_code != 0:
+			raise Exception(f"bench new-site failed (exit {exit_code}): {output}")
+		append_log("Site created successfully")
+
+	if settings.base_domain:
+		public_host = f"https://{bench.bench_name}.{settings.base_domain}"
+		exec_in_container(
+			container_id,
+			f"bench --site {site_name} set-config host_name {public_host}",
+			user="frappe",
+			workdir=bench_dir,
+		)
+		append_log(f"Canonical host set to {public_host}")
+
+	append_log("Building assets...")
+	exec_in_container(container_id, "bench build", user="frappe", workdir=bench_dir)
+
+	if not bench.ssh_username:
+		bench.ssh_username = bench._derive_username(bench.owner)
+
+	ssh_password = secrets.token_urlsafe(12)
+	linkuser_args = [
+		bench.ssh_username,
+		bench.owner,
+		lab.title,
+		bench.wg_ip or "0.0.0.0",
+		ssh_password,
+		bench.bench_name,
+		settings.base_domain or "localhost",
+		lab.mount_target or "/home/frappe",
+	]
+	append_log(f"=== Provisioning SSH user '{bench.ssh_username}' ===")
+	linkuser_cmd = "bash /opt/benchpress/scripts/linkuser.sh " + " ".join(f"'{a}'" for a in linkuser_args)
+	exit_code, output = exec_in_container(container_id, linkuser_cmd, user="root")
+	if output:
+		append_log(output.strip())
+	if exit_code != 0:
+		raise Exception(f"linkuser.sh failed (exit {exit_code}): {output}")
+
+	bench.ssh_password = ssh_password
+
+	if getattr(lab, "enable_code_server", 0):
+		append_log("=== Provisioning code-server ===")
+		cs_user = bench.ssh_username
+		cs_home = f"/home/{cs_user}"
+		code_server_password = secrets.token_urlsafe(16)
+		config_yaml = (
+			f"bind-addr: 0.0.0.0:8080\nauth: password\npassword: {code_server_password}\ncert: false\n"
+		)
+		write_file_to_container(
+			container_id,
+			config_yaml,
+			f"{cs_home}/.config/code-server/config.yaml",
+		)
+		exec_in_container(
+			container_id,
+			f"chown -R {cs_user}:{cs_user} {cs_home}/.config && chmod 600 {cs_home}/.config/code-server/config.yaml",
+			user="root",
+		)
+		exec_in_container(container_id, "bash /opt/benchpress/scripts/restart.sh", user="root")
+		bench.code_server_password = code_server_password
+		bench.code_server_url = f"http://{bench.wg_ip or bench.container_ip or '127.0.0.1'}:8080/"
+		append_log(f"code-server ready at {bench.code_server_url}")
+
+
 def deploy_bench(bench_name: str) -> None:
 	"""Deploy pipeline — shared MariaDB, site created at runtime via press agent pattern."""
 	bench = frappe.get_doc("Bench Instance", bench_name)
@@ -152,6 +307,11 @@ def deploy_bench(bench_name: str) -> None:
 
 		_remove_stale_container(bench)
 		append_log("=== Creating container ===")
+		if not bench.is_public:
+			bench.public_username = bench.public_username or "lab"
+			bench.public_password = secrets.token_urlsafe(9)
+			bench.save(ignore_permissions=True)
+			frappe.db.commit()
 		container_id = create_bench_container(bench, lab)
 		bench.container_id = container_id
 		bench.container_image = lab.image_tag
@@ -161,140 +321,7 @@ def deploy_bench(bench_name: str) -> None:
 		start_container(container_id)
 		time.sleep(5)
 
-		from benchpress.wg_manager import _get_container_ip
-
-		container_ip = _get_container_ip(container_id)
-		if container_ip:
-			bench.container_ip = container_ip
-			bench.save(ignore_permissions=True)
-			frappe.db.commit()
-
-		if settings.wg_server_public_key and settings.wg_server_endpoint:
-			from benchpress.wg_manager import (
-				add_peer_to_server,
-				allocate_ip,
-				ensure_wg_running,
-				generate_keypair,
-				remove_peer_from_server,
-				setup_container_vpn,
-				sync_wg_config,
-			)
-
-			append_log("=== Configuring WireGuard VPN ===")
-			ensure_wg_running()
-
-			if bench.wg_public_key:
-				try:
-					remove_peer_from_server(bench.wg_public_key)
-				except Exception:
-					pass  # best-effort
-
-			container_wg_ip = bench.wg_ip if bench.wg_ip else allocate_ip()
-			container_keys = generate_keypair()
-			add_peer_to_server(container_keys["public_key"], container_wg_ip)
-			setup_container_vpn(
-				container_id,
-				container_keys["private_key"],
-				container_wg_ip,
-				settings.wg_server_public_key,
-				settings.wg_server_port or 51820,
-			)
-			sync_wg_config()
-
-			bench.wg_ip = container_wg_ip
-			bench.wg_private_key = container_keys["private_key"]
-			bench.wg_public_key = container_keys["public_key"]
-			bench.save(ignore_permissions=True)
-			frappe.db.commit()
-			append_log(f"Container VPN: {container_wg_ip}")
-		else:
-			append_log("WireGuard not configured, skipping VPN.", "warning")
-
-		bench_dir = f"{lab.mount_target or '/home/frappe'}/frappe-bench"
-		site_name = bench.site_name
-		config = {
-			**db_server.get_connection_config(),
-			"redis_cache": "redis://benchpress-redis:6379/0",
-			"redis_queue": "redis://benchpress-redis:6379/1",
-			"redis_socketio": "redis://benchpress-redis:6379/2",
-			"socketio_port": 9000,
-			"webserver_port": 8000,
-			"default_site": site_name,
-		}
-		write_file_to_container(
-			container_id, json.dumps(config, indent=2), f"{bench_dir}/sites/common_site_config.json"
-		)
-		append_log("common_site_config.json written")
-
-		append_log(f"=== Creating site {site_name} ===")
-
-		apps_csv = ",".join(a.app_name for a in lab.apps if a.app_name.lower() != "frappe")
-		exit_code, output = create_site_in_container(
-			container_id, db_server, lab, site_name, admin_password, apps_csv
-		)
-		if exit_code != 0:
-			raise Exception(f"bench new-site failed (exit {exit_code}): {output}")
-		append_log("Site created successfully")
-
-		if settings.base_domain:
-			public_host = f"https://{bench.bench_name}.{settings.base_domain}"
-			exec_in_container(
-				container_id,
-				f"bench --site {site_name} set-config host_name {public_host}",
-				user="frappe",
-				workdir=bench_dir,
-			)
-			append_log(f"Canonical host set to {public_host}")
-
-		append_log("Building assets...")
-		exec_in_container(container_id, "bench build", user="frappe", workdir=bench_dir)
-
-		if not bench.ssh_username:
-			bench.ssh_username = bench._derive_username(bench.owner)
-
-		ssh_password = secrets.token_urlsafe(12)
-		linkuser_args = [
-			bench.ssh_username,
-			bench.owner,
-			lab.title,
-			bench.wg_ip or "0.0.0.0",
-			ssh_password,
-			bench.bench_name,
-			settings.base_domain or "localhost",
-			lab.mount_target or "/home/frappe",
-		]
-		append_log(f"=== Provisioning SSH user '{bench.ssh_username}' ===")
-		linkuser_cmd = "bash /opt/benchpress/scripts/linkuser.sh " + " ".join(f"'{a}'" for a in linkuser_args)
-		exit_code, output = exec_in_container(container_id, linkuser_cmd, user="root")
-		if output:
-			append_log(output.strip())
-		if exit_code != 0:
-			raise Exception(f"linkuser.sh failed (exit {exit_code}): {output}")
-
-		bench.ssh_password = ssh_password
-
-		if getattr(lab, "enable_code_server", 0):
-			append_log("=== Provisioning code-server ===")
-			cs_user = bench.ssh_username
-			cs_home = f"/home/{cs_user}"
-			code_server_password = secrets.token_urlsafe(16)
-			config_yaml = (
-				f"bind-addr: 0.0.0.0:8080\nauth: password\npassword: {code_server_password}\ncert: false\n"
-			)
-			write_file_to_container(
-				container_id,
-				config_yaml,
-				f"{cs_home}/.config/code-server/config.yaml",
-			)
-			exec_in_container(
-				container_id,
-				f"chown -R {cs_user}:{cs_user} {cs_home}/.config && chmod 600 {cs_home}/.config/code-server/config.yaml",
-				user="root",
-			)
-			exec_in_container(container_id, "bash /opt/benchpress/scripts/restart.sh", user="root")
-			bench.code_server_password = code_server_password
-			bench.code_server_url = f"http://{bench.wg_ip or bench.container_ip or '127.0.0.1'}:8080/"
-			append_log(f"code-server ready at {bench.code_server_url}")
+		_provision_running_container(bench, lab, settings, container_id, db_server, append_log)
 
 		if settings.base_domain:
 			bench.public_url = f"https://{bench.bench_name}.{settings.base_domain}"
@@ -352,6 +379,84 @@ def redeploy_bench(bench_name: str) -> None:
 	frappe.db.commit()
 
 	deploy_bench(bench_name)
+
+
+def apply_public_visibility(bench_name: str, is_public: bool, username: str | None = None) -> None:
+	"""Flip a bench between public and basicauth-gated private access.
+
+	Docker labels are immutable on a running container, so the container is
+	re-created (data volume preserved) to pick up the new Traefik labels. The
+	site DB survives; SSH and code-server credentials rotate, as on redeploy.
+	"""
+	bench = frappe.get_doc("Bench Instance", bench_name)
+	lab = frappe.get_doc("Lab", bench.lab)
+	settings = frappe.get_cached_doc("BenchPress Settings")
+
+	deploy_log = frappe.get_doc(
+		{
+			"doctype": "Deploy Log",
+			"bench": bench_name,
+			"message": "=== Updating visibility ===\n",
+			"log_type": "info",
+			"timestamp": frappe.utils.now_datetime(),
+		}
+	)
+	deploy_log.insert(ignore_permissions=True)
+	frappe.db.commit()
+	deploy_log_name = deploy_log.name
+
+	append_log = _make_log_appender(
+		"Deploy Log",
+		deploy_log_name,
+		"bench_deploy_log",
+		{"bench": bench_name, "deploy_log": deploy_log_name},
+	)
+
+	try:
+		bench.status = "Deploying"
+		bench.is_public = 1 if is_public else 0
+		if not is_public:
+			bench.public_username = username or bench.public_username or "lab"
+			bench.public_password = secrets.token_urlsafe(9)
+		bench.save(ignore_permissions=True)
+		frappe.db.commit()
+
+		db_server = frappe.get_doc("Database Server", bench.database_server)
+
+		visibility = "public" if is_public else "private"
+		append_log(f"=== Applying {visibility} visibility ===")
+		_remove_stale_container(bench)
+		append_log("=== Re-creating container with new labels ===")
+		container_id = create_bench_container(bench, lab)
+		bench.container_id = container_id
+		bench.container_image = lab.image_tag
+		bench.save(ignore_permissions=True)
+		frappe.db.commit()
+
+		start_container(container_id)
+		time.sleep(5)
+
+		_provision_running_container(bench, lab, settings, container_id, db_server, append_log)
+
+		bench.status = "Running"
+		bench.save(ignore_permissions=True)
+		frappe.db.commit()
+		append_log(f"=== Visibility set to {visibility} ===", "success")
+		frappe.db.set_value("Deploy Log", deploy_log_name, "log_type", "success")
+		frappe.db.commit()
+
+	except Exception as e:
+		bench.reload()
+		bench.status = "Error"
+		bench.save(ignore_permissions=True)
+		frappe.db.commit()
+		append_log(f"=== Visibility update failed: {e!s} ===", "error")
+		frappe.db.set_value("Deploy Log", deploy_log_name, "log_type", "error")
+		frappe.db.commit()
+		frappe.log_error(
+			title=f"BenchPress visibility update failed: {bench_name}",
+			message=frappe.get_traceback(),
+		)
 
 
 def _build_lab_with_logs(lab, log_fn) -> None:

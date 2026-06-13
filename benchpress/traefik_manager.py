@@ -1,13 +1,17 @@
 # Copyright (c) 2026, Venkatesh and contributors
 # For license information, please see license.txt
 
+import hashlib
 import os
+import secrets
 import subprocess
 
 from benchpress.docker_manager import ensure_network
 
 ACME_STAGING = "https://acme-staging-v02.api.letsencrypt.org/directory"
 ACME_PRODUCTION = "https://acme-v02.api.letsencrypt.org/directory"
+
+_ITOA64 = "./0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
 
 
 def _get_config_dir() -> str:
@@ -94,6 +98,68 @@ def ensure_traefik() -> None:
 		raise Exception(f"docker compose up traefik failed: {output}")
 
 
+def _to64(value: int, length: int) -> str:
+	out = []
+	for _ in range(length):
+		out.append(_ITOA64[value & 0x3F])
+		value >>= 6
+	return "".join(out)
+
+
+def _apr1_crypt(password: str, salt: str) -> str:
+	"""Apache apr1 (salted MD5) hash, matching `openssl passwd -apr1`."""
+	pw = password.encode()
+	sp = salt.encode()
+	ctx = hashlib.md5(pw + b"$apr1$" + sp)
+	final = hashlib.md5(pw + sp + pw).digest()
+	i = len(pw)
+	while i > 0:
+		ctx.update(final[: min(i, 16)])
+		i -= 16
+	i = len(pw)
+	while i:
+		ctx.update(b"\x00" if i & 1 else pw[:1])
+		i >>= 1
+	final = ctx.digest()
+	for i in range(1000):
+		c = hashlib.md5()
+		c.update(pw if i & 1 else final)
+		if i % 3:
+			c.update(sp)
+		if i % 7:
+			c.update(pw)
+		c.update(final if i & 1 else pw)
+		final = c.digest()
+	rearranged = ""
+	for a, b, c in ((0, 6, 12), (1, 7, 13), (2, 8, 14), (3, 9, 15), (4, 10, 5)):
+		rearranged += _to64((final[a] << 16) | (final[b] << 8) | final[c], 4)
+	rearranged += _to64(final[11], 2)
+	return f"$apr1${salt}${rearranged}"
+
+
+def make_basicauth_users(user: str, password: str) -> str:
+	"""Return an htpasswd `user:hash` entry for a Traefik basicauth middleware.
+
+	The apr1 hash is passed raw into the Docker SDK label dict — do NOT double the
+	`$` (that escaping is only needed for docker-compose file interpolation).
+	"""
+	try:
+		from passlib.hash import apr_md5_crypt
+
+		hashed = apr_md5_crypt.hash(password)
+	except ImportError:
+		salt = "".join(secrets.choice(_ITOA64) for _ in range(8))
+		hashed = _apr1_crypt(password, salt)
+	return f"{user}:{hashed}"
+
+
+def _decrypt_public_password(bench) -> str:
+	getter = getattr(bench, "get_password", None)
+	if callable(getter):
+		return getter("public_password", raise_exception=False) or ""
+	return bench.get("public_password") or ""
+
+
 def compute_bench_labels(bench, lab, settings) -> dict[str, str]:
 	"""Single source of truth for a bench container's Docker labels.
 
@@ -120,5 +186,11 @@ def compute_bench_labels(bench, lab, settings) -> dict[str, str]:
 				f"traefik.http.routers.{name}.service": f"{name}-svc",
 			}
 		)
+
+		if not bench.is_public:
+			user = bench.public_username or "lab"
+			users = make_basicauth_users(user, _decrypt_public_password(bench))
+			labels[f"traefik.http.middlewares.{name}-auth.basicauth.users"] = users
+			labels[f"traefik.http.routers.{name}.middlewares"] = f"{name}-auth"
 
 	return labels
