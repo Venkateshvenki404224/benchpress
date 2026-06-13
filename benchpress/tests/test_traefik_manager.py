@@ -4,7 +4,7 @@
 import frappe
 from frappe.tests import IntegrationTestCase
 
-from benchpress.traefik_manager import compute_bench_labels
+from benchpress.traefik_manager import _render_traefik_config, compute_bench_labels
 
 BENCH = frappe._dict(bench_name="abc123")
 LAB = frappe._dict(lab_id="crm-lab")
@@ -26,6 +26,25 @@ class TestComputeBenchLabels(IntegrationTestCase):
 		self.assertEqual(labels["traefik.enable"], "true")
 		self.assertEqual(labels["traefik.docker.network"], "benchpress")
 		self.assertEqual(labels["traefik.http.routers.abc123.rule"], "Host(`abc123.lab.test`)")
-		self.assertEqual(labels["traefik.http.routers.abc123.entrypoints"], "web")
+		self.assertEqual(labels["traefik.http.routers.abc123.entrypoints"], "websecure")
+		self.assertEqual(labels["traefik.http.routers.abc123.tls"], "true")
+		self.assertEqual(labels["traefik.http.routers.abc123.tls.certresolver"], "letsencrypt")
 		self.assertEqual(labels["traefik.http.routers.abc123.service"], "abc123-svc")
 		self.assertEqual(labels["traefik.http.services.abc123-svc.loadbalancer.server.port"], "8000")
+
+
+class TestRenderTraefikConfig(IntegrationTestCase):
+	def test_staging_ca_by_default(self):
+		config = _render_traefik_config(frappe._dict(le_use_staging=1, acme_email="ops@lab.test"))
+		self.assertIn("acme-staging-v02.api.letsencrypt.org/directory", config)
+		self.assertIn('email: "ops@lab.test"', config)
+		self.assertIn("entryPoint:\n          to: websecure", config)
+
+	def test_production_ca_when_staging_disabled(self):
+		config = _render_traefik_config(frappe._dict(le_use_staging=0, acme_email="ops@lab.test"))
+		self.assertIn("acme-v02.api.letsencrypt.org/directory", config)
+		self.assertNotIn("staging", config)
+
+	def test_blank_email_when_unset(self):
+		config = _render_traefik_config(frappe._dict(le_use_staging=1, acme_email=None))
+		self.assertIn('email: ""', config)

@@ -6,6 +6,9 @@ import subprocess
 
 from benchpress.docker_manager import ensure_network
 
+ACME_STAGING = "https://acme-staging-v02.api.letsencrypt.org/directory"
+ACME_PRODUCTION = "https://acme-v02.api.letsencrypt.org/directory"
+
 
 def _get_config_dir() -> str:
 	import frappe
@@ -22,10 +25,71 @@ def _compose_cmd(*args: str) -> tuple[int, str]:
 	return result.returncode, output
 
 
+def _render_traefik_config(settings) -> str:
+	"""Render the Traefik static config. Traefik does not expand environment
+	variables in its static config file, so the ACME email and CA server are
+	written in directly. le_use_staging selects the staging CA (the default) to
+	avoid burning the Let's Encrypt production rate limit during testing."""
+	ca_server = ACME_STAGING if settings.le_use_staging else ACME_PRODUCTION
+	email = settings.acme_email or ""
+	return f"""entryPoints:
+  web:
+    address: ":80"
+    http:
+      redirections:
+        entryPoint:
+          to: websecure
+          scheme: https
+  websecure:
+    address: ":443"
+
+providers:
+  docker:
+    endpoint: "unix:///var/run/docker.sock"
+    network: benchpress
+    exposedByDefault: false
+
+certificatesResolvers:
+  letsencrypt:
+    acme:
+      email: "{email}"
+      storage: /etc/traefik/acme/acme.json
+      caServer: "{ca_server}"
+      tlsChallenge: {{}}
+
+api:
+  dashboard: true
+  insecure: true
+"""
+
+
+def _write_traefik_config(settings) -> bool:
+	"""Write config/traefik.yml from Settings. Returns True if the file changed."""
+	config = _render_traefik_config(settings)
+	config_path = os.path.join(_get_config_dir(), "traefik.yml")
+	existing = ""
+	if os.path.exists(config_path):
+		with open(config_path) as f:
+			existing = f.read()
+	if existing == config:
+		return False
+	with open(config_path, "w") as f:  # nosemgrep: frappe-semgrep-rules.rules.security.frappe-security-file-traversal  # fmt: skip
+		f.write(config)
+	return True
+
+
 def ensure_traefik() -> None:
 	"""Bring up the shared Traefik reverse proxy. Idempotent."""
+	import frappe
+
 	ensure_network()
-	exit_code, output = _compose_cmd("up", "-d", "traefik")
+	settings = frappe.get_cached_doc("BenchPress Settings")
+	recreate = _write_traefik_config(settings)
+	args = ["up", "-d"]
+	if recreate:
+		args.append("--force-recreate")
+	args.append("traefik")
+	exit_code, output = _compose_cmd(*args)
 	if exit_code != 0:
 		raise Exception(f"docker compose up traefik failed: {output}")
 
@@ -49,7 +113,9 @@ def compute_bench_labels(bench, lab, settings) -> dict[str, str]:
 				"traefik.enable": "true",
 				"traefik.docker.network": "benchpress",
 				f"traefik.http.routers.{name}.rule": f"Host(`{host}`)",
-				f"traefik.http.routers.{name}.entrypoints": "web",
+				f"traefik.http.routers.{name}.entrypoints": "websecure",
+				f"traefik.http.routers.{name}.tls": "true",
+				f"traefik.http.routers.{name}.tls.certresolver": "letsencrypt",
 				f"traefik.http.services.{name}-svc.loadbalancer.server.port": "8000",
 				f"traefik.http.routers.{name}.service": f"{name}-svc",
 			}

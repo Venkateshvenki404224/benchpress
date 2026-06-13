@@ -237,7 +237,7 @@ def deploy_bench(bench_name: str) -> None:
 		append_log("Site created successfully")
 
 		if settings.base_domain:
-			public_host = f"http://{bench.bench_name}.{settings.base_domain}"
+			public_host = f"https://{bench.bench_name}.{settings.base_domain}"
 			exec_in_container(
 				container_id,
 				f"bench --site {site_name} set-config host_name {public_host}",
@@ -297,7 +297,7 @@ def deploy_bench(bench_name: str) -> None:
 			append_log(f"code-server ready at {bench.code_server_url}")
 
 		if settings.base_domain:
-			bench.public_url = f"http://{bench.bench_name}.{settings.base_domain}"
+			bench.public_url = f"https://{bench.bench_name}.{settings.base_domain}"
 
 		bench.status = "Running"
 		bench.started_at = frappe.utils.now_datetime()

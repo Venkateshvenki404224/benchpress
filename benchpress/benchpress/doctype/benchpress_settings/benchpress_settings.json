@@ -12,6 +12,8 @@
   "column_break_docker",
   "base_domain",
   "traefik_network",
+  "acme_email",
+  "le_use_staging",
   "wireguard_section",
   "wg_server_ip",
   "wg_subnet",
@@ -61,6 +63,17 @@
    "fieldname": "traefik_network",
    "fieldtype": "Data",
    "label": "Traefik Network"
+  },
+  {
+   "fieldname": "acme_email",
+   "fieldtype": "Data",
+   "label": "ACME Email (Let's Encrypt)"
+  },
+  {
+   "default": "1",
+   "fieldname": "le_use_staging",
+   "fieldtype": "Check",
+   "label": "Use Let's Encrypt Staging"
   },
   {
    "fieldname": "wireguard_section",
@@ -144,7 +157,7 @@
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2026-04-14 02:51:00.627290",
+ "modified": "2026-06-13 15:56:00.000000",
  "modified_by": "Administrator",
  "module": "Benchpress",
  "name": "BenchPress Settings",
