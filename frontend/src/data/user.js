@@ -1,10 +1,12 @@
-import { createResource } from "frappe-ui";
+import { useCall } from "frappe-ui";
 
-export const userResource = createResource({
-	url: "frappe.auth.get_logged_user",
-	cache: "User",
+export const userResource = useCall({
+	url: "/api/v2/method/frappe.auth.get_logged_user",
+	method: "GET",
+	immediate: true,
+	cacheKey: "User",
 	onError(error) {
-		if (error && error.exc_type === "AuthenticationError") {
+		if (error?.type === "AuthenticationError") {
 			window.location.href = "/login";
 		}
 	},

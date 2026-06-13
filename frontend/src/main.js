@@ -13,10 +13,7 @@ import {
 	FormControl,
 	Input,
 	TextInput,
-	frappeRequest,
 	pageMetaPlugin,
-	resourcesPlugin,
-	setConfig,
 } from "frappe-ui";
 
 import "./index.css";
@@ -35,10 +32,7 @@ const globalComponents = {
 
 const app = createApp(App);
 
-setConfig("resourceFetcher", frappeRequest);
-
 app.use(router);
-app.use(resourcesPlugin);
 app.use(pageMetaPlugin);
 
 const socket = initSocket();
