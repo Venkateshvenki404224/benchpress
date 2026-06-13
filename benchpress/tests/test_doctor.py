@@ -10,10 +10,22 @@ from benchpress.doctor import (
 	MIN_RAM_GB,
 	PASS,
 	WARN,
+	_evaluate_compose,
+	_evaluate_container,
+	_evaluate_docker_network,
+	_evaluate_http_port,
+	_evaluate_ip_forward,
 	_evaluate_os,
 	_evaluate_resources,
+	_evaluate_sudoers,
+	_evaluate_wg_interface,
+	_evaluate_wg_port,
+	_evaluate_wireguard_tools,
 	_format_report,
+	_network_subnet,
+	_parse_listening_ports,
 	_result,
+	_skipped,
 	_summary,
 )
 
@@ -100,3 +112,136 @@ class TestSummary(IntegrationTestCase):
 			_result(FAIL, "f", ""),
 		]
 		self.assertEqual(_summary(results), {"pass": 2, "warn": 1, "fail": 3})
+
+
+class TestSkipped(IntegrationTestCase):
+	def test_skipped_is_warn_on_the_host(self):
+		result = _skipped("IP forwarding")
+		self.assertEqual(result["status"], WARN)
+		self.assertIn("run on the host", result["detail"])
+
+
+class TestEvaluateCompose(IntegrationTestCase):
+	def test_available_passes(self):
+		self.assertEqual(_evaluate_compose(True, "Docker Compose version v2.27.0")["status"], PASS)
+
+	def test_missing_fails_with_install_fix(self):
+		result = _evaluate_compose(False, "")
+		self.assertEqual(result["status"], FAIL)
+		self.assertIn("docker-compose-plugin", result["fix"])
+
+
+class TestEvaluateDockerNetwork(IntegrationTestCase):
+	def test_missing_fails(self):
+		self.assertEqual(_evaluate_docker_network(False, "")["status"], FAIL)
+
+	def test_expected_subnet_passes(self):
+		self.assertEqual(_evaluate_docker_network(True, "172.30.0.0/24")["status"], PASS)
+
+	def test_wrong_subnet_warns(self):
+		self.assertEqual(_evaluate_docker_network(True, "10.0.0.0/24")["status"], WARN)
+
+
+class TestNetworkSubnet(IntegrationTestCase):
+	def test_extracts_subnet(self):
+		attrs = {"IPAM": {"Config": [{"Subnet": "172.30.0.0/24"}]}}
+		self.assertEqual(_network_subnet(attrs), "172.30.0.0/24")
+
+	def test_missing_config_returns_empty(self):
+		self.assertEqual(_network_subnet({}), "")
+
+
+class TestEvaluateContainer(IntegrationTestCase):
+	def test_running_passes(self):
+		self.assertEqual(_evaluate_container("benchpress-redis", "running", FAIL, "fix")["status"], PASS)
+
+	def test_stopped_uses_severity(self):
+		self.assertEqual(_evaluate_container("benchpress-traefik", "exited", WARN, "fix")["status"], WARN)
+
+	def test_not_found_carries_fix(self):
+		result = _evaluate_container("benchpress-mariadb", None, FAIL, "do x")
+		self.assertEqual(result["status"], FAIL)
+		self.assertEqual(result["fix"], "do x")
+
+
+class TestEvaluateIpForward(IntegrationTestCase):
+	def test_enabled_passes(self):
+		self.assertEqual(_evaluate_ip_forward("1\n")["status"], PASS)
+
+	def test_disabled_fails_with_sysctl_fix(self):
+		result = _evaluate_ip_forward("0\n")
+		self.assertEqual(result["status"], FAIL)
+		self.assertIn("ip_forward=1", result["fix"])
+
+
+class TestEvaluateSudoers(IntegrationTestCase):
+	def test_missing_file_fails(self):
+		self.assertEqual(_evaluate_sudoers(False, False)["status"], FAIL)
+
+	def test_sudo_check_failing_fails(self):
+		self.assertEqual(_evaluate_sudoers(True, False)["status"], FAIL)
+
+	def test_configured_passes(self):
+		self.assertEqual(_evaluate_sudoers(True, True)["status"], PASS)
+
+
+class TestEvaluateWireguardTools(IntegrationTestCase):
+	def test_missing_tool_warns(self):
+		result = _evaluate_wireguard_tools(False, True, False)
+		self.assertEqual(result["status"], WARN)
+		self.assertIn("wg", result["detail"])
+
+	def test_no_kernel_module_warns(self):
+		self.assertEqual(_evaluate_wireguard_tools(True, True, False)["status"], WARN)
+
+	def test_all_present_passes(self):
+		self.assertEqual(_evaluate_wireguard_tools(True, True, True)["status"], PASS)
+
+
+class TestEvaluateWgInterface(IntegrationTestCase):
+	def test_down_warns_with_bring_up_fix(self):
+		result = _evaluate_wg_interface(False, "", "51820")
+		self.assertEqual(result["status"], WARN)
+		self.assertIn("wg-quick up", result["fix"])
+
+	def test_port_mismatch_warns(self):
+		self.assertEqual(_evaluate_wg_interface(True, "51821", "51820")["status"], WARN)
+
+	def test_matching_port_passes(self):
+		self.assertEqual(_evaluate_wg_interface(True, "51820", "51820")["status"], PASS)
+
+
+class TestEvaluatePorts(IntegrationTestCase):
+	def test_free_http_port_passes(self):
+		self.assertEqual(_evaluate_http_port(80, False, False)["status"], PASS)
+
+	def test_http_port_owned_by_traefik_passes(self):
+		self.assertEqual(_evaluate_http_port(443, True, True)["status"], PASS)
+
+	def test_http_port_taken_by_other_warns(self):
+		self.assertEqual(_evaluate_http_port(80, True, False)["status"], WARN)
+
+	def test_wg_port_bound_passes(self):
+		self.assertEqual(_evaluate_wg_port(51820, True)["status"], PASS)
+
+	def test_wg_port_unbound_warns_with_port_in_fix(self):
+		result = _evaluate_wg_port(51820, False)
+		self.assertEqual(result["status"], WARN)
+		self.assertIn("51820", result["fix"])
+
+
+class TestParseListeningPorts(IntegrationTestCase):
+	def test_parses_tcp_and_udp(self):
+		out = (
+			"Netid State  Recv-Q Send-Q Local Address:Port Peer Address:Port\n"
+			"tcp   LISTEN 0      128    0.0.0.0:80         0.0.0.0:*\n"
+			"tcp   LISTEN 0      128    [::]:443           [::]:*\n"
+			"udp   UNCONN 0      0      0.0.0.0:51820      0.0.0.0:*\n"
+		)
+		parsed = _parse_listening_ports(out)
+		self.assertEqual(parsed["tcp"], {80, 443})
+		self.assertEqual(parsed["udp"], {51820})
+
+	def test_ignores_header_only(self):
+		header = "Netid State Recv-Q Send-Q Local Address:Port Peer Address:Port\n"
+		self.assertEqual(_parse_listening_ports(header), {"tcp": set(), "udp": set()})
