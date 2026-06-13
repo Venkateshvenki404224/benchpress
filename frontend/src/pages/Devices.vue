@@ -7,7 +7,12 @@
 					Register your devices once to access all lab containers over WireGuard VPN.
 				</p>
 			</div>
-			<Button appearance="primary" icon-left="plus" @click="showAddDialog = true">
+			<Button
+				variant="solid"
+				theme="gray"
+				:icon-left="PlusIcon"
+				@click="showAddDialog = true"
+			>
 				Add Device
 			</Button>
 		</div>
@@ -66,7 +71,7 @@
 				</div>
 				<Dropdown
 					:options="getDeviceActions(device)"
-					:button="{ icon: 'more-horizontal', appearance: 'minimal' }"
+					:button="{ icon: MoreIcon, variant: 'ghost', label: 'Device actions' }"
 				/>
 			</div>
 		</div>
@@ -100,16 +105,11 @@
 						:required="true"
 					/>
 					<div>
-						<label
-							class="mb-1 flex items-center gap-2 text-xs font-medium text-ink-gray-6"
-						>
-							<input
-								type="checkbox"
-								v-model="autoGenKey"
-								class="accent-surface-blue-2"
-							/>
-							Auto Generate Keypair
-						</label>
+						<Checkbox
+							v-model="autoGenKey"
+							label="Auto Generate Keypair"
+							class="mb-2"
+						/>
 						<FormControl
 							v-if="!autoGenKey"
 							label="WireGuard Public Key"
@@ -127,7 +127,8 @@
 			</template>
 			<template #actions>
 				<Button
-					appearance="primary"
+					variant="solid"
+					theme="gray"
 					class="w-full"
 					:loading="addAction.loading"
 					@click="addDevice"
@@ -180,15 +181,22 @@
 <script setup>
 import { ref, nextTick } from "vue";
 import {
-	createResource,
+	useCall,
 	Badge,
 	Button,
+	Checkbox,
 	Dialog,
 	Dropdown,
 	FormControl,
 	ErrorMessage,
 } from "frappe-ui";
 import QRCode from "qrcode";
+import PlusIcon from "~icons/lucide/plus";
+import MoreIcon from "~icons/lucide/more-horizontal";
+import FileTextIcon from "~icons/lucide/file-text";
+import DownloadIcon from "~icons/lucide/download";
+import Trash2Icon from "~icons/lucide/trash-2";
+import { downloadFile } from "@/utils/downloadFile";
 
 function formatBytes(bytes) {
 	if (!bytes) return "0 B";
@@ -226,12 +234,12 @@ function getDeviceActions(device) {
 			items: [
 				{
 					label: "Show Configuration",
-					icon: "file-text",
+					icon: FileTextIcon,
 					onClick: () => showConfig(device),
 				},
 				{
 					label: "Download Tunnel File",
-					icon: "download",
+					icon: DownloadIcon,
 					onClick: () => downloadConfig(device),
 				},
 			],
@@ -241,7 +249,7 @@ function getDeviceActions(device) {
 			items: [
 				{
 					label: "Delete",
-					icon: "trash-2",
+					icon: Trash2Icon,
 					theme: "red",
 					onClick: () => confirmRemove(device),
 				},
@@ -255,39 +263,38 @@ const configText = ref("");
 const configDeviceName = ref("");
 const qrCanvas = ref(null);
 
-const wgConfigAction = createResource({
-	url: "benchpress.api.get_device_wg_config",
+const wgConfigAction = useCall({
+	url: "/api/v2/method/benchpress.api.get_device_wg_config",
+	method: "POST",
+	immediate: false,
 });
 
-function showConfig(device) {
+async function showConfig(device) {
 	configDeviceName.value = device.device_name;
-	wgConfigAction.submit(
-		{ device_name: device.name },
-		{
-			onSuccess(data) {
-				configText.value = data;
-				showConfigDialog.value = true;
-				nextTick(() => {
-					if (qrCanvas.value && configText.value) {
-						QRCode.toCanvas(qrCanvas.value, configText.value, {
-							width: 200,
-							margin: 2,
-						});
-					}
-				});
-			},
+	const data = await wgConfigAction.submit({ device_name: device.name });
+	if (!data) return;
+	configText.value = data;
+	showConfigDialog.value = true;
+	nextTick(() => {
+		if (qrCanvas.value && configText.value) {
+			QRCode.toCanvas(qrCanvas.value, configText.value, {
+				width: 200,
+				margin: 2,
+			});
 		}
-	);
+	});
 }
 
-const devices = createResource({
-	url: "benchpress.api.list_devices",
-	auto: true,
+const devices = useCall({
+	url: "/api/v2/method/benchpress.api.list_devices",
+	immediate: true,
 });
 
-const addAction = createResource({
-	url: "benchpress.api.add_device",
-	onSuccess(data) {
+const addAction = useCall({
+	url: "/api/v2/method/benchpress.api.add_device",
+	method: "POST",
+	immediate: false,
+	onSuccess() {
 		showAddDialog.value = false;
 		newDevice.value = { name: "", type: "Laptop", publicKey: "" };
 		autoGenKey.value = true;
@@ -304,8 +311,10 @@ function addDevice() {
 	});
 }
 
-const removeAction = createResource({
-	url: "benchpress.api.remove_device",
+const removeAction = useCall({
+	url: "/api/v2/method/benchpress.api.remove_device",
+	method: "POST",
+	immediate: false,
 	onSuccess() {
 		showRemoveDialog.value = false;
 		deviceToRemove.value = null;
@@ -323,20 +332,9 @@ function removeDevice() {
 	removeAction.submit({ device_name: deviceToRemove.value.name });
 }
 
-function downloadConfig(device) {
-	wgConfigAction.submit(
-		{ device_name: device.name },
-		{
-			onSuccess(data) {
-				const blob = new Blob([data], { type: "text/plain" });
-				const url = URL.createObjectURL(blob);
-				const a = document.createElement("a");
-				a.href = url;
-				a.download = `${device.device_name}.conf`;
-				a.click();
-				URL.revokeObjectURL(url);
-			},
-		}
-	);
+async function downloadConfig(device) {
+	const data = await wgConfigAction.submit({ device_name: device.name });
+	if (!data) return;
+	downloadFile(data, `${device.device_name}.conf`);
 }
 </script>

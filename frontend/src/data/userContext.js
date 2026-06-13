@@ -1,4 +1,4 @@
-import { createResource } from "frappe-ui";
+import { useCall } from "frappe-ui";
 import { reactive } from "vue";
 
 export const userContext = reactive({
@@ -9,10 +9,11 @@ export const userContext = reactive({
 	ready: false,
 });
 
-const userContextResource = createResource({
-	url: "/api/method/benchpress.api.get_user_context",
-	auto: true,
-	cache: "UserContext",
+const userContextResource = useCall({
+	url: "/api/v2/method/benchpress.api.get_user_context",
+	method: "GET",
+	immediate: true,
+	cacheKey: "UserContext",
 	onSuccess(data) {
 		const ctx = data?.message ?? data;
 		userContext.isAdmin = ctx?.is_admin ?? false;

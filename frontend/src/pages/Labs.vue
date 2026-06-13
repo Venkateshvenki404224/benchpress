@@ -4,8 +4,9 @@
 			<h1 class="text-xl font-semibold text-ink-gray-9">Labs</h1>
 			<Button
 				v-if="userContext.isAdmin"
-				appearance="primary"
-				icon-left="plus"
+				variant="solid"
+				theme="gray"
+				:icon-left="PlusIcon"
 				@click="$router.push('/labs/new')"
 			>
 				New Lab
@@ -19,8 +20,11 @@
 				type="text"
 				placeholder="Search by Lab ID, title, or app name..."
 				v-model="searchQuery"
-				icon-left="search"
-			/>
+			>
+				<template #prefix>
+					<SearchIcon class="size-4 text-ink-gray-5" aria-hidden="true" />
+				</template>
+			</FormControl>
 			<FormControl
 				type="select"
 				:options="statusOptions"
@@ -60,8 +64,10 @@
 
 <script setup>
 import { ref, computed } from "vue";
-import { ListView, Button, FormControl, createListResource } from "frappe-ui";
+import { ListView, Button, FormControl, useList } from "frappe-ui";
 import { userContext } from "@/data/userContext";
+import PlusIcon from "~icons/lucide/plus";
+import SearchIcon from "~icons/lucide/search";
 
 const searchQuery = ref("");
 const statusFilter = ref("All");
@@ -92,7 +98,7 @@ const columns = [
 	{ label: "CPU", key: "cpu_cores", width: "80px" },
 ];
 
-const labs = createListResource({
+const labs = useList({
 	doctype: "Lab",
 	fields: [
 		"name",
@@ -105,8 +111,7 @@ const labs = createListResource({
 		"cpu_cores",
 	],
 	orderBy: "creation desc",
-	pageLength: 100,
-	auto: true,
+	limit: 100,
 });
 
 const filteredRows = computed(() => {

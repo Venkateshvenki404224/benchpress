@@ -23,7 +23,7 @@
 </template>
 
 <script setup>
-import { ListView, Badge, createListResource } from "frappe-ui";
+import { ListView, Badge, useList } from "frappe-ui";
 import { h } from "vue";
 
 const columns = [
@@ -99,7 +99,7 @@ const columns = [
 	{ label: "Memory %", key: "memory_usage", width: "100px" },
 ];
 
-let benches = createListResource({
+const benches = useList({
 	doctype: "Bench Instance",
 	fields: [
 		"name",
@@ -119,7 +119,6 @@ let benches = createListResource({
 		"started_at",
 	],
 	orderBy: "creation desc",
-	pageLength: 100,
-	auto: true,
+	limit: 100,
 });
 </script>

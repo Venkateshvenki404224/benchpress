@@ -3,8 +3,13 @@
 		<div class="mb-6 flex items-center justify-between">
 			<h1 class="text-xl font-semibold text-ink-gray-9">New Lab</h1>
 			<div class="flex gap-2">
-				<Button appearance="minimal" @click="$router.push('/labs')">Cancel</Button>
-				<Button appearance="primary" :loading="lab.insert.loading" @click="createLab">
+				<Button variant="ghost" @click="$router.push('/labs')">Cancel</Button>
+				<Button
+					variant="solid"
+					theme="gray"
+					:loading="lab.insert.loading"
+					@click="createLab"
+				>
 					Create Lab
 				</Button>
 			</div>
@@ -74,7 +79,7 @@
 		<div class="mb-6 rounded-lg border border-outline-gray-1 bg-surface-white p-4">
 			<div class="mb-4 flex items-center justify-between">
 				<h2 class="text-base font-medium text-ink-gray-8">Apps</h2>
-				<Button icon-left="plus" appearance="minimal" @click="addApp">Add App</Button>
+				<Button :icon-left="PlusIcon" variant="ghost" @click="addApp">Add App</Button>
 			</div>
 
 			<div v-if="form.apps.length === 0" class="py-4 text-center text-sm text-ink-gray-5">
@@ -88,7 +93,13 @@
 			>
 				<div class="mb-2 flex items-center justify-between">
 					<span class="text-sm font-medium text-ink-gray-7">App {{ idx + 1 }}</span>
-					<Button icon="x" appearance="minimal" size="sm" @click="removeApp(idx)" />
+					<Button
+						:icon="XIcon"
+						variant="ghost"
+						size="sm"
+						label="Remove app"
+						@click="removeApp(idx)"
+					/>
 				</div>
 				<div class="grid grid-cols-3 gap-3">
 					<FormControl
@@ -121,7 +132,9 @@
 <script setup>
 import { reactive } from "vue";
 import { useRouter } from "vue-router";
-import { createListResource, toast, Button, FormControl, ErrorMessage } from "frappe-ui";
+import { useList, toast, Button, FormControl, ErrorMessage } from "frappe-ui";
+import PlusIcon from "~icons/lucide/plus";
+import XIcon from "~icons/lucide/x";
 
 const router = useRouter();
 
@@ -153,9 +166,10 @@ function removeApp(idx) {
 	form.apps.splice(idx, 1);
 }
 
-const lab = createListResource({
+const lab = useList({
 	doctype: "Lab",
 	fields: ["name"],
+	immediate: false,
 });
 
 async function createLab() {
@@ -164,20 +178,18 @@ async function createLab() {
 		return;
 	}
 
-	try {
-		await lab.insert.submit({
-			lab_id: form.lab_id,
-			title: form.title,
-			frappe_version: form.frappe_version,
-			status: form.status,
-			description: form.description,
-			memory_limit: form.memory_limit,
-			cpu_cores: form.cpu_cores,
-			apps: form.apps.filter((a) => a.app_name && a.git_url && a.branch),
-		});
+	const created = await lab.insert.submit({
+		lab_id: form.lab_id,
+		title: form.title,
+		frappe_version: form.frappe_version,
+		status: form.status,
+		description: form.description,
+		memory_limit: form.memory_limit,
+		cpu_cores: form.cpu_cores,
+		apps: form.apps.filter((a) => a.app_name && a.git_url && a.branch),
+	});
+	if (created) {
 		router.push("/labs");
-	} catch (err) {
-		// lab.insert.error is rendered by the ErrorMessage above
 	}
 }
 </script>

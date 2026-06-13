@@ -45,7 +45,7 @@
 
 <script setup>
 import { ref } from "vue";
-import { createListResource, Badge } from "frappe-ui";
+import { useList, Badge } from "frappe-ui";
 import LogViewer from "@/components/LogViewer.vue";
 
 const expandedLog = ref(null);
@@ -54,12 +54,10 @@ function toggleLog(name) {
 	expandedLog.value = expandedLog.value === name ? null : name;
 }
 
-let buildLogs = createListResource({
+const buildLogs = useList({
 	doctype: "Build Log",
 	fields: ["name", "lab", "message", "log_type", "timestamp"],
 	orderBy: "timestamp desc",
-	start: 0,
-	pageLength: 20,
-	auto: true,
+	limit: 20,
 });
 </script>

@@ -58,18 +58,15 @@ const router = createRouter({
 	routes,
 });
 
-router.beforeEach(async (to, from, next) => {
-	let isLoggedIn = session.isLoggedIn;
-	try {
-		await userResource.promise;
-	} catch (error) {
-		isLoggedIn = false;
-	}
+const userReady = userResource.promise;
 
-	if (!isLoggedIn) {
+router.beforeEach(async (to, from, next) => {
+	await userReady;
+
+	if (!session.isLoggedIn) {
 		window.location.href = "/login";
 	} else if (ADMIN_ONLY_ROUTES.has(to.name)) {
-		await waitForUserContext().catch(() => {});
+		await waitForUserContext();
 		if (!userContext.isAdmin) {
 			next({ name: "Labs" });
 		} else {
