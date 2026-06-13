@@ -60,6 +60,7 @@
 - [Logs & Monitoring](docs/logs-and-monitoring.md) -- Build logs, deploy logs, and stats
 - [VPN Device Management](docs/device-management.md) -- Register devices for WireGuard access
 - [WireGuard Setup](docs/wireguard-setup.md) -- Detailed WireGuard configuration
+- [Headscale Installation](docs/headscale-installation.md) -- Phase 2 private developer access setup, API usage, and license notes
 
 ---
 
