@@ -148,6 +148,29 @@
 									you secure, this password changes during every redeploy.
 								</p>
 								<div class="space-y-0 divide-y divide-outline-gray-1">
+									<div
+										v-if="activeBench.public_url"
+										class="flex items-center gap-4 py-3"
+									>
+										<label
+											class="w-36 shrink-0 text-sm font-medium text-ink-gray-9"
+											>Public URL</label
+										>
+										<div class="flex flex-1 items-center gap-2">
+											<a
+												:href="activeBench.public_url"
+												target="_blank"
+												class="flex-1 truncate rounded bg-surface-gray-1 px-4 py-2.5 font-mono text-sm text-ink-blue-3 hover:underline"
+												>{{ activeBench.public_url }}</a
+											>
+											<Button
+												icon="copy"
+												appearance="minimal"
+												size="sm"
+												@click="copyText(activeBench.public_url)"
+											/>
+										</div>
+									</div>
 									<div class="flex items-center gap-4 py-3">
 										<label
 											class="w-36 shrink-0 text-sm font-medium text-ink-gray-9"

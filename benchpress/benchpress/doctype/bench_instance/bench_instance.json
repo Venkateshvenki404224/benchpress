@@ -20,6 +20,8 @@
   "column_break_ssh",
   "admin_password",
   "domain",
+  "public_access_section",
+  "public_url",
   "container_section",
   "container_id",
   "container_image",
@@ -111,6 +113,18 @@
    "fieldname": "domain",
    "fieldtype": "Data",
    "label": "Domain"
+  },
+  {
+   "fieldname": "public_access_section",
+   "fieldtype": "Section Break",
+   "label": "Public Access"
+  },
+  {
+   "fieldname": "public_url",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Public URL",
+   "read_only": 1
   },
   {
    "collapsible": 1,

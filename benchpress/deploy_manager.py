@@ -22,6 +22,7 @@ from benchpress.mariadb_manager import (
 	ensure_infrastructure,
 	wait_for_mariadb,
 )
+from benchpress.traefik_manager import ensure_traefik
 
 
 def _remove_stale_container(bench) -> None:
@@ -127,11 +128,17 @@ def deploy_bench(bench_name: str) -> None:
 		admin_password = secrets.token_urlsafe(10)
 		bench.admin_password = admin_password
 
+		settings = frappe.get_cached_doc("BenchPress Settings")
+
 		append_log("=== Checking shared infrastructure (MariaDB + Redis) ===")
 		db_server_name = ensure_infrastructure()
 		db_server = frappe.get_doc("Database Server", db_server_name)
 		wait_for_mariadb(db_server_name, timeout=60)
 		append_log(f"MariaDB reachable at {db_server.container_name}:{db_server.port or 3306}")
+
+		if settings.base_domain:
+			append_log("=== Ensuring Traefik reverse proxy ===")
+			ensure_traefik()
 
 		bench.database_server = db_server_name
 		bench.save(ignore_permissions=True)
@@ -162,7 +169,6 @@ def deploy_bench(bench_name: str) -> None:
 			bench.save(ignore_permissions=True)
 			frappe.db.commit()
 
-		settings = frappe.get_cached_doc("BenchPress Settings")
 		if settings.wg_server_public_key and settings.wg_server_endpoint:
 			from benchpress.wg_manager import (
 				add_peer_to_server,
@@ -230,6 +236,16 @@ def deploy_bench(bench_name: str) -> None:
 			raise Exception(f"bench new-site failed (exit {exit_code}): {output}")
 		append_log("Site created successfully")
 
+		if settings.base_domain:
+			public_host = f"http://{bench.bench_name}.{settings.base_domain}"
+			exec_in_container(
+				container_id,
+				f"bench --site {site_name} set-config host_name {public_host}",
+				user="frappe",
+				workdir=bench_dir,
+			)
+			append_log(f"Canonical host set to {public_host}")
+
 		append_log("Building assets...")
 		exec_in_container(container_id, "bench build", user="frappe", workdir=bench_dir)
 
@@ -279,6 +295,9 @@ def deploy_bench(bench_name: str) -> None:
 			bench.code_server_password = code_server_password
 			bench.code_server_url = f"http://{bench.wg_ip or bench.container_ip or '127.0.0.1'}:8080/"
 			append_log(f"code-server ready at {bench.code_server_url}")
+
+		if settings.base_domain:
+			bench.public_url = f"http://{bench.bench_name}.{settings.base_domain}"
 
 		bench.status = "Running"
 		bench.started_at = frappe.utils.now_datetime()

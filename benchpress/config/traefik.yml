@@ -1,0 +1,13 @@
+entryPoints:
+  web:
+    address: ":80"
+
+providers:
+  docker:
+    endpoint: "unix:///var/run/docker.sock"
+    network: benchpress
+    exposedByDefault: false
+
+api:
+  dashboard: true
+  insecure: true

@@ -85,6 +85,7 @@ def get_benches() -> list[dict]:
 			"lab",
 			"frappe_version",
 			"domain",
+			"public_url",
 			"status",
 			"container_id",
 			"container_ip",

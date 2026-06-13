@@ -123,16 +123,14 @@ def create_bench_container(bench_doc, lab_doc) -> str:
 	"""Create a container from a lab image with resource limits.
 	Does NOT start the container. Returns the container ID.
 	"""
+	from benchpress.traefik_manager import compute_bench_labels
+
 	client = get_client()
 	ensure_network(client)
 
 	name = bench_doc.bench_name
 
-	labels = {
-		"benchpress.managed": "true",
-		"benchpress.bench_name": name,
-		"benchpress.lab": lab_doc.lab_id,
-	}
+	labels = compute_bench_labels(bench_doc, lab_doc, frappe.get_cached_doc("BenchPress Settings"))
 
 	pids_limit = int(getattr(lab_doc, "pids_limit", None) or DEFAULT_PIDS_LIMIT)
 	iops = int(getattr(lab_doc, "iops_limit", None) or DEFAULT_IOPS)
