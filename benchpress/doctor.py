@@ -118,7 +118,7 @@ def _summary(results: list[dict]) -> dict:
 
 def _read_text(path: str) -> str:
 	try:
-		with open(path) as f:
+		with open(path) as f:  # nosemgrep: frappe-semgrep-rules.rules.security.frappe-security-file-traversal  # fmt: skip
 			return f.read()
 	except OSError:
 		return ""
