@@ -118,346 +118,28 @@
 								</div>
 							</div>
 
-							<!-- Copy alert -->
-							<Teleport to="body">
-								<Transition name="slide-in">
-									<Alert
-										v-if="copyAlert"
-										title="Copied to clipboard"
-										description="Connection info has been copied. You can paste it in your terminal."
-										theme="green"
-										class="fixed right-4 top-4 z-50 w-80 shadow-lg"
-									/>
-								</Transition>
-							</Teleport>
-
 							<!-- Connection Info -->
-							<div
+							<ConnectionInfo
 								v-if="activeBench && activeBench.status === 'Running'"
-								class="rounded-lg border border-outline-gray-1 bg-surface-white p-5"
-							>
-								<h2 class="mb-3 text-base font-semibold text-ink-gray-9">
-									Connection Information
-								</h2>
-								<p class="mb-5 text-sm leading-relaxed text-ink-gray-6">
-									This server is accessible through
-									<strong class="text-ink-gray-8">Code</strong> or
-									<strong class="text-ink-gray-8">SSH</strong>. Code is
-									accessible under VPN in one click and you do not have to SSH
-									into your lab. Just ensure you are connected to VPN. To keep
-									you secure, this password changes during every redeploy.
-								</p>
-								<div class="space-y-0 divide-y divide-outline-gray-1">
-									<div class="flex items-center gap-4 py-3">
-										<label
-											class="w-36 shrink-0 text-sm font-medium text-ink-gray-9"
-											>Public Access</label
-										>
-										<div class="flex flex-1 items-center gap-3">
-											<Switch
-												:modelValue="!!activeBench.is_public"
-												:disabled="visibilityAction.loading"
-												@update:modelValue="onVisibilityChange"
-											/>
-											<span class="text-sm text-ink-gray-6">{{
-												activeBench.is_public
-													? "Anyone with the link can open this bench"
-													: "Visitors must sign in with the credentials below"
-											}}</span>
-										</div>
-									</div>
-									<div
-										v-if="
-											!activeBench.is_public && activeBench.public_username
-										"
-										class="flex items-center gap-4 py-3"
-									>
-										<label
-											class="w-36 shrink-0 text-sm font-medium text-ink-gray-9"
-											>Access Username</label
-										>
-										<div class="flex flex-1 items-center gap-2">
-											<code
-												class="flex-1 rounded bg-surface-gray-1 px-4 py-2.5 font-mono text-sm text-ink-gray-8"
-												>{{ activeBench.public_username }}</code
-											>
-											<Button
-												icon="copy"
-												appearance="minimal"
-												size="sm"
-												@click="copyText(activeBench.public_username)"
-											/>
-										</div>
-									</div>
-									<div
-										v-if="
-											!activeBench.is_public && activeBench.public_password
-										"
-										class="flex items-center gap-4 py-3"
-									>
-										<label
-											class="w-36 shrink-0 text-sm font-medium text-ink-gray-9"
-											>Access Password</label
-										>
-										<div class="flex flex-1 items-center gap-2">
-											<code
-												class="flex-1 rounded bg-surface-gray-1 px-4 py-2.5 font-mono text-sm text-ink-gray-8"
-												>{{
-													activeBench.public_password
-														? "••••••••••••"
-														: "—"
-												}}</code
-											>
-											<Button
-												icon="copy"
-												appearance="minimal"
-												size="sm"
-												@click="copyText(activeBench.public_password)"
-											/>
-										</div>
-									</div>
-									<div
-										v-if="activeBench.public_url"
-										class="flex items-center gap-4 py-3"
-									>
-										<label
-											class="w-36 shrink-0 text-sm font-medium text-ink-gray-9"
-											>Public URL</label
-										>
-										<div class="flex flex-1 items-center gap-2">
-											<a
-												:href="activeBench.public_url"
-												target="_blank"
-												class="flex-1 truncate rounded bg-surface-gray-1 px-4 py-2.5 font-mono text-sm text-ink-blue-3 hover:underline"
-												>{{ activeBench.public_url }}</a
-											>
-											<Button
-												icon="copy"
-												appearance="minimal"
-												size="sm"
-												@click="copyText(activeBench.public_url)"
-											/>
-										</div>
-									</div>
-									<div class="flex items-center gap-4 py-3">
-										<label
-											class="w-36 shrink-0 text-sm font-medium text-ink-gray-9"
-											>Device IP</label
-										>
-										<div class="flex flex-1 items-center gap-2">
-											<code
-												class="flex-1 rounded bg-surface-gray-1 px-4 py-2.5 font-mono text-sm text-ink-gray-8"
-												>{{ benchIp ?? "—" }}</code
-											>
-											<Button
-												icon="copy"
-												appearance="minimal"
-												size="sm"
-												@click="copyText(benchIp)"
-											/>
-										</div>
-									</div>
-									<div class="flex items-center gap-4 py-3">
-										<label
-											class="w-36 shrink-0 text-sm font-medium text-ink-gray-9"
-											>SSH Command</label
-										>
-										<div class="flex flex-1 items-center gap-2">
-											<code
-												class="flex-1 rounded bg-surface-gray-1 px-4 py-2.5 font-mono text-sm text-ink-gray-8"
-												>{{ sshCommand ?? "—" }}</code
-											>
-											<Button
-												icon="copy"
-												appearance="minimal"
-												size="sm"
-												@click="copyText(sshCommand)"
-											/>
-										</div>
-									</div>
-									<div class="flex items-center gap-4 py-3">
-										<label
-											class="w-36 shrink-0 text-sm font-medium text-ink-gray-9"
-											>Username</label
-										>
-										<div class="flex flex-1 items-center gap-2">
-											<code
-												class="flex-1 rounded bg-surface-gray-1 px-4 py-2.5 font-mono text-sm text-ink-gray-8"
-												>{{ sshUsername ?? "—" }}</code
-											>
-											<Button
-												icon="copy"
-												appearance="minimal"
-												size="sm"
-												@click="copyText(sshUsername)"
-											/>
-										</div>
-									</div>
-									<div class="flex items-center gap-4 py-3">
-										<label
-											class="w-36 shrink-0 text-sm font-medium text-ink-gray-9"
-											>su Password</label
-										>
-										<div class="flex flex-1 items-center gap-2">
-											<code
-												class="flex-1 rounded bg-surface-gray-1 px-4 py-2.5 font-mono text-sm text-ink-gray-8"
-												>{{ sshPassword ? "••••••••••••" : "—" }}</code
-											>
-											<Button
-												icon="copy"
-												appearance="minimal"
-												size="sm"
-												@click="copyText(sshPassword)"
-											/>
-										</div>
-									</div>
-									<div class="flex items-center gap-4 py-3">
-										<label
-											class="w-36 shrink-0 text-sm font-medium text-ink-gray-9"
-											>Admin Password</label
-										>
-										<div class="flex flex-1 items-center gap-2">
-											<code
-												class="flex-1 rounded bg-surface-gray-1 px-4 py-2.5 font-mono text-sm text-ink-gray-8"
-												>{{ adminPassword ? "••••••••••••" : "—" }}</code
-											>
-											<Button
-												icon="copy"
-												appearance="minimal"
-												size="sm"
-												@click="copyText(adminPassword)"
-											/>
-										</div>
-									</div>
-									<div class="flex items-center gap-4 py-3">
-										<label
-											class="w-36 shrink-0 text-sm font-medium text-ink-gray-9"
-											>VS Port Forward</label
-										>
-										<div class="flex flex-1 items-center gap-2">
-											<code
-												class="flex-1 rounded bg-surface-gray-1 px-4 py-2.5 font-mono text-sm text-ink-gray-8"
-												>{{ siteUrl ?? "—" }}</code
-											>
-											<Button
-												icon="copy"
-												appearance="minimal"
-												size="sm"
-												@click="copyText(siteUrl)"
-											/>
-										</div>
-									</div>
-									<div
-										v-if="lab.doc.enable_code_server && codeServerUrl"
-										class="flex items-center gap-4 py-3"
-									>
-										<label
-											class="w-36 shrink-0 text-sm font-medium text-ink-gray-9"
-											>VS Code URL</label
-										>
-										<div class="flex flex-1 items-center gap-2">
-											<code
-												class="flex-1 rounded bg-surface-gray-1 px-4 py-2.5 font-mono text-sm text-ink-gray-8"
-												>{{ codeServerUrl }}</code
-											>
-											<Button
-												icon="copy"
-												appearance="minimal"
-												size="sm"
-												@click="copyText(codeServerUrl)"
-											/>
-										</div>
-									</div>
-									<div
-										v-if="lab.doc.enable_code_server && codeServerPassword"
-										class="flex items-center gap-4 py-3"
-									>
-										<label
-											class="w-36 shrink-0 text-sm font-medium text-ink-gray-9"
-											>VS Code Password</label
-										>
-										<div class="flex flex-1 items-center gap-2">
-											<code
-												class="flex-1 rounded bg-surface-gray-1 px-4 py-2.5 font-mono text-sm text-ink-gray-8"
-												>{{
-													codeServerPassword ? "••••••••••••" : "—"
-												}}</code
-											>
-											<Button
-												icon="copy"
-												appearance="minimal"
-												size="sm"
-												@click="copyText(codeServerPassword)"
-											/>
-										</div>
-									</div>
-								</div>
-							</div>
+								:bench="activeBench"
+								:enable-code-server="!!lab.doc.enable_code_server"
+								:visibility-loading="visibilityAction.loading"
+								:bench-ip="benchIp"
+								:ssh-command="sshCommand"
+								:ssh-username="sshUsername"
+								:ssh-password="sshPassword"
+								:admin-password="adminPassword"
+								:site-url="siteUrl"
+								:code-server-url="codeServerUrl"
+								:code-server-password="codeServerPassword"
+								@toggle-visibility="onVisibilityChange"
+							/>
 						</div>
 
 						<!-- Right column -->
 						<div class="flex flex-col gap-6">
 							<!-- Container Status -->
-							<div
-								v-if="activeBench"
-								class="rounded-lg border border-outline-gray-1 bg-surface-white p-5"
-							>
-								<div class="mb-4 flex items-center justify-between">
-									<h2 class="text-base font-semibold text-ink-gray-9">
-										Container Status
-									</h2>
-									<Badge
-										:label="activeBench.status"
-										:theme="statusColor(activeBench.status)"
-									/>
-								</div>
-								<div class="grid grid-cols-2 gap-4">
-									<div class="rounded-lg border border-outline-gray-1 p-4">
-										<div class="text-xs text-ink-gray-5">CPU Usage</div>
-										<div class="mt-1 text-lg font-semibold text-ink-gray-9">
-											{{ activeBench.cpu_usage || 0 }}%
-										</div>
-										<div
-											class="mt-2 h-2 w-full rounded-full bg-surface-gray-2"
-										>
-											<div
-												class="h-2 rounded-full bg-surface-blue-2"
-												:style="{
-													width: `${Math.min(
-														activeBench.cpu_usage || 0,
-														100
-													)}%`,
-												}"
-											/>
-										</div>
-									</div>
-									<div class="rounded-lg border border-outline-gray-1 p-4">
-										<div class="text-xs text-ink-gray-5">Memory Usage</div>
-										<div class="mt-1 text-lg font-semibold text-ink-gray-9">
-											{{ activeBench.memory_usage || 0 }}%
-										</div>
-										<div
-											class="mt-2 h-2 w-full rounded-full bg-surface-gray-2"
-										>
-											<div
-												class="h-2 rounded-full bg-surface-blue-2"
-												:style="{
-													width: `${Math.min(
-														activeBench.memory_usage || 0,
-														100
-													)}%`,
-												}"
-											/>
-										</div>
-									</div>
-								</div>
-								<div
-									v-if="activeBench.started_at"
-									class="mt-3 text-xs text-ink-gray-5"
-								>
-									Started: {{ activeBench.started_at }}
-								</div>
-							</div>
+							<ResourceUsage v-if="activeBench" :bench="activeBench" />
 
 							<!-- No deployment yet -->
 							<div
@@ -477,95 +159,15 @@
 				</div>
 
 				<!-- Sites Tab -->
-				<div v-if="tab.label === 'Sites'" class="p-4">
-					<div class="mb-4 flex items-center justify-between">
-						<h2 class="text-base font-semibold text-ink-gray-9">Sites</h2>
-						<Button
-							appearance="primary"
-							icon-left="plus"
-							:disabled="!activeBench"
-							@click="showNewSite = true"
-							>New Site</Button
-						>
-					</div>
-
-					<!-- Sites list -->
-					<ListView
-						v-if="sites.data?.length"
-						:columns="siteColumns"
-						:rows="sites.data"
-						:options="{ selectable: false, showTooltip: true, resizeColumn: true }"
-						row-key="name"
-					/>
-					<div
-						v-else-if="!activeBench"
-						class="rounded-lg border border-outline-gray-1 bg-surface-white p-8 text-center"
-					>
-						<div class="text-sm text-ink-gray-5">
-							Deploy this lab first to create sites.
-						</div>
-					</div>
-					<div
-						v-else
-						class="rounded-lg border border-outline-gray-1 bg-surface-white p-8 text-center"
-					>
-						<div class="text-sm text-ink-gray-5">
-							No sites yet. Create your first site.
-						</div>
-					</div>
-
-					<!-- New Site Dialog -->
-					<Dialog
-						:options="{ title: 'Create New Site', size: 'sm' }"
-						v-model="showNewSite"
-					>
-						<template #body-content>
-							<div class="space-y-4">
-								<FormControl
-									label="Site Name"
-									v-model="newSiteName"
-									type="text"
-									placeholder="e.g. mysite"
-									:required="true"
-								/>
-								<div v-if="lab.doc.apps?.length">
-									<label class="mb-2 block text-xs font-medium text-ink-gray-6"
-										>Apps to Install</label
-									>
-									<div class="flex flex-wrap gap-2">
-										<label
-											v-for="app in lab.doc.apps"
-											:key="app.app_name"
-											class="flex cursor-pointer items-center gap-2 rounded border border-outline-gray-1 px-3 py-2 text-sm"
-											:class="
-												selectedApps.includes(app.app_name)
-													? 'border-outline-blue-2 bg-surface-blue-1'
-													: ''
-											"
-										>
-											<input
-												type="checkbox"
-												:value="app.app_name"
-												v-model="selectedApps"
-												class="accent-surface-blue-2"
-											/>
-											{{ app.app_label || app.app_name }}
-										</label>
-									</div>
-								</div>
-							</div>
-						</template>
-						<template #actions>
-							<Button
-								appearance="primary"
-								class="w-full"
-								:loading="createSiteAction.loading"
-								@click="createSite"
-								>Create Site</Button
-							>
-						</template>
-					</Dialog>
-				</div>
+				<SitesTab
+					v-if="tab.label === 'Sites'"
+					v-model="showNewSite"
+					:rows="sites.data"
+					:apps="lab.doc.apps"
+					:active-bench="activeBench"
+					:create-loading="createSiteAction.loading"
+					@create="createSite"
+				/>
 
 				<!-- Deploy Log Tab -->
 				<div v-if="tab.label === 'Deploy Log'" class="p-4">
@@ -674,21 +276,20 @@ import { computed, ref, watch, onMounted, onUnmounted } from "vue";
 import { useRoute } from "vue-router";
 import { useSocket } from "@/socket";
 import {
-	createResource,
-	createDocumentResource,
-	createListResource,
+	useDoc,
+	useCall,
+	useList,
 	Badge,
 	Button,
-	Switch,
 	Tabs,
-	ListView,
 	Dialog,
-	FormControl,
 	ErrorMessage,
-	Alert,
 	toast,
 } from "frappe-ui";
 import LogViewer from "@/components/LogViewer.vue";
+import ConnectionInfo from "@/components/lab/ConnectionInfo.vue";
+import ResourceUsage from "@/components/lab/ResourceUsage.vue";
+import SitesTab from "@/components/lab/SitesTab.vue";
 import { userContext } from "@/data/userContext";
 
 const route = useRoute();
@@ -697,8 +298,6 @@ const activeTab = ref(0);
 const showNewSite = ref(false);
 const showDeployConfirm = ref(false);
 const showStopConfirm = ref(false);
-const newSiteName = ref("");
-const selectedApps = ref([]);
 
 const tabs = computed(() => {
 	const base = [{ label: "Dashboard" }, { label: "Sites" }];
@@ -709,12 +308,6 @@ const tabs = computed(() => {
 	}
 	return base;
 });
-
-const siteColumns = [
-	{ label: "Site Name", key: "site_name", width: "200px" },
-	{ label: "Domain", key: "full_domain", width: "250px" },
-	{ label: "Status", key: "status", width: "120px" },
-];
 
 const sshUsername = computed(() => activeBench.value?.ssh_username || null);
 const sshPassword = computed(() => activeBench.value?.ssh_password || null);
@@ -736,14 +329,14 @@ const siteUrl = computed(() => {
 	return `${ip}:8000`;
 });
 
-const lab = createDocumentResource({
+const lab = useDoc({
 	doctype: "Lab",
 	name: labId,
 });
 
-const benches = createResource({
-	url: "benchpress.api.get_benches",
-	auto: true,
+const benches = useCall({
+	url: "/api/v2/method/benchpress.api.get_benches",
+	immediate: true,
 });
 
 const activeBench = computed(() => {
@@ -751,16 +344,33 @@ const activeBench = computed(() => {
 	return benches.data.find((b) => b.lab === labId) || null;
 });
 
-const sites = createListResource({
+const sites = useList({
 	doctype: "Bench Site",
 	fields: ["name", "site_name", "full_domain", "status"],
-	filters: computed(() => ({ bench: activeBench.value?.name || "" })),
+	filters: () => ({ bench: activeBench.value?.name || "" }),
 	orderBy: "creation desc",
-	auto: computed(() => !!activeBench.value),
+	immediate: false,
+	refetch: false,
 });
 
-const deployLogs = createResource({
-	url: "benchpress.api.get_deploy_logs",
+watch(
+	() => activeBench.value?.name,
+	(n) => n && sites.reload(),
+	{ immediate: true }
+);
+
+const deployLogs = useCall({
+	url: "/api/v2/method/benchpress.api.get_deploy_logs",
+	immediate: false,
+});
+
+const buildLogs = useList({
+	doctype: "Build Log",
+	fields: ["name", "message", "log_type", "timestamp"],
+	filters: { lab: labId },
+	orderBy: "timestamp desc",
+	limit: 20,
+	immediate: true,
 });
 
 const liveDeployLog = ref("");
@@ -932,17 +542,10 @@ onUnmounted(() => {
 	}
 });
 
-const buildLogs = createListResource({
-	doctype: "Build Log",
-	fields: ["name", "message", "log_type", "timestamp"],
-	filters: { lab: labId },
-	orderBy: "timestamp desc",
-	pageLength: 20,
-	auto: true,
-});
-
-const buildAction = createResource({
-	url: "benchpress.api.build_lab_image",
+const buildAction = useCall({
+	url: "/api/v2/method/benchpress.api.build_lab_image",
+	method: "POST",
+	immediate: false,
 	onSuccess() {
 		lab.reload();
 		buildLogs.reload();
@@ -954,8 +557,10 @@ function buildLabImage() {
 	buildAction.submit({ lab_name: labId });
 }
 
-const deployAction = createResource({
-	url: "benchpress.api.create_bench",
+const deployAction = useCall({
+	url: "/api/v2/method/benchpress.api.create_bench",
+	method: "POST",
+	immediate: false,
 	onSuccess() {
 		liveDeployLog.value = "";
 		deployComplete.value = false;
@@ -969,8 +574,10 @@ function deployLab() {
 	});
 }
 
-const benchAction = createResource({
-	url: "benchpress.api.bench_action",
+const benchAction = useCall({
+	url: "/api/v2/method/benchpress.api.bench_action",
+	method: "POST",
+	immediate: false,
 	onSuccess() {
 		benches.reload();
 	},
@@ -991,8 +598,10 @@ function doBenchAction(action) {
 	});
 }
 
-const visibilityAction = createResource({
-	url: "benchpress.api.set_bench_visibility",
+const visibilityAction = useCall({
+	url: "/api/v2/method/benchpress.api.set_bench_visibility",
+	method: "POST",
+	immediate: false,
 	onSuccess() {
 		liveDeployLog.value = "";
 		deployComplete.value = false;
@@ -1000,7 +609,7 @@ const visibilityAction = createResource({
 		toast.success("Updating bench visibility — this re-creates the container.");
 	},
 	onError(err) {
-		toast.error(err?.messages?.[0] || "Failed to update visibility");
+		toast.error(err?.message || "Failed to update visibility");
 	},
 });
 
@@ -1012,67 +621,24 @@ function onVisibilityChange(value) {
 	});
 }
 
-const createSiteAction = createResource({
-	url: "benchpress.api.create_site",
+const createSiteAction = useCall({
+	url: "/api/v2/method/benchpress.api.create_site",
+	method: "POST",
+	immediate: false,
 	onSuccess() {
 		showNewSite.value = false;
-		newSiteName.value = "";
-		selectedApps.value = [];
 		sites.reload();
 	},
 });
 
-function createSite() {
-	if (!newSiteName.value || !activeBench.value) return;
+function createSite({ siteName, apps }) {
+	if (!siteName || !activeBench.value) return;
 	createSiteAction.submit({
 		data: JSON.stringify({
-			site_name: newSiteName.value,
+			site_name: siteName,
 			bench: activeBench.value.name,
-			apps: selectedApps.value.map((name) => ({ name })),
+			apps: apps.map((name) => ({ name })),
 		}),
 	});
 }
-
-const copyAlert = ref("");
-
-function copyText(text) {
-	navigator.clipboard.writeText(text);
-	copyAlert.value = "Copied to clipboard!";
-	setTimeout(() => {
-		copyAlert.value = "";
-	}, 2000);
-}
-
-function statusColor(status) {
-	const map = {
-		Draft: "gray",
-		Building: "orange",
-		Ready: "green",
-		Running: "green",
-		Deploying: "orange",
-		Stopped: "red",
-		Error: "red",
-		Active: "green",
-		Creating: "orange",
-		Inactive: "gray",
-	};
-	return map[status] || "gray";
-}
 </script>
-
-<style scoped>
-.slide-in-enter-active {
-	transition: all 0.3s ease-out;
-}
-.slide-in-leave-active {
-	transition: all 0.2s ease-in;
-}
-.slide-in-enter-from {
-	transform: translateX(100%);
-	opacity: 0;
-}
-.slide-in-leave-to {
-	transform: translateX(100%);
-	opacity: 0;
-}
-</style>

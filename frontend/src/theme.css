@@ -64,7 +64,7 @@
   --surface-gray-7: #F1F5F9;
   --surface-menu-bar: #0D1526;  /* dark sidebar */
   --surface-cards: #0F1A2E;
-  --surface-modal: #15243B;
+  --surface-modal: #1E3253;     /* elevated above --surface-gray-2 so inputs/borders stay visible in dialogs */
   --surface-selected: #1E3A5F;
 
   /* ── Primary blue accent ── */
