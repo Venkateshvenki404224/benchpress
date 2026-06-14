@@ -4,6 +4,7 @@
 import frappe
 from frappe import _
 
+from benchpress import lab_templates
 from benchpress.permissions import (
 	get_bench_owner_filter,
 	is_admin,
@@ -60,6 +61,18 @@ def get_lab(name: str) -> dict:
 			for a in lab.apps
 		],
 	}
+
+
+@frappe.whitelist()
+def get_lab_templates() -> list[dict]:
+	return lab_templates.get_templates()
+
+
+@frappe.whitelist()
+def create_lab_from_template(template: str, lab_id: str, title: str | None = None) -> dict:
+	require_admin()
+	name = lab_templates.create_lab_from_template(template, lab_id, title)
+	return {"name": name, "status": "Draft"}
 
 
 @frappe.whitelist()

@@ -18,6 +18,34 @@ Create Lab  -->  Build Image  -->  Deploy Bench  -->  Connect & Develop
 
 ---
 
+## Starting from a Template
+
+BenchPress ships a small, versioned catalog of ready-made lab templates so you
+don't have to type every app's Git URL and resource limit by hand. Each
+template pre-fills the Frappe version, recommended memory/CPU, and the apps to
+install.
+
+| Template | Apps | Recommended resources |
+|----------|------|------------------------|
+| **Frappe Framework** (`frappe`) | none (bare bench) | 512m / 1 core |
+| **ERPNext** (`erpnext`) | `erpnext` | 2g / 2 cores |
+| **Frappe CRM** (`crm`) | `crm` | 1g / 1 core |
+
+Creating a lab from a template produces an ordinary, fully editable Lab — you
+can tweak the apps, version, or limits afterwards just like a hand-built one.
+
+The catalog and the create action are exposed as whitelisted APIs:
+
+```
+benchpress.api.get_lab_templates()
+benchpress.api.create_lab_from_template(template="erpnext", lab_id="erp-demo", title="ERP Demo")
+```
+
+> Adding to the catalog: templates live in `benchpress/lab_templates.py` and are
+> versioned with `CATALOG_VERSION`. Append an entry and bump the version.
+
+---
+
 ## Creating a New Lab
 
 ### Navigate to the Labs page
