@@ -2,14 +2,18 @@
 	<div class="p-4">
 		<div class="mb-4 flex items-center justify-between">
 			<h1 class="text-xl font-semibold text-ink-gray-9">Labs</h1>
-			<Button
-				v-if="userContext.isAdmin"
-				appearance="primary"
-				icon-left="plus"
-				@click="$router.push('/labs/new')"
-			>
-				New Lab
-			</Button>
+			<div v-if="userContext.isAdmin" class="flex gap-2">
+				<Button
+					appearance="minimal"
+					icon-left="grid"
+					@click="$router.push('/labs/templates')"
+				>
+					From Template
+				</Button>
+				<Button appearance="primary" icon-left="plus" @click="$router.push('/labs/new')">
+					New Lab
+				</Button>
+			</div>
 		</div>
 
 		<!-- Search & Filters -->
