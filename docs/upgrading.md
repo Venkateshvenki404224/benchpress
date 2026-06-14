@@ -9,9 +9,10 @@ release to a newer one.
 > Frappe app and its site). Rebuilding the **lab images** your benches run on is
 > a separate, opt-in step covered in [Lab image policy](#lab-image-policy-after-an-upgrade).
 >
-> This is the documented runbook. A scripted `benchpress upgrade` command that
-> automates these steps (with the same backup gate and rollback) is the next
-> slice — see [What's not automated yet](#whats-not-automated-yet).
+> Prefer one command? `apps/benchpress/upgrade.sh` runs Steps 0–5 below with the
+> same backup gate and abort-on-failure behaviour — see
+> [Scripted upgrade](#scripted-upgrade). The manual steps remain the reference
+> for what each step does and for [rollback](#rollback).
 
 ---
 
@@ -27,6 +28,33 @@ release to a newer one.
 Throughout this guide, replace `<your-site>` with your real site name and run
 commands from the bench root (the directory that contains `apps/`, `sites/`,
 and `env/`).
+
+---
+
+## Scripted upgrade
+
+To run the whole flow as one command, use the bundled script. It performs
+Steps 0–5 below, enforces the **Step 0 backup gate** (it aborts if the backup
+fails), and stops on the first error so a failed upgrade never silently
+continues:
+
+```bash
+# from the bench root
+bash apps/benchpress/upgrade.sh <your-site>
+```
+
+Upgrade to a specific branch or tag, or preview every step without changing
+anything:
+
+```bash
+bash apps/benchpress/upgrade.sh <your-site> version-16   # checkout a target ref
+bash apps/benchpress/upgrade.sh <your-site> --dry-run    # print steps only
+```
+
+The script does **not** roll back automatically (that is a later slice). On
+failure it prints the recorded pre-upgrade revision and points you at the
+[Rollback](#rollback) section. The manual steps below document exactly what each
+step runs — read them before relying on the script in production.
 
 ---
 
@@ -193,11 +221,11 @@ Treat lab rebuilds as an opt-in follow-up, not part of the control-plane upgrade
 
 ## What's not automated yet
 
-This runbook is the manual, supported path today. Still to come:
+The [upgrade script](#scripted-upgrade) now chains Steps 0–5 with the backup
+gate and abort-on-failure. Still to come:
 
-- A scripted `benchpress upgrade` command that chains Steps 0–5 with the same
-  backup gate and abort-on-failure behaviour.
-- Automatic rollback when a step fails mid-upgrade.
+- Automatic rollback when a step fails mid-upgrade (the script aborts and points
+  you at the recorded revision + backup, but does not restore them for you).
 - A versioned `CHANGELOG` so installs can be upgraded across several releases
   safely.
 
