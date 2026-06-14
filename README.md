@@ -61,6 +61,7 @@
 - [VPN Device Management](docs/device-management.md) -- Register devices for WireGuard access
 - [WireGuard Setup](docs/wireguard-setup.md) -- Detailed WireGuard configuration
 - [Upgrading a BenchPress Install](docs/upgrading.md) -- Backup-gated upgrade and rollback runbook
+- [Changelog](CHANGELOG.md) -- Notable changes per release; read before a multi-release upgrade
 
 ---
 

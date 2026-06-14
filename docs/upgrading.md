@@ -23,7 +23,7 @@ release to a newer one.
 | You know your site name (e.g. `your-site.localhost`) | Every command is scoped to one site |
 | You can reach the host bench shell | Upgrades run as bench commands, not in the dashboard |
 | No build or deploy job is in flight | Migrating mid-deploy can leave benches in a bad state |
-| You have read the release notes for the target version | Schema or config changes may need manual steps |
+| You have read the [CHANGELOG](../CHANGELOG.md) for the target version | Schema or config changes may need manual steps |
 
 Throughout this guide, replace `<your-site>` with your real site name and run
 commands from the bench root (the directory that contains `apps/`, `sites/`,
@@ -222,12 +222,12 @@ Treat lab rebuilds as an opt-in follow-up, not part of the control-plane upgrade
 ## What's not automated yet
 
 The [upgrade script](#scripted-upgrade) now chains Steps 0–5 with the backup
-gate and abort-on-failure. Still to come:
+gate and abort-on-failure, and the [CHANGELOG](../CHANGELOG.md) records what
+changed between releases so you know which manual steps a multi-release upgrade
+needs. Still to come:
 
 - Automatic rollback when a step fails mid-upgrade (the script aborts and points
   you at the recorded revision + backup, but does not restore them for you).
-- A versioned `CHANGELOG` so installs can be upgraded across several releases
-  safely.
 
-Until those ship, follow the steps above in order and do not skip the Step 0
+Until that ships, follow the steps above in order and do not skip the Step 0
 backup gate.
