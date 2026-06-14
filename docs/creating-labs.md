@@ -30,6 +30,9 @@ install.
 | **Frappe Framework** (`frappe`) | none (bare bench) | 512m / 1 core |
 | **ERPNext** (`erpnext`) | `erpnext` | 2g / 2 cores |
 | **Frappe CRM** (`crm`) | `crm` | 1g / 1 core |
+| **Frappe HR** (`hrms`) | `hrms` | 2g / 2 cores |
+| **Frappe Learning** (`lms`) | `lms` | 1g / 1 core |
+| **Frappe Helpdesk** (`helpdesk`) | `helpdesk` | 1g / 1 core |
 
 Creating a lab from a template produces an ordinary, fully editable Lab — you
 can tweak the apps, version, or limits afterwards just like a hand-built one.

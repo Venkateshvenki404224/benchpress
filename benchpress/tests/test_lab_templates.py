@@ -46,6 +46,12 @@ class TestLabTemplates(IntegrationTestCase):
 	def test_get_template_returns_match(self):
 		self.assertEqual(lab_templates.get_template("erpnext")["key"], "erpnext")
 
+	def test_first_party_app_templates_present(self):
+		for key in ("hrms", "lms", "helpdesk"):
+			template = lab_templates.get_template(key)
+			self.assertEqual(len(template["apps"]), 1)
+			self.assertEqual(template["apps"][0]["app_name"], key)
+
 	def test_get_template_unknown_throws(self):
 		with self.assertRaises(frappe.ValidationError):
 			lab_templates.get_template("does-not-exist")
