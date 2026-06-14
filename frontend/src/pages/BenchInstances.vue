@@ -55,7 +55,34 @@ const columns = [
 	},
 	{ label: "CPU %", key: "cpu_usage", width: "80px" },
 	{ label: "Memory %", key: "memory_usage", width: "100px" },
+	{
+		label: "Health",
+		key: "container_health",
+		width: "110px",
+		getLabel: ({ row }) => row.container_health || "—",
+		prefix: ({ row }) => {
+			if (!row.container_health) return null;
+			const color =
+				{
+					Healthy: "green",
+					Unhealthy: "red",
+					Unknown: "gray",
+				}[row.container_health] || "gray";
+			return h(Badge, { label: row.container_health, theme: color, size: "sm" });
+		},
+	},
+	{
+		label: "Last Check",
+		key: "last_health_check",
+		width: "150px",
+		getLabel: ({ row }) => formatCheckTime(row.last_health_check),
+	},
 ];
+
+function formatCheckTime(value) {
+	if (!value) return "—";
+	return value.slice(0, 16).replace("T", " ");
+}
 
 let benches = createListResource({
 	doctype: "Bench Instance",
@@ -71,6 +98,8 @@ let benches = createListResource({
 		"wg_ip",
 		"cpu_usage",
 		"memory_usage",
+		"container_health",
+		"last_health_check",
 		"started_at",
 	],
 	orderBy: "creation desc",

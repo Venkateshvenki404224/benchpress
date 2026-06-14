@@ -2,8 +2,9 @@
 # For license information, please see license.txt
 
 import frappe
+from frappe.utils import now_datetime
 
-from benchpress.docker_manager import get_container_stats
+from benchpress.docker_manager import get_container_health, get_container_stats
 
 
 def collect_all_stats() -> None:
@@ -38,7 +39,22 @@ def _collect_bench_stats() -> None:
 				message=frappe.get_traceback(),
 			)
 
+		_update_bench_health(bench)
+
 	frappe.db.commit()
+
+
+def _update_bench_health(bench: dict) -> None:
+	"""Record the container health and check timestamp for a single bench."""
+	frappe.db.set_value(
+		"Bench Instance",
+		bench["name"],
+		{
+			"container_health": get_container_health(bench["container_id"]),
+			"last_health_check": now_datetime(),
+		},
+		update_modified=False,
+	)
 
 
 def _collect_device_stats() -> None:

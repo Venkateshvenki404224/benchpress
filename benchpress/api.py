@@ -91,6 +91,8 @@ def get_benches() -> list[dict]:
 			"wg_ip",
 			"cpu_usage",
 			"memory_usage",
+			"container_health",
+			"last_health_check",
 			"started_at",
 			"ssh_username",
 			"code_server_url",
