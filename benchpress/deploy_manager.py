@@ -58,7 +58,7 @@ def build_linkuser_args(bench, lab, settings, ssh_password: str) -> list[str]:
 	"""Positional arguments for linkuser.sh, in the order the script reads them.
 
 	Order must match scripts/linkuser.sh:
-	USERNAME EMAIL LAB_NAME WG_IP SSH_PASSWORD BENCH_NAME BASE_DOMAIN MOUNT_TARGET LOGIN_SHELL
+	USERNAME EMAIL LAB_NAME WG_IP SSH_PASSWORD BENCH_NAME BASE_DOMAIN LOGIN_SHELL
 	"""
 	return [
 		bench.ssh_username,
@@ -68,7 +68,6 @@ def build_linkuser_args(bench, lab, settings, ssh_password: str) -> list[str]:
 		ssh_password,
 		bench.bench_name,
 		settings.base_domain or "localhost",
-		lab.mount_target or "/home/frappe",
 		lab.shell or "/bin/bash",
 	]
 
@@ -88,10 +87,10 @@ def _make_log_appender(doctype: str, log_name: str, event: str, context: dict):
 
 
 def create_site_in_container(
-	container_id: str, db_server, lab, site_name: str, admin_password: str, apps_csv: str
+	container_id: str, db_server, site_name: str, admin_password: str, apps_csv: str
 ) -> tuple[int, str]:
 	"""Run setup-site.sh inside a bench container using a temporary MariaDB user."""
-	bench_dir = f"{lab.mount_target or '/home/frappe'}/frappe-bench"
+	bench_dir = "/home/frappe/frappe-bench"  # fixed: the data volume binds at /home/frappe
 	db_name, temp_user, temp_password = create_mariadb_user(db_server.name, site_name)
 	try:
 		return exec_in_container(
@@ -223,7 +222,7 @@ def deploy_bench(bench_name: str) -> None:
 		else:
 			append_log("WireGuard not configured, skipping VPN.", "warning")
 
-		bench_dir = f"{lab.mount_target or '/home/frappe'}/frappe-bench"
+		bench_dir = "/home/frappe/frappe-bench"  # fixed: the data volume binds at /home/frappe
 		site_name = bench.site_name
 		config = {
 			**db_server.get_connection_config(),
@@ -243,7 +242,7 @@ def deploy_bench(bench_name: str) -> None:
 
 		apps_csv = ",".join(a.app_name for a in lab.apps if a.app_name.lower() != "frappe")
 		exit_code, output = create_site_in_container(
-			container_id, db_server, lab, site_name, admin_password, apps_csv
+			container_id, db_server, site_name, admin_password, apps_csv
 		)
 		if exit_code != 0:
 			raise Exception(f"bench new-site failed (exit {exit_code}): {output}")

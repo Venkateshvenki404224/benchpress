@@ -202,9 +202,11 @@ class TestDeployManager(IntegrationTestCase):
 
 		args = build_linkuser_args(bench, self.lab, settings, "secret-pw")
 
-		self.assertEqual(len(args), 9)
+		# 8 args: mount_target was removed, so LOGIN_SHELL immediately follows BASE_DOMAIN.
+		self.assertEqual(len(args), 8)
 		self.assertEqual(args[4], "secret-pw")  # SSH_PASSWORD position
-		self.assertEqual(args[-1], "/bin/zsh")  # LOGIN_SHELL position
+		self.assertEqual(args[6], settings.base_domain or "localhost")  # BASE_DOMAIN position
+		self.assertEqual(args[-1], "/bin/zsh")  # LOGIN_SHELL position (right after BASE_DOMAIN)
 
 	def test_build_linkuser_args_defaults_shell_to_bash(self):
 		from benchpress.deploy_manager import build_linkuser_args

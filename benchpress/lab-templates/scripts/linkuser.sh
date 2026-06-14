@@ -1,7 +1,7 @@
 #!/bin/bash
 # linkuser.sh — User provisioning for BenchPress containers
 # Renames the 'frappe' user to the dynamic username instead of creating a new one.
-# Args: USERNAME EMAIL LAB_NAME WG_IP SSH_PASSWORD BENCH_NAME BASE_DOMAIN MOUNT_TARGET LOGIN_SHELL
+# Args: USERNAME EMAIL LAB_NAME WG_IP SSH_PASSWORD BENCH_NAME BASE_DOMAIN LOGIN_SHELL
 
 set -e
 
@@ -12,8 +12,7 @@ WG_IP="$4"
 SSH_PASSWORD="$5"
 BENCH_NAME="$6"
 BASE_DOMAIN="$7"
-MOUNT_TARGET="${8:-/home/frappe}"
-LOGIN_SHELL="${9:-/bin/bash}"
+LOGIN_SHELL="${8:-/bin/bash}"
 
 if [ -z "$USERNAME" ] || [ -z "$SSH_PASSWORD" ]; then
     echo "[error] USERNAME and SSH_PASSWORD are required"
