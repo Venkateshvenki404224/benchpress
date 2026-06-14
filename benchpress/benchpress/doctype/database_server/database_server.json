@@ -22,7 +22,6 @@
   "volume_name",
   "created_at",
   "configuration_section",
-  "max_connections",
   "custom_config",
   "error_section",
   "error_message"
@@ -130,12 +129,7 @@
    "label": "MariaDB Configuration"
   },
   {
-   "default": "500",
-   "fieldname": "max_connections",
-   "fieldtype": "Int",
-   "label": "Max Connections"
-  },
-  {
+   "description": "Full MariaDB server config (INI). Seeded with sensible defaults on creation; edit to tune the server (e.g. max_connections, buffer pool). Re-run setup to apply.",
    "fieldname": "custom_config",
    "fieldtype": "Code",
    "label": "Custom Config",
