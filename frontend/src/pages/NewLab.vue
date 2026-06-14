@@ -67,6 +67,18 @@
 					placeholder="e.g. 512m"
 				/>
 				<FormControl label="CPU Cores" v-model="form.cpu_cores" type="number" />
+				<FormControl
+					label="Max IOPS (Block I/O)"
+					v-model="form.iops_limit"
+					type="number"
+					description="Per host block device. 0 = default (1000)."
+				/>
+				<FormControl
+					label="Max Bytes/sec (Block I/O)"
+					v-model="form.bps_limit"
+					type="number"
+					description="Per host block device. 0 = default (40 MiB/s)."
+				/>
 			</div>
 		</div>
 
@@ -142,6 +154,8 @@ const form = reactive({
 	description: "",
 	memory_limit: "512m",
 	cpu_cores: 1,
+	iops_limit: 0,
+	bps_limit: 0,
 	apps: [],
 });
 
@@ -173,6 +187,8 @@ async function createLab() {
 			description: form.description,
 			memory_limit: form.memory_limit,
 			cpu_cores: form.cpu_cores,
+			iops_limit: form.iops_limit,
+			bps_limit: form.bps_limit,
 			apps: form.apps.filter((a) => a.app_name && a.git_url && a.branch),
 		});
 		router.push("/labs");
