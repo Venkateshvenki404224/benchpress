@@ -189,3 +189,31 @@ class TestDeployManager(IntegrationTestCase):
 
 		redeploy_bench(bench.name)
 		mock_drop_db.assert_called_once_with(self.db_server_name, bench.site_name)
+
+	# --- build_linkuser_args (Lab.shell wiring) ---
+
+	def test_build_linkuser_args_includes_lab_shell(self):
+		from benchpress.deploy_manager import build_linkuser_args
+
+		bench = self._fresh_bench()
+		bench.ssh_username = "tester"
+		self.lab.shell = "/bin/zsh"
+		settings = frappe.get_single("BenchPress Settings")
+
+		args = build_linkuser_args(bench, self.lab, settings, "secret-pw")
+
+		self.assertEqual(len(args), 9)
+		self.assertEqual(args[4], "secret-pw")  # SSH_PASSWORD position
+		self.assertEqual(args[-1], "/bin/zsh")  # LOGIN_SHELL position
+
+	def test_build_linkuser_args_defaults_shell_to_bash(self):
+		from benchpress.deploy_manager import build_linkuser_args
+
+		bench = self._fresh_bench()
+		bench.ssh_username = "tester"
+		self.lab.shell = None
+		settings = frappe.get_single("BenchPress Settings")
+
+		args = build_linkuser_args(bench, self.lab, settings, "pw")
+
+		self.assertEqual(args[-1], "/bin/bash")

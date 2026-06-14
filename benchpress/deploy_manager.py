@@ -54,6 +54,25 @@ def remove_bench_volume(bench_name: str) -> None:
 		pass  # best-effort
 
 
+def build_linkuser_args(bench, lab, settings, ssh_password: str) -> list[str]:
+	"""Positional arguments for linkuser.sh, in the order the script reads them.
+
+	Order must match scripts/linkuser.sh:
+	USERNAME EMAIL LAB_NAME WG_IP SSH_PASSWORD BENCH_NAME BASE_DOMAIN MOUNT_TARGET LOGIN_SHELL
+	"""
+	return [
+		bench.ssh_username,
+		bench.owner,
+		lab.title,
+		bench.wg_ip or "0.0.0.0",
+		ssh_password,
+		bench.bench_name,
+		settings.base_domain or "localhost",
+		lab.mount_target or "/home/frappe",
+		lab.shell or "/bin/bash",
+	]
+
+
 def _make_log_appender(doctype: str, log_name: str, event: str, context: dict):
 	def append_log(line: str, log_type: str = "info") -> None:
 		frappe.publish_realtime(  # nosemgrep -- the SPA listens via raw socket.io without doc-room subscription; room-scoping would drop its events
@@ -237,16 +256,7 @@ def deploy_bench(bench_name: str) -> None:
 			bench.ssh_username = bench._derive_username(bench.owner)
 
 		ssh_password = secrets.token_urlsafe(12)
-		linkuser_args = [
-			bench.ssh_username,
-			bench.owner,
-			lab.title,
-			bench.wg_ip or "0.0.0.0",
-			ssh_password,
-			bench.bench_name,
-			settings.base_domain or "localhost",
-			lab.mount_target or "/home/frappe",
-		]
+		linkuser_args = build_linkuser_args(bench, lab, settings, ssh_password)
 		append_log(f"=== Provisioning SSH user '{bench.ssh_username}' ===")
 		linkuser_cmd = "bash /opt/benchpress/scripts/linkuser.sh " + " ".join(f"'{a}'" for a in linkuser_args)
 		exit_code, output = exec_in_container(container_id, linkuser_cmd, user="root")
