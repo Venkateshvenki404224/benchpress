@@ -79,6 +79,12 @@
 					type="number"
 					description="Per host block device. 0 = default (40 MiB/s)."
 				/>
+				<FormControl
+					label="Max Processes (PID limit)"
+					v-model="form.pids_limit"
+					type="number"
+					description="0 = default (500)."
+				/>
 			</div>
 		</div>
 
@@ -156,6 +162,7 @@ const form = reactive({
 	cpu_cores: 1,
 	iops_limit: 0,
 	bps_limit: 0,
+	pids_limit: 0,
 	apps: [],
 });
 
@@ -189,6 +196,7 @@ async function createLab() {
 			cpu_cores: form.cpu_cores,
 			iops_limit: form.iops_limit,
 			bps_limit: form.bps_limit,
+			pids_limit: form.pids_limit,
 			apps: form.apps.filter((a) => a.app_name && a.git_url && a.branch),
 		});
 		router.push("/labs");

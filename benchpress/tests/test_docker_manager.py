@@ -10,7 +10,12 @@ import frappe
 from frappe.tests import IntegrationTestCase
 
 import benchpress.docker_manager as docker_manager
-from benchpress.docker_manager import DEFAULT_BPS, DEFAULT_IOPS, get_container_health
+from benchpress.docker_manager import (
+	DEFAULT_BPS,
+	DEFAULT_IOPS,
+	DEFAULT_PIDS_LIMIT,
+	get_container_health,
+)
 
 
 def _client_returning(status):
@@ -94,3 +99,20 @@ class TestDockerManagerBlockIO(IntegrationTestCase):
 
 		self.assertEqual(kwargs["device_read_iops"], [{"Path": "/dev/sda", "Rate": DEFAULT_IOPS}])
 		self.assertEqual(kwargs["device_write_bps"], [{"Path": "/dev/sda", "Rate": DEFAULT_BPS}])
+
+	def test_lab_pids_limit_passed_to_container(self):
+		lab = _make_lab("pids-custom", pids_limit=250)
+		self.addCleanup(frappe.delete_doc, "Lab", lab.name, force=True, ignore_permissions=True)
+
+		kwargs = self._container_create_kwargs(lab)
+
+		self.assertEqual(kwargs["pids_limit"], 250)
+
+	def test_unset_pids_limit_falls_back_to_default(self):
+		# pids_limit defaults to 0, which means "use the default".
+		lab = _make_lab("pids-default")
+		self.addCleanup(frappe.delete_doc, "Lab", lab.name, force=True, ignore_permissions=True)
+
+		kwargs = self._container_create_kwargs(lab)
+
+		self.assertEqual(kwargs["pids_limit"], DEFAULT_PIDS_LIMIT)

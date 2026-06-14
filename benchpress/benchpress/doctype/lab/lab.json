@@ -20,6 +20,7 @@
   "cpu_cores",
   "iops_limit",
   "bps_limit",
+  "pids_limit",
   "column_break_resources",
   "enable_ssh",
   "enable_code_server",
@@ -109,6 +110,13 @@
    "fieldname": "bps_limit",
    "fieldtype": "Int",
    "label": "Max Bytes/sec (Block I/O)",
+   "non_negative": 1
+  },
+  {
+   "description": "Max number of processes (PIDs) the container may spawn. Leave 0 for the default (500).",
+   "fieldname": "pids_limit",
+   "fieldtype": "Int",
+   "label": "Max Processes (PID limit)",
    "non_negative": 1
   },
   {
