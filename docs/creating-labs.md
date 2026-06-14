@@ -33,6 +33,7 @@ install.
 | **Frappe HR** (`hrms`) | `hrms` | 2g / 2 cores |
 | **Frappe Learning** (`lms`) | `lms` | 1g / 1 core |
 | **Frappe Helpdesk** (`helpdesk`) | `helpdesk` | 1g / 1 core |
+| **ERPNext + India Compliance** (`india-compliance`) | `erpnext` + `india_compliance` | 2g / 2 cores |
 
 Creating a lab from a template produces an ordinary, fully editable Lab — you
 can tweak the apps, version, or limits afterwards just like a hand-built one.

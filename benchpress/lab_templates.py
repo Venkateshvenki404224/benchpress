@@ -14,7 +14,7 @@ from frappe import _
 
 # Bumped whenever the template set or its fields change so an install can tell
 # which catalog a lab was created against.
-CATALOG_VERSION = 2
+CATALOG_VERSION = 3
 
 LAB_TEMPLATES = [
 	{
@@ -104,6 +104,30 @@ LAB_TEMPLATES = [
 				"git_url": "https://github.com/frappe/helpdesk",
 				"branch": "main",
 			}
+		],
+	},
+	{
+		"key": "india-compliance",
+		"title": "ERPNext + India Compliance",
+		"description": "ERPNext with GST, e-invoicing and TDS for Indian businesses.",
+		"frappe_version": "version-15",
+		"memory_limit": "2g",
+		"cpu_cores": 2,
+		# india_compliance extends ERPNext, so ERPNext must install first. The
+		# build/deploy pipeline installs apps in this listed order.
+		"apps": [
+			{
+				"app_name": "erpnext",
+				"app_label": "ERPNext",
+				"git_url": "https://github.com/frappe/erpnext",
+				"branch": "version-15",
+			},
+			{
+				"app_name": "india_compliance",
+				"app_label": "India Compliance",
+				"git_url": "https://github.com/resilient-tech/india-compliance",
+				"branch": "version-15",
+			},
 		],
 	},
 ]

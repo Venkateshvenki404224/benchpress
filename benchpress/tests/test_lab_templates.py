@@ -52,6 +52,12 @@ class TestLabTemplates(IntegrationTestCase):
 			self.assertEqual(len(template["apps"]), 1)
 			self.assertEqual(template["apps"][0]["app_name"], key)
 
+	def test_india_compliance_template_installs_erpnext_first(self):
+		template = lab_templates.get_template("india-compliance")
+		app_names = [app["app_name"] for app in template["apps"]]
+		# india_compliance extends ERPNext; order matters at install time.
+		self.assertEqual(app_names, ["erpnext", "india_compliance"])
+
 	def test_get_template_unknown_throws(self):
 		with self.assertRaises(frappe.ValidationError):
 			lab_templates.get_template("does-not-exist")
