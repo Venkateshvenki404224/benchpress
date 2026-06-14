@@ -60,6 +60,7 @@
 - [Logs & Monitoring](docs/logs-and-monitoring.md) -- Build logs, deploy logs, and stats
 - [VPN Device Management](docs/device-management.md) -- Register devices for WireGuard access
 - [WireGuard Setup](docs/wireguard-setup.md) -- Detailed WireGuard configuration
+- [Upgrading a BenchPress Install](docs/upgrading.md) -- Backup-gated upgrade and rollback runbook
 
 ---
 

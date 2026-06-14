@@ -99,3 +99,4 @@ Once BenchPress is running, follow the [Creating Labs](creating-labs.md) guide t
 | [Logs and Monitoring](logs-and-monitoring.md) | Build logs, deploy logs, and container stats |
 | [VPN Device Management](device-management.md) | Register devices for persistent WireGuard access |
 | [WireGuard Setup](wireguard-setup.md) | Detailed WireGuard configuration and troubleshooting |
+| [Upgrading a BenchPress Install](upgrading.md) | Backup-gated upgrade and rollback runbook |
