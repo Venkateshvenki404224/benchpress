@@ -62,3 +62,6 @@ everything-claude-code/
 # Frontend build output
 benchpress/public/frontend/
 benchpress/www/frontend.html
+
+# Local planning docs (not committed)
+plans/

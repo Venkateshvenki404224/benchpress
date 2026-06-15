@@ -124,8 +124,12 @@ def deploy_bench(bench_name: str) -> None:
 		bench.save(ignore_permissions=True)
 		frappe.db.commit()
 
-		admin_password = secrets.token_urlsafe(10)
-		bench.admin_password = admin_password
+		# Honor a pre-set admin password (e.g. set by the quickstart CLI); only
+		# generate a random one when none was provided.
+		admin_password = bench.get_password("admin_password", raise_exception=False)
+		if not admin_password:
+			admin_password = secrets.token_urlsafe(10)
+			bench.admin_password = admin_password
 
 		append_log("=== Checking shared infrastructure (MariaDB + Redis) ===")
 		db_server_name = ensure_infrastructure()
