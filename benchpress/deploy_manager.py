@@ -22,6 +22,7 @@ from benchpress.mariadb_manager import (
 	ensure_infrastructure,
 	wait_for_mariadb,
 )
+from benchpress.platform import resolve_access_url
 
 
 def _remove_stale_container(bench) -> None:
@@ -124,8 +125,12 @@ def deploy_bench(bench_name: str) -> None:
 		bench.save(ignore_permissions=True)
 		frappe.db.commit()
 
-		admin_password = secrets.token_urlsafe(10)
-		bench.admin_password = admin_password
+		# Honor a pre-set admin password (e.g. set by the quickstart CLI); only
+		# generate a random one when none was provided.
+		admin_password = bench.get_password("admin_password", raise_exception=False)
+		if not admin_password:
+			admin_password = secrets.token_urlsafe(10)
+			bench.admin_password = admin_password
 
 		append_log("=== Checking shared infrastructure (MariaDB + Redis) ===")
 		db_server_name = ensure_infrastructure()
@@ -277,7 +282,7 @@ def deploy_bench(bench_name: str) -> None:
 			)
 			exec_in_container(container_id, "bash /opt/benchpress/scripts/restart.sh", user="root")
 			bench.code_server_password = code_server_password
-			bench.code_server_url = f"http://{bench.wg_ip or bench.container_ip or '127.0.0.1'}:8080/"
+			bench.code_server_url = f"http://{resolve_access_url(bench)}:8080/"
 			append_log(f"code-server ready at {bench.code_server_url}")
 
 		bench.status = "Running"
