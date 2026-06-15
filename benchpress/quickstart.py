@@ -1,32 +1,39 @@
 # Copyright (c) 2026, Venkatesh and contributors
 # For license information, please see license.txt
 
-"""TB1 walking-skeleton ``quickstart`` orchestration.
+"""TB2 ``quickstart`` orchestration — config-driven and idempotent.
 
-One command, end to end: ensure a hardcoded ERPNext Lab exists, build its image,
-deploy a Bench Instance with predictable ``Administrator / admin`` credentials, and
-block until the site is up. Everything that is not load-bearing for the wiring is
-deliberately hardcoded here and paid back in later tracer bullets (TB2+).
+One command, end to end: ensure the default ERPNext Lab exists, build its image,
+deploy a Bench Instance with the preset ``Administrator / <default_admin_password>``
+credentials, and block until the site is up. The presets (which Lab, which admin
+password) live in **BenchPress Settings** so they are editable from Desk; the
+hardcoded Lab below is only the create-if-missing seed for a fresh install.
+
+Re-running is idempotent: an already-Running default bench reprints its access
+banner instead of redeploying.
 """
 
 import time
 
 import click
 import frappe
+from frappe import _
 
 from benchpress.benchpress.doctype.bench_instance import get_instance_id
 from benchpress.deploy_manager import build_lab, deploy_bench
+from benchpress.platform import resolve_access_url
 
-# --- Deliberately hardcoded in TB1 (paid back in TB2 via a Settings preset) ---
+# Seed for the default Lab, created on first run when Settings.default_lab is unset.
+# The *live* preset is BenchPress Settings.default_lab — this dict only bootstraps a
+# fresh install so there is something to point that field at.
 QUICKSTART_LAB_ID = "erpnext-quickstart"
 QUICKSTART_FRAPPE_VERSION = "version-15"
-QUICKSTART_ADMIN_PASSWORD = "admin"
 QUICKSTART_LAB = {
 	"doctype": "Lab",
 	"lab_id": QUICKSTART_LAB_ID,
 	"title": "ERPNext Quickstart",
 	"frappe_version": QUICKSTART_FRAPPE_VERSION,
-	"description": "Zero-config ERPNext bench (TB1 walking skeleton).",
+	"description": "Zero-config ERPNext bench (BenchPress quickstart default).",
 	"memory_limit": "4g",
 	"cpu_cores": 2,
 	"apps": [
@@ -45,29 +52,57 @@ QUICKSTART_LAB = {
 	],
 }
 
+DEFAULT_ADMIN_PASSWORD = "admin"
+
 
 def _echo(message: str, fg: str | None = None) -> None:
 	click.echo(click.style(message, fg=fg) if fg else message)
 
 
 def run_quickstart() -> None:
-	"""Drive the full Lab -> image -> bench -> banner slice, blocking throughout."""
-	lab = _ensure_lab()
+	"""Drive the full Lab -> image -> bench -> banner slice, blocking throughout.
+
+	Idempotent: if the default bench is already Running, reprint its banner and stop.
+	"""
+	settings = frappe.get_cached_doc("BenchPress Settings")
+	lab = _ensure_lab(settings)
+
+	bench_name = get_instance_id(frappe.session.user, lab.name)
+	if frappe.db.exists("Bench Instance", bench_name):
+		bench = frappe.get_doc("Bench Instance", bench_name)
+		if bench.status == "Running":
+			_echo(f"==> Default bench '{bench_name}' is already running; reprinting access details.")
+			_print_banner(bench)
+			return
+
 	_ensure_image(lab)
-	bench = _deploy(lab)
+	bench = _deploy(lab, settings)
 	_start_web_server(bench)
 	_print_banner(bench)
 
 
-def _ensure_lab():
-	"""Create the hardcoded ERPNext Lab if it does not already exist."""
+def _ensure_lab(settings):
+	"""Resolve the default Lab from Settings, seeding it on a fresh install.
+
+	Uses ``BenchPress Settings.default_lab`` when set; otherwise creates the hardcoded
+	ERPNext seed Lab and records it back into Settings so subsequent runs (and Desk)
+	share the same source of truth.
+	"""
+	if settings.default_lab and frappe.db.exists("Lab", settings.default_lab):
+		_echo(f"==> Using default Lab '{settings.default_lab}' from BenchPress Settings.")
+		return frappe.get_doc("Lab", settings.default_lab)
+
 	if frappe.db.exists("Lab", QUICKSTART_LAB_ID):
 		_echo(f"==> Lab '{QUICKSTART_LAB_ID}' already exists.")
+		lab = frappe.get_doc("Lab", QUICKSTART_LAB_ID)
 	else:
-		_echo(f"==> Creating Lab '{QUICKSTART_LAB_ID}'...")
-		frappe.get_doc(QUICKSTART_LAB).insert(ignore_permissions=True)
-		frappe.db.commit()
-	return frappe.get_doc("Lab", QUICKSTART_LAB_ID)
+		_echo(f"==> Creating default Lab '{QUICKSTART_LAB_ID}'...")
+		lab = frappe.get_doc(QUICKSTART_LAB).insert(ignore_permissions=True)
+
+	frappe.db.set_single_value("BenchPress Settings", "default_lab", lab.name)
+	# CLI one-shot: nothing else commits before frappe.destroy(), so persist the seed here.
+	frappe.db.commit()  # nosemgrep
+	return lab
 
 
 def _ensure_image(lab) -> None:
@@ -84,7 +119,7 @@ def _ensure_image(lab) -> None:
 	_echo(f"==> Image ready: {lab.image_tag}")
 
 
-def _deploy(lab):
+def _deploy(lab, settings):
 	"""Create (or reuse) the Bench Instance with preset creds and deploy inline."""
 	bench_name = get_instance_id(frappe.session.user, lab.name)
 
@@ -113,11 +148,12 @@ def _deploy(lab):
 			)
 		bench.insert(ignore_permissions=True)
 
-	# Override the random password deploy_bench would otherwise generate, so
-	# beginners get predictable Administrator / admin credentials.
-	bench.admin_password = QUICKSTART_ADMIN_PASSWORD
+	# Override the random password deploy_bench would otherwise generate, so beginners
+	# get predictable Administrator credentials sourced from Settings.
+	bench.admin_password = settings.default_admin_password or DEFAULT_ADMIN_PASSWORD
 	bench.save(ignore_permissions=True)
-	frappe.db.commit()
+	# Persist the bench before the inline deploy_bench; the CLI commits nothing else.
+	frappe.db.commit()  # nosemgrep
 
 	# Run the deploy INLINE (the API enqueues to the "long" queue; a CLI must
 	# block until the site is actually up).
@@ -152,7 +188,7 @@ def _start_web_server(bench) -> None:
 	)
 
 	# Block until the port actually accepts connections, so the printed URL works.
-	for _ in range(15):
+	for _attempt in range(15):
 		exit_code, _output = exec_in_container(
 			bench.container_id,
 			"ss -ltn 2>/dev/null | grep -q ':8000 '",
@@ -162,13 +198,14 @@ def _start_web_server(bench) -> None:
 		if exit_code == 0:
 			return
 		time.sleep(2)
-	frappe.throw("Web server did not start listening on :8000; inspect the container.")
+	frappe.throw(_("Web server did not start listening on :8000; inspect the container."))
 
 
 def _print_banner(bench) -> None:
 	"""Print the success banner: web URL, credentials, SSH details, bench name."""
-	host = bench.wg_ip or bench.container_ip or "127.0.0.1"
+	host = resolve_access_url(bench)
 	web_url = f"http://{host}:8000/"
+	admin_password = bench.get_password("admin_password", raise_exception=False) or DEFAULT_ADMIN_PASSWORD
 	ssh_password = bench.get_password("ssh_password", raise_exception=False) or "(see Bench Instance)"
 
 	line = "=" * 64
@@ -178,7 +215,7 @@ def _print_banner(bench) -> None:
 	_echo(line, fg="green")
 	_echo(f"  Web URL   : {web_url}")
 	_echo("  Login     : Administrator")
-	_echo(f"  Password  : {QUICKSTART_ADMIN_PASSWORD}")
+	_echo(f"  Password  : {admin_password}")
 	_echo("")
 	_echo(f"  SSH       : ssh {bench.ssh_username}@{host}")
 	_echo(f"  SSH pass  : {ssh_password}")

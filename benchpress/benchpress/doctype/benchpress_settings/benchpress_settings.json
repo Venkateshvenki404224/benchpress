@@ -25,7 +25,11 @@
   "column_break_resource",
   "container_cpu_quota",
   "wg_server_private_key",
-  "code_server_version"
+  "code_server_version",
+  "quickstart_section",
+  "default_lab",
+  "column_break_quickstart",
+  "default_admin_password"
  ],
  "fields": [
   {
@@ -138,6 +142,29 @@
    "fieldname": "code_server_version",
    "fieldtype": "Data",
    "label": "Code Server Version"
+  },
+  {
+   "fieldname": "quickstart_section",
+   "fieldtype": "Section Break",
+   "label": "Quickstart Defaults"
+  },
+  {
+   "description": "Lab the `bench benchpress quickstart` command deploys by default. Seeded on first run if left blank.",
+   "fieldname": "default_lab",
+   "fieldtype": "Link",
+   "label": "Default Lab",
+   "options": "Lab"
+  },
+  {
+   "fieldname": "column_break_quickstart",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "admin",
+   "description": "Administrator password set on the quickstart bench's site.",
+   "fieldname": "default_admin_password",
+   "fieldtype": "Data",
+   "label": "Default Admin Password"
   }
  ],
  "grid_page_length": 50,
