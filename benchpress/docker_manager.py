@@ -144,14 +144,22 @@ def create_bench_container(bench_doc, lab_doc) -> str:
 	device_read_bps = [{"Path": dev, "Rate": bps} for dev in devices]
 	device_write_bps = [{"Path": dev, "Rate": bps} for dev in devices]
 
+	# Security: lab containers must NOT be privileged. The student has in-container
+	# root (sudo for bench/dev work), so privileged=True is a host-escape primitive:
+	# in-container root + privileged -> Docker host root -> `docker exec
+	# benchpress-mariadb mariadb -u root` reads EVERY tenant's database, defeating
+	# the per-site DB isolation (Press-style scoped grants in mariadb_manager).
+	# WireGuard (entry.sh `wg-quick up wg0`) needs only NET_ADMIN + /dev/net/tun,
+	# NOT full privilege. For defense-in-depth (container-root != host-root), enable
+	# Docker daemon userns-remap on the host (see docs/wireguard-setup.md).
 	container = client.containers.create(
 		image=lab_doc.image_tag,
 		name=name,
 		labels=labels,
 		detach=True,
 		hostname=name,
-		privileged=True,
 		cap_add=["NET_ADMIN"],
+		devices=["/dev/net/tun:/dev/net/tun:rwm"],
 		volumes={
 			f"benchpress-{name}-data": {"bind": "/home/frappe", "mode": "rw"},
 		},
