@@ -18,6 +18,9 @@
   "resources_section",
   "memory_limit",
   "cpu_cores",
+  "iops_limit",
+  "bps_limit",
+  "pids_limit",
   "column_break_resources",
   "enable_ssh",
   "enable_code_server",
@@ -94,6 +97,27 @@
    "fieldname": "cpu_cores",
    "fieldtype": "Int",
    "label": "CPU Cores"
+  },
+  {
+   "description": "Read/write IOPS cap per host block device. Leave 0 for the default (1000).",
+   "fieldname": "iops_limit",
+   "fieldtype": "Int",
+   "label": "Max IOPS (Block I/O)",
+   "non_negative": 1
+  },
+  {
+   "description": "Read/write throughput cap in bytes/sec per host block device. Leave 0 for the default (40 MiB/s).",
+   "fieldname": "bps_limit",
+   "fieldtype": "Int",
+   "label": "Max Bytes/sec (Block I/O)",
+   "non_negative": 1
+  },
+  {
+   "description": "Max number of processes (PIDs) the container may spawn. Leave 0 for the default (500).",
+   "fieldname": "pids_limit",
+   "fieldtype": "Int",
+   "label": "Max Processes (PID limit)",
+   "non_negative": 1
   },
   {
    "fieldname": "column_break_resources",
