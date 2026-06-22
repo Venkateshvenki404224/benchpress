@@ -217,6 +217,28 @@ def write_file_to_container(container_id: str, content: str, path: str) -> None:
 	)
 
 
+def get_container_health(container_id: str) -> str:
+	"""Return a coarse health label for a bench container.
+
+	A "running" container is Healthy; any other known Docker state (exited,
+	paused, dead, restarting) is Unhealthy; a missing container or inspect
+	failure is Unknown. This deliberately mirrors the actual container state so
+	a bench whose DB status drifts from reality is flagged.
+	"""
+	client = get_client()
+	try:
+		container = client.containers.get(container_id)
+		return "Healthy" if container.status == "running" else "Unhealthy"
+	except docker.errors.NotFound:
+		return "Unknown"
+	except Exception:
+		frappe.log_error(
+			title=f"Failed to get health for container {container_id}",
+			message=frappe.get_traceback(),
+		)
+		return "Unknown"
+
+
 def get_container_stats(container_id: str) -> dict:
 	"""Returns dict with cpu_percent, memory_percent, and memory_usage_mb."""
 	client = get_client()

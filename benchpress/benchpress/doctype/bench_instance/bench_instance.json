@@ -31,6 +31,8 @@
   "cpu_usage",
   "column_break_stats",
   "memory_usage",
+  "container_health",
+  "last_health_check",
   "wireguard_section",
   "wg_ip",
   "wg_public_key",
@@ -172,6 +174,19 @@
    "fieldname": "memory_usage",
    "fieldtype": "Float",
    "label": "Memory Usage (%)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "container_health",
+   "fieldtype": "Select",
+   "label": "Container Health",
+   "options": "\nHealthy\nUnhealthy\nUnknown",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_health_check",
+   "fieldtype": "Datetime",
+   "label": "Last Health Check",
    "read_only": 1
   },
   {
