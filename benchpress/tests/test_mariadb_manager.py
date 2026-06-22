@@ -2,6 +2,8 @@
 # See license.txt
 
 import hashlib
+import os
+import tempfile
 from unittest.mock import MagicMock, patch
 
 import frappe
@@ -146,3 +148,28 @@ class TestMariadbManager(IntegrationTestCase):
 		self.assertIn(db_name, combined)
 		self.assertIn("DROP DATABASE", combined)
 		self.assertIn("DROP USER", combined)
+
+	@patch("benchpress.mariadb_manager._get_config_dir")
+	def test_write_mariadb_config_writes_custom_config_verbatim(self, mock_config_dir):
+		"""Database Server.custom_config flows verbatim into the mounted mariadb.cnf."""
+		from benchpress.mariadb_manager import _write_mariadb_config
+
+		with tempfile.TemporaryDirectory() as tmp:
+			mock_config_dir.return_value = tmp
+			custom = "[mysqld]\nmax_connections=1234\ninnodb_buffer_pool_size=1073741824\n"
+			_write_mariadb_config(custom)
+			with open(os.path.join(tmp, "mariadb.cnf")) as f:
+				written = f.read()
+		self.assertEqual(written, custom)
+
+	@patch("benchpress.mariadb_manager._get_config_dir")
+	def test_write_mariadb_config_falls_back_to_default(self, mock_config_dir):
+		"""An empty custom_config falls back to DEFAULT_MARIADB_CONFIG."""
+		from benchpress.mariadb_manager import DEFAULT_MARIADB_CONFIG, _write_mariadb_config
+
+		with tempfile.TemporaryDirectory() as tmp:
+			mock_config_dir.return_value = tmp
+			_write_mariadb_config(None)
+			with open(os.path.join(tmp, "mariadb.cnf")) as f:
+				written = f.read()
+		self.assertEqual(written, DEFAULT_MARIADB_CONFIG)
