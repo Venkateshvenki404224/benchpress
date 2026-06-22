@@ -17,6 +17,7 @@ import { userContext } from "@/data/userContext";
 
 import ServerIcon from "~icons/lucide/server";
 import FlaskConicalIcon from "~icons/lucide/flask-conical";
+import LayoutTemplateIcon from "~icons/lucide/layout-template";
 import ScrollTextIcon from "~icons/lucide/scroll-text";
 import HammerIcon from "~icons/lucide/hammer";
 import ShieldIcon from "~icons/lucide/shield";
@@ -59,16 +60,16 @@ const headerConfig = computed(() => {
 });
 
 const sections = computed(() => {
-	const items = [
-		{
-			label: "",
-			items: [
-				{ label: "Labs", icon: FlaskConicalIcon, to: "/labs" },
-				{ label: "Bench Instances", icon: ServerIcon, to: "/bench-instances" },
-				{ label: "VPN Devices", icon: ShieldIcon, to: "/devices" },
-			],
-		},
-	];
+	const labItems = [{ label: "Labs", icon: FlaskConicalIcon, to: "/labs" }];
+	if (userContext.isAdmin) {
+		labItems.push({ label: "Templates", icon: LayoutTemplateIcon, to: "/labs/templates" });
+	}
+	labItems.push(
+		{ label: "Bench Instances", icon: ServerIcon, to: "/bench-instances" },
+		{ label: "VPN Devices", icon: ShieldIcon, to: "/devices" }
+	);
+
+	const items = [{ label: "", items: labItems }];
 
 	const logItems = [{ label: "Deploy Logs", icon: ScrollTextIcon, to: "/deploy-logs" }];
 	if (userContext.isAdmin) {

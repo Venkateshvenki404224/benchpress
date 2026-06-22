@@ -3,7 +3,7 @@ import { createRouter, createWebHistory } from "vue-router";
 import { session } from "./data/session";
 import { userContext, waitForUserContext } from "./data/userContext";
 
-const ADMIN_ONLY_ROUTES = new Set(["NewLab", "Settings", "BuildLogs"]);
+const ADMIN_ONLY_ROUTES = new Set(["NewLab", "LabTemplates", "Settings", "BuildLogs"]);
 
 const routes = [
 	{
@@ -25,6 +25,11 @@ const routes = [
 		path: "/labs/new",
 		name: "NewLab",
 		component: () => import("@/pages/NewLab.vue"),
+	},
+	{
+		path: "/labs/templates",
+		name: "LabTemplates",
+		component: () => import("@/pages/LabTemplates.vue"),
 	},
 	{
 		path: "/labs/:labId",
