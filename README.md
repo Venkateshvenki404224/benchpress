@@ -55,6 +55,7 @@
 ### Detailed Guides
 
 - [Getting Started](docs/getting-started.md) -- Installation and first setup
+- [Production Safety & Compatibility](docs/production-safety.md) -- Readiness caveats, supported platforms, and version matrix
 - [Creating Labs & Deploying](docs/creating-labs.md) -- Labs, builds, and deployments
 - [Connecting to Benches](docs/connecting-to-benches.md) -- SSH, VPN, and connection info
 - [Logs & Monitoring](docs/logs-and-monitoring.md) -- Build logs, deploy logs, and stats
