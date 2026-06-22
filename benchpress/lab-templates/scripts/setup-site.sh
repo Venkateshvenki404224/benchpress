@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-# May fail under a custom mount_target, where the caller already sets workdir to the bench dir
+# The caller (deploy_manager) already sets workdir to the bench dir; this cd is a fallback.
 cd /home/frappe/frappe-bench || true
 
 echo "[*] Creating site ${SITE_NAME}..."

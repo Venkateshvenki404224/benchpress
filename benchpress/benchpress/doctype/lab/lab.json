@@ -22,8 +22,6 @@
   "enable_ssh",
   "enable_code_server",
   "shell",
-  "container_section",
-  "mount_target",
   "image_section",
   "image_tag",
   "build_log_section",
@@ -113,18 +111,6 @@
    "fieldname": "shell",
    "fieldtype": "Data",
    "label": "Default Shell"
-  },
-  {
-   "collapsible": 1,
-   "fieldname": "container_section",
-   "fieldtype": "Section Break",
-   "label": "Container Settings"
-  },
-  {
-   "default": "/home/frappe",
-   "fieldname": "mount_target",
-   "fieldtype": "Data",
-   "label": "Mount Target"
   },
   {
    "collapsible": 1,

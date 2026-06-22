@@ -1,7 +1,7 @@
 #!/bin/bash
 # linkuser.sh — User provisioning for BenchPress containers
 # Renames the 'frappe' user to the dynamic username instead of creating a new one.
-# Args: USERNAME EMAIL LAB_NAME WG_IP SSH_PASSWORD BENCH_NAME BASE_DOMAIN MOUNT_TARGET
+# Args: USERNAME EMAIL LAB_NAME WG_IP SSH_PASSWORD BENCH_NAME BASE_DOMAIN LOGIN_SHELL
 
 set -e
 
@@ -12,7 +12,7 @@ WG_IP="$4"
 SSH_PASSWORD="$5"
 BENCH_NAME="$6"
 BASE_DOMAIN="$7"
-MOUNT_TARGET="${8:-/home/frappe}"
+LOGIN_SHELL="${8:-/bin/bash}"
 
 if [ -z "$USERNAME" ] || [ -z "$SSH_PASSWORD" ]; then
     echo "[error] USERNAME and SSH_PASSWORD are required"
@@ -27,7 +27,13 @@ groupmod -n "$USERNAME" frappe
 usermod --login "$USERNAME" --home "/home/$USERNAME" frappe
 ln -sfn /home/frappe "/home/$USERNAME"
 
-usermod --shell /bin/bash "$USERNAME"
+# Honor the lab's configured login shell; fall back to bash if it is missing
+# or not executable in this image (also guards against a malformed value).
+if [ ! -x "$LOGIN_SHELL" ]; then
+    echo "[warn] login shell '$LOGIN_SHELL' not found or not executable; falling back to /bin/bash"
+    LOGIN_SHELL="/bin/bash"
+fi
+usermod --shell "$LOGIN_SHELL" "$USERNAME"
 usermod -aG sudo "$USERNAME"
 
 echo "[*] Setting SSH password..."
