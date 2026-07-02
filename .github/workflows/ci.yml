@@ -122,10 +122,28 @@ jobs:
           pip install frappe-bench
           bench init --skip-redis-config-generation --skip-assets --python "$(which python)" ~/frappe-bench
 
+      # benchpress declares required_apps = ["vpn_management"] (a private repo),
+      # so install-app benchpress only resolves if the app is already on the bench.
+      - name: Setup vpn_management deploy key
+        env:
+          DEPLOY_KEY: ${{ secrets.VPN_MANAGEMENT_DEPLOY_KEY }}
+        run: |
+          if [ -z "$DEPLOY_KEY" ]; then
+            echo "::error::Secret VPN_MANAGEMENT_DEPLOY_KEY is not set. Add a read-only deploy key on Venkateshvenki404224/vpn_management and store its private half in this secret."
+            exit 1
+          fi
+          eval "$(ssh-agent -s)"
+          echo "SSH_AUTH_SOCK=$SSH_AUTH_SOCK" >> "$GITHUB_ENV"
+          echo "SSH_AGENT_PID=$SSH_AGENT_PID" >> "$GITHUB_ENV"
+          ssh-add - <<< "$DEPLOY_KEY"
+          mkdir -p ~/.ssh
+          ssh-keyscan github.com >> ~/.ssh/known_hosts
+
       - name: Install
         working-directory: /home/runner/frappe-bench
         run: |
           bench get-app https://github.com/NagariaHussain/doppio
+          bench get-app --branch version-16 git@github.com:Venkateshvenki404224/vpn_management.git
           bench get-app benchpress $GITHUB_WORKSPACE
           bench setup requirements --dev
           bench new-site --db-root-password root --admin-password admin test_site
