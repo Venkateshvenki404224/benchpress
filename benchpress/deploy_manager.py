@@ -182,17 +182,7 @@ def deploy_bench(bench_name: str) -> None:
 
 		settings = frappe.get_cached_doc("BenchPress Settings")
 
-		from benchpress.vpn_adapter import configure_container, create_container_peer
-
-		append_log("=== Configuring WireGuard VPN (vpn_management) ===")
-		peer = create_container_peer(bench)
-		append_log(f"VPN peer {peer['peer']} registered, claimed IP {peer['assigned_ip']}")
-		configure_container(container_id, peer["private_key"], peer["assigned_ip"])
-
-		bench.wg_ip = peer["assigned_ip"]
-		bench.save(ignore_permissions=True)
-		frappe.db.commit()
-		append_log(f"Container VPN: {peer['assigned_ip']}")
+		_setup_container_vpn(bench, container_id, append_log)
 
 		bench_dir = "/home/frappe/frappe-bench"  # fixed: the data volume binds at /home/frappe
 		site_name = bench.site_name
@@ -281,6 +271,26 @@ def deploy_bench(bench_name: str) -> None:
 			title=f"BenchPress deploy failed: {bench_name}",
 			message=frappe.get_traceback(),
 		)
+
+
+def _setup_container_vpn(bench, container_id: str, append_log) -> None:
+	"""Replace any stale peer, claim a fresh tunnel IP, and configure the container.
+
+	Removing before creating keeps exactly one peer per bench across deploy /
+	redeploy; the link is persisted before the container is configured so a
+	configure failure (which reloads the bench) cannot orphan the peer.
+	"""
+	from benchpress.vpn_adapter import configure_container, create_container_peer, remove_bench_peer
+
+	append_log("=== Configuring WireGuard VPN (vpn_management) ===")
+	remove_bench_peer(bench)
+	peer = create_container_peer(bench)
+	bench.wg_ip = peer["assigned_ip"]
+	bench.save(ignore_permissions=True)
+	frappe.db.commit()
+	append_log(f"VPN peer {peer['peer']} registered, claimed IP {peer['assigned_ip']}")
+	configure_container(container_id, peer["private_key"], peer["assigned_ip"])
+	append_log(f"Container VPN: {peer['assigned_ip']}")
 
 
 def redeploy_bench(bench_name: str) -> None:

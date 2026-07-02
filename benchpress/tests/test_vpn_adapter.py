@@ -6,7 +6,12 @@ from unittest.mock import MagicMock, patch
 
 from frappe.tests import IntegrationTestCase
 
-from benchpress.vpn_adapter import configure_container, create_container_peer, render_container_config
+from benchpress.vpn_adapter import (
+	configure_container,
+	create_container_peer,
+	remove_bench_peer,
+	render_container_config,
+)
 
 
 def _fake_server():
@@ -73,6 +78,91 @@ class TestCreateContainerPeer(IntegrationTestCase):
 		# The insert (atomic IP claim) must precede the interface converge.
 		call_order = [name for name, _args, _kwargs in flow.mock_calls]
 		self.assertEqual(call_order, ["insert", "reconcile"])
+
+	@patch("vpn_management.tasks.reconcile_interface")
+	@patch("vpn_management.crypto.generate_keypair", return_value=("PRIV==", "PUB=="))
+	@patch("benchpress.vpn_adapter.frappe.get_doc")
+	def test_links_the_peer_to_the_bench(self, mock_get_doc, _keygen, _reconcile):
+		mock_get_doc.return_value = _fake_peer()
+		bench = SimpleNamespace(name="BENCH-0001", bench_name="my-bench", owner="user@example.com")
+
+		create_container_peer(bench)
+
+		self.assertEqual(bench.vpn_peer, "PEER-00001")
+
+	@patch("vpn_management.tasks.reconcile_interface")
+	@patch("vpn_management.crypto.generate_keypair", return_value=("PRIV==", "PUB=="))
+	@patch("benchpress.vpn_adapter.frappe.get_doc")
+	def test_no_longer_writes_the_bench_keypair_fields(self, mock_get_doc, _keygen, _reconcile):
+		mock_get_doc.return_value = _fake_peer()
+		bench = SimpleNamespace(name="BENCH-0001", bench_name="my-bench", owner="user@example.com")
+
+		create_container_peer(bench)
+
+		self.assertFalse(hasattr(bench, "wg_public_key"))
+		self.assertFalse(hasattr(bench, "wg_private_key"))
+
+
+class TestRemoveBenchPeer(IntegrationTestCase):
+	@patch("benchpress.vpn_adapter.frappe.delete_doc")
+	@patch("benchpress.vpn_adapter.frappe.db.exists", return_value=True)
+	def test_deletes_the_linked_peer_and_clears_the_link(self, _exists, mock_delete):
+		bench = SimpleNamespace(vpn_peer="PEER-00001")
+
+		remove_bench_peer(bench)
+
+		mock_delete.assert_called_once_with("VPN Peer", "PEER-00001", ignore_permissions=True)
+		self.assertIsNone(bench.vpn_peer)
+
+	@patch("benchpress.vpn_adapter.frappe.delete_doc")
+	def test_no_ops_when_no_peer_is_linked(self, mock_delete):
+		bench = SimpleNamespace(vpn_peer=None)
+
+		remove_bench_peer(bench)
+
+		mock_delete.assert_not_called()
+
+	@patch("benchpress.vpn_adapter.frappe.delete_doc")
+	@patch("benchpress.vpn_adapter.frappe.db.exists", return_value=False)
+	def test_clears_a_dangling_link_without_deleting(self, _exists, mock_delete):
+		bench = SimpleNamespace(vpn_peer="PEER-GONE")
+
+		remove_bench_peer(bench)
+
+		mock_delete.assert_not_called()
+		self.assertIsNone(bench.vpn_peer)
+
+
+class TestSetupContainerVpn(IntegrationTestCase):
+	@patch("benchpress.deploy_manager.frappe.db.commit")
+	@patch("benchpress.vpn_adapter.configure_container")
+	@patch("benchpress.vpn_adapter.create_container_peer")
+	@patch("benchpress.vpn_adapter.remove_bench_peer")
+	def test_redeploy_removes_the_stale_peer_before_the_fresh_claim(
+		self, mock_remove, mock_create, mock_configure, _commit
+	):
+		from benchpress.deploy_manager import _setup_container_vpn
+
+		mock_create.return_value = {
+			"peer": "PEER-00002",
+			"assigned_ip": "172.27.0.2",
+			"private_key": "PRIV==",
+			"public_key": "PUB==",
+		}
+		bench = MagicMock()
+		flow = MagicMock()
+		flow.attach_mock(mock_remove, "remove")
+		flow.attach_mock(mock_create, "create")
+		flow.attach_mock(bench.save, "save")
+		flow.attach_mock(mock_configure, "configure")
+
+		_setup_container_vpn(bench, "cid123", lambda line, log_type="info": None)
+
+		# Old peer out first, then the fresh claim; the link is persisted
+		# before the container is configured so a failure cannot orphan it.
+		call_order = [name for name, _args, _kwargs in flow.mock_calls]
+		self.assertEqual(call_order, ["remove", "create", "save", "configure"])
+		mock_configure.assert_called_once_with("cid123", "PRIV==", "172.27.0.2")
 
 
 class TestRenderContainerConfig(IntegrationTestCase):

@@ -229,8 +229,10 @@ def bench_action(bench_name: str, action: str) -> dict:
 			remove_container(bench.container_id)
 
 		from benchpress.deploy_manager import remove_bench_volume
+		from benchpress.vpn_adapter import remove_bench_peer
 
 		remove_bench_volume(bench.bench_name)
+		remove_bench_peer(bench)
 
 		frappe.delete_doc("Bench Instance", bench_name, force=True)
 		frappe.db.commit()

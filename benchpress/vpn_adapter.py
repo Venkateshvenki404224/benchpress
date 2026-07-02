@@ -33,6 +33,7 @@ def create_container_peer(bench) -> dict:
 		}
 	)
 	peer.insert(ignore_permissions=True)  # deploy job acts as the system, not the bench owner
+	bench.vpn_peer = peer.name
 	tasks.reconcile_interface(DEFAULT_INTERFACE)
 	return {
 		"peer": peer.name,
@@ -40,6 +41,22 @@ def create_container_peer(bench) -> dict:
 		"private_key": private_key,
 		"public_key": public_key,
 	}
+
+
+def remove_bench_peer(bench) -> None:
+	"""Delete the bench's linked VPN Peer so its IP allocation is freed.
+
+	The peer's own on_trash releases the allocation and enqueues a deduped
+	reconcile on queue-long — the only worker that mounts both the agent
+	socket and the wireguard conf volume — so this is safe to call from web
+	requests too. No-ops cleanly when no peer is linked, and clears a
+	dangling link if the peer is already gone.
+	"""
+	if not bench.vpn_peer:
+		return
+	if frappe.db.exists("VPN Peer", bench.vpn_peer):
+		frappe.delete_doc("VPN Peer", bench.vpn_peer, ignore_permissions=True)
+	bench.vpn_peer = None
 
 
 def configure_container(container_id: str, private_key: str, assigned_ip: str) -> None:
