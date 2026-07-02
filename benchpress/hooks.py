@@ -7,7 +7,8 @@ app_license = "mit"
 app_logo_url = "/assets/benchpress/images/logo/favicon.svg"
 app_home = "/desk/benchpress"
 
-# required_apps = []
+# The VPN plane (peers, IP allocation, wg-agent) is fully delegated to vpn_management.
+required_apps = ["vpn_management"]
 
 # Fixtures
 fixtures = [{"dt": "Role", "filters": [["role_name", "in", ["BenchPress Admin", "BenchPress User"]]]}]
@@ -171,7 +172,7 @@ scheduler_events = {
 	# ],
 	"cron": {
 		"*/1 * * * *": [
-			"benchpress.stats_collector.collect_all_stats",
+			"benchpress.stats_collector.collect_bench_stats",
 		],
 		"*/5 * * * *": [
 			"benchpress.mariadb_manager.scheduled_health_check",

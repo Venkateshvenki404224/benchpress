@@ -18,9 +18,10 @@ are evaluating BenchPress for anything beyond a throwaway machine.
 It is built for developers and small teams spinning up disposable Frappe/ERPNext
 environments — not yet for production hosting of customer data. Concretely:
 
-- **Host-level privilege.** `setup.sh` adds your user to the `docker` group, edits
-  `/etc/sudoers.d`, enables IP forwarding via `/etc/sysctl.d`, and brings up a
-  WireGuard interface. These are real, persistent changes to the host.
+- **Host-level privilege.** `setup.sh` adds your user to the `docker` group, starts
+  the shared MariaDB/Redis infrastructure containers, and enables IP forwarding via
+  `/etc/sysctl.d`. These are real, persistent changes to the host. (WireGuard is
+  brought up by the vpn_management app's wg-agent container, not by `setup.sh`.)
 - **Privileged containers.** Bench containers currently run with elevated Docker
   privileges to support in-container networking. Treat every bench as having host
   reach until that is hardened.
@@ -36,17 +37,18 @@ your daily-driver workstation or a shared production server.
 
 ## Supported host platforms
 
-BenchPress installs onto an existing Frappe Bench and drives the host's Docker and
-WireGuard. The setup script is Linux-only (it uses `apt`, `systemd`/`sysctl`,
-`/etc/sudoers.d`, and the WireGuard kernel module).
+BenchPress installs onto an existing Frappe Bench and drives the host's Docker. The
+setup script is Linux-only (it uses `apt` and `systemd`/`sysctl`). VPN is provided
+by the vpn_management app's **wg-agent** sidecar container, which still needs
+WireGuard kernel support on the Docker host.
 
 | Platform | Status | Notes |
 |----------|--------|-------|
 | Ubuntu 22.04 / 24.04 | Supported | Primary target; CI and development happen here. |
 | Debian 12+ | Supported | Same `apt` + systemd toolchain as Ubuntu. |
-| Windows 11 via WSL2 (Ubuntu) | Experimental | App and Docker work; WireGuard/kernel-module steps depend on your WSL kernel. See issue [#26](https://github.com/Venkateshvenki404224/benchpress/issues/26). |
+| Windows 11 via WSL2 (Ubuntu) | Experimental | App and Docker work; the vpn_management wg-agent needs WireGuard support in your WSL kernel. See issue [#26](https://github.com/Venkateshvenki404224/benchpress/issues/26). |
 | Other Linux (Fedora, Arch, …) | Untested | Likely workable, but `setup.sh` assumes `apt`; adapt package install steps manually. |
-| macOS / native Windows | Not supported as a host | No `apt`/systemd/WireGuard kernel module. On Windows, use WSL2. |
+| macOS / native Windows | Not supported as a host | No `apt`/systemd, and no WireGuard kernel support for the vpn_management wg-agent. On Windows, use WSL2. |
 
 > A browser on **any** OS can reach a deployed bench over VPN or (later) a public
 > URL — the platform table above is only about the **host that runs BenchPress**.
@@ -65,7 +67,7 @@ from the project's CI and packaging config.
 | Node.js | 24 | CI (`ci.yml`) — for the frontend build |
 | Docker Engine | 20+ | Container management |
 | Docker Compose | v2+ | Shared MariaDB + Redis infrastructure |
-| WireGuard | Any recent | Optional; required only for VPN access |
+| WireGuard | Any recent | Handled by vpn_management (wg-agent); host needs kernel support only |
 | Vue (frontend) | 3.5+ | `frontend/package.json` |
 | frappe-ui | 0.1.270+ | `frontend/package.json` |
 

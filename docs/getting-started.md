@@ -13,7 +13,7 @@ Before installing BenchPress, ensure your host machine has:
 | Frappe Bench | v16 | The bench environment to install BenchPress into |
 | Docker Engine | 20+ | Container management |
 | Docker Compose | v2+ | Manages shared MariaDB + Redis infrastructure |
-| WireGuard | Any | VPN access (optional but recommended) |
+| vpn_management app | version-16 | VPN control plane (required app — provides the wg-agent and VPN DocTypes) |
 
 > MariaDB and Redis for bench containers are managed automatically via Docker Compose. You only need them on the host for Frappe itself.
 
@@ -38,14 +38,14 @@ bench --site your-site.localhost migrate
 bash apps/benchpress/setup.sh your-site.localhost
 ```
 
-The setup script is idempotent (safe to run multiple times) and handles six steps:
+The setup script is idempotent (safe to run multiple times) and handles three steps:
 
 1. **Docker group** — Adds your user to the `docker` group
 2. **Shared infrastructure** — Starts `benchpress-mariadb` and `benchpress-redis` via docker-compose
 3. **IP forwarding** — Enables kernel IP forwarding for VPN routing
-4. **Sudoers** — Configures passwordless sudo for WireGuard commands
-5. **WireGuard tools** — Installs `wireguard-tools` if missing
-6. **WireGuard server** — Generates keys and brings up the `wg0` interface
+
+> VPN (the WireGuard interface, peers, and IPs) is provisioned by the
+> **vpn_management** app and its wg-agent — see [WireGuard Setup](wireguard-setup.md).
 
 > If the Docker group was just added, log out and back in before starting bench.
 
@@ -63,15 +63,15 @@ yarn build
 
 1. Start the bench: `bench start`
 2. Open BenchPress Settings in your browser: `/app/benchpress-settings`
-3. Fill in the WireGuard fields (values are printed by the setup script):
-   - **WG Server Public Key**
-   - **WG Server Endpoint** — Your server's public IP (`curl -s ifconfig.me`)
-   - **WG Server Port** — `51820`
+3. Set the **Base Domain** and review the container resource limits.
+
+VPN configuration (server, pool, peers) lives in the vpn_management
+DocTypes in Desk — see [WireGuard Setup](wireguard-setup.md).
 
 ### Step 5: Open firewall
 
 ```bash
-sudo ufw allow 51820/udp
+sudo ufw allow 44556/udp
 ```
 
 ### Step 6: Access the dashboard
@@ -98,5 +98,5 @@ Once BenchPress is running, follow the [Creating Labs](creating-labs.md) guide t
 | [Connecting to Benches](connecting-to-benches.md) | SSH access, VPN setup, and connection info |
 | [Logs and Monitoring](logs-and-monitoring.md) | Build logs, deploy logs, and container stats |
 | [VPN Device Management](device-management.md) | Register devices for persistent WireGuard access |
-| [WireGuard Setup](wireguard-setup.md) | Detailed WireGuard configuration and troubleshooting |
+| [WireGuard Setup](wireguard-setup.md) | How the vpn_management app runs the VPN plane |
 | [Upgrading a BenchPress Install](upgrading.md) | Backup-gated upgrade and rollback runbook |

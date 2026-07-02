@@ -33,11 +33,9 @@
   "memory_usage",
   "container_health",
   "last_health_check",
-  "wireguard_section",
+  "vpn_section",
   "wg_ip",
-  "wg_public_key",
-  "column_break_wg",
-  "wg_private_key",
+  "vpn_peer",
   "apps_section",
   "apps"
  ],
@@ -191,30 +189,22 @@
   },
   {
    "collapsible": 1,
-   "fieldname": "wireguard_section",
+   "fieldname": "vpn_section",
    "fieldtype": "Section Break",
-   "label": "WireGuard VPN"
+   "label": "VPN"
   },
   {
    "fieldname": "wg_ip",
    "fieldtype": "Data",
-   "label": "WireGuard IP",
+   "label": "VPN IP",
    "read_only": 1
   },
   {
-   "fieldname": "wg_public_key",
-   "fieldtype": "Data",
-   "label": "WG Public Key",
+   "fieldname": "vpn_peer",
+   "fieldtype": "Link",
+   "label": "VPN Peer",
+   "options": "VPN Peer",
    "read_only": 1
-  },
-  {
-   "fieldname": "column_break_wg",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "wg_private_key",
-   "fieldtype": "Password",
-   "label": "WG Private Key"
   },
   {
    "fieldname": "apps_section",
@@ -243,7 +233,7 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-04-14 02:50:51.168589",
+ "modified": "2026-07-02 16:00:00.000000",
  "modified_by": "Administrator",
  "module": "Benchpress",
  "name": "Bench Instance",

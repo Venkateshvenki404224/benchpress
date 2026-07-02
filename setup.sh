@@ -8,6 +8,10 @@
 #
 # Example:
 #   bash apps/benchpress/setup.sh sponge.localhost
+#
+# VPN note: tunnels, peers and IP allocation are owned by the vpn_management
+# app (wg-agent + VPN Peer / Network Pool DocTypes). This script only prepares
+# Docker and host networking for BenchPress itself.
 
 set -e
 
@@ -36,8 +40,8 @@ if [ -z "$SITE_NAME" ]; then
     error "Site name required. Usage: bash apps/benchpress/setup.sh <site-name>"
 fi
 
-# Every step needs host-level access (docker group, sysctl, sudoers,
-# wireguard kernel module) — none of it works inside a container.
+# Every step needs host-level access (docker group, sysctl) — none of it
+# works inside a container.
 if [ -f "/.dockerenv" ]; then
     warn "Running inside a Docker container — host setup must be run on the host."
     warn "  bash apps/benchpress/setup.sh $SITE_NAME"
@@ -57,7 +61,7 @@ echo ""
 
 # --- Step 1: Docker group ---
 
-info "Step 1/6: Docker group"
+info "Step 1/3: Docker group"
 
 if groups "$BENCH_USER" | grep -q '\bdocker\b'; then
     success "User '$BENCH_USER' is already in the docker group"
@@ -80,7 +84,7 @@ echo ""
 
 # --- Step 2: Shared infrastructure (MariaDB + Redis) ---
 
-info "Step 2/6: Shared infrastructure (MariaDB + Redis)"
+info "Step 2/3: Shared infrastructure (MariaDB + Redis)"
 
 COMPOSE_DIR="$BENCH_DIR/apps/benchpress/benchpress/config"
 COMPOSE_FILE="$COMPOSE_DIR/docker-compose.yml"
@@ -152,7 +156,7 @@ echo ""
 
 # --- Step 3: IP forwarding ---
 
-info "Step 3/6: IP forwarding"
+info "Step 3/3: IP forwarding"
 
 SYSCTL_CONF="/etc/sysctl.d/99-benchpress.conf"
 
@@ -174,98 +178,21 @@ else
 fi
 
 echo ""
-
-# --- Step 4: Sudoers for WireGuard ---
-
-info "Step 4/6: Sudoers (WireGuard + Docker socket)"
-
-SUDOERS_FILE="/etc/sudoers.d/benchpress"
-
-WG_BIN="$(which wg 2>/dev/null || echo /usr/bin/wg)"
-WG_QUICK_BIN="$(which wg-quick 2>/dev/null || echo /usr/bin/wg-quick)"
-
-SUDOERS_LINE="$BENCH_USER ALL=(ALL) NOPASSWD: $WG_BIN, $WG_QUICK_BIN"
-
-if [ -f "$SUDOERS_FILE" ] && grep -q "$BENCH_USER" "$SUDOERS_FILE"; then
-    success "Sudoers entry already exists for '$BENCH_USER'"
-else
-    info "Writing sudoers entry to $SUDOERS_FILE..."
-    echo "$SUDOERS_LINE" | sudo tee "$SUDOERS_FILE" > /dev/null
-    sudo chmod 0440 "$SUDOERS_FILE"
-    success "Sudoers configured"
-fi
-
-# Quick sanity check
-if sudo -n wg show &>/dev/null || sudo -n wg show 2>&1 | grep -qv "password"; then
-    success "Passwordless sudo for wg is working"
-else
-    warn "Could not verify passwordless sudo — check $SUDOERS_FILE manually"
-fi
-
-echo ""
-
-# --- Step 5: WireGuard install check ---
-
-info "Step 5/6: WireGuard tools"
-
-if command -v wg &>/dev/null && command -v wg-quick &>/dev/null; then
-    success "WireGuard tools already installed ($(wg --version 2>/dev/null || echo 'wg found'))"
-else
-    info "Installing WireGuard tools..."
-    sudo apt-get update -qq
-    sudo apt-get install -y --no-install-recommends wireguard wireguard-tools
-    success "WireGuard installed"
-fi
-
-echo ""
-
-# --- Step 6: WireGuard server init ---
-
-info "Step 6/6: WireGuard server initialization"
-
-if sudo wg show wg0 &>/dev/null; then
-    success "wg0 interface is already running"
-    WG_PUBKEY=$(sudo wg show wg0 public-key 2>/dev/null || echo "")
-else
-    info "Initializing WireGuard server (wg0)..."
-    cd "$BENCH_DIR"
-    bench --site "$SITE_NAME" execute benchpress.wg_manager.setup_wg_server
-    success "WireGuard server initialized"
-
-    if sudo wg show wg0 &>/dev/null; then
-        WG_PUBKEY=$(sudo wg show wg0 public-key 2>/dev/null || echo "")
-        success "wg0 is up"
-    else
-        warn "wg0 did not come up — run 'sudo wg-quick up wg0' manually"
-        WG_PUBKEY=""
-    fi
-fi
-
-echo ""
 echo "=============================="
 echo "  Setup Complete"
 echo "=============================="
 echo ""
-
-if [ -n "$WG_PUBKEY" ]; then
-    echo -e "${GREEN}WireGuard Server Public Key:${NC}"
-    echo "  $WG_PUBKEY"
-    echo ""
-fi
 
 echo "Next steps:"
 echo ""
 echo "  1. If group change was needed: log out, log back in, then restart bench"
 echo "     $ bench start"
 echo ""
-echo "  2. Open BenchPress Settings DocType in Frappe Desk:"
+echo "  2. Open BenchPress Settings in Frappe Desk and set the Base Domain."
 echo ""
-echo "  3. Fill in:"
-echo "     - WG Server Endpoint    : <your server's public IP>"
-echo "     - WG Server Port        : 51820"
-echo ""
-echo "  4. Make sure UDP 51820 is open in your firewall / cloud security group"
-echo "     $ sudo ufw allow 51820/udp"
+echo "  3. VPN is managed by the vpn_management app — see the VPN workspace"
+echo "     in Desk (WireGuard Server, Network Pool, VPN Peer) and make sure"
+echo "     its wg-agent is running with the server's UDP port open."
 echo ""
 echo "  Done! Create a Lab and deploy your first bench."
 echo ""

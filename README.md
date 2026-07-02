@@ -107,7 +107,7 @@ BenchPress is a **self-hosted Frappe Cloud alternative** built entirely as a Fra
                                 |                            |
                                 |  api.py ---- REST API      |
                                 |  hooks.py -- Scheduler     |
-                                |  wg_manager -- WireGuard   |
+                                |  vpn_adapter -- VPN seam   |
                                 +---+--------+----------+---+
                                     |        |          |
                      +--------------+   +----v----+  +--v--------------+
@@ -118,9 +118,10 @@ BenchPress is a **self-hosted Frappe Cloud alternative** built entirely as a Fra
                      |                       |           |         |
               +------v------+         +------v------+    |   +-----v--------+
               |  WireGuard  |         |   Docker    |<---+   | stats_       |
-              |  (wg0)      |         |   Engine    |        | collector    |
-              |  10.10.0.0  |         |   (SDK)     |        | (cron 2min) |
-              |  /24 subnet |         +------+------+        +--------------+
+              | (wg0, owned |         |   Engine    |        | collector    |
+              | by vpn_mgmt)|         |   (SDK)     |        | (cron 1min) |
+              | 172.27.0.0  |         +------+------+        +--------------+
+              |  /16 pool   |                |
               +------+------+                |
                      |              +--------v---------+
                      |              |  benchpress       |
@@ -128,10 +129,10 @@ BenchPress is a **self-hosted Frappe Cloud alternative** built entirely as a Fra
                      |              |  172.30.0.0/24    |
                      |              +---+-----+-----+--+
                      |                  |     |     |
-                 DNAT Routing     +-----v-+ +-v---+ +v-------+   +------------------+
-                 (iptables)       | Bench | |Bench| | Bench  |   | benchpress-      |
-                 22,8000,9000     | Ctr 1 | |Ctr 2| | Ctr N  +-->| mariadb          |
-                     |            |       | |     | |        |   | (shared MariaDB) |
+                 Direct tunnel    +-----v-+ +-v---+ +v-------+   +------------------+
+                 to container     | Bench | |Bench| | Bench  |   | benchpress-      |
+                 wg0 (22,8000,    | Ctr 1 | |Ctr 2| | Ctr N  +-->| mariadb          |
+                 9000)            |       | |     | |        |   | (shared MariaDB) |
                      +----------->| SSH   | |SSH  | | SSH    |   +------------------+
                                   | Frappe| |Frapp| | Frappe |
                                   +---+---+ +--+--+ +---+----+   +------------------+
@@ -148,10 +149,10 @@ BenchPress is a **self-hosted Frappe Cloud alternative** built entirely as a Fra
 | **Frappe Web Server** | Hosts the BenchPress app, serves the Vue 3 SPA, handles REST API calls, and publishes real-time WebSocket events |
 | **Redis Queue (RQ)** | Processes long-running background jobs: Docker image builds (up to 60 min) and container deployments |
 | **Docker Engine** | Builds images from the 5-layer Dockerfile template, creates and manages containers with CPU/memory limits |
-| **WireGuard (wg0)** | Kernel-level VPN on the host. Each bench gets a unique IP (10.10.0.X). iptables DNAT rules route ports 22, 8000, and 9000 from the WG IP to the container |
+| **WireGuard (wg0)** | Kernel-level VPN owned by the **vpn_management** app (wg-agent sidecar, listen port 44556). Each bench claims a unique IP (172.27.0.X) from the network pool; clients reach ports 22, 8000, and 9000 directly over the tunnel |
 | **Shared MariaDB** | A `benchpress-mariadb` container shared across all benches, managed via `docker-compose.yml`. Each site gets its own database (named by SHA1 hash). Managed via the Database Server DocType |
 | **Shared Redis** | A `benchpress-redis` container shared across all benches. DB 0 = cache, DB 1 = queue, DB 2 = socketio. Also managed via `docker-compose.yml` with `restart: always` |
-| **Stats Collector** | Cron job running every 2 minutes that polls Docker stats API for all running containers and updates CPU/memory metrics |
+| **Stats Collector** | Cron job running every minute that polls the Docker stats API for all running containers and updates CPU/memory/health metrics (VPN transfer stats are polled by vpn_management) |
 | **Each Container** | A Frappe bench with SSH server and all pre-installed apps. MariaDB and Redis are provided by the shared containers. Users SSH in and run `bench start` |
 
 ---
@@ -167,7 +168,7 @@ BenchPress is a **self-hosted Frappe Cloud alternative** built entirely as a Fra
  | Frappe v  +---->| Layer 2: SSH     +---->| 2. Ensure shared    +---->| client .conf|
  | Apps[]    |     | Layer 3: bench   |     |    MariaDB + Redis  |     |             |
  | CPU/Mem   |     | Layer 4: apps    |     | 3. Create container |     | ssh frappe@ |
- |           |     | Layer 5: site    |     | 4. Setup WireGuard  |     | 10.10.0.X   |
+ |           |     | Layer 5: site    |     | 4. Register VPN Peer|     | 172.27.0.X  |
  |           |     |                  |     | 5. Set SSH password |     |             |
  +-----------+     +------------------+     +---------------------+     +-------------+
    Status:            Cached layers            Logs streamed via          Ports:
@@ -185,11 +186,11 @@ BenchPress is a **self-hosted Frappe Cloud alternative** built entirely as a Fra
 | **Backend** | Python 3.14 + Frappe Framework v16 | REST API, background jobs, ORM, permissions |
 | **Frontend** | Vue 3 + Vite + TailwindCSS + frappe-ui | Modern SPA dashboard with real-time updates |
 | **Containers** | Docker Engine (Python SDK) | Image builds, container lifecycle, resource limits |
-| **VPN** | WireGuard (kernel-level) | Secure SSH/web access to containers without exposed ports |
+| **VPN** | WireGuard via the vpn_management app | Secure SSH/web access to containers without exposed ports (wg-agent sidecar, port 44556) |
 | **Database** | MariaDB (shared container) | Single `benchpress-mariadb` container shared across all benches via docker-compose |
 | **Cache/Queue** | Redis (shared container) + RQ | Single `benchpress-redis` container shared across all benches; RQ for background jobs on host |
 | **Real-time** | Socket.io via Frappe | Live log streaming during builds and deployments |
-| **Routing** | iptables DNAT | Routes WireGuard peer IPs to container Docker IPs |
+| **Routing** | In-container WireGuard (`wg0`) | Direct tunnel to each container's VPN IP — no iptables DNAT or port mapping |
 | **Linting** | Ruff (Python) + Biome (JS) | Code quality enforcement |
 
 ---
@@ -198,15 +199,15 @@ BenchPress is a **self-hosted Frappe Cloud alternative** built entirely as a Fra
 
 - **Lab Templates** -- Define reusable bench configurations with apps, Frappe version (v14, v15, v16, develop), and resource limits
 - **5-Layer Cached Docker Builds** -- System deps, SSH config, bench init, app install, and site creation each cached separately. Only changed layers rebuild.
-- **One-Click Deploy** -- Background job handles image build, container creation, WireGuard setup, SSH password, and site creation against the shared MariaDB. Admin password is `admin` for easy access
+- **One-Click Deploy** -- Background job handles image build, container creation, VPN peer registration, SSH password, and site creation against the shared MariaDB. Admin password is `admin` for easy access
 - **Live Build & Deploy Logs** -- GitHub Actions-style collapsible log viewer with status indicators (success/error/running), streamed in real-time via WebSocket
-- **WireGuard VPN** -- Auto-generates keypair, allocates IP from 10.10.0.2-254 pool, adds peer to wg0, configures iptables DNAT routing
+- **WireGuard VPN** -- Generates a keypair, claims an IP from the vpn_management network pool (172.27.0.0/16), and registers a VPN Peer
 - **Resource Controls** -- CPU cores and memory limits per lab, enforced by Docker `--cpus` and `--memory` flags
 - **Container Management** -- Start, stop, restart, redeploy, and delete benches from the dashboard
 - **Multi-Site Support** -- Create multiple Frappe sites per bench container, each with its own set of installed apps
 - **VPN Device Management** -- Register persistent devices (Laptop, Mobile, etc.), generate WireGuard configs per device, and manage device lifecycle from a dedicated page
 - **Confirmation Dialogs** -- Destructive actions (deploy, stop, delete) require explicit confirmation before execution
-- **Stats Monitoring** -- CPU and memory usage polled every 2 minutes from Docker stats API, displayed as progress bars
+- **Stats Monitoring** -- CPU and memory usage polled every minute from the Docker stats API, displayed as progress bars
 - **Connection Info Panel** -- Shows VPN IP, SSH command, username, and password with one-click copy to clipboard
 - **Search & Filters** -- Filter labs by status, Frappe version, or search by lab ID, title, and app name
 - **Dark Mode** -- Toggle between light and dark themes from the sidebar menu
@@ -266,27 +267,28 @@ Device management page for registering and managing VPN devices. Users add devic
 
 ![Settings](docs/images/settings.png)
 
-Modal dialog to configure Docker (socket path, base domain, default image, Traefik network), WireGuard (server IP, subnet, port, endpoint, public key), and container resource defaults (memory limit, CPU quota).
+Modal dialog to configure Docker (socket path, base domain, default image, Traefik network) and container resource defaults (memory limit, CPU quota). Admin VPN configuration lives in the vpn_management app's desk DocTypes (WireGuard Server, Network Pool).
 
 ---
 
 ## Data Model (DocTypes)
 
-BenchPress uses 11 DocTypes to model the complete bench lifecycle:
+BenchPress uses 10 DocTypes to model the complete bench lifecycle (VPN DocTypes live in the vpn_management app):
 
 | DocType | Type | Purpose | Key Fields |
 |---------|------|---------|------------|
 | **Lab** | Document | Reusable bench template | `lab_id`, `title`, `frappe_version`, `status` (Draft/Building/Ready/Error), `image_tag`, `memory_limit`, `cpu_cores` |
 | **Lab App** | Child Table | Apps to install in a Lab | `app_name`, `app_label`, `git_url`, `branch` |
-| **Bench Instance** | Document | Running container | `bench_name`, `lab`, `status` (Draft/Deploying/Running/Stopped/Error), `container_id`, `wg_ip`, `wg_config`, `cpu_usage`, `memory_usage` |
+| **Bench Instance** | Document | Running container | `bench_name`, `lab`, `status` (Draft/Deploying/Running/Stopped/Error), `container_id`, `wg_ip`, `vpn_peer` (Link to VPN Peer), `cpu_usage`, `memory_usage` |
 | **Bench App** | Child Table | Apps installed in a Bench | `app_name`, `app_label`, `git_url`, `branch` |
 | **Bench Site** | Document | Frappe site inside a bench | `site_name`, `bench`, `status` (Creating/Active/Inactive/Error), `full_domain`, `admin_password` |
 | **Site App** | Child Table | Apps installed on a Site | `app_name`, `app_label` |
 | **Database Server** | Document | Shared MariaDB container | `container_name`, `container_id`, `status`, `port`, `volume_name`, `image_tag`, `memory_limit` |
-| **BenchPress Settings** | Single | Global configuration | `docker_socket`, `base_domain`, `wg_server_*` keys, `next_wg_ip`, `container_memory_limit`, `container_cpu_quota` |
-| **Bench Device** | Document | Persistent VPN device | `device_name`, `device_type` (Laptop/Mobile/etc.), `user`, `wg_public_key`, `wg_private_key`, `wg_ip` |
+| **BenchPress Settings** | Single | Global configuration | `docker_socket`, `base_domain`, `container_memory_limit`, `container_cpu_quota` |
 | **Deploy Log** | Log | Deployment event log | `bench`, `message`, `log_type`, `timestamp` |
 | **Build Log** | Log | Image build log | `lab`, `message`, `log_type`, `timestamp` |
+
+> **VPN identities** (for benches and user devices) are **VPN Peer** documents owned by the **vpn_management** app, alongside its WireGuard Server, Network Pool, and IP Allocation DocTypes. Bench Instance links to its peer via the `vpn_peer` field.
 
 ### Entity Relationship
 
@@ -304,7 +306,7 @@ Lab ----> Build Log[] (linked: image build events)
 
 BenchPress Settings (singleton: global config)
 
-Bench Device (user's registered VPN devices)
+VPN Peer (vpn_management: bench + user device VPN identities)
 ```
 
 ---
@@ -342,16 +344,10 @@ All endpoints require authentication and use `@frappe.whitelist()`. Long-running
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `benchpress.api.add_device` | POST | Register a new VPN device (Laptop, Mobile, etc.) and generate WireGuard config |
-| `benchpress.api.remove_device` | POST | Remove a registered VPN device and clean up WireGuard peer |
-| `benchpress.api.list_devices` | GET | List all VPN devices for the current user |
-| `benchpress.api.get_device_wg_config` | GET | Get WireGuard client config for a specific device |
-
-### System Endpoints
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `benchpress.wg_manager.setup_wg_server` | POST | One-time WireGuard server initialization |
+| `benchpress.api.add_device` | POST | Register a new VPN device (Laptop, Mobile, etc.) — thin wrapper that creates a vpn_management VPN Peer (device type encoded as a `[Laptop] ` prefix on the peer name) |
+| `benchpress.api.remove_device` | POST | Remove a registered VPN device — deletes the underlying VPN Peer |
+| `benchpress.api.list_devices` | GET | List the current user's device VPN Peers |
+| `benchpress.api.get_device_wg_config` | GET | Get the WireGuard client config for a device (routes only the VPN pool subnet `172.27.0.0/16`) |
 
 > **Note:** Settings are accessed via `createDocumentResource` from `frappe-ui` (no custom API endpoint needed). Labs, bench instances, sites, and build logs use `createListResource` / `createDocumentResource` for native Frappe data fetching.
 
@@ -362,7 +358,7 @@ These are called via `frappe.client.run_doc_method` on a Bench Instance document
 | Method | Description |
 |--------|-------------|
 | `enqueue_deploy` | Enqueue deployment as background job (queue: long, timeout: 1800s) |
-| `enqueue_stop` | Stop the container and clean up WireGuard routing |
+| `enqueue_stop` | Stop the container |
 | `enqueue_redeploy` | Stop, remove, and redeploy the container from scratch |
 | `enqueue_start` | Start a stopped container |
 
@@ -379,7 +375,7 @@ Before installing BenchPress, ensure your host machine has:
 | Node.js | 24+ | Frontend build toolchain |
 | Docker Engine | 20+ | Container management (must be running) |
 | Docker Compose | v2+ | Manages shared MariaDB + Redis infrastructure |
-| WireGuard | Any | VPN (`wg` and `wg-quick` commands available) |
+| WireGuard | Any | Handled by the vpn_management app (wg-agent sidecar); the Docker host only needs WireGuard kernel support |
 
 > **Note:** MariaDB and Redis for bench containers are managed automatically via Docker Compose (`benchpress-mariadb` and `benchpress-redis` containers). You only need MariaDB and Redis on the host for Frappe itself.
 
@@ -399,7 +395,7 @@ docker ps
 
 ### Required: IP forwarding
 
-IP forwarding must be enabled for WireGuard VPN routing between the host and containers:
+IP forwarding must be enabled for VPN routing between the host and containers:
 
 ```bash
 # Enable immediately
@@ -410,17 +406,7 @@ echo "net.ipv4.ip_forward = 1" | sudo tee /etc/sysctl.d/99-benchpress.conf
 sudo sysctl -p /etc/sysctl.d/99-benchpress.conf
 ```
 
-### Required: Passwordless sudo for WireGuard
-
-The bench user needs passwordless sudo for WireGuard commands (used to add/remove VPN peers):
-
-```bash
-sudo tee /etc/sudoers.d/benchpress-wg > /dev/null <<EOF
-frappe ALL=(ALL) NOPASSWD: /usr/bin/wg
-frappe ALL=(ALL) NOPASSWD: /usr/bin/wg-quick
-EOF
-sudo chmod 0440 /etc/sudoers.d/benchpress-wg
-```
+> **No sudo for WireGuard needed.** All `wg` operations are performed by the vpn_management app's privileged **wg-agent** sidecar container — BenchPress never runs WireGuard commands on the host.
 
 ---
 
@@ -460,9 +446,11 @@ bench --site your-site.localhost install-app benchpress
 bench --site your-site.localhost migrate
 ```
 
+> **Note:** BenchPress declares `required_apps = ["vpn_management"]` — the vpn_management app must be on the bench so it is installed alongside BenchPress. It owns everything VPN (WireGuard Server, Network Pool, VPN Peer, IP Allocation, and the wg-agent sidecar).
+
 ### 2. Run the setup script
 
-BenchPress ships with a setup script that handles everything in 6 steps:
+BenchPress ships with a setup script that handles everything in 3 steps:
 
 ```bash
 cd /path/to/your/frappe-bench
@@ -474,11 +462,8 @@ The script is **idempotent** — safe to run multiple times. It will:
 1. **Docker group** — Add your bench user to the `docker` group
 2. **Shared infrastructure** — Start `benchpress-mariadb` and `benchpress-redis` containers via docker-compose (generates a random root password, creates the Docker network and volumes, waits for services to be ready)
 3. **IP forwarding** — Enable via sysctl (runtime + persistent)
-4. **Sudoers** — Write `/etc/sudoers.d/benchpress` for passwordless `wg` and `wg-quick`
-5. **WireGuard tools** — Install `wireguard-tools` if missing
-6. **WireGuard server** — Generate keys, write `wg0.conf`, bring up `wg0`
 
-The script prints the **WireGuard Server Public Key** you need for BenchPress Settings.
+No WireGuard steps run on the host — the VPN is provisioned by the **vpn_management** app (wg-agent sidecar, WireGuard port 44556).
 
 > **After the script:** If the docker group was just added, log out and back in, then `bench start`.
 
@@ -500,48 +485,21 @@ bench build --app benchpress
 1. Navigate to **BenchPress Settings** in the Frappe Desk (`/app/benchpress-settings`)
 2. Set the **Docker Socket** path (default: `unix:///var/run/docker.sock`)
 3. Set the **Base Domain** for your bench instances
-4. Fill in WireGuard (values printed by the setup script):
-   - **WG Server Public Key**: *(from setup script output)*
-   - **WG Server Endpoint**: Your server's public IP (`curl -s ifconfig.me`)
-   - **WG Server Port**: `51820`
+
+Admin VPN configuration (server endpoint, listen port, pool CIDR) lives in the **vpn_management** app's desk DocTypes — **WireGuard Server** (interface `wg0`, port `44556`) and **Network Pool** (`pool-wg0`, `172.27.0.0/16` in dev) — not in BenchPress Settings.
 
 ### 5. Open firewall for WireGuard
 
 ```bash
-sudo ufw allow 51820/udp
+sudo ufw allow 44556/udp
 sudo ufw reload
 ```
 
-Also open UDP 51820 in your cloud provider's security group / firewall if applicable.
+Also open UDP 44556 in your cloud provider's security group / firewall if applicable.
 
 For a full WireGuard reference and troubleshooting, see the **[WireGuard Setup Guide](docs/wireguard-setup.md)**.
 
-**Quick start** (if you just want the minimum commands):
-
-```bash
-# Install WireGuard
-sudo apt install -y wireguard wireguard-tools
-
-# Allow bench user to run WireGuard/iptables without password
-sudo visudo -f /etc/sudoers.d/benchpress
-# Add: labs ALL=(ALL) NOPASSWD: /usr/sbin/iptables, /usr/bin/wg, /usr/bin/wg-quick, /sbin/sysctl
-
-# Initialize WireGuard server from Frappe console
-bench --site your-site.localhost console
->>> from benchpress.wg_manager import setup_wg_server
->>> setup_wg_server()
-
-# Set your VPS public IP in BenchPress Settings
->>> s = frappe.get_doc("BenchPress Settings")
->>> s.wg_server_endpoint = "YOUR_VPS_PUBLIC_IP"  # run: curl -s ifconfig.me
->>> s.save()
->>> frappe.db.commit()
-
-# Open the firewall port
-sudo ufw allow 51820/udp
-```
-
-> **Note**: WireGuard is optional. If not configured, BenchPress still works — containers run normally but without VPN access. Users can connect via Docker bridge IPs on the local machine. See the [Local Development section](docs/wireguard-setup.md#local-development-no-vpn) in the guide.
+> **Note**: WireGuard is optional. If the VPN is not configured, BenchPress still works — containers run normally but without VPN access. Users can connect via Docker bridge IPs on the local machine. See the [Local Development section](docs/wireguard-setup.md#local-development-no-vpn) in the guide.
 
 ### 5. Start BenchPress
 
@@ -583,7 +541,7 @@ Click **Deploy** on the Lab Detail page. The background worker will:
 1. Verify or build the Docker image
 2. Create a container with resource limits on the `benchpress` Docker network (172.30.0.0/24)
 3. Start the container (MariaDB, Redis, and SSH start automatically via `entry.sh`)
-4. Generate a WireGuard keypair, allocate a VPN IP (10.10.0.X), add the peer, and configure iptables DNAT routing
+4. Generate a WireGuard keypair, register a VPN Peer with vpn_management (which claims a VPN IP from the `172.27.0.0/16` pool), write the config into the container, and bring up `wg0` inside it
 5. Set the SSH password for the `frappe` user inside the container
 6. Mark the bench as **Running**
 
@@ -599,14 +557,14 @@ All deployment steps stream to the Deploy Logs page in real-time.
 
 ```bash
 # SSH into your bench
-ssh frappe@10.10.0.X
+ssh frappe@172.27.0.X
 
 # Start the Frappe development server
 cd frappe-bench
 bench start
 
 # Access your Frappe site
-# http://10.10.0.X:8000
+# http://172.27.0.X:8000
 ```
 
 ### Step 6: Manage Sites
@@ -674,9 +632,8 @@ benchpress/
 |   +-- api.py                    # REST API layer (~12 endpoints)
 |   +-- deploy_manager.py         # Build & deploy orchestration (brain of BenchPress)
 |   +-- docker_manager.py         # Docker SDK wrapper (build, create, exec, stats)
-|   +-- wg_manager.py             # WireGuard VPN management (keys, peers, routing)
-|   +-- device_manager.py         # VPN device registration and config generation
-|   +-- stats_collector.py        # Cron job: poll Docker stats every 2 minutes
+|   +-- vpn_adapter.py            # Seam to the vpn_management VPN plane (bench peers, device wrappers)
+|   +-- stats_collector.py        # Cron job: poll Docker stats every minute
 |   +-- hooks.py                  # App config: routes, scheduler, ignore_links_on_delete
 |   +-- mariadb_manager.py        # Shared MariaDB + Redis lifecycle (docker compose)
 |   +-- config/
@@ -703,9 +660,6 @@ benchpress/
 |   |       +-- benchpress_settings/  # Global config singleton
 |   |       +-- deploy_log/       # Deployment log DocType
 |   |       +-- build_log/        # Build log DocType
-|   +-- device_management/
-|   |   +-- doctype/
-|   |       +-- bench_device/     # VPN device DocType
 |   +-- public/
 |       +-- images/               # App logos, favicons, Frappe ecosystem app icons
 +-- frontend/
@@ -734,12 +688,11 @@ benchpress/
 | File | Lines | What It Does |
 |------|-------|--------------|
 | `api.py` | ~300 | REST API layer with 12 endpoints. All `@frappe.whitelist()`. Long-running ops enqueued to `"long"` queue. Frontend uses `frappe-ui` native data fetching (`createDocumentResource`, `createListResource`) for most reads. |
-| `deploy_manager.py` | ~300 | Orchestration brain. Coordinates image builds, container creation, WireGuard setup, SSH config, and real-time log streaming. |
-| `docker_manager.py` | ~190 | Docker SDK wrapper. Builds images, creates/starts/stops containers, executes commands inside containers, collects stats. |
-| `wg_manager.py` | ~210 | WireGuard VPN management. Generates keypairs, allocates IPs, manages peers, configures iptables DNAT routing for ports 22/8000/9000. |
-| `device_manager.py` | ~110 | VPN device registration. Creates Bench Device docs, generates WireGuard keypairs, allocates IPs, and builds client configs. |
+| `deploy_manager.py` | ~400 | Orchestration brain. Coordinates image builds, container creation, VPN peer registration (via `vpn_adapter`), SSH config, and real-time log streaming. |
+| `docker_manager.py` | ~290 | Docker SDK wrapper. Builds images, creates/starts/stops containers, executes commands inside containers, collects stats. |
+| `vpn_adapter.py` | ~210 | Seam to the vpn_management app. Registers/removes bench VPN Peers, writes WireGuard config into containers, and wraps the device APIs over VPN Peer docs. |
 | `mariadb_manager.py` | ~400 | Shared MariaDB + Redis lifecycle via docker-compose. Setup, start, stop, health checks, backups, SQL execution. |
-| `stats_collector.py` | ~35 | Cron job (every 2 min). Polls Docker stats for running containers, updates CPU/memory fields. |
+| `stats_collector.py` | ~50 | Cron job (every minute). Polls Docker stats for running containers, updates CPU/memory/health fields. |
 | `hooks.py` | ~240 | App configuration: routes, scheduler events, `add_to_apps_screen`, `ignore_links_on_delete`. |
 
 ---
@@ -778,15 +731,15 @@ socket.on("bench_deploy_log", (data) => {
 | Network | Subnet | Purpose |
 |---------|--------|---------|
 | `benchpress` (Docker bridge) | `172.30.0.0/24` | Internal communication between host and containers |
-| WireGuard (`wg0`) | `10.10.0.0/24` | VPN subnet for user access (server: `10.10.0.1`, clients: `10.10.0.2`-`10.10.0.254`) |
+| WireGuard (`wg0`) | `172.27.0.0/16` | VPN pool for user and bench access, owned by the vpn_management app (Network Pool `pool-wg0`, listen port `44556`) |
 
 ### Inside-Container WireGuard VPN
 
-Each container runs its own `wg0` WireGuard interface. On deploy, BenchPress:
+Each container runs its own `wg0` WireGuard interface. On deploy, BenchPress (via `vpn_adapter`):
 
-1. Allocates a VPN IP (e.g., `10.10.0.5`) from the `10.10.0.0/24` subnet
-2. Generates a key pair for the container
-3. Adds the container as a peer on the host's WireGuard server
+1. Generates a key pair for the container (the private key is never persisted)
+2. Registers a VPN Peer with vpn_management — the peer insert atomically claims an IP (e.g., `172.27.0.5`) from the `172.27.0.0/16` network pool
+3. vpn_management's wg-agent sidecar syncs the peer onto the server's `wg0`
 4. Writes `/etc/wireguard/wg0.conf` inside the container (peer config pointing back to host via Docker gateway `172.30.0.1`)
 5. Runs `wg-quick up wg0` inside the container
 
@@ -794,9 +747,9 @@ The result: users connect to the VPN and access the container directly at its al
 
 | Access | Address | Description |
 |--------|---------|-------------|
-| SSH | `ssh user@10.10.0.X` | Direct to container SSH server |
-| Frappe Web | `http://10.10.0.X:8000` | Frappe development server |
-| Socket.io | `http://10.10.0.X:9000` | Real-time events |
+| SSH | `ssh user@172.27.0.X` | Direct to container SSH server |
+| Frappe Web | `http://172.27.0.X:8000` | Frappe development server |
+| Socket.io | `http://172.27.0.X:9000` | Real-time events |
 
 ### Shared Infrastructure (Docker Compose)
 
@@ -841,10 +794,10 @@ BenchPress works with **any Frappe app** -- there is no hardcoded app list. When
 BenchPress supports persistent VPN device registration so users can maintain stable WireGuard identities across sessions:
 
 1. **Register a device** -- Navigate to `/frontend/devices` and add a device with a name and type (Laptop, Mobile, Tablet, Desktop, Other)
-2. **Get WireGuard config** -- Each device receives a dedicated WireGuard configuration file with its own keypair and IP allocation
+2. **Get WireGuard config** -- Each device receives a dedicated WireGuard configuration file with its own keypair and IP allocation. Device configs route only the VPN pool subnet (`AllowedIPs = 172.27.0.0/16`), not all traffic
 3. **Manage devices** -- View all registered devices, download configs, or remove devices when no longer needed
 
-Device management uses the **Bench Device** DocType and is exposed through four API endpoints (`add_device`, `remove_device`, `list_devices`, `get_device_wg_config`).
+Device management is backed by the **VPN Peer** DocType in the vpn_management app (the device type is encoded as a `[Laptop] ` prefix on the peer name) and is exposed through four API endpoints (`add_device`, `remove_device`, `list_devices`, `get_device_wg_config`), all thin wrappers in `vpn_adapter.py`. Device rx/tx stats are updated by vpn_management's own `poll_status` cron job.
 
 ---
 
@@ -858,21 +811,16 @@ Device management uses the **Bench Device** DocType and is exposed through four 
 | `default_image` | `frappe/bench:latest` | Base Docker image for lab builds |
 | `base_domain` | *(required)* | Base domain for bench instances |
 | `traefik_network` | `traefik-public` | Docker network for Traefik (if used) |
-| `wg_server_ip` | `10.10.0.1` | WireGuard server IP address |
-| `wg_subnet` | `10.10.0.0/24` | WireGuard VPN subnet |
-| `wg_server_port` | `51820` | WireGuard listen port |
-| `wg_server_endpoint` | *(required)* | Public IP/hostname for WireGuard clients to connect to |
-| `wg_server_public_key` | Auto-generated | Server's WireGuard public key |
-| `wg_server_private_key` | Auto-generated | Server's WireGuard private key (encrypted) |
-| `next_wg_ip` | `2` | Next IP octet to allocate (auto-increments from 2 to 254) |
 | `container_memory_limit` | `512m` | Default memory limit for containers |
 | `container_cpu_quota` | `100000` | Default CPU quota in microseconds (100000 = 1 core) |
+
+> WireGuard configuration (server endpoint, listen port `44556`, pool CIDR `172.27.0.0/16`) lives in the **vpn_management** app's DocTypes: **WireGuard Server** and **Network Pool**.
 
 ### Scheduler Jobs
 
 | Schedule | Function | Description |
 |----------|----------|-------------|
-| Every 1 minute | `benchpress.stats_collector.collect_all_stats` | Polls Docker and WireGuard stats, updates CPU/memory metrics and VPN transfer counters |
+| Every 1 minute | `benchpress.stats_collector.collect_bench_stats` | Polls Docker CPU/memory/health for running containers (VPN transfer counters are updated by vpn_management's own `poll_status` job) |
 | Every 5 minutes | `benchpress.mariadb_manager.scheduled_health_check` | Checks shared MariaDB health, attempts restart if down |
 | Daily at 2 AM | `benchpress.mariadb_manager.scheduled_backup` | Full MariaDB backup with 7-day retention |
 
@@ -895,7 +843,7 @@ type(scope): short description
 
 feat(lab):     add multi-app selection to lab creation form
 fix(deploy):   prevent duplicate container on rapid double-click
-refactor(wg):  migrate iptables rules to nftables
+refactor(vpn): delegate peer lifecycle to vpn_management
 test(api):     add tests for site creation endpoint
 docs(readme):  add architecture diagram
 chore(deps):   bump frappe-ui to 0.1.192

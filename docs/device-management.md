@@ -2,6 +2,11 @@
 
 BenchPress supports persistent VPN device registration. Each device (laptop, phone, tablet) gets its own WireGuard identity that works across all your lab containers.
 
+Under the hood every device is a **VPN Peer** document in the
+**vpn_management** app, which owns the WireGuard server, the IP pool, and
+key management — see [WireGuard Setup](wireguard-setup.md). The Devices page
+below is unchanged; it is a thin view over those peers.
+
 ---
 
 ## Why Register Devices?
@@ -48,7 +53,7 @@ After registering, each device appears as a card showing:
 | **Device name** | The friendly name you chose |
 | **Type badge** | Device type (Laptop, Mobile, etc.) |
 | **Status** | Active (green) or inactive (gray) |
-| **WireGuard IP** | Allocated VPN IP (e.g., `10.10.0.3`) |
+| **WireGuard IP** | Allocated VPN IP (e.g., `172.27.0.3`) |
 | **Received / Sent** | Data transfer stats from WireGuard |
 
 ---
@@ -89,9 +94,9 @@ A confirmation dialog appears:
 > "Are you sure you want to remove [device_name]? This will revoke its VPN access immediately."
 
 Click **Remove Device** to confirm. This will:
-1. Remove the WireGuard peer from the server
-2. Deallocate the VPN IP
-3. Delete the Bench Device doc
+1. Delete the device's VPN Peer
+2. Free its IP allocation
+3. Sync the change to the WireGuard interface
 
 > After removal, the device can no longer connect to any bench containers via VPN.
 
@@ -121,9 +126,9 @@ Each device gets its own IP and can access all your running bench containers sim
 
 ### Cannot connect after registering
 
-1. Download a fresh config file (the config may have been generated before WireGuard server was fully set up)
-2. Verify the server's UDP port 51820 is open: `sudo ufw status`
-3. Check the WireGuard server is running: `sudo wg show wg0`
+1. Download a fresh config file (the config may have been generated before the WireGuard server was fully set up)
+2. Verify the server's UDP port 44556 is open: `sudo ufw status`
+3. Check the **WireGuard Server** DocType (vpn_management) shows the interface as active
 
 ### QR code not scanning
 

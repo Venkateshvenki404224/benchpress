@@ -14,12 +14,12 @@ After deploying a bench, the **Dashboard** tab on the Lab Detail page shows a **
 
 | Field | Description | Example |
 |-------|-------------|---------|
-| **Device IP** | WireGuard VPN IP of the container | `10.10.0.5` |
-| **SSH Command** | Full SSH command to connect | `ssh frappe@10.10.0.5` |
+| **Device IP** | WireGuard VPN IP of the container (claimed from the vpn_management network pool) | `172.27.0.5` |
+| **SSH Command** | Full SSH command to connect | `ssh frappe@172.27.0.5` |
 | **Username** | SSH username (derived from your email) | `john` |
 | **Su Password** | SSH password for the user | `a1b2c3d4e5f6` |
 | **Admin Password** | Frappe admin password for the site | `admin` |
-| **VS Port Forward** | Port forward command for VS Code remote | `10.10.0.5:8000` |
+| **VS Port Forward** | Port forward command for VS Code remote | `172.27.0.5:8000` |
 
 Each field has a **copy button** that copies the value to your clipboard with a "Copied to clipboard" confirmation.
 
@@ -45,7 +45,7 @@ Import the `.conf` file into your WireGuard client and activate the tunnel:
 Copy the SSH command from the Connection Information panel:
 
 ```bash
-ssh frappe@10.10.0.5
+ssh frappe@172.27.0.5
 # Enter the Su Password when prompted
 ```
 
@@ -58,7 +58,7 @@ cd frappe-bench
 bench start
 ```
 
-Your Frappe site is now accessible at `http://10.10.0.5:8000` from any device on the VPN.
+Your Frappe site is now accessible at `http://172.27.0.5:8000` from any device on the VPN.
 
 ---
 
@@ -68,8 +68,8 @@ After running `bench start` inside the container:
 
 | Service | URL | Description |
 |---------|-----|-------------|
-| **Frappe Desk** | `http://10.10.0.5:8000` | Main ERP/app interface |
-| **Socket.io** | `http://10.10.0.5:9000` | Real-time updates |
+| **Frappe Desk** | `http://172.27.0.5:8000` | Main ERP/app interface |
+| **Socket.io** | `http://172.27.0.5:9000` | Real-time updates |
 
 Log in with:
 - **Username**: `Administrator`
@@ -85,7 +85,7 @@ BenchPress supports VS Code Remote SSH for a full IDE experience inside the cont
 
 1. Install the **Remote - SSH** extension in VS Code
 2. Press `Ctrl+Shift+P` → "Remote-SSH: Connect to Host..."
-3. Enter the SSH command from Connection Info: `frappe@10.10.0.5`
+3. Enter the SSH command from Connection Info: `frappe@172.27.0.5`
 4. Enter the Su Password when prompted
 5. Open the `/home/frappe/frappe-bench` folder
 
@@ -94,7 +94,7 @@ BenchPress supports VS Code Remote SSH for a full IDE experience inside the cont
 Use the VS Port Forward command from Connection Info to forward port 8000:
 
 ```bash
-ssh -L 8000:localhost:8000 frappe@10.10.0.5
+ssh -L 8000:localhost:8000 frappe@172.27.0.5
 ```
 
 Then access the Frappe site at `http://localhost:8000` on your local machine.
@@ -123,7 +123,7 @@ ssh frappe@172.30.0.X
 
 1. Check that your WireGuard tunnel is active: `sudo wg show`
 2. Verify the bench status is **Running** in the dashboard
-3. Try pinging the VPN IP: `ping 10.10.0.5`
+3. Try pinging the VPN IP: `ping 172.27.0.5`
 
 ### "Permission denied" on SSH
 
@@ -135,7 +135,7 @@ ssh frappe@172.30.0.X
 1. SSH into the bench first
 2. Run `bench start` inside the container
 3. Wait a few seconds for gunicorn to start
-4. Access `http://10.10.0.5:8000`
+4. Access `http://172.27.0.5:8000`
 
 ### Cannot reach the container from another machine
 

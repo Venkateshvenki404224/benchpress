@@ -12,19 +12,10 @@
   "column_break_docker",
   "base_domain",
   "traefik_network",
-  "wireguard_section",
-  "wg_server_ip",
-  "wg_subnet",
-  "wg_server_port",
-  "column_break_wg",
-  "wg_server_public_key",
-  "wg_server_endpoint",
-  "next_wg_ip",
   "resource_section",
   "container_memory_limit",
   "column_break_resource",
   "container_cpu_quota",
-  "wg_server_private_key",
   "code_server_version"
  ],
  "fields": [
@@ -63,49 +54,6 @@
    "label": "Traefik Network"
   },
   {
-   "fieldname": "wireguard_section",
-   "fieldtype": "Section Break",
-   "label": "WireGuard Configuration"
-  },
-  {
-   "default": "10.10.0.1",
-   "fieldname": "wg_server_ip",
-   "fieldtype": "Data",
-   "label": "WG Server IP"
-  },
-  {
-   "default": "10.10.0.0/24",
-   "fieldname": "wg_subnet",
-   "fieldtype": "Data",
-   "label": "WG Subnet"
-  },
-  {
-   "default": "51820",
-   "fieldname": "wg_server_port",
-   "fieldtype": "Int",
-   "label": "WG Server Port"
-  },
-  {
-   "fieldname": "column_break_wg",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "wg_server_public_key",
-   "fieldtype": "Data",
-   "label": "WG Server Public Key"
-  },
-  {
-   "fieldname": "wg_server_endpoint",
-   "fieldtype": "Data",
-   "label": "WG Server Endpoint"
-  },
-  {
-   "default": "2",
-   "fieldname": "next_wg_ip",
-   "fieldtype": "Int",
-   "label": "Next WG IP"
-  },
-  {
    "fieldname": "resource_section",
    "fieldtype": "Section Break",
    "label": "Container Resource Limits"
@@ -129,11 +77,6 @@
    "label": "CPU Quota"
   },
   {
-   "fieldname": "wg_server_private_key",
-   "fieldtype": "Password",
-   "label": "WG Server Private Key"
-  },
-  {
    "default": "4.96.4",
    "fieldname": "code_server_version",
    "fieldtype": "Data",
@@ -144,7 +87,7 @@
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2026-04-14 02:51:00.627290",
+ "modified": "2026-07-02 16:00:00.000000",
  "modified_by": "Administrator",
  "module": "Benchpress",
  "name": "BenchPress Settings",
