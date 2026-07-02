@@ -142,6 +142,18 @@ jobs:
         env:
           TYPE: server
 
+      - name: Page load
+        working-directory: /home/runner/frappe-bench
+        run: |
+          bench --site test_site serve --port 8000 > /tmp/bench-serve.log 2>&1 &
+          for _ in $(seq 1 30); do
+            curl -fsS -o /dev/null http://127.0.0.1:8000/api/method/ping && break
+            sleep 2
+          done
+          body=$(curl -fsS -H 'Host: test_site' http://127.0.0.1:8000/frontend) || { cat /tmp/bench-serve.log; exit 1; }
+          echo "$body" | grep -q 'id="app"'
+          echo "$body" | grep -q '<title>Benchpress'
+
   frontend:
     runs-on: ubuntu-latest
     needs: changes
