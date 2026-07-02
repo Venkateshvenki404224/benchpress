@@ -8,14 +8,22 @@ public key as a VPN Peer — the insert claims the tunnel IP atomically from the
 server's pool. The interface is converged synchronously because deploys run on
 queue-long, which mounts the wg-agent socket. The container's private key is
 written into the container and never persisted anywhere.
+
+User devices are VPN Peers too: the device functions below keep the old
+Bench Device API contract (field names, reply shapes) so Devices.vue ships
+unchanged, and let the peer's own hooks drive allocation and reconciliation.
 """
 
 import ipaddress
+import re
 
 import frappe
+from frappe import _
 
 DEFAULT_INTERFACE = "wg0"
 CONTAINER_KEEPALIVE_SECONDS = 25
+DEVICE_TYPES = ["Mobile", "Laptop", "Desktop", "Tablet", "Server", "IoT", "Embedded"]
+DEVICE_PEER_PATTERN = re.compile(r"^\[(?P<device_type>[A-Za-z]+)\] (?P<device_name>.+)$")
 
 
 def create_container_peer(bench) -> dict:
@@ -102,3 +110,100 @@ def _get_docker_gateway() -> str:
 	except Exception:
 		pass  # best-effort
 	return "172.30.0.1"
+
+
+def register_device(device_name: str, device_type: str, public_key: str | None = None) -> dict:
+	"""Register a personal device as a VPN Peer, keeping the old Bench Device reply shape."""
+	if device_type not in DEVICE_TYPES:
+		frappe.throw(_("Invalid device type: {0}").format(device_type))
+	peer = frappe.get_doc(
+		{
+			"doctype": "VPN Peer",
+			"peer_name": f"[{device_type}] {device_name}",
+			"owner_user": frappe.session.user,
+			"server": DEFAULT_INTERFACE,
+			"public_key": public_key,  # blank → vpn_management generates the keypair server-side
+			"client_allowed_ips": _device_allowed_ips(),
+		}
+	)
+	peer.insert(ignore_permissions=True)  # users hold no VPN roles; ownership lives in owner_user
+	return {"name": peer.name, "wg_ip": peer.assigned_ip, "wg_config": _render_device_config(peer)}
+
+
+def unregister_device(device_docname: str) -> bool:
+	"""Delete an owned device peer; its on_trash frees the IP and reconciles."""
+	peer = _owned_device_peer(device_docname)
+	frappe.delete_doc("VPN Peer", peer.name, ignore_permissions=True)
+	return True
+
+
+def list_devices() -> list[dict]:
+	"""The session user's device peers, mapped to the old Bench Device field names."""
+	peers = frappe.get_all(
+		"VPN Peer",
+		filters=_device_peer_filters(),
+		fields=["name", "peer_name", "status", "assigned_ip", "public_key", "rx_bytes", "tx_bytes"],
+		order_by="creation desc",
+		limit=100,
+	)
+	return [_as_device_row(peer) for peer in peers]
+
+
+def get_device_config(device_docname: str) -> str:
+	"""Render the client conf for an owned device peer."""
+	return _render_device_config(_owned_device_peer(device_docname))
+
+
+def _device_peer_filters() -> dict:
+	"""Everything the user owns except the peers that belong to bench containers."""
+	filters = {"owner_user": frappe.session.user}
+	bench_peers = frappe.get_all(
+		"Bench Instance", filters={"vpn_peer": ("is", "set")}, pluck="vpn_peer"
+	)
+	if bench_peers:
+		filters["name"] = ("not in", bench_peers)
+	return filters
+
+
+def _as_device_row(peer) -> dict:
+	device_type, device_name = _split_device_peer_name(peer.peer_name)
+	return {
+		"name": peer.name,
+		"device_name": device_name,
+		"device_type": device_type,
+		"status": peer.status,
+		"wg_ip": peer.assigned_ip,
+		"wg_public_key": peer.public_key,
+		"wg_rx_bytes": peer.rx_bytes,
+		"wg_tx_bytes": peer.tx_bytes,
+	}
+
+
+def _split_device_peer_name(peer_name: str) -> tuple[str, str]:
+	# register_device encodes the type as a "[Laptop] " prefix — VPN Peer has no such field.
+	match = DEVICE_PEER_PATTERN.match(peer_name or "")
+	if match and match["device_type"] in DEVICE_TYPES:
+		return match["device_type"], match["device_name"]
+	return "Device", peer_name
+
+
+def _device_allowed_ips() -> str:
+	# Route only the VPN pool through the device's tunnel (the old device contract),
+	# not the VPN Peer full-tunnel default of 0.0.0.0/0.
+	server = frappe.get_cached_doc("WireGuard Server", DEFAULT_INTERFACE)
+	return str(ipaddress.ip_network(server.address_cidr, strict=False))
+
+
+def _owned_device_peer(device_docname: str):
+	from benchpress.permissions import is_admin
+
+	peer = frappe.get_doc("VPN Peer", device_docname)
+	if peer.owner_user != frappe.session.user and not is_admin():
+		frappe.throw(_("You do not have permission to access this device."), frappe.PermissionError)
+	return peer
+
+
+def _render_device_config(peer) -> str:
+	from vpn_management.api.client_config import _render_client_config
+
+	return _render_client_config(peer)

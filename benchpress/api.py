@@ -259,14 +259,14 @@ def get_deploy_logs(bench_name: str) -> list[dict]:
 
 @frappe.whitelist()
 def add_device(device_name: str, device_type: str, public_key: str | None = None) -> dict:
-	from benchpress.device_manager import register_device
+	from benchpress.vpn_adapter import register_device
 
 	return register_device(device_name, device_type, public_key or None)
 
 
 @frappe.whitelist()
 def remove_device(device_name: str) -> dict:
-	from benchpress.device_manager import unregister_device
+	from benchpress.vpn_adapter import unregister_device
 
 	unregister_device(device_name)
 	return {"status": "removed"}
@@ -274,14 +274,14 @@ def remove_device(device_name: str) -> dict:
 
 @frappe.whitelist()
 def list_devices() -> list[dict]:
-	from benchpress.device_manager import list_devices as _list
+	from benchpress.vpn_adapter import list_devices as _list
 
 	return _list()
 
 
 @frappe.whitelist()
 def get_device_wg_config(device_name: str) -> str:
-	from benchpress.device_manager import get_device_config
+	from benchpress.vpn_adapter import get_device_config
 
 	return get_device_config(device_name)
 
