@@ -16,8 +16,8 @@ def after_install():
 	print("  BenchPress — Running post-install setup")
 	print("=" * 60 + "\n")
 
-	# setup.sh requires host-level access (docker group, sysctl, sudoers,
-	# wireguard). Skip it when running inside a container.
+	# setup.sh requires host-level access (docker group, sysctl, sudoers).
+	# Skip it when running inside a container.
 	if os.path.exists("/.dockerenv"):
 		print("[!] Running inside Docker — skipping host setup script.")
 		_print_manual_instructions(site)
@@ -90,6 +90,6 @@ def create_test_users():
 
 
 def _print_manual_instructions(site: str) -> None:
-	print("\nRun the setup script manually to configure Docker, WireGuard, and permissions:")
+	print("\nRun the setup script manually to configure Docker and permissions:")
 	print(f"\n  bash apps/benchpress/setup.sh {site}\n")
-	print("Or follow the manual steps in: apps/benchpress/docs/wireguard-setup.md\n")
+	print("VPN (tunnels, peers, IPs) is managed by the vpn_management app.\n")

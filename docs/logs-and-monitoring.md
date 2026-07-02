@@ -86,7 +86,7 @@ A typical deployment log shows these phases:
 |------|-------------|
 | **Building lab image** | Docker image build (if not already built) |
 | **Creating container** | Container created from the lab image |
-| **Configuring WireGuard VPN** | Keypair generated, IP allocated, peer added |
+| **Configuring WireGuard VPN (vpn_management)** | Peer registered, IP claimed from the pool, container tunnel up |
 | **Ensuring shared infrastructure** | Shared MariaDB and Redis containers verified |
 | **Writing common_site_config.json** | Database and Redis connection config written to container |
 | **Creating site** | `bench new-site` run inside the container |
@@ -113,7 +113,7 @@ Common deployment failures:
 
 ## Container Stats Monitoring
 
-BenchPress polls Docker stats every 2 minutes and displays them on the dashboard.
+BenchPress polls Docker stats every minute and displays them on the dashboard.
 
 ### Where to see stats
 
@@ -135,8 +135,10 @@ The table shows CPU % and Memory % columns for all benches at a glance.
 
 The `stats_collector` cron job runs every minute and:
 1. Queries the Docker stats API for all running containers with the `benchpress.managed` label
-2. Calculates CPU percentage and memory percentage
+2. Calculates CPU percentage, memory percentage, and container health
 3. Updates the `cpu_usage` and `memory_usage` fields on the Bench Instance doc
+
+It collects Docker CPU/memory/health only. Device and bench VPN rx/tx counters are updated by the vpn_management app's own `poll_status` job (every 2 minutes).
 
 ---
 

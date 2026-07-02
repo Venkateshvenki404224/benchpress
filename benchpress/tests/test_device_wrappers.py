@@ -166,8 +166,6 @@ class TestDeviceRoundTrip(IntegrationTestCase):
 
 	@patch(RECONCILE_HOOK)
 	def test_add_list_remove_round_trip(self, _reconcile):
-		legacy_rows_before = frappe.db.count("Bench Device")
-
 		result = register_device("Contract Phone", "Mobile")
 
 		self.assertRegex(result["wg_ip"], r"^172\.27\.")
@@ -175,8 +173,6 @@ class TestDeviceRoundTrip(IntegrationTestCase):
 		self.assertIn(f"Address = {result['wg_ip']}/32", result["wg_config"])
 		self.assertIn("Endpoint = ", result["wg_config"])
 		self.assertIn("AllowedIPs = 172.27.0.0/16", result["wg_config"])
-		# Nothing writes legacy Bench Device rows anymore.
-		self.assertEqual(frappe.db.count("Bench Device"), legacy_rows_before)
 
 		rows = [row for row in list_devices() if row["name"] == result["name"]]
 		self.assertEqual(rows[0]["device_name"], "Contract Phone")

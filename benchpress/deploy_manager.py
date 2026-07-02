@@ -11,6 +11,7 @@ from benchpress.docker_manager import (
 	build_lab_image,
 	create_bench_container,
 	exec_in_container,
+	get_container_ip,
 	remove_container,
 	start_container,
 	stop_container,
@@ -172,9 +173,7 @@ def deploy_bench(bench_name: str) -> None:
 		start_container(container_id)
 		time.sleep(5)
 
-		from benchpress.wg_manager import _get_container_ip
-
-		container_ip = _get_container_ip(container_id)
+		container_ip = get_container_ip(container_id)
 		if container_ip:
 			bench.container_ip = container_ip
 			bench.save(ignore_permissions=True)

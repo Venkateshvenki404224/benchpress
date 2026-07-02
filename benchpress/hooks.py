@@ -172,7 +172,7 @@ scheduler_events = {
 	# ],
 	"cron": {
 		"*/1 * * * *": [
-			"benchpress.stats_collector.collect_all_stats",
+			"benchpress.stats_collector.collect_bench_stats",
 		],
 		"*/5 * * * *": [
 			"benchpress.mariadb_manager.scheduled_health_check",

@@ -176,6 +176,16 @@ def create_bench_container(bench_doc, lab_doc) -> str:
 	return container.id
 
 
+def get_container_ip(container_id: str) -> str:
+	"""The container's bridge IP on the benchpress network."""
+	client = get_client()
+	container = client.containers.get(container_id)
+	networks = container.attrs["NetworkSettings"]["Networks"]
+	if "benchpress" in networks:
+		return networks["benchpress"]["IPAddress"]
+	return container.attrs["NetworkSettings"]["IPAddress"]
+
+
 def start_container(container_id: str) -> None:
 	client = get_client()
 	client.containers.get(container_id).start()

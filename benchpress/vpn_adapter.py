@@ -9,8 +9,8 @@ server's pool. The interface is converged synchronously because deploys run on
 queue-long, which mounts the wg-agent socket. The container's private key is
 written into the container and never persisted anywhere.
 
-User devices are VPN Peers too: the device functions below keep the old
-Bench Device API contract (field names, reply shapes) so Devices.vue ships
+User devices are VPN Peers too: the device functions below keep the legacy
+device API contract (field names, reply shapes) so Devices.vue ships
 unchanged, and let the peer's own hooks drive allocation and reconciliation.
 """
 
@@ -113,7 +113,7 @@ def _get_docker_gateway() -> str:
 
 
 def register_device(device_name: str, device_type: str, public_key: str | None = None) -> dict:
-	"""Register a personal device as a VPN Peer, keeping the old Bench Device reply shape."""
+	"""Register a personal device as a VPN Peer, keeping the legacy device reply shape."""
 	if device_type not in DEVICE_TYPES:
 		frappe.throw(_("Invalid device type: {0}").format(device_type))
 	peer = frappe.get_doc(
@@ -138,7 +138,7 @@ def unregister_device(device_docname: str) -> bool:
 
 
 def list_devices() -> list[dict]:
-	"""The session user's device peers, mapped to the old Bench Device field names."""
+	"""The session user's device peers, mapped to the legacy device field names."""
 	peers = frappe.get_all(
 		"VPN Peer",
 		filters=_device_peer_filters(),

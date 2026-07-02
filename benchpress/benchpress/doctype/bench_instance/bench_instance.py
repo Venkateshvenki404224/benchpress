@@ -38,15 +38,6 @@ class BenchInstance(Document):
 			username = "user" + username
 		return username
 
-	def on_trash(self):
-		if self.wg_public_key:
-			try:
-				from benchpress.wg_manager import remove_peer_from_server
-
-				remove_peer_from_server(self.wg_public_key)
-			except Exception:
-				frappe.log_error(title=f"WG cleanup failed: {self.name}")
-
 	@frappe.whitelist()
 	def enqueue_deploy(self):
 		frappe.enqueue(

@@ -32,36 +32,6 @@
 						</div>
 					</div>
 
-					<!-- WireGuard Configuration -->
-					<div>
-						<h3 class="mb-3 text-sm font-semibold text-ink-gray-8">
-							WireGuard Configuration
-						</h3>
-						<div class="grid grid-cols-2 gap-4">
-							<FormControl
-								label="WG Server IP"
-								v-model="form.wg_server_ip"
-								type="text"
-							/>
-							<FormControl label="WG Subnet" v-model="form.wg_subnet" type="text" />
-							<FormControl
-								label="WG Server Port"
-								v-model="form.wg_server_port"
-								type="text"
-							/>
-							<FormControl
-								label="WG Server Endpoint"
-								v-model="form.wg_server_endpoint"
-								type="text"
-							/>
-							<FormControl
-								label="WG Server Public Key"
-								v-model="form.wg_server_public_key"
-								type="text"
-							/>
-						</div>
-					</div>
-
 					<!-- Resource Limits -->
 					<div>
 						<h3 class="mb-3 text-sm font-semibold text-ink-gray-8">
@@ -118,11 +88,6 @@ const form = reactive({
 	default_image: "",
 	traefik_network: "",
 	docker_socket: "",
-	wg_server_ip: "",
-	wg_subnet: "",
-	wg_server_port: "",
-	wg_server_endpoint: "",
-	wg_server_public_key: "",
 	container_memory_limit: "",
 	container_cpu_quota: "",
 });
@@ -136,11 +101,6 @@ const settings = createDocumentResource({
 			default_image: doc.default_image || "",
 			traefik_network: doc.traefik_network || "",
 			docker_socket: doc.docker_socket || "",
-			wg_server_ip: doc.wg_server_ip || "",
-			wg_subnet: doc.wg_subnet || "",
-			wg_server_port: doc.wg_server_port || "",
-			wg_server_endpoint: doc.wg_server_endpoint || "",
-			wg_server_public_key: doc.wg_server_public_key || "",
 			container_memory_limit: doc.container_memory_limit || "",
 			container_cpu_quota: doc.container_cpu_quota || "",
 		});
