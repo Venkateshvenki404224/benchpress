@@ -14,9 +14,7 @@ from benchpress.vpn_adapter import (
 	unregister_device,
 )
 
-RECONCILE_HOOK = (
-	"vpn_management.vpn_management.doctype.vpn_peer.vpn_peer.VPNPeer._enqueue_reconcile"
-)
+RECONCILE_HOOK = "vpn_management.vpn_management.doctype.vpn_peer.vpn_peer.VPNPeer._enqueue_reconcile"
 
 
 def _fake_server():
@@ -182,6 +180,4 @@ class TestDeviceRoundTrip(IntegrationTestCase):
 		unregister_device(result["name"])
 
 		self.assertFalse(frappe.db.exists("VPN Peer", result["name"]))
-		self.assertEqual(
-			frappe.db.count("IP Allocation", {"ip_address": result["wg_ip"], "allocated": 1}), 0
-		)
+		self.assertEqual(frappe.db.count("IP Allocation", {"ip_address": result["wg_ip"], "allocated": 1}), 0)
