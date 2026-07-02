@@ -162,6 +162,40 @@ class TestDeviceOwnership(IntegrationTestCase):
 class TestDeviceRoundTrip(IntegrationTestCase):
 	"""add → list → remove against real VPN Peer rows (reconcile enqueue stubbed out)."""
 
+	def setUp(self):
+		super().setUp()
+		self._ensure_endpoint_host_configured()
+		self._ensure_wg0_pool_materialized()
+
+	def _ensure_endpoint_host_configured(self):
+		"""Config rendering needs a public endpoint host — set on the local stack, empty in CI."""
+		if not frappe.db.get_single_value("VPN Settings", "vpn_endpoint_host"):
+			frappe.db.set_single_value("VPN Settings", "vpn_endpoint_host", "vpn.test.local")
+
+	def _ensure_wg0_pool_materialized(self):
+		"""A bare CI bench has the wg0 server but no pool; the local stack has both."""
+		if frappe.db.exists("IP Allocation", {"server": "wg0"}):
+			return
+		from vpn_management import allocation
+
+		pool = frappe.db.get_value("Network Pool", {"server": "wg0"}, "name")
+		if not pool:
+			with patch("frappe.enqueue"):
+				pool = (
+					frappe.get_doc(
+						{
+							"doctype": "Network Pool",
+							"pool_name": "pool-wg0",
+							"server": "wg0",
+							"cidr": "172.27.0.0/24",
+							"gateway_ip": "172.27.0.1",
+						}
+					)
+					.insert(ignore_permissions=True)
+					.name
+				)
+		allocation.materialize(pool)
+
 	@patch(RECONCILE_HOOK)
 	def test_add_list_remove_round_trip(self, _reconcile):
 		result = register_device("Contract Phone", "Mobile")
