@@ -90,6 +90,27 @@ class TestMariadbManager(IntegrationTestCase):
 		cmd = last_call[1].get("cmd") or last_call[0][0]
 		self.assertIn("rm", cmd)
 
+	@patch("benchpress.mariadb_manager.get_client")
+	@patch("benchpress.mariadb_manager.frappe.get_doc")
+	def test_execute_sql_passes_password_via_env_not_argv(self, mock_get_doc, mock_get_client):
+		from benchpress.mariadb_manager import execute_sql
+
+		sentinel = "S3cret!pw"
+		db_server = self._make_mock_db_server()
+		db_server.get_root_password.return_value = sentinel
+		mock_get_doc.return_value = db_server
+		mock_container = MagicMock()
+		mock_container.exec_run.return_value = (0, b"ok")
+		mock_get_client.return_value.containers.get.return_value = mock_container
+
+		execute_sql("db-server-name", "SELECT 1")
+
+		sql_call = mock_container.exec_run.call_args_list[1]
+		self.assertEqual(sql_call.kwargs.get("environment"), {"MYSQL_PWD": sentinel})
+		for call in mock_container.exec_run.call_args_list:
+			cmd = call.kwargs.get("cmd") or call.args[0]
+			self.assertNotIn(sentinel, " ".join(cmd))
+
 	@patch("benchpress.mariadb_manager.execute_sql")
 	def test_create_mariadb_user_returns_db_name_user_pass(self, mock_exec):
 		from benchpress.mariadb_manager import create_mariadb_user, get_database_name

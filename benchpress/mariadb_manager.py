@@ -65,7 +65,8 @@ def execute_sql(db_server_name: str, sql: str) -> tuple[int, str]:
 	try:
 		container.exec_run(cmd=["bash", "-c", f"echo '{encoded}' | base64 -d > {tmp}"])
 		exit_code, output = container.exec_run(
-			cmd=["bash", "-c", f"mariadb -u root -p'{root_pw}' < {tmp}"],
+			cmd=["bash", "-c", f"mariadb -u root < {tmp}"],
+			environment={"MYSQL_PWD": root_pw},
 		)
 	finally:
 		container.exec_run(cmd=["rm", "-f", tmp])
