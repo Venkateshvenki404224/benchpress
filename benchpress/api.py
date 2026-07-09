@@ -402,3 +402,11 @@ def restart_code_server(bench_name: str) -> dict:
 	if exit_code != 0:
 		frappe.throw(_("restart failed: {0}").format(output))
 	return {"ok": True}
+
+
+@frappe.whitelist()
+def run_diagnostics() -> list[dict]:
+	require_admin()
+	from benchpress.diagnostics import run_diagnostics as _run_diagnostics
+
+	return _run_diagnostics()
