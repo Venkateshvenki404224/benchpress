@@ -166,8 +166,11 @@ class TestApi(IntegrationTestCase):
 		benches, elapsed_ms = _timed(api.get_benches)
 		self.assertIsInstance(benches, list)
 		for bench in benches:
-			for key in ("app_count", "site_count", "ssh_password", "admin_password", "code_server_password"):
+			for key in ("app_count", "site_count", "ssh_username"):
 				self.assertIn(key, bench)
+			# Secrets moved to get_bench_credentials (issue #91).
+			for key in ("ssh_password", "admin_password", "code_server_password"):
+				self.assertNotIn(key, bench)
 		self.assert_within_budget("get_benches", elapsed_ms)
 
 	def test_list_devices_shape_and_timing(self):
