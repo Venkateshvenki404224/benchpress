@@ -15,6 +15,7 @@ from benchpress.docker_manager import (
 	DEFAULT_IOPS,
 	DEFAULT_PIDS_LIMIT,
 	get_container_health,
+	wait_for_container_running,
 )
 
 
@@ -41,6 +42,54 @@ class TestContainerHealth(unittest.TestCase):
 		client.containers.get.side_effect = docker.errors.NotFound("no such container")
 		get_client.return_value = client
 		self.assertEqual(get_container_health("gone"), "Unknown")
+
+
+def _reloading_container(states):
+	"""Container mock whose reload() steps through (status, attrs) states."""
+	container = MagicMock()
+	steps = iter(states)
+
+	def advance():
+		container.status, container.attrs = next(steps)
+
+	container.reload.side_effect = advance
+	return container
+
+
+IP_ATTRS = {"NetworkSettings": {"Networks": {"benchpress": {"IPAddress": "172.30.0.5"}}}}
+NO_IP_ATTRS = {"NetworkSettings": {"Networks": {"benchpress": {"IPAddress": ""}}}}
+
+
+class TestWaitForContainerRunning(unittest.TestCase):
+	@patch("benchpress.docker_manager.time.sleep")
+	@patch("benchpress.docker_manager.get_client")
+	def test_returns_ip_when_running_on_third_poll(self, get_client, sleep):
+		container = _reloading_container([("created", {}), ("created", {}), ("running", IP_ATTRS)])
+		get_client.return_value.containers.get.return_value = container
+		self.assertEqual(wait_for_container_running("abc123"), "172.30.0.5")
+		self.assertEqual(container.reload.call_count, 3)
+		self.assertEqual(sleep.call_count, 2)
+		sleep.assert_called_with(2)
+
+	@patch("benchpress.docker_manager.time.sleep")
+	@patch("benchpress.docker_manager.get_client")
+	def test_running_without_ip_keeps_polling(self, get_client, sleep):
+		container = _reloading_container(
+			[("running", NO_IP_ATTRS), ("running", NO_IP_ATTRS), ("running", IP_ATTRS)]
+		)
+		get_client.return_value.containers.get.return_value = container
+		self.assertEqual(wait_for_container_running("abc123"), "172.30.0.5")
+		self.assertEqual(container.reload.call_count, 3)
+
+	@patch("benchpress.docker_manager.time.sleep")
+	@patch("benchpress.docker_manager.get_client")
+	def test_raises_clear_exception_on_timeout(self, get_client, sleep):
+		container = _reloading_container([("created", {})] * 30)
+		get_client.return_value.containers.get.return_value = container
+		with self.assertRaises(Exception) as ctx:
+			wait_for_container_running("abc123")
+		self.assertIn("not running with an IP after 60s", str(ctx.exception))
+		self.assertEqual(sleep.call_count, 30)
 
 
 def _make_lab(lab_id, **extra):

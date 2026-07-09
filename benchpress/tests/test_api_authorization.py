@@ -118,6 +118,7 @@ class TestApiAuthorization(IntegrationTestCase):
 		frappe.set_user("Guest")
 		self.assert_denied(lambda: api.create_lab_from_template("frappe", "authz-guest"))
 		self.assert_denied(lambda: api.build_lab_image(self.lab.name))
+		self.assert_denied(lambda: api.run_diagnostics())
 
 	def test_guest_denied_from_bench_scoped_endpoints(self):
 		frappe.set_user("Guest")
@@ -136,6 +137,10 @@ class TestApiAuthorization(IntegrationTestCase):
 	def test_non_admin_denied_from_build_lab_image(self):
 		frappe.set_user(self.user_a)
 		self.assert_denied(lambda: api.build_lab_image(self.lab.name))
+
+	def test_non_admin_denied_from_run_diagnostics(self):
+		frappe.set_user(self.user_a)
+		self.assert_denied(lambda: api.run_diagnostics())
 
 	def test_owner_denied_from_deleting_own_bench(self):
 		# user_a passes require_bench_access on its own bench, but delete is admin-only.
@@ -183,3 +188,8 @@ class TestApiAuthorization(IntegrationTestCase):
 			result = api.create_lab_from_template("frappe", "authz-admin")
 		create.assert_called_once()
 		self.assertEqual(result, {"name": "LAB-authz", "status": "Draft"})
+
+	def test_admin_allowed_to_run_diagnostics(self):
+		frappe.set_user(self.admin_user)
+		with patch("benchpress.diagnostics.run_diagnostics", return_value=[]):
+			self.assertEqual(api.run_diagnostics(), [])

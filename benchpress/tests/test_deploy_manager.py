@@ -33,6 +33,35 @@ def _make_bench(lab_name):
 	return bench
 
 
+def _fresh_bench(case, lab_name):
+	frappe.set_user("Administrator")
+	existing = get_instance_id("Administrator", lab_name)
+	if frappe.db.exists("Bench Instance", existing):
+		frappe.delete_doc("Bench Instance", existing, force=True, ignore_permissions=True)
+		frappe.db.commit()
+	bench = _make_bench(lab_name)
+	case.addCleanup(
+		lambda n=bench.name: frappe.delete_doc("Bench Instance", n, force=True, ignore_permissions=True)
+		if frappe.db.exists("Bench Instance", n)
+		else None
+	)
+	case.addCleanup(frappe.db.commit)
+	return bench
+
+
+def _ensure_owner(email):
+	if not frappe.db.exists("User", email):
+		frappe.get_doc(
+			{
+				"doctype": "User",
+				"email": email,
+				"first_name": "Notify Owner",
+				"send_welcome_email": 0,
+			}
+		).insert(ignore_permissions=True)
+	return email
+
+
 class TestDeployManager(IntegrationTestCase):
 	@classmethod
 	def setUpClass(cls):
@@ -64,19 +93,7 @@ class TestDeployManager(IntegrationTestCase):
 		super().tearDownClass()
 
 	def _fresh_bench(self):
-		frappe.set_user("Administrator")
-		existing = get_instance_id("Administrator", self.lab.name)
-		if frappe.db.exists("Bench Instance", existing):
-			frappe.delete_doc("Bench Instance", existing, force=True, ignore_permissions=True)
-			frappe.db.commit()
-		bench = _make_bench(self.lab.name)
-		self.addCleanup(
-			lambda n=bench.name: frappe.delete_doc("Bench Instance", n, force=True, ignore_permissions=True)
-			if frappe.db.exists("Bench Instance", n)
-			else None
-		)
-		self.addCleanup(frappe.db.commit)
-		return bench
+		return _fresh_bench(self, self.lab.name)
 
 	# --- stop_bench ---
 
@@ -265,3 +282,161 @@ class TestDeployManager(IntegrationTestCase):
 		args = build_linkuser_args(bench, self.lab, settings, "pw")
 
 		self.assertEqual(args[-1], "/bin/bash")
+
+
+class TestTerminalStateNotifications(IntegrationTestCase):
+	"""Phase 3 (#98): every terminal deploy/build state desk-notifies the owner, best-effort."""
+
+	@classmethod
+	def setUpClass(cls):
+		super().setUpClass()
+		frappe.set_user("Administrator")
+		cls.lab = _make_lab("test-lab-notify")
+		cls.owner = _ensure_owner("notify-owner@example.com")
+		if not frappe.db.exists("Database Server", "test-db-notify"):
+			frappe.get_doc(
+				{
+					"doctype": "Database Server",
+					"container_name": "test-db-notify",
+					"mariadb_version": "10.6",
+				}
+			).insert(ignore_permissions=True)
+		cls.db_server_name = frappe.db.get_value(
+			"Database Server", {"container_name": "test-db-notify"}, "name"
+		)
+		frappe.db.commit()
+
+	@classmethod
+	def tearDownClass(cls):
+		frappe.set_user("Administrator")
+		for name in frappe.get_all("Bench Instance", filters={"lab": cls.lab.name}, pluck="name"):
+			frappe.delete_doc("Bench Instance", name, force=True, ignore_permissions=True)
+		if cls.db_server_name and frappe.db.exists("Database Server", cls.db_server_name):
+			frappe.delete_doc("Database Server", cls.db_server_name, force=True, ignore_permissions=True)
+		cls.lab.delete(ignore_permissions=True)
+		frappe.db.commit()
+		super().tearDownClass()
+
+	def _owned_bench(self):
+		bench = _fresh_bench(self, self.lab.name)
+		frappe.db.set_value("Bench Instance", bench.name, "owner", self.owner)
+		frappe.db.commit()
+		self._cleanup_side_effects(bench_name=bench.name)
+		return bench
+
+	def _cleanup_side_effects(self, bench_name=None, lab_name=None):
+		# deploy/build commit mid-flight, so test-transaction rollback can't
+		# undo these rows — the file's manual-cleanup idiom.
+		def _purge():
+			frappe.db.delete("Notification Log", {"for_user": self.owner})
+			if bench_name:
+				frappe.db.delete("Deploy Log", {"bench": bench_name})
+			if lab_name:
+				frappe.db.delete("Build Log", {"lab": lab_name})
+			frappe.db.commit()
+
+		self.addCleanup(_purge)
+
+	def _owner_notification(self, document_type, document_name):
+		return frappe.db.get_value(
+			"Notification Log",
+			{"for_user": self.owner, "document_type": document_type, "document_name": document_name},
+			["type", "subject"],
+			as_dict=True,
+		)
+
+	@patch("benchpress.deploy_manager.ensure_infrastructure", autospec=True)
+	def test_deploy_failure_notifies_owner(self, mock_infra):
+		from benchpress.deploy_manager import deploy_bench
+
+		bench = self._owned_bench()
+		mock_infra.side_effect = Exception("mariadb container refused to start")
+
+		deploy_bench(bench.name)
+
+		self.assertEqual(frappe.db.get_value("Bench Instance", bench.name, "status"), "Error")
+		notification = self._owner_notification("Bench Instance", bench.name)
+		self.assertIsNotNone(notification)
+		self.assertEqual(notification.type, "Alert")
+		self.assertIn("failed", notification.subject)
+
+	def test_deploy_success_notifies_owner(self):
+		from benchpress import deploy_manager
+
+		bench = self._owned_bench()
+		frappe.db.set_value("Lab", self.lab.name, {"status": "Ready", "image_tag": "benchpress/test:latest"})
+		frappe.db.commit()
+
+		with (
+			patch.object(deploy_manager, "ensure_infrastructure", autospec=True) as mock_infra,
+			patch.object(deploy_manager, "wait_for_mariadb", autospec=True),
+			patch.object(deploy_manager, "_remove_stale_container", autospec=True),
+			patch.object(deploy_manager, "create_bench_container", autospec=True) as mock_create,
+			patch.object(deploy_manager, "start_container", autospec=True),
+			patch.object(deploy_manager, "wait_for_container_running", autospec=True) as mock_wait,
+			patch.object(deploy_manager, "_setup_container_vpn", autospec=True),
+			patch.object(deploy_manager, "write_file_to_container", autospec=True),
+			patch.object(deploy_manager, "exec_in_container", autospec=True) as mock_exec,
+			patch.object(deploy_manager, "create_site_in_container", autospec=True) as mock_site,
+		):
+			mock_infra.return_value = self.db_server_name
+			mock_create.return_value = "cid-notify"
+			mock_wait.return_value = "172.30.0.9"
+			mock_exec.return_value = (0, "")
+			mock_site.return_value = (0, "site created")
+
+			deploy_manager.deploy_bench(bench.name)
+
+		self.assertEqual(frappe.db.get_value("Bench Instance", bench.name, "status"), "Running")
+		notification = self._owner_notification("Bench Instance", bench.name)
+		self.assertIsNotNone(notification)
+		self.assertIn("deployed", notification.subject)
+
+	@patch("benchpress.deploy_manager.build_lab_image", autospec=True)
+	def test_build_lab_success_notifies_lab_owner(self, mock_build):
+		from benchpress.deploy_manager import build_lab
+
+		frappe.db.set_value("Lab", self.lab.name, "owner", self.owner)
+		frappe.db.commit()
+		self._cleanup_side_effects(lab_name=self.lab.name)
+		mock_build.return_value = "benchpress/x:latest"
+
+		build_lab(self.lab.name)
+
+		notification = self._owner_notification("Lab", self.lab.name)
+		self.assertIsNotNone(notification)
+		self.assertEqual(notification.type, "Alert")
+		self.assertIn("complete", notification.subject)
+
+	@patch("benchpress.deploy_manager.build_lab_image", autospec=True)
+	def test_build_lab_failure_notifies_lab_owner(self, mock_build):
+		from benchpress.deploy_manager import build_lab
+
+		frappe.db.set_value("Lab", self.lab.name, "owner", self.owner)
+		frappe.db.commit()
+		self._cleanup_side_effects(lab_name=self.lab.name)
+		mock_build.side_effect = Exception("docker build blew up")
+
+		build_lab(self.lab.name)
+
+		self.assertEqual(frappe.db.get_value("Lab", self.lab.name, "status"), "Error")
+		notification = self._owner_notification("Lab", self.lab.name)
+		self.assertIsNotNone(notification)
+		self.assertIn("failed", notification.subject)
+
+	@patch(
+		"frappe.desk.doctype.notification_log.notification_log.enqueue_create_notification",
+		autospec=True,
+	)
+	@patch("benchpress.deploy_manager.ensure_infrastructure", autospec=True)
+	def test_notification_failure_does_not_break_deploy(self, mock_infra, mock_notify):
+		from benchpress.deploy_manager import deploy_bench
+
+		bench = self._owned_bench()
+		mock_infra.side_effect = Exception("infrastructure down")
+		mock_notify.side_effect = Exception("redis down")
+
+		deploy_bench(bench.name)  # must not raise: _notify_owner swallows the failure
+
+		self.assertEqual(frappe.db.get_value("Bench Instance", bench.name, "status"), "Error")
+		self.assertFalse(frappe.db.exists("Notification Log", {"for_user": self.owner}))

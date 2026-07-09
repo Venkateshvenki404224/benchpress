@@ -5,6 +5,7 @@ import json
 import os
 import re
 import subprocess
+import time
 
 import docker
 import frappe
@@ -189,6 +190,25 @@ def get_container_ip(container_id: str) -> str:
 def start_container(container_id: str) -> None:
 	client = get_client()
 	client.containers.get(container_id).start()
+
+
+def wait_for_container_running(container_id: str, timeout: int = 60) -> str:
+	"""Poll until the container reports status "running" and has an IP on the
+	benchpress network. Returns the container IP. Mirrors wait_for_mariadb.
+	"""
+	client = get_client()
+	container = client.containers.get(container_id)
+	for _attempt in range(timeout // 2):
+		container.reload()
+		if container.status == "running":
+			networks = container.attrs.get("NetworkSettings", {}).get("Networks", {})
+			ip = networks.get("benchpress", {}).get("IPAddress", "") or container.attrs.get(
+				"NetworkSettings", {}
+			).get("IPAddress", "")
+			if ip:
+				return ip
+		time.sleep(2)
+	raise Exception(f"Container {container_id[:12]} not running with an IP after {timeout}s")
 
 
 def stop_container(container_id: str) -> None:

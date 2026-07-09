@@ -3,7 +3,6 @@
 
 import json
 import secrets
-import time
 
 import frappe
 
@@ -11,10 +10,10 @@ from benchpress.docker_manager import (
 	build_lab_image,
 	create_bench_container,
 	exec_in_container,
-	get_container_ip,
 	remove_container,
 	start_container,
 	stop_container,
+	wait_for_container_running,
 	write_file_to_container,
 )
 from benchpress.mariadb_manager import (
@@ -85,6 +84,34 @@ def _make_log_appender(doctype: str, log_name: str, event: str, context: dict):
 		frappe.db.commit()
 
 	return append_log
+
+
+def _notify_owner(user: str, subject: str, document_type: str, document_name: str) -> None:
+	"""Best-effort desk notification on a terminal deploy/build state.
+
+	type "Alert" both bypasses the for_user == from_user skip in
+	make_notification_logs (the job usually runs as the owner) and is exempt
+	from notification emails, so this stays desk-only. Never raises — a
+	notification failure must not disturb the deploy/build outcome.
+	"""
+	try:
+		from frappe.desk.doctype.notification_log.notification_log import enqueue_create_notification
+
+		email = frappe.db.get_value("User", user, "email") or user
+		enqueue_create_notification(
+			[email],
+			{
+				"type": "Alert",
+				"subject": subject,
+				"document_type": document_type,
+				"document_name": document_name,
+			},
+		)
+	except Exception:
+		frappe.log_error(
+			title=f"BenchPress notification failed: {document_name}",
+			message=frappe.get_traceback(),
+		)
 
 
 def create_site_in_container(
@@ -171,13 +198,11 @@ def deploy_bench(bench_name: str) -> None:
 		frappe.db.commit()
 
 		start_container(container_id)
-		time.sleep(5)
-
-		container_ip = get_container_ip(container_id)
-		if container_ip:
-			bench.container_ip = container_ip
-			bench.save(ignore_permissions=True)
-			frappe.db.commit()
+		append_log("Waiting for container to report running with an IP...")
+		container_ip = wait_for_container_running(container_id, timeout=60)
+		bench.container_ip = container_ip
+		bench.save(ignore_permissions=True)
+		frappe.db.commit()
 
 		settings = frappe.get_cached_doc("BenchPress Settings")
 
@@ -257,6 +282,12 @@ def deploy_bench(bench_name: str) -> None:
 		append_log("=== Deploy complete ===", "success")
 		frappe.db.set_value("Deploy Log", deploy_log_name, "log_type", "success")
 		frappe.db.commit()
+		_notify_owner(
+			bench.owner,
+			f"Bench deployed: {bench.bench_name} ({bench.site_name})",
+			"Bench Instance",
+			bench.name,
+		)
 
 	except Exception as e:
 		bench.reload()
@@ -270,6 +301,7 @@ def deploy_bench(bench_name: str) -> None:
 			title=f"BenchPress deploy failed: {bench_name}",
 			message=frappe.get_traceback(),
 		)
+		_notify_owner(bench.owner, f"Bench deploy failed: {bench.bench_name}", "Bench Instance", bench.name)
 
 
 def _setup_container_vpn(bench, container_id: str, append_log) -> None:
@@ -369,6 +401,7 @@ def build_lab(lab_name: str) -> None:
 		append_log(f"=== Build complete: {lab.image_tag} ===", "success")
 		frappe.db.set_value("Build Log", build_log_name, "log_type", "success")
 		frappe.db.commit()
+		_notify_owner(lab.owner, f"Lab build complete: {lab.title} ({lab.image_tag})", "Lab", lab_name)
 
 	except Exception as e:
 		frappe.db.set_value("Lab", lab_name, "status", "Error")
@@ -381,6 +414,7 @@ def build_lab(lab_name: str) -> None:
 			title=f"Lab image build failed: {lab_name}",
 			message=frappe.get_traceback(),
 		)
+		_notify_owner(lab.owner, f"Lab build failed: {lab.title}", "Lab", lab_name)
 
 
 def stop_bench(bench_name: str) -> None:
