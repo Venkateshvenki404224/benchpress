@@ -9,6 +9,13 @@ on:
     - cron: '0 0 * * *'
   workflow_dispatch:
 
+# dorny/paths-filter needs pull-requests: read to list PR files; without an
+# explicit block a read-only default token makes Detect Changes fail with
+# "Resource not accessible by integration", which skips Server and Frontend.
+permissions:
+  contents: read
+  pull-requests: read
+
 concurrency:
   group: develop-benchpress-${{ github.event.number || github.ref }}
   cancel-in-progress: true
@@ -143,7 +150,12 @@ jobs:
         working-directory: /home/runner/frappe-bench
         run: |
           bench get-app https://github.com/NagariaHussain/doppio
-          bench get-app --branch version-16 git@github.com:Venkateshvenki404224/vpn_management.git
+          # Pin vpn_management to a reviewed commit so CI is repeatable instead
+          # of tracking the moving version-16 branch. Update the SHA only after
+          # reviewing the new commit.
+          git clone --branch version-16 git@github.com:Venkateshvenki404224/vpn_management.git /tmp/vpn_management
+          git -C /tmp/vpn_management checkout 76e0da16a9859e7fa9df1f7a96ae4ab992137ec0
+          bench get-app /tmp/vpn_management
           bench get-app benchpress $GITHUB_WORKSPACE
           bench setup requirements --dev
           bench new-site --db-root-password root --admin-password admin test_site
