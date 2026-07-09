@@ -157,9 +157,7 @@ def get_device_config(device_docname: str) -> str:
 def _device_peer_filters() -> dict:
 	"""Everything the user owns except the peers that belong to bench containers."""
 	filters = {"owner_user": frappe.session.user}
-	bench_peers = frappe.get_all(
-		"Bench Instance", filters={"vpn_peer": ("is", "set")}, pluck="vpn_peer"
-	)
+	bench_peers = frappe.get_all("Bench Instance", filters={"vpn_peer": ("is", "set")}, pluck="vpn_peer")
 	if bench_peers:
 		filters["name"] = ("not in", bench_peers)
 	return filters
