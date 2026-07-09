@@ -152,7 +152,7 @@ def _log_deploy_skipped(bench_name: str) -> None:
 			"timestamp": frappe.utils.now_datetime(),
 		}
 	).insert(ignore_permissions=True)
-	frappe.db.commit()
+	# no manual commit: the job ends right after this, and the worker commits on return
 
 
 def deploy_bench(bench_name: str) -> None:
@@ -458,4 +458,4 @@ def stop_bench(bench_name: str) -> None:
 
 	bench.status = "Stopped"
 	bench.save(ignore_permissions=True)
-	frappe.db.commit()
+	frappe.db.commit()  # nosemgrep: intentional commit to persist status before response
