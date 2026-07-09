@@ -303,7 +303,8 @@ def wait_for_mariadb(
 	for _attempt in range(timeout // 2):
 		if direct:
 			exit_code, _output = container.exec_run(
-				cmd=["mariadb", "-u", "root", f"-p{root_pw}", "-e", "SELECT 1"],
+				cmd=["mariadb", "-u", "root", "-e", "SELECT 1"],
+				environment={"MYSQL_PWD": root_pw},
 			)
 			healthy = exit_code == 0
 		else:
@@ -363,8 +364,9 @@ def backup_database_server(db_server_name: str, output_path: str = "/var/lib/mys
 		cmd=[
 			"bash",
 			"-c",
-			f"mariadb-dump -u root -p'{root_pw}' --all-databases | gzip > {backup_file}",
+			f"mariadb-dump -u root --all-databases | gzip > {backup_file}",
 		],
+		environment={"MYSQL_PWD": root_pw},
 	)
 	if exit_code != 0:
 		frappe.throw(_("Backup failed: {0}").format(output.decode()))
