@@ -19,6 +19,10 @@ def require_admin():
 	frappe.only_for(ADMIN_ROLES)
 
 
+def require_app_user():
+	frappe.only_for(APP_ROLES)
+
+
 def require_bench_access(bench_name: str):
 	frappe.has_permission("Bench Instance", "read", doc=bench_name, throw=True)
 
