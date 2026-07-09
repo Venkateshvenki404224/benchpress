@@ -127,6 +127,7 @@ class TestApiAuthorization(IntegrationTestCase):
 		self.assert_denied(lambda: api.bench_action(bench, "start"))
 		self.assert_denied(lambda: api.get_deploy_logs(bench))
 		self.assert_denied(lambda: api.get_code_server_credentials(bench))
+		self.assert_denied(lambda: api.get_bench_credentials(bench))
 		self.assert_denied(lambda: api.restart_code_server(bench))
 
 	# --- Wrong-role (BenchPress User) blocked from admin-only endpoints -------
@@ -165,6 +166,10 @@ class TestApiAuthorization(IntegrationTestCase):
 	def test_cross_user_denied_from_restart_code_server(self):
 		frappe.set_user(self.user_b)
 		self.assert_denied(lambda: api.restart_code_server(self.bench.name))
+
+	def test_cross_user_denied_from_get_bench_credentials(self):
+		frappe.set_user(self.user_b)
+		self.assert_denied(lambda: api.get_bench_credentials(self.bench.name))
 
 	def test_get_benches_hides_other_users_bench(self):
 		frappe.set_user(self.user_b)
@@ -213,6 +218,10 @@ class TestApiAuthorization(IntegrationTestCase):
 	def test_roleless_denied_from_get_benches(self):
 		frappe.set_user(self.norole_user)
 		self.assert_denied(api.get_benches)
+
+	def test_roleless_denied_from_get_bench_credentials(self):
+		frappe.set_user(self.norole_user)
+		self.assert_denied(lambda: api.get_bench_credentials(self.bench.name))
 
 	# --- Positive controls: require_app_user permits a BenchPress User --------
 
@@ -295,6 +304,20 @@ class TestApiAuthorization(IntegrationTestCase):
 		frappe.set_user(self.user_a)
 		names = [bench["name"] for bench in api.get_benches()]
 		self.assertIn(self.bench.name, names)
+
+	def test_get_benches_omits_password_fields(self):
+		# Ponytail check for issue #91: fails if the decrypt loop is reintroduced.
+		frappe.set_user(self.user_a)
+		for bench in api.get_benches():
+			for field in ("ssh_password", "admin_password", "code_server_password"):
+				self.assertNotIn(field, bench)
+
+	def test_owner_reads_own_bench_credentials_via_get_bench_credentials(self):
+		frappe.set_user(self.user_a)
+		creds = api.get_bench_credentials(self.bench.name)
+		self.assertEqual(creds["code_server_password"], "cs-secret")
+		self.assertIn("ssh_password", creds)
+		self.assertIn("admin_password", creds)
 
 	def test_admin_allowed_to_create_lab_from_template(self):
 		frappe.set_user(self.admin_user)

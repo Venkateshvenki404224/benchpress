@@ -10,7 +10,8 @@ export class BasePage {
     await this.page.goto("/login");
     await this.page.locator("#login_email").fill(user);
     await this.page.locator("#login_password").fill(password);
-    await this.page.locator(".btn-login").click();
+    // Login page has a second .btn-login for the email-link flow; target the password submit.
+    await this.page.locator("button.btn-login[type=submit]:not(.btn-login-with-email-link)").click();
     await this.page.waitForURL(/\/(app|desk)/, { timeout: 20_000 });
   }
 

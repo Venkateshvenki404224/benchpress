@@ -118,16 +118,9 @@ def get_benches() -> list[dict]:
 		order_by="creation desc",
 	)
 
-	from frappe.utils.password import get_decrypted_password
-
 	for bench in benches:
 		bench["app_count"] = frappe.db.count("Bench App", {"parent": bench["name"]})
 		bench["site_count"] = frappe.db.count("Bench Site", {"bench": bench["name"]})
-		for field in ("ssh_password", "admin_password", "code_server_password"):
-			try:
-				bench[field] = get_decrypted_password("Bench Instance", bench["name"], field)
-			except frappe.exceptions.ValidationError:
-				bench[field] = None
 
 	return benches
 
@@ -395,6 +388,20 @@ def get_code_server_credentials(bench_name: str) -> dict:
 
 	password = get_decrypted_password("Bench Instance", bench_name, "code_server_password")
 	return {"url": bench.code_server_url, "password": password}
+
+
+@frappe.whitelist()
+def get_bench_credentials(bench_name: str) -> dict:
+	require_bench_access(bench_name)
+	from frappe.utils.password import get_decrypted_password
+
+	credentials = {}
+	for field in ("ssh_password", "admin_password", "code_server_password"):
+		try:
+			credentials[field] = get_decrypted_password("Bench Instance", bench_name, field)
+		except frappe.exceptions.ValidationError:
+			credentials[field] = None
+	return credentials
 
 
 @frappe.whitelist()
