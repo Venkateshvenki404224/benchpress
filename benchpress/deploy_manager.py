@@ -3,7 +3,6 @@
 
 import json
 import secrets
-import time
 
 import frappe
 
@@ -11,10 +10,10 @@ from benchpress.docker_manager import (
 	build_lab_image,
 	create_bench_container,
 	exec_in_container,
-	get_container_ip,
 	remove_container,
 	start_container,
 	stop_container,
+	wait_for_container_running,
 	write_file_to_container,
 )
 from benchpress.mariadb_manager import (
@@ -171,13 +170,11 @@ def deploy_bench(bench_name: str) -> None:
 		frappe.db.commit()
 
 		start_container(container_id)
-		time.sleep(5)
-
-		container_ip = get_container_ip(container_id)
-		if container_ip:
-			bench.container_ip = container_ip
-			bench.save(ignore_permissions=True)
-			frappe.db.commit()
+		append_log("Waiting for container to report running with an IP...")
+		container_ip = wait_for_container_running(container_id, timeout=60)
+		bench.container_ip = container_ip
+		bench.save(ignore_permissions=True)
+		frappe.db.commit()
 
 		settings = frappe.get_cached_doc("BenchPress Settings")
 
