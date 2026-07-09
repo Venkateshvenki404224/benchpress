@@ -190,6 +190,52 @@ class TestDeployManager(IntegrationTestCase):
 		redeploy_bench(bench.name)
 		mock_drop_db.assert_called_once_with(self.db_server_name, bench.site_name)
 
+	# --- _create_site_on_bench (add-site path) ---
+
+	def _make_bench_site(self, bench):
+		site = frappe.get_doc(
+			{
+				"doctype": "Bench Site",
+				"site_name": "arity-test-site",
+				"bench": bench.name,
+				"status": "Creating",
+				"apps_installed": [{"app_name": "benchpress", "app_label": "BenchPress"}],
+			}
+		).insert(ignore_permissions=True)
+		frappe.db.commit()
+		self.addCleanup(
+			lambda n=site.name: frappe.delete_doc("Bench Site", n, force=True, ignore_permissions=True)
+			if frappe.db.exists("Bench Site", n)
+			else None
+		)
+		return site
+
+	@patch("benchpress.deploy_manager.create_site_in_container", autospec=True)
+	def test_create_site_on_bench_matches_signature_and_activates_site(self, mock_create):
+		from benchpress.api import _create_site_on_bench
+
+		bench = self._fresh_bench()
+		bench.database_server = self.db_server_name
+		bench.container_id = "container-arity-test"
+		bench.admin_password = "test-admin-pw"
+		bench.save(ignore_permissions=True)
+		frappe.db.commit()
+
+		site = self._make_bench_site(bench)
+		# autospec enforces the real 5-arg signature: a stale 6-arg call raises
+		# TypeError inside the except block, which would leave status = Error.
+		mock_create.return_value = (0, "site created")
+
+		_create_site_on_bench(site.name)
+
+		site.reload()
+		self.assertEqual(site.status, "Active")
+		mock_create.assert_called_once()
+		args = mock_create.call_args.args
+		self.assertEqual(args[0], "container-arity-test")
+		self.assertEqual(args[2], "arity-test-site")
+		self.assertEqual(args[4], "benchpress")
+
 	# --- build_linkuser_args (Lab.shell wiring) ---
 
 	def test_build_linkuser_args_includes_lab_shell(self):

@@ -330,7 +330,6 @@ def _create_site_on_bench(site_doc_name: str) -> None:
 	site = frappe.get_doc("Bench Site", site_doc_name)
 	bench = frappe.get_doc("Bench Instance", site.bench)
 	db_server = frappe.get_doc("Database Server", bench.database_server)
-	lab = frappe.get_cached_doc("Lab", bench.lab)
 
 	try:
 		admin_password = bench.get_password("admin_password")
@@ -339,7 +338,7 @@ def _create_site_on_bench(site_doc_name: str) -> None:
 		apps_csv = ",".join(a.app_name for a in site.apps_installed if a.app_name.lower() != "frappe")
 
 		exit_code, output = create_site_in_container(
-			bench.container_id, db_server, lab, site_name, admin_password, apps_csv
+			bench.container_id, db_server, site_name, admin_password, apps_csv
 		)
 
 		if exit_code != 0:
