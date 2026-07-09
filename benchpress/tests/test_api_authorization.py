@@ -198,6 +198,22 @@ class TestApiAuthorization(IntegrationTestCase):
 		frappe.set_user(self.norole_user)
 		self.assert_denied(lambda: api.get_device_wg_config("authz-dev"))
 
+	def test_roleless_denied_from_get_labs(self):
+		frappe.set_user(self.norole_user)
+		self.assert_denied(api.get_labs)
+
+	def test_roleless_denied_from_get_lab(self):
+		frappe.set_user(self.norole_user)
+		self.assert_denied(lambda: api.get_lab(self.lab.name))
+
+	def test_roleless_denied_from_get_lab_templates(self):
+		frappe.set_user(self.norole_user)
+		self.assert_denied(api.get_lab_templates)
+
+	def test_roleless_denied_from_get_benches(self):
+		frappe.set_user(self.norole_user)
+		self.assert_denied(api.get_benches)
+
 	# --- Positive controls: require_app_user permits a BenchPress User --------
 
 	def test_app_user_allowed_to_create_bench(self):
@@ -253,6 +269,20 @@ class TestApiAuthorization(IntegrationTestCase):
 			result = api.get_device_wg_config("authz-dev")
 		get_config.assert_called_once()
 		self.assertEqual(result, "[Interface]")
+
+	def test_app_user_allowed_to_get_labs(self):
+		frappe.set_user(self.user_a)
+		self.assertIn(self.lab.name, [lab["name"] for lab in api.get_labs()])
+
+	def test_app_user_allowed_to_get_lab(self):
+		frappe.set_user(self.user_a)
+		self.assertEqual(api.get_lab(self.lab.name)["lab_id"], self.lab.lab_id)
+
+	def test_app_user_allowed_to_get_lab_templates(self):
+		frappe.set_user(self.user_a)
+		self.assertIsInstance(api.get_lab_templates(), list)
+
+	# get_benches positive control: test_owner_sees_own_bench_in_get_benches below.
 
 	# --- Positive controls: the guards permit the legitimate caller ----------
 
