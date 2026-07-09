@@ -137,7 +137,7 @@ class TestDeployManager(IntegrationTestCase):
 		bench.reload()
 		self.assertEqual(bench.status, "Stopped")
 
-	@patch("benchpress.deploy_manager.deploy_bench")
+	@patch("benchpress.deploy_manager._deploy_bench")
 	@patch("benchpress.deploy_manager.remove_container")
 	@patch("benchpress.deploy_manager.stop_container")
 	@patch("benchpress.docker_manager.get_client")
@@ -166,7 +166,7 @@ class TestDeployManager(IntegrationTestCase):
 		mock_deploy.assert_called_once_with(bench.name)
 		self.assertEqual(status_at_deploy["status"], "Draft")
 
-	@patch("benchpress.deploy_manager.deploy_bench")
+	@patch("benchpress.deploy_manager._deploy_bench")
 	@patch("benchpress.deploy_manager.remove_container")
 	@patch("benchpress.deploy_manager.stop_container")
 	@patch("benchpress.docker_manager.get_client")
@@ -186,7 +186,7 @@ class TestDeployManager(IntegrationTestCase):
 		mock_client.return_value.volumes.get.assert_called_with(f"benchpress-{bench.bench_name}-data")
 		mock_vol.remove.assert_called_once_with(force=True)
 
-	@patch("benchpress.deploy_manager.deploy_bench")
+	@patch("benchpress.deploy_manager._deploy_bench")
 	@patch("benchpress.deploy_manager.remove_container")
 	@patch("benchpress.deploy_manager.stop_container")
 	@patch("benchpress.docker_manager.get_client")
@@ -206,6 +206,62 @@ class TestDeployManager(IntegrationTestCase):
 
 		redeploy_bench(bench.name)
 		mock_drop_db.assert_called_once_with(self.db_server_name, bench.site_name)
+
+	# --- deploy concurrency lock (issue #92) ---
+
+	def _held_deploy_lock(self, bench_name):
+		from frappe.utils.synchronization import filelock
+
+		return filelock(f"bench_deploy_{bench_name}", timeout=1)
+
+	def _cleanup_deploy_logs(self, bench_name):
+		def _purge():
+			frappe.db.delete("Deploy Log", {"bench": bench_name})
+			frappe.db.commit()
+
+		self.addCleanup(_purge)
+
+	@patch("benchpress.deploy_manager._deploy_bench")
+	def test_deploy_skipped_when_lock_held(self, mock_deploy):
+		from benchpress.deploy_manager import deploy_bench
+
+		bench = self._fresh_bench()
+		self._cleanup_deploy_logs(bench.name)
+		status_before = frappe.db.get_value("Bench Instance", bench.name, "status")
+
+		with self._held_deploy_lock(bench.name):
+			deploy_bench(bench.name)
+
+		mock_deploy.assert_not_called()
+		self.assertEqual(frappe.db.get_value("Bench Instance", bench.name, "status"), status_before)
+		skip_message = frappe.db.get_value(
+			"Deploy Log", {"bench": bench.name, "log_type": "warning"}, "message"
+		)
+		self.assertIn("skipped", skip_message)
+
+	@patch("benchpress.deploy_manager._deploy_bench")
+	def test_deploy_lock_released_after_run(self, mock_deploy):
+		from benchpress.deploy_manager import deploy_bench
+
+		bench = self._fresh_bench()
+		deploy_bench(bench.name)
+		deploy_bench(bench.name)
+
+		self.assertEqual(mock_deploy.call_count, 2)
+
+	@patch("benchpress.deploy_manager._deploy_bench")
+	@patch("benchpress.deploy_manager.remove_bench_volume")
+	def test_redeploy_skipped_when_lock_held(self, mock_volume, mock_deploy):
+		from benchpress.deploy_manager import redeploy_bench
+
+		bench = self._fresh_bench()
+		self._cleanup_deploy_logs(bench.name)
+
+		with self._held_deploy_lock(bench.name):
+			redeploy_bench(bench.name)
+
+		mock_volume.assert_not_called()
+		mock_deploy.assert_not_called()
 
 	# --- _create_site_on_bench (add-site path) ---
 
