@@ -624,10 +624,10 @@ const siteColumns = [
 ];
 
 const sshUsername = computed(() => activeBench.value?.ssh_username || null);
-const sshPassword = computed(() => activeBench.value?.ssh_password || null);
-const adminPassword = computed(() => activeBench.value?.admin_password || null);
+const sshPassword = computed(() => benchCredentials.data?.ssh_password || null);
+const adminPassword = computed(() => benchCredentials.data?.admin_password || null);
 const codeServerUrl = computed(() => activeBench.value?.code_server_url || null);
-const codeServerPassword = computed(() => activeBench.value?.code_server_password || null);
+const codeServerPassword = computed(() => benchCredentials.data?.code_server_password || null);
 const benchIp = computed(
 	() => activeBench.value?.wg_ip || activeBench.value?.container_ip || null
 );
@@ -657,6 +657,19 @@ const activeBench = computed(() => {
 	if (!benches.data) return null;
 	return benches.data.find((b) => b.lab === labId) || null;
 });
+
+const benchCredentials = createResource({
+	url: "benchpress.api.get_bench_credentials",
+});
+
+// Passwords are no longer in get_benches; fetch them per bench once it resolves.
+watch(
+	() => activeBench.value?.name,
+	(name) => {
+		if (name) benchCredentials.submit({ bench_name: name });
+	},
+	{ immediate: true }
+);
 
 const sites = createListResource({
 	doctype: "Bench Site",
