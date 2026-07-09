@@ -19,7 +19,7 @@ from benchpress import api
 from benchpress.benchpress.doctype.bench_instance import get_instance_id
 
 
-def _ensure_user(email, first_name, role):
+def _ensure_user(email, first_name, role=None):
 	if not frappe.db.exists("User", email):
 		frappe.get_doc(
 			{
@@ -27,7 +27,7 @@ def _ensure_user(email, first_name, role):
 				"email": email,
 				"first_name": first_name,
 				"send_welcome_email": 0,
-				"roles": [{"role": role}],
+				"roles": [{"role": role}] if role else [],
 			}
 		).insert(ignore_permissions=True)
 	return email
@@ -77,6 +77,7 @@ class TestApiAuthorization(IntegrationTestCase):
 		cls.user_a = _ensure_user("authz-user-a@example.com", "Authz UserA", "BenchPress User")
 		cls.user_b = _ensure_user("authz-user-b@example.com", "Authz UserB", "BenchPress User")
 		cls.admin_user = _ensure_user("authz-admin@example.com", "Authz Admin", "BenchPress Admin")
+		cls.norole_user = _ensure_user("authz-norole@example.com", "Authz NoRole")
 		cls.lab = _ensure_lab("authz-lab")
 		cls.bench = _ensure_owned_bench(cls.user_a, cls.lab)
 		cls.deploy_log = frappe.get_doc(
@@ -96,7 +97,7 @@ class TestApiAuthorization(IntegrationTestCase):
 		frappe.delete_doc("Deploy Log", cls.deploy_log.name, force=True, ignore_permissions=True)
 		frappe.delete_doc("Bench Instance", cls.bench.name, force=True, ignore_permissions=True)
 		frappe.delete_doc("Lab", cls.lab.name, force=True, ignore_permissions=True)
-		for email in (cls.user_a, cls.user_b, cls.admin_user):
+		for email in (cls.user_a, cls.user_b, cls.admin_user, cls.norole_user):
 			if frappe.db.exists("User", email):
 				frappe.delete_doc("User", email, force=True, ignore_permissions=True)
 		frappe.db.commit()
@@ -169,6 +170,119 @@ class TestApiAuthorization(IntegrationTestCase):
 		frappe.set_user(self.user_b)
 		names = [bench["name"] for bench in api.get_benches()]
 		self.assertNotIn(self.bench.name, names)
+
+	# --- Role-less user blocked by require_app_user (issue #88) ---------------
+	# No mocks: the guard raises before any side effect can happen.
+
+	def test_roleless_denied_from_create_bench(self):
+		frappe.set_user(self.norole_user)
+		self.assert_denied(lambda: api.create_bench("{}"))
+
+	def test_roleless_denied_from_create_site(self):
+		frappe.set_user(self.norole_user)
+		self.assert_denied(lambda: api.create_site("{}"))
+
+	def test_roleless_denied_from_add_device(self):
+		frappe.set_user(self.norole_user)
+		self.assert_denied(lambda: api.add_device("authz-dev", "laptop"))
+
+	def test_roleless_denied_from_remove_device(self):
+		frappe.set_user(self.norole_user)
+		self.assert_denied(lambda: api.remove_device("authz-dev"))
+
+	def test_roleless_denied_from_list_devices(self):
+		frappe.set_user(self.norole_user)
+		self.assert_denied(lambda: api.list_devices())
+
+	def test_roleless_denied_from_get_device_wg_config(self):
+		frappe.set_user(self.norole_user)
+		self.assert_denied(lambda: api.get_device_wg_config("authz-dev"))
+
+	def test_roleless_denied_from_get_labs(self):
+		frappe.set_user(self.norole_user)
+		self.assert_denied(api.get_labs)
+
+	def test_roleless_denied_from_get_lab(self):
+		frappe.set_user(self.norole_user)
+		self.assert_denied(lambda: api.get_lab(self.lab.name))
+
+	def test_roleless_denied_from_get_lab_templates(self):
+		frappe.set_user(self.norole_user)
+		self.assert_denied(api.get_lab_templates)
+
+	def test_roleless_denied_from_get_benches(self):
+		frappe.set_user(self.norole_user)
+		self.assert_denied(api.get_benches)
+
+	# --- Positive controls: require_app_user permits a BenchPress User --------
+
+	def test_app_user_allowed_to_create_bench(self):
+		frappe.set_user(self.user_a)
+		try:
+			with patch("frappe.enqueue") as enqueue:
+				result = api.create_bench(frappe.as_json({"lab": self.lab.name}))
+			enqueue.assert_called_once()
+			self.assertEqual(result["name"], self.bench.name)
+		finally:
+			# create_bench flips the shared bench fixture to Deploying; restore it.
+			frappe.set_user("Administrator")
+			frappe.db.set_value("Bench Instance", self.bench.name, "status", "Running")
+			frappe.db.commit()
+
+	def test_app_user_allowed_to_create_site(self):
+		frappe.set_user(self.user_a)
+		result = None
+		try:
+			with patch("frappe.enqueue") as enqueue:
+				result = api.create_site(
+					frappe.as_json({"site_name": "authz-site", "bench": self.bench.name})
+				)
+			enqueue.assert_called_once()
+			self.assertEqual(result["status"], "Creating")
+		finally:
+			frappe.set_user("Administrator")
+			if result and frappe.db.exists("Bench Site", result["name"]):
+				frappe.delete_doc("Bench Site", result["name"], force=True, ignore_permissions=True)
+			frappe.db.commit()
+
+	def test_app_user_allowed_to_add_device(self):
+		frappe.set_user(self.user_a)
+		with patch("benchpress.vpn_adapter.register_device", return_value={"name": "authz-dev"}) as register:
+			result = api.add_device("authz-dev", "laptop")
+		register.assert_called_once()
+		self.assertEqual(result, {"name": "authz-dev"})
+
+	def test_app_user_allowed_to_remove_device(self):
+		frappe.set_user(self.user_a)
+		with patch("benchpress.vpn_adapter.unregister_device") as unregister:
+			result = api.remove_device("authz-dev")
+		unregister.assert_called_once()
+		self.assertEqual(result, {"status": "removed"})
+
+	def test_app_user_allowed_to_list_devices(self):
+		frappe.set_user(self.user_a)
+		self.assertIsInstance(api.list_devices(), list)
+
+	def test_app_user_allowed_to_get_device_wg_config(self):
+		frappe.set_user(self.user_a)
+		with patch("benchpress.vpn_adapter.get_device_config", return_value="[Interface]") as get_config:
+			result = api.get_device_wg_config("authz-dev")
+		get_config.assert_called_once()
+		self.assertEqual(result, "[Interface]")
+
+	def test_app_user_allowed_to_get_labs(self):
+		frappe.set_user(self.user_a)
+		self.assertIn(self.lab.name, [lab["name"] for lab in api.get_labs()])
+
+	def test_app_user_allowed_to_get_lab(self):
+		frappe.set_user(self.user_a)
+		self.assertEqual(api.get_lab(self.lab.name)["lab_id"], self.lab.lab_id)
+
+	def test_app_user_allowed_to_get_lab_templates(self):
+		frappe.set_user(self.user_a)
+		self.assertIsInstance(api.get_lab_templates(), list)
+
+	# get_benches positive control: test_owner_sees_own_bench_in_get_benches below.
 
 	# --- Positive controls: the guards permit the legitimate caller ----------
 

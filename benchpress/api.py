@@ -9,12 +9,14 @@ from benchpress.permissions import (
 	get_bench_owner_filter,
 	is_admin,
 	require_admin,
+	require_app_user,
 	require_bench_access,
 )
 
 
 @frappe.whitelist()
 def get_labs() -> list[dict]:
+	require_app_user()
 	labs = frappe.get_all(
 		"Lab",
 		fields=[
@@ -45,6 +47,7 @@ def get_labs() -> list[dict]:
 
 @frappe.whitelist()
 def get_lab(name: str) -> dict:
+	require_app_user()
 	lab = frappe.get_cached_doc("Lab", name)
 	return {
 		"name": lab.name,
@@ -65,6 +68,7 @@ def get_lab(name: str) -> dict:
 
 @frappe.whitelist()
 def get_lab_templates() -> list[dict]:
+	require_app_user()
 	return lab_templates.get_templates()
 
 
@@ -89,6 +93,7 @@ def build_lab_image(lab_name: str) -> dict:
 
 @frappe.whitelist()
 def get_benches() -> list[dict]:
+	require_app_user()
 	benches = frappe.get_all(
 		"Bench Instance",
 		filters=get_bench_owner_filter(),
@@ -129,6 +134,7 @@ def get_benches() -> list[dict]:
 
 @frappe.whitelist()
 def create_bench(data: str) -> dict:
+	require_app_user()
 	from benchpress.benchpress.doctype.bench_instance import get_instance_id
 
 	data = frappe.parse_json(data)
@@ -259,6 +265,7 @@ def get_deploy_logs(bench_name: str) -> list[dict]:
 
 @frappe.whitelist()
 def add_device(device_name: str, device_type: str, public_key: str | None = None) -> dict:
+	require_app_user()
 	from benchpress.vpn_adapter import register_device
 
 	return register_device(device_name, device_type, public_key or None)
@@ -266,6 +273,7 @@ def add_device(device_name: str, device_type: str, public_key: str | None = None
 
 @frappe.whitelist()
 def remove_device(device_name: str) -> dict:
+	require_app_user()
 	from benchpress.vpn_adapter import unregister_device
 
 	unregister_device(device_name)
@@ -274,6 +282,7 @@ def remove_device(device_name: str) -> dict:
 
 @frappe.whitelist()
 def list_devices() -> list[dict]:
+	require_app_user()
 	from benchpress.vpn_adapter import list_devices as _list
 
 	return _list()
@@ -281,6 +290,7 @@ def list_devices() -> list[dict]:
 
 @frappe.whitelist()
 def get_device_wg_config(device_name: str) -> str:
+	require_app_user()
 	from benchpress.vpn_adapter import get_device_config
 
 	return get_device_config(device_name)
@@ -288,6 +298,7 @@ def get_device_wg_config(device_name: str) -> str:
 
 @frappe.whitelist()
 def create_site(data: str) -> dict:
+	require_app_user()
 	data = frappe.parse_json(data)
 
 	bench_name = data.get("bench")

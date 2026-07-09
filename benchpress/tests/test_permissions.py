@@ -34,13 +34,25 @@ class TestPermissions(IntegrationTestCase):
 					"roles": [{"role": "BenchPress Admin"}],
 				}
 			).insert(ignore_permissions=True)
+		# Create a user with no BenchPress roles
+		if not frappe.db.exists("User", "perm-norole@example.com"):
+			frappe.get_doc(
+				{
+					"doctype": "User",
+					"email": "perm-norole@example.com",
+					"first_name": "Perm",
+					"last_name": "NoRole",
+					"send_welcome_email": 0,
+				}
+			).insert(ignore_permissions=True)
 		cls.regular_user = "perm-user@example.com"
 		cls.admin_user = "perm-admin@example.com"
+		cls.norole_user = "perm-norole@example.com"
 
 	@classmethod
 	def tearDownClass(cls):
 		frappe.set_user("Administrator")
-		for email in [cls.regular_user, cls.admin_user]:
+		for email in [cls.regular_user, cls.admin_user, cls.norole_user]:
 			if frappe.db.exists("User", email):
 				frappe.delete_doc("User", email, force=True, ignore_permissions=True)
 		frappe.db.commit()
@@ -151,3 +163,44 @@ class TestPermissions(IntegrationTestCase):
 		frappe.set_user(self.regular_user)
 		with self.assertRaises(frappe.PermissionError):
 			require_admin()
+
+	def test_require_app_user_succeeds_for_benchpress_user(self):
+		from benchpress.permissions import require_app_user
+
+		frappe.set_user(self.regular_user)
+		try:
+			require_app_user()
+		except frappe.PermissionError:
+			self.fail("require_app_user raised PermissionError for BenchPress User")
+
+	def test_require_app_user_succeeds_for_benchpress_admin(self):
+		from benchpress.permissions import require_app_user
+
+		frappe.set_user(self.admin_user)
+		try:
+			require_app_user()
+		except frappe.PermissionError:
+			self.fail("require_app_user raised PermissionError for BenchPress Admin")
+
+	def test_require_app_user_succeeds_for_administrator(self):
+		from benchpress.permissions import require_app_user
+
+		frappe.set_user("Administrator")
+		try:
+			require_app_user()
+		except frappe.PermissionError:
+			self.fail("require_app_user raised PermissionError for Administrator")
+
+	def test_require_app_user_throws_for_roleless_user(self):
+		from benchpress.permissions import require_app_user
+
+		frappe.set_user(self.norole_user)
+		with self.assertRaises(frappe.PermissionError):
+			require_app_user()
+
+	def test_require_app_user_throws_for_guest(self):
+		from benchpress.permissions import require_app_user
+
+		frappe.set_user("Guest")
+		with self.assertRaises(frappe.PermissionError):
+			require_app_user()
