@@ -263,6 +263,35 @@ class TestDeployManager(IntegrationTestCase):
 		mock_volume.assert_not_called()
 		mock_deploy.assert_not_called()
 
+	# --- enqueue-time dedupe (issue #92 phase 2) ---
+
+	@patch("frappe.enqueue")
+	def test_deploy_enqueues_carry_dedupe_job_id(self, mock_enqueue):
+		from benchpress.api import create_bench
+
+		mock_enqueue.return_value = MagicMock()
+		bench = self._fresh_bench()
+
+		bench.enqueue_deploy()
+		bench.enqueue_redeploy()
+		create_bench(frappe.as_json({"lab": self.lab.name}))
+
+		self.assertEqual(mock_enqueue.call_count, 3)
+		for call in mock_enqueue.call_args_list:
+			self.assertEqual(call.kwargs["job_id"], f"deploy_bench:{bench.name}")
+			self.assertTrue(call.kwargs["deduplicate"])
+
+	@patch("frappe.msgprint")
+	@patch("frappe.enqueue", return_value=None)
+	def test_deduped_enqueue_messages_user(self, mock_enqueue, mock_msgprint):
+		bench = self._fresh_bench()
+
+		bench.enqueue_deploy()
+		bench.enqueue_redeploy()
+
+		for call in mock_msgprint.call_args_list:
+			self.assertIn("already in progress", str(call.args[0]))
+
 	# --- _create_site_on_bench (add-site path) ---
 
 	def _make_bench_site(self, bench):
