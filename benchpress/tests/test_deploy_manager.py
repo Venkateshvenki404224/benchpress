@@ -41,9 +41,11 @@ def _fresh_bench(case, lab_name):
 		frappe.db.commit()
 	bench = _make_bench(lab_name)
 	case.addCleanup(
-		lambda n=bench.name: frappe.delete_doc("Bench Instance", n, force=True, ignore_permissions=True)
-		if frappe.db.exists("Bench Instance", n)
-		else None
+		lambda n=bench.name: (
+			frappe.delete_doc("Bench Instance", n, force=True, ignore_permissions=True)
+			if frappe.db.exists("Bench Instance", n)
+			else None
+		)
 	)
 	case.addCleanup(frappe.db.commit)
 	return bench
@@ -263,6 +265,81 @@ class TestDeployManager(IntegrationTestCase):
 		mock_volume.assert_not_called()
 		mock_deploy.assert_not_called()
 
+	def test_deploy_failure_after_container_creation_cleans_up(self):
+		from benchpress import deploy_manager
+
+		bench = self._fresh_bench()
+		self._cleanup_deploy_logs(bench.name)
+		frappe.db.set_value("Lab", self.lab.name, {"status": "Ready", "image_tag": "benchpress/test:latest"})
+		frappe.db.set_value(
+			"Bench Instance",
+			bench.name,
+			{"container_ip": "172.30.0.50", "wg_ip": "10.8.0.20"},
+		)
+		frappe.db.commit()
+
+		with (
+			patch.object(deploy_manager, "ensure_infrastructure", autospec=True) as mock_infra,
+			patch.object(deploy_manager, "wait_for_mariadb", autospec=True),
+			patch.object(deploy_manager, "_remove_stale_container", autospec=True),
+			patch.object(deploy_manager, "create_bench_container", autospec=True) as mock_create,
+			patch.object(deploy_manager, "start_container", autospec=True),
+			patch.object(deploy_manager, "wait_for_container_running", autospec=True) as mock_wait,
+			patch.object(deploy_manager, "remove_container", autospec=True) as mock_remove_container,
+			patch.object(deploy_manager, "remove_bench_volume", autospec=True) as mock_remove_volume,
+			patch.object(deploy_manager, "_notify_owner", autospec=True),
+			patch("benchpress.vpn_adapter.remove_bench_peer", autospec=True) as mock_remove_peer,
+		):
+			mock_infra.return_value = self.db_server_name
+			mock_create.return_value = "cid-cleanup"
+			mock_wait.side_effect = Exception("container did not report running")
+
+			deploy_manager.deploy_bench(bench.name)
+
+		mock_remove_container.assert_called_once_with("cid-cleanup")
+		mock_remove_peer.assert_called_once()
+		mock_remove_volume.assert_not_called()
+		bench.reload()
+		self.assertEqual(bench.status, "Error")
+		self.assertIsNone(bench.container_id)
+		self.assertIsNone(bench.container_ip)
+		self.assertIsNone(bench.wg_ip)
+
+	def test_deploy_failure_before_container_skips_cleanup(self):
+		from benchpress import deploy_manager
+
+		bench = self._fresh_bench()
+		self._cleanup_deploy_logs(bench.name)
+		frappe.db.set_value("Lab", self.lab.name, {"status": "Ready", "image_tag": "benchpress/test:latest"})
+		frappe.db.set_value(
+			"Bench Instance",
+			bench.name,
+			{
+				"container_id": "old-container",
+				"container_ip": "172.30.0.50",
+				"wg_ip": "10.8.0.20",
+			},
+		)
+		frappe.db.commit()
+
+		with (
+			patch.object(deploy_manager, "ensure_infrastructure", autospec=True) as mock_infra,
+			patch.object(deploy_manager, "remove_container", autospec=True) as mock_remove_container,
+			patch.object(deploy_manager, "_notify_owner", autospec=True),
+			patch("benchpress.vpn_adapter.remove_bench_peer", autospec=True) as mock_remove_peer,
+		):
+			mock_infra.side_effect = Exception("infrastructure unavailable")
+
+			deploy_manager.deploy_bench(bench.name)
+
+		mock_remove_container.assert_not_called()
+		mock_remove_peer.assert_not_called()
+		bench.reload()
+		self.assertEqual(bench.status, "Error")
+		self.assertEqual(bench.container_id, "old-container")
+		self.assertEqual(bench.container_ip, "172.30.0.50")
+		self.assertEqual(bench.wg_ip, "10.8.0.20")
+
 	# --- enqueue-time dedupe (issue #92 phase 2) ---
 
 	@patch("frappe.enqueue")
@@ -306,9 +383,11 @@ class TestDeployManager(IntegrationTestCase):
 		).insert(ignore_permissions=True)
 		frappe.db.commit()
 		self.addCleanup(
-			lambda n=site.name: frappe.delete_doc("Bench Site", n, force=True, ignore_permissions=True)
-			if frappe.db.exists("Bench Site", n)
-			else None
+			lambda n=site.name: (
+				frappe.delete_doc("Bench Site", n, force=True, ignore_permissions=True)
+				if frappe.db.exists("Bench Site", n)
+				else None
+			)
 		)
 		return site
 
