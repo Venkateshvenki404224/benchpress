@@ -28,8 +28,11 @@ environments — not yet for production hosting of customer data. Concretely:
 - **Privileged containers.** Bench containers currently run with elevated Docker
   privileges to support in-container networking. Treat every bench as having host
   reach until that is hardened.
-- **No backup/restore guarantees yet.** Bench data lives in Docker volumes. Take
-  your own backups; there is no built-in restore path you should rely on.
+- **Database backups are automatic; restore is manual.** The shared MariaDB
+  server is dumped nightly to host disk outside its data volume, and the restore
+  path is documented and verified — see
+  [Database Backup & Restore](database-backup-restore.md). Other bench data in
+  Docker volumes is **not** backed up yet; take your own copies.
 - **Single-tenant assumption.** Quotas, rate limits, and audit trails are still in
   progress. Run BenchPress for people you trust, on a host dedicated to it.
 

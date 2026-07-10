@@ -2,7 +2,9 @@
 # See license.txt
 
 import hashlib
+import io
 import os
+import tarfile
 import tempfile
 from unittest.mock import MagicMock, patch
 
@@ -111,10 +113,13 @@ class TestMariadbManager(IntegrationTestCase):
 			cmd = call.kwargs.get("cmd") or call.args[0]
 			self.assertNotIn(sentinel, " ".join(cmd))
 
+	@patch("benchpress.mariadb_manager._pull_backup_to_host", return_value="/tmp/dump.sql.gz")
 	@patch("benchpress.mariadb_manager.frappe.utils.now", return_value="2026-01-01 00:00:00")
 	@patch("benchpress.mariadb_manager.get_client")
 	@patch("benchpress.mariadb_manager.frappe.get_doc")
-	def test_backup_passes_password_via_env_not_argv(self, mock_get_doc, mock_get_client, mock_now):
+	def test_backup_passes_password_via_env_not_argv(
+		self, mock_get_doc, mock_get_client, mock_now, mock_pull
+	):
 		from benchpress.mariadb_manager import backup_database_server
 
 		sentinel = "S3cret!pw"
@@ -132,6 +137,149 @@ class TestMariadbManager(IntegrationTestCase):
 		for call in mock_container.exec_run.call_args_list:
 			cmd = call.kwargs.get("cmd") or call.args[0]
 			self.assertNotIn(sentinel, " ".join(cmd))
+
+	def _make_backup_tar(self, name, data):
+		buffer = io.BytesIO()
+		with tarfile.open(fileobj=buffer, mode="w") as tar:
+			info = tarfile.TarInfo(name=name)
+			info.size = len(data)
+			tar.addfile(info, io.BytesIO(data))
+		return buffer.getvalue()
+
+	@patch("benchpress.mariadb_manager.frappe.get_site_path")
+	@patch("benchpress.mariadb_manager.frappe.utils.now", return_value="2026-01-01 00:00:00")
+	@patch("benchpress.mariadb_manager.get_client")
+	@patch("benchpress.mariadb_manager.frappe.get_doc")
+	def test_backup_pulls_dump_to_host_and_removes_container_file(
+		self, mock_get_doc, mock_get_client, mock_now, mock_site_path
+	):
+		from benchpress.mariadb_manager import backup_database_server
+
+		mock_get_doc.return_value = self._make_mock_db_server()
+		dump_name = "all_databases_2026-01-01_00-00-00.sql.gz"
+		dump_bytes = b"fake gzip bytes"
+		mock_container = MagicMock()
+		mock_container.exec_run.return_value = (0, b"")
+		mock_container.get_archive.return_value = (iter([self._make_backup_tar(dump_name, dump_bytes)]), {})
+		mock_get_client.return_value.containers.get.return_value = mock_container
+
+		with tempfile.TemporaryDirectory() as tmp:
+			mock_site_path.side_effect = lambda *parts: os.path.join(tmp, *parts)
+			host_path = backup_database_server("db-server-name")
+
+			self.assertEqual(host_path, os.path.join(tmp, "private", "backups", "mariadb", dump_name))
+			with open(host_path, "rb") as f:
+				self.assertEqual(f.read(), dump_bytes)
+
+		rm_cmd = ["rm", "-f", f"/var/lib/mysql/backups/{dump_name}"]
+		cmds = [c.kwargs.get("cmd") or c.args[0] for c in mock_container.exec_run.call_args_list]
+		self.assertIn(rm_cmd, cmds)
+
+	@patch("benchpress.mariadb_manager.frappe.log_error")
+	@patch("benchpress.mariadb_manager.frappe.utils.now", return_value="2026-01-01 00:00:00")
+	@patch("benchpress.mariadb_manager.get_client")
+	@patch("benchpress.mariadb_manager.frappe.get_doc")
+	def test_backup_keeps_container_file_when_pull_fails(
+		self, mock_get_doc, mock_get_client, mock_now, mock_log_error
+	):
+		from benchpress.mariadb_manager import backup_database_server
+
+		mock_get_doc.return_value = self._make_mock_db_server()
+		mock_container = MagicMock()
+		mock_container.exec_run.return_value = (0, b"")
+		mock_container.get_archive.side_effect = RuntimeError("stream broke")
+		mock_get_client.return_value.containers.get.return_value = mock_container
+
+		result = backup_database_server("db-server-name")
+
+		self.assertEqual(result, "/var/lib/mysql/backups/all_databases_2026-01-01_00-00-00.sql.gz")
+		mock_log_error.assert_called_once()
+		for call in mock_container.exec_run.call_args_list:
+			cmd = call.kwargs.get("cmd") or call.args[0]
+			self.assertNotEqual(cmd[:2], ["rm", "-f"])
+
+	@patch("benchpress.mariadb_manager.frappe.get_site_path")
+	@patch("benchpress.mariadb_manager.get_client")
+	@patch("benchpress.mariadb_manager.frappe.get_doc")
+	def test_cleanup_prunes_host_dir_and_still_prunes_container(
+		self, mock_get_doc, mock_get_client, mock_site_path
+	):
+		from benchpress.mariadb_manager import cleanup_old_backups
+
+		mock_get_doc.return_value = self._make_mock_db_server()
+		mock_container = MagicMock()
+		mock_container.exec_run.return_value = (0, b"")
+		mock_get_client.return_value.containers.get.return_value = mock_container
+
+		with tempfile.TemporaryDirectory() as tmp:
+			mock_site_path.side_effect = lambda *parts: os.path.join(tmp, *parts)
+			host_dir = os.path.join(tmp, "private", "backups", "mariadb")
+			os.makedirs(host_dir)
+			for i in range(10):
+				path = os.path.join(host_dir, f"all_databases_{i}.sql.gz")
+				open(path, "wb").close()
+				os.utime(path, (i, i))
+
+			cleanup_old_backups("db-server-name", keep=7)
+
+			survivors = sorted(os.listdir(host_dir))
+			self.assertEqual(survivors, [f"all_databases_{i}.sql.gz" for i in range(3, 10)])
+
+		container_cmd = mock_container.exec_run.call_args_list[0].kwargs["cmd"]
+		self.assertIn("ls -t /var/lib/mysql/backups/*.sql.gz", container_cmd[2])
+		self.assertIn("xargs rm -f", container_cmd[2])
+
+	@patch("benchpress.mariadb_manager.get_client")
+	@patch("benchpress.mariadb_manager.frappe.get_doc")
+	def test_restore_pushes_dump_and_passes_password_via_env_not_argv(self, mock_get_doc, mock_get_client):
+		from benchpress.mariadb_manager import restore_database_server
+
+		sentinel = "S3cret!pw"
+		db_server = self._make_mock_db_server()
+		db_server.get_root_password.return_value = sentinel
+		mock_get_doc.return_value = db_server
+		mock_container = MagicMock()
+		mock_container.exec_run.return_value = (0, b"")
+		mock_get_client.return_value.containers.get.return_value = mock_container
+
+		dump_bytes = b"fake gzip bytes"
+		with tempfile.NamedTemporaryFile(suffix=".sql.gz") as f:
+			f.write(dump_bytes)
+			f.flush()
+			dump_name = os.path.basename(f.name)
+			restore_database_server("db-server-name", f.name)
+
+		dest, tar_bytes = mock_container.put_archive.call_args.args
+		self.assertEqual(dest, "/tmp")
+		with tarfile.open(fileobj=io.BytesIO(tar_bytes)) as tar:
+			self.assertEqual(tar.extractfile(dump_name).read(), dump_bytes)
+
+		restore_call = mock_container.exec_run.call_args_list[0]
+		self.assertEqual(restore_call.kwargs.get("environment"), {"MYSQL_PWD": sentinel})
+		self.assertIn(f"gunzip -c /tmp/{dump_name} | mariadb -u root", restore_call.kwargs["cmd"][2])
+		for call in mock_container.exec_run.call_args_list:
+			cmd = call.kwargs.get("cmd") or call.args[0]
+			self.assertNotIn(sentinel, " ".join(cmd))
+
+	@patch("benchpress.mariadb_manager.get_client")
+	@patch("benchpress.mariadb_manager.frappe.get_doc")
+	def test_restore_throws_on_nonzero_exit_and_cleans_tmp(self, mock_get_doc, mock_get_client):
+		from benchpress.mariadb_manager import restore_database_server
+
+		mock_get_doc.return_value = self._make_mock_db_server()
+		mock_container = MagicMock()
+		mock_container.exec_run.side_effect = [(1, b"ERROR 1064"), (0, b"")]
+		mock_get_client.return_value.containers.get.return_value = mock_container
+
+		with tempfile.NamedTemporaryFile(suffix=".sql.gz") as f:
+			f.write(b"x")
+			f.flush()
+			with self.assertRaises(frappe.ValidationError):
+				restore_database_server("db-server-name", f.name)
+
+		last_call = mock_container.exec_run.call_args_list[-1]
+		cmd = last_call.kwargs.get("cmd") or last_call.args[0]
+		self.assertEqual(cmd[:2], ["rm", "-f"])
 
 	@patch("benchpress.mariadb_manager.execute_sql")
 	def test_create_mariadb_user_returns_db_name_user_pass(self, mock_exec):

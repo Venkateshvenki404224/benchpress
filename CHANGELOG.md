@@ -31,6 +31,13 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
 
 ### Added
 
+- Nightly MariaDB dumps are now copied to host disk
+  (`sites/<site>/private/backups/mariadb/`), off the database volume, with 7-day
+  retention enforced on the new location — losing the DB volume no longer loses
+  the backups. A documented, once-verified restore runbook
+  ([`docs/database-backup-restore.md`](docs/database-backup-restore.md)) and a
+  console-only `restore_database_server()` helper close the loop.
+  ([#96](https://github.com/Venkateshvenki404224/benchpress/issues/96))
 - Documented, backup-gated upgrade path for installed instances: a manual
   runbook ([`docs/upgrading.md`](docs/upgrading.md)) and a scripted
   [`upgrade.sh`](upgrade.sh) that chains backup → app update → `bench migrate` →
