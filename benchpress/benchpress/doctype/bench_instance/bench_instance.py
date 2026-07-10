@@ -83,6 +83,6 @@ class BenchInstance(Document):
 			frappe.throw(_("No container to start."))
 		start_container(self.container_id)
 		self.status = "Running"
-		self.save(ignore_permissions=True)
+		self.save()
 		frappe.db.commit()  # nosemgrep: intentional commit to persist status before response
 		frappe.msgprint(_("Bench started."))

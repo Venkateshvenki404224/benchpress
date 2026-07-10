@@ -143,8 +143,7 @@ def create_bench(data: str) -> dict:
 	if frappe.db.exists("Bench Instance", instance_id):
 		doc = frappe.get_doc("Bench Instance", instance_id)
 		doc.status = "Deploying"
-		doc.save(ignore_permissions=True)
-		frappe.db.commit()
+		doc.save()
 	else:
 		doc = frappe.get_doc(
 			{
@@ -169,7 +168,6 @@ def create_bench(data: str) -> dict:
 			)
 
 		doc.insert()
-		frappe.db.commit()
 
 	frappe.enqueue(
 		"benchpress.deploy_manager.deploy_bench",
@@ -178,6 +176,7 @@ def create_bench(data: str) -> dict:
 		timeout=3600,
 		job_id=f"deploy_bench:{doc.name}",
 		deduplicate=True,
+		enqueue_after_commit=True,
 	)
 
 	return {"name": doc.name, "status": "Deploying"}
@@ -242,7 +241,7 @@ def bench_action(bench_name: str, action: str) -> dict:
 	else:
 		frappe.throw(_("Invalid action: {0}").format(action))
 
-	bench.save(ignore_permissions=True)
+	bench.save()
 	frappe.db.commit()
 	return {"name": bench.name, "status": bench.status}
 
@@ -319,13 +318,13 @@ def create_site(data: str) -> dict:
 		)
 
 	doc.insert()
-	frappe.db.commit()  # nosemgrep
 
 	frappe.enqueue(
 		"benchpress.api._create_site_on_bench",
 		site_doc_name=doc.name,
 		queue="long",
 		timeout=600,
+		enqueue_after_commit=True,
 	)
 
 	return {"name": doc.name, "status": "Creating"}
