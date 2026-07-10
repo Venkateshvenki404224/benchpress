@@ -46,6 +46,32 @@ def _remove_stale_container(bench) -> None:
 		pass  # best-effort
 
 
+def _cleanup_failed_deploy(bench, container_id, append_log) -> None:
+	"""Best-effort teardown of resources created by this failed run.
+
+	Fires only when this run created a container — earlier failures leave the
+	previous deploy's container and peer untouched. Never touches the data
+	volume and never raises: the except block must still record Error state.
+	"""
+	if not container_id:
+		return
+	try:
+		remove_container(container_id)
+		append_log("Cleanup: removed container created by this run")
+	except Exception:
+		pass  # best-effort
+	try:
+		from benchpress.vpn_adapter import remove_bench_peer
+
+		remove_bench_peer(bench)
+		append_log("Cleanup: VPN peer removed")
+	except Exception:
+		pass  # best-effort
+	bench.container_id = None
+	bench.container_ip = None
+	bench.wg_ip = None
+
+
 def remove_bench_volume(bench_name: str) -> None:
 	"""Remove the bench data volume if it exists."""
 	from benchpress.docker_manager import get_client
@@ -189,6 +215,7 @@ def _deploy_bench(bench_name: str) -> None:
 		{"bench": bench_name, "deploy_log": deploy_log_name},
 	)
 
+	created_container_id = None
 	try:
 		bench.status = "Deploying"
 		bench.save(ignore_permissions=True)
@@ -216,6 +243,7 @@ def _deploy_bench(bench_name: str) -> None:
 		_remove_stale_container(bench)
 		append_log("=== Creating container ===")
 		container_id = create_bench_container(bench, lab)
+		created_container_id = container_id
 		bench.container_id = container_id
 		bench.container_image = lab.image_tag
 		bench.save(ignore_permissions=True)
@@ -315,6 +343,7 @@ def _deploy_bench(bench_name: str) -> None:
 
 	except Exception as e:
 		bench.reload()
+		_cleanup_failed_deploy(bench, created_container_id, append_log)
 		bench.status = "Error"
 		bench.save(ignore_permissions=True)
 		frappe.db.commit()
