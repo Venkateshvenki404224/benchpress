@@ -3,9 +3,11 @@
 
 import base64
 import hashlib
+import io
 import os
 import secrets
 import subprocess
+import tarfile
 import time
 import uuid
 
@@ -349,8 +351,26 @@ def scheduled_health_check():
 			)
 
 
+def _pull_backup_to_host(container, backup_file: str) -> str:
+	"""Copy an in-container dump to the site's private backup dir. Returns host path."""
+	# ponytail: whole dump buffered in RAM; stream the tar (mode="r|") if dumps outgrow worker memory.
+	stream, _stat = container.get_archive(backup_file)
+	buffer = io.BytesIO(b"".join(stream))
+	host_dir = frappe.get_site_path("private", "backups", "mariadb")
+	os.makedirs(host_dir, exist_ok=True)
+	host_path = os.path.join(host_dir, os.path.basename(backup_file))
+	with tarfile.open(fileobj=buffer) as tar:
+		member = tar.extractfile(tar.getmembers()[0])
+		with open(host_path, "wb") as f:
+			f.write(member.read())
+	return host_path
+
+
 def backup_database_server(db_server_name: str, output_path: str = "/var/lib/mysql/backups") -> str:
-	"""Full backup via mariadb-dump, gzipped. Returns backup filename."""
+	"""Full backup via mariadb-dump, gzipped, pulled to host disk.
+
+	Returns the host path; on pull failure returns the in-container path (dump kept as fallback).
+	"""
 	db_server = frappe.get_doc("Database Server", db_server_name)
 	client = get_client()
 	container = client.containers.get(db_server.container_id)
@@ -370,7 +390,16 @@ def backup_database_server(db_server_name: str, output_path: str = "/var/lib/mys
 	)
 	if exit_code != 0:
 		frappe.throw(_("Backup failed: {0}").format(output.decode()))
-	return backup_file
+	try:
+		host_path = _pull_backup_to_host(container, backup_file)
+	except Exception:
+		frappe.log_error(
+			title=f"Backup host copy failed: {db_server_name}",
+			message=frappe.get_traceback(),
+		)
+		return backup_file
+	container.exec_run(cmd=["rm", "-f", backup_file])
+	return host_path
 
 
 def cleanup_old_backups(
