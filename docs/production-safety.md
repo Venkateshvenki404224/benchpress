@@ -22,6 +22,9 @@ environments — not yet for production hosting of customer data. Concretely:
   the shared MariaDB/Redis infrastructure containers, and enables IP forwarding via
   `/etc/sysctl.d`. These are real, persistent changes to the host. (WireGuard is
   brought up by the vpn_management app's wg-agent container, not by `setup.sh`.)
+  Production hosts must also enable
+  [Docker userns-remap](wireguard-setup.md#docker-userns-remap) so in-container
+  root is not host root.
 - **Privileged containers.** Bench containers currently run with elevated Docker
   privileges to support in-container networking. Treat every bench as having host
   reach until that is hardened.
