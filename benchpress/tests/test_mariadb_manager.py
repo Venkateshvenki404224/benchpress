@@ -198,6 +198,37 @@ class TestMariadbManager(IntegrationTestCase):
 			cmd = call.kwargs.get("cmd") or call.args[0]
 			self.assertNotEqual(cmd[:2], ["rm", "-f"])
 
+	@patch("benchpress.mariadb_manager.frappe.get_site_path")
+	@patch("benchpress.mariadb_manager.get_client")
+	@patch("benchpress.mariadb_manager.frappe.get_doc")
+	def test_cleanup_prunes_host_dir_and_still_prunes_container(
+		self, mock_get_doc, mock_get_client, mock_site_path
+	):
+		from benchpress.mariadb_manager import cleanup_old_backups
+
+		mock_get_doc.return_value = self._make_mock_db_server()
+		mock_container = MagicMock()
+		mock_container.exec_run.return_value = (0, b"")
+		mock_get_client.return_value.containers.get.return_value = mock_container
+
+		with tempfile.TemporaryDirectory() as tmp:
+			mock_site_path.side_effect = lambda *parts: os.path.join(tmp, *parts)
+			host_dir = os.path.join(tmp, "private", "backups", "mariadb")
+			os.makedirs(host_dir)
+			for i in range(10):
+				path = os.path.join(host_dir, f"all_databases_{i}.sql.gz")
+				open(path, "wb").close()
+				os.utime(path, (i, i))
+
+			cleanup_old_backups("db-server-name", keep=7)
+
+			survivors = sorted(os.listdir(host_dir))
+			self.assertEqual(survivors, [f"all_databases_{i}.sql.gz" for i in range(3, 10)])
+
+		container_cmd = mock_container.exec_run.call_args_list[0].kwargs["cmd"]
+		self.assertIn("ls -t /var/lib/mysql/backups/*.sql.gz", container_cmd[2])
+		self.assertIn("xargs rm -f", container_cmd[2])
+
 	@patch("benchpress.mariadb_manager.execute_sql")
 	def test_create_mariadb_user_returns_db_name_user_pass(self, mock_exec):
 		from benchpress.mariadb_manager import create_mariadb_user, get_database_name

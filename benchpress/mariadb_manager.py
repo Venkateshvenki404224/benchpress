@@ -10,6 +10,7 @@ import subprocess
 import tarfile
 import time
 import uuid
+from pathlib import Path
 
 import frappe
 from frappe import _
@@ -351,12 +352,16 @@ def scheduled_health_check():
 			)
 
 
+def _host_backup_dir() -> str:
+	return frappe.get_site_path("private", "backups", "mariadb")
+
+
 def _pull_backup_to_host(container, backup_file: str) -> str:
 	"""Copy an in-container dump to the site's private backup dir. Returns host path."""
 	# ponytail: whole dump buffered in RAM; stream the tar (mode="r|") if dumps outgrow worker memory.
 	stream, _stat = container.get_archive(backup_file)
 	buffer = io.BytesIO(b"".join(stream))
-	host_dir = frappe.get_site_path("private", "backups", "mariadb")
+	host_dir = _host_backup_dir()
 	os.makedirs(host_dir, exist_ok=True)
 	host_path = os.path.join(host_dir, os.path.basename(backup_file))
 	with tarfile.open(fileobj=buffer) as tar:
@@ -405,7 +410,7 @@ def backup_database_server(db_server_name: str, output_path: str = "/var/lib/mys
 def cleanup_old_backups(
 	db_server_name: str, keep: int = 7, output_path: str = "/var/lib/mysql/backups"
 ) -> None:
-	"""Retain only the last `keep` backups."""
+	"""Retain only the last `keep` backups on host disk; container prune catches failed-pull leftovers."""
 	db_server = frappe.get_doc("Database Server", db_server_name)
 	client = get_client()
 	container = client.containers.get(db_server.container_id)
@@ -416,6 +421,9 @@ def cleanup_old_backups(
 			f"ls -t {output_path}/*.sql.gz 2>/dev/null | tail -n +{keep + 1} | xargs rm -f",
 		],
 	)
+	dumps = sorted(Path(_host_backup_dir()).glob("*.sql.gz"), key=lambda p: p.stat().st_mtime)
+	for old in dumps[:-keep]:
+		old.unlink()
 
 
 def scheduled_backup():
