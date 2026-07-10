@@ -426,6 +426,33 @@ def cleanup_old_backups(
 		old.unlink()
 
 
+def restore_database_server(db_server_name: str, backup_file: str) -> None:
+	"""DESTRUCTIVE: overwrites ALL databases in the target container with a host-side dump.
+
+	Scratch/recovery use only — never point this at a live tenant DB server.
+	Not whitelisted on purpose; run it from `bench console`.
+	See docs/database-backup-restore.md for the full runbook.
+	"""
+	db_server = frappe.get_doc("Database Server", db_server_name)
+	container = get_client().containers.get(db_server.container_id)
+	root_pw = db_server.get_root_password()
+
+	dump_name = os.path.basename(backup_file)
+	buffer = io.BytesIO()
+	with tarfile.open(fileobj=buffer, mode="w") as tar:
+		tar.add(backup_file, arcname=dump_name)
+	container.put_archive("/tmp", buffer.getvalue())
+	try:
+		exit_code, output = container.exec_run(
+			cmd=["bash", "-c", f"gunzip -c /tmp/{dump_name} | mariadb -u root"],
+			environment={"MYSQL_PWD": root_pw},
+		)
+	finally:
+		container.exec_run(cmd=["rm", "-f", f"/tmp/{dump_name}"])
+	if exit_code != 0:
+		frappe.throw(_("Restore failed: {0}").format(output.decode()))
+
+
 def scheduled_backup():
 	"""Cron job — nightly backup with 7-day retention."""
 	servers = frappe.get_all("Database Server", filters={"status": "Active"}, fields=["name"])

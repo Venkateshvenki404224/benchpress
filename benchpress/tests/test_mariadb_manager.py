@@ -229,6 +229,58 @@ class TestMariadbManager(IntegrationTestCase):
 		self.assertIn("ls -t /var/lib/mysql/backups/*.sql.gz", container_cmd[2])
 		self.assertIn("xargs rm -f", container_cmd[2])
 
+	@patch("benchpress.mariadb_manager.get_client")
+	@patch("benchpress.mariadb_manager.frappe.get_doc")
+	def test_restore_pushes_dump_and_passes_password_via_env_not_argv(self, mock_get_doc, mock_get_client):
+		from benchpress.mariadb_manager import restore_database_server
+
+		sentinel = "S3cret!pw"
+		db_server = self._make_mock_db_server()
+		db_server.get_root_password.return_value = sentinel
+		mock_get_doc.return_value = db_server
+		mock_container = MagicMock()
+		mock_container.exec_run.return_value = (0, b"")
+		mock_get_client.return_value.containers.get.return_value = mock_container
+
+		dump_bytes = b"fake gzip bytes"
+		with tempfile.NamedTemporaryFile(suffix=".sql.gz") as f:
+			f.write(dump_bytes)
+			f.flush()
+			dump_name = os.path.basename(f.name)
+			restore_database_server("db-server-name", f.name)
+
+		dest, tar_bytes = mock_container.put_archive.call_args.args
+		self.assertEqual(dest, "/tmp")
+		with tarfile.open(fileobj=io.BytesIO(tar_bytes)) as tar:
+			self.assertEqual(tar.extractfile(dump_name).read(), dump_bytes)
+
+		restore_call = mock_container.exec_run.call_args_list[0]
+		self.assertEqual(restore_call.kwargs.get("environment"), {"MYSQL_PWD": sentinel})
+		self.assertIn(f"gunzip -c /tmp/{dump_name} | mariadb -u root", restore_call.kwargs["cmd"][2])
+		for call in mock_container.exec_run.call_args_list:
+			cmd = call.kwargs.get("cmd") or call.args[0]
+			self.assertNotIn(sentinel, " ".join(cmd))
+
+	@patch("benchpress.mariadb_manager.get_client")
+	@patch("benchpress.mariadb_manager.frappe.get_doc")
+	def test_restore_throws_on_nonzero_exit_and_cleans_tmp(self, mock_get_doc, mock_get_client):
+		from benchpress.mariadb_manager import restore_database_server
+
+		mock_get_doc.return_value = self._make_mock_db_server()
+		mock_container = MagicMock()
+		mock_container.exec_run.side_effect = [(1, b"ERROR 1064"), (0, b"")]
+		mock_get_client.return_value.containers.get.return_value = mock_container
+
+		with tempfile.NamedTemporaryFile(suffix=".sql.gz") as f:
+			f.write(b"x")
+			f.flush()
+			with self.assertRaises(frappe.ValidationError):
+				restore_database_server("db-server-name", f.name)
+
+		last_call = mock_container.exec_run.call_args_list[-1]
+		cmd = last_call.kwargs.get("cmd") or last_call.args[0]
+		self.assertEqual(cmd[:2], ["rm", "-f"])
+
 	@patch("benchpress.mariadb_manager.execute_sql")
 	def test_create_mariadb_user_returns_db_name_user_pass(self, mock_exec):
 		from benchpress.mariadb_manager import create_mariadb_user, get_database_name
