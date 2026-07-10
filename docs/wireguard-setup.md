@@ -61,6 +61,46 @@ BenchPress only *consumes* the VPN plane through `benchpress/vpn_adapter.py`:
 
 ---
 
+## Docker userns-remap
+
+Lab users get **root inside their bench containers**. `create_bench_container`
+deliberately avoids `privileged`, but without user-namespace remapping,
+in-container UID 0 *is* host UID 0 — a container escape is a host-root escape.
+Enabling `userns-remap` makes the Docker daemon map container root to an
+unprivileged host UID range, the release-blocking defense called out in
+[PRODUCTION_CHECKLIST.md](PRODUCTION_CHECKLIST.md).
+
+### Enable it
+
+1. Add to `/etc/docker/daemon.json` (create the file if it doesn't exist):
+
+   ```json
+   { "userns-remap": "default" }
+   ```
+
+2. Restart Docker: `sudo systemctl restart docker`
+3. Re-run the setup check and confirm the PASS line:
+
+   ```bash
+   bash apps/benchpress/setup.sh <site> --strict
+   ```
+
+> **⚠️ Migration warning — enable this BEFORE your first deploy.**
+> Turning on userns-remap re-roots Docker's storage under a remapped
+> subdirectory of `/var/lib/docker`. The remapped daemon **no longer sees
+> existing containers, images, or volumes** — deployed labs and
+> `benchpress-mariadb-data` included. Nothing is deleted, but everything must
+> be redeployed. If benches already exist, back up their data and plan a
+> redeploy of every bench before flipping the switch.
+
+### Rootless Docker
+
+Running the Docker daemon itself rootless is an accepted alternative: the
+entire daemon runs as an unprivileged user, so container-root ≠ host-root
+holds even more strongly. `setup.sh` reports PASS on rootless hosts.
+
+---
+
 ## Troubleshooting
 
 | Symptom | Check |
