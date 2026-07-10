@@ -175,6 +175,8 @@ def create_bench(data: str) -> dict:
 		bench_name=doc.name,
 		queue="long",
 		timeout=3600,
+		job_id=f"deploy_bench:{doc.name}",
+		deduplicate=True,
 	)
 
 	return {"name": doc.name, "status": "Deploying"}

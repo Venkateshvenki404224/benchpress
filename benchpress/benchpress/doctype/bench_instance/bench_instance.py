@@ -40,12 +40,17 @@ class BenchInstance(Document):
 
 	@frappe.whitelist()
 	def enqueue_deploy(self):
-		frappe.enqueue(
+		job = frappe.enqueue(
 			"benchpress.deploy_manager.deploy_bench",
 			bench_name=self.name,
 			queue="long",
 			timeout=1800,
+			job_id=f"deploy_bench:{self.name}",
+			deduplicate=True,
 		)
+		if not job:
+			frappe.msgprint(_("A deploy is already in progress for this bench."))
+			return
 		frappe.msgprint(_("Deploy started. Watch the Deploy Log for progress."))
 
 	@frappe.whitelist()
@@ -57,12 +62,17 @@ class BenchInstance(Document):
 
 	@frappe.whitelist()
 	def enqueue_redeploy(self):
-		frappe.enqueue(
+		job = frappe.enqueue(
 			"benchpress.deploy_manager.redeploy_bench",
 			bench_name=self.name,
 			queue="long",
 			timeout=1800,
+			job_id=f"deploy_bench:{self.name}",
+			deduplicate=True,
 		)
+		if not job:
+			frappe.msgprint(_("A deploy is already in progress for this bench."))
+			return
 		frappe.msgprint(_("Redeploy started. Watch the Deploy Log for progress."))
 
 	@frappe.whitelist()

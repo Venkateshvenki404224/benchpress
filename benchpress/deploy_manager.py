@@ -5,6 +5,8 @@ import json
 import secrets
 
 import frappe
+from frappe.utils.file_lock import LockTimeoutError
+from frappe.utils.synchronization import filelock
 
 from benchpress.docker_manager import (
 	build_lab_image,
@@ -140,7 +142,29 @@ def create_site_in_container(
 		drop_mariadb_user(db_server.name, site_name, db_name)
 
 
+def _log_deploy_skipped(bench_name: str) -> None:
+	frappe.get_doc(
+		{
+			"doctype": "Deploy Log",
+			"bench": bench_name,
+			"message": "=== Deploy skipped: another deploy is already in progress ===\n",
+			"log_type": "warning",
+			"timestamp": frappe.utils.now_datetime(),
+		}
+	).insert(ignore_permissions=True)
+	# no manual commit: the job ends right after this, and the worker commits on return
+
+
 def deploy_bench(bench_name: str) -> None:
+	"""Deploy a bench, refusing to run concurrently with another deploy of the same bench."""
+	try:
+		with filelock(f"bench_deploy_{bench_name}", timeout=1):
+			_deploy_bench(bench_name)
+	except LockTimeoutError:
+		_log_deploy_skipped(bench_name)
+
+
+def _deploy_bench(bench_name: str) -> None:
 	"""Deploy pipeline — shared MariaDB, site created at runtime via press agent pattern."""
 	bench = frappe.get_doc("Bench Instance", bench_name)
 	lab = frappe.get_doc("Lab", bench.lab)
@@ -325,6 +349,14 @@ def _setup_container_vpn(bench, container_id: str, append_log) -> None:
 
 
 def redeploy_bench(bench_name: str) -> None:
+	try:
+		with filelock(f"bench_deploy_{bench_name}", timeout=1):
+			_redeploy_bench(bench_name)
+	except LockTimeoutError:
+		_log_deploy_skipped(bench_name)
+
+
+def _redeploy_bench(bench_name: str) -> None:
 	bench = frappe.get_doc("Bench Instance", bench_name)
 
 	if bench.container_id:
@@ -354,7 +386,7 @@ def redeploy_bench(bench_name: str) -> None:
 	bench.save(ignore_permissions=True)
 	frappe.db.commit()
 
-	deploy_bench(bench_name)
+	_deploy_bench(bench_name)
 
 
 def _build_lab_with_logs(lab, log_fn) -> None:
@@ -426,4 +458,4 @@ def stop_bench(bench_name: str) -> None:
 
 	bench.status = "Stopped"
 	bench.save(ignore_permissions=True)
-	frappe.db.commit()
+	frappe.db.commit()  # nosemgrep: intentional commit to persist status before response
