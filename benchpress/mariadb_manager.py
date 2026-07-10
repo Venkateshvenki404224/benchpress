@@ -366,7 +366,8 @@ def _pull_backup_to_host(container, backup_file: str) -> str:
 	host_path = os.path.join(host_dir, os.path.basename(backup_file))
 	with tarfile.open(fileobj=buffer) as tar:
 		member = tar.extractfile(tar.getmembers()[0])
-		with open(host_path, "wb") as f:
+		# Safe: host_dir is the fixed site backup path, filename passed through basename().
+		with open(host_path, "wb") as f:  # nosemgrep: frappe-semgrep-rules.rules.security.frappe-security-file-traversal  # fmt: skip
 			f.write(member.read())
 	return host_path
 
