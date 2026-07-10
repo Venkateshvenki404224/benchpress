@@ -17,7 +17,7 @@ from benchpress.permissions import (
 @frappe.whitelist()
 def get_labs() -> list[dict]:
 	require_app_user()
-	labs = frappe.get_all(
+	labs = frappe.get_list(
 		"Lab",
 		fields=[
 			"name",
@@ -33,11 +33,12 @@ def get_labs() -> list[dict]:
 		order_by="creation desc",
 	)
 	for lab in labs:
-		apps = frappe.get_all(
+		apps = frappe.get_list(
 			"Lab App",
 			filters={"parent": lab["name"]},
 			fields=["app_name"],
 			limit_page_length=50,
+			parent_doctype="Lab",
 		)
 		lab["app_names"] = [a["app_name"] for a in apps]
 		lab["app_count"] = len(apps)
@@ -94,7 +95,7 @@ def build_lab_image(lab_name: str) -> dict:
 @frappe.whitelist()
 def get_benches() -> list[dict]:
 	require_app_user()
-	benches = frappe.get_all(
+	benches = frappe.get_list(
 		"Bench Instance",
 		filters=get_bench_owner_filter(),
 		fields=[
@@ -211,7 +212,7 @@ def bench_action(bench_name: str, action: str) -> dict:
 		if bench.database_server:
 			from benchpress.mariadb_manager import drop_site_database
 
-			sites = frappe.get_all(
+			sites = frappe.get_list(
 				"Bench Site", filters={"bench": bench.name}, fields=["site_name", "full_domain"]
 			)
 			for s in sites:
@@ -249,7 +250,7 @@ def bench_action(bench_name: str, action: str) -> dict:
 @frappe.whitelist()
 def get_deploy_logs(bench_name: str) -> list[dict]:
 	require_bench_access(bench_name)
-	return frappe.get_all(
+	return frappe.get_list(
 		"Deploy Log",
 		filters={"bench": bench_name},
 		fields=["name", "message", "log_type", "timestamp"],
