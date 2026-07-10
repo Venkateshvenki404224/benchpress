@@ -216,6 +216,7 @@ class TestApi(IntegrationTestCase):
 			frappe.delete_doc, "Bench Instance", result["name"], force=True, ignore_permissions=True
 		)
 		enqueue.assert_called_once()
+		self.assertTrue(enqueue.call_args.kwargs["enqueue_after_commit"])
 		self.assertEqual(result["status"], "Deploying")
 		self.assertTrue(frappe.db.exists("Bench Instance", result["name"]))
 		self.assert_within_budget("create_bench", elapsed_ms)
@@ -226,6 +227,7 @@ class TestApi(IntegrationTestCase):
 			result, elapsed_ms = _timed(lambda: api.create_site(data))
 		self.addCleanup(frappe.delete_doc, "Bench Site", result["name"], force=True, ignore_permissions=True)
 		enqueue.assert_called_once()
+		self.assertTrue(enqueue.call_args.kwargs["enqueue_after_commit"])
 		self.assertEqual(result["status"], "Creating")
 		self.assert_within_budget("create_site", elapsed_ms)
 

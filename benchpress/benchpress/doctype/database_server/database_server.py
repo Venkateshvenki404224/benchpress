@@ -47,6 +47,7 @@ class DatabaseServer(Document):
 			db_server_name=self.name,
 			queue="long",
 			timeout=600,
+			enqueue_after_commit=True,
 		)
 		frappe.msgprint(_("MariaDB setup started."))
 
@@ -69,8 +70,7 @@ class DatabaseServer(Document):
 		frappe.has_permission("Database Server", doc=self.name, throw=True)
 		self.status = "Pending"
 		self.error_message = ""
-		self.save(ignore_permissions=True)
-		frappe.db.commit()
+		self.save()
 		self.setup_mariadb()
 
 	@frappe.whitelist()

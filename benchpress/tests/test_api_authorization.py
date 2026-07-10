@@ -305,6 +305,13 @@ class TestApiAuthorization(IntegrationTestCase):
 		names = [bench["name"] for bench in api.get_benches()]
 		self.assertIn(self.bench.name, names)
 
+	def test_owner_reads_own_deploy_logs(self):
+		frappe.set_user(self.user_a)
+		logs = api.get_deploy_logs(self.bench.name)
+		self.assertIn(self.deploy_log.name, [log["name"] for log in logs])
+		for key in ("name", "message", "log_type", "timestamp"):
+			self.assertIn(key, logs[0])
+
 	def test_get_benches_omits_password_fields(self):
 		# Ponytail check for issue #91: fails if the decrypt loop is reintroduced.
 		frappe.set_user(self.user_a)
