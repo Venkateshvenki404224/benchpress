@@ -4,10 +4,13 @@
 #
 # Usage:
 #   cd /path/to/frappe-bench
-#   bash apps/benchpress/setup.sh <site-name>
+#   bash apps/benchpress/setup.sh <site-name> [--strict]
 #
 # Example:
 #   bash apps/benchpress/setup.sh sponge.localhost
+#
+# --strict: exit non-zero if Docker userns-remap is absent or unverifiable
+# (production hosts); default is warn-and-continue (dev hosts).
 #
 # VPN note: tunnels, peers and IP allocation are owned by the vpn_management
 # app (wg-agent + VPN Peer / Network Pool DocTypes). This script only prepares
@@ -16,7 +19,6 @@
 set -e
 
 BENCH_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
-SITE_NAME="${1:-}"
 BENCH_USER="$(whoami)"
 
 RED='\033[0;31m'
@@ -30,6 +32,25 @@ success() { echo -e "${GREEN}[✓]${NC} $1"; }
 warn()    { echo -e "${YELLOW}[!]${NC} $1"; }
 error()   { echo -e "${RED}[✗]${NC} $1"; exit 1; }
 
+# --- Parse arguments ---
+
+SITE_NAME=""
+STRICT=0
+
+for arg in "$@"; do
+    case "$arg" in
+        --strict) STRICT=1 ;;
+        -*) error "Unknown option: $arg. Usage: bash apps/benchpress/setup.sh <site-name> [--strict]" ;;
+        *)
+            if [ -z "$SITE_NAME" ]; then
+                SITE_NAME="$arg"
+            else
+                error "Unexpected argument: $arg"
+            fi
+            ;;
+    esac
+done
+
 echo ""
 echo "=============================="
 echo "  BenchPress Setup"
@@ -37,7 +58,7 @@ echo "=============================="
 echo ""
 
 if [ -z "$SITE_NAME" ]; then
-    error "Site name required. Usage: bash apps/benchpress/setup.sh <site-name>"
+    error "Site name required. Usage: bash apps/benchpress/setup.sh <site-name> [--strict]"
 fi
 
 # Every step needs host-level access (docker group, sysctl) — none of it
@@ -61,7 +82,7 @@ echo ""
 
 # --- Step 1: Docker group ---
 
-info "Step 1/3: Docker group"
+info "Step 1/4: Docker group"
 
 if groups "$BENCH_USER" | grep -q '\bdocker\b'; then
     success "User '$BENCH_USER' is already in the docker group"
@@ -82,9 +103,27 @@ fi
 
 echo ""
 
-# --- Step 2: Shared infrastructure (MariaDB + Redis) ---
+# --- Step 2: Docker user-namespace remap (container-root != host-root) ---
 
-info "Step 2/3: Shared infrastructure (MariaDB + Redis)"
+info "Step 2/4: Docker userns-remap"
+if ! docker info &>/dev/null; then
+    MSG="Cannot verify userns-remap — docker socket not accessible (re-login, then re-run)"
+    [ "$STRICT" -eq 1 ] && error "$MSG" || warn "$MSG"
+elif docker info --format '{{join .SecurityOptions ","}}' | grep -qE 'name=(userns|rootless)'; then
+    success "Docker userns-remap (or rootless) is enabled — container root is unprivileged on the host"
+else
+    warn "Docker userns-remap is NOT enabled — in-container root maps to HOST root"
+    warn "Lab users get container root; without remap that is one kernel bug from host root."
+    warn "Enable it: add {\"userns-remap\": \"default\"} to /etc/docker/daemon.json, restart docker."
+    warn "Details and migration caveats: apps/benchpress/docs/wireguard-setup.md#docker-userns-remap"
+    [ "$STRICT" -eq 1 ] && error "--strict: refusing to continue without userns-remap"
+fi
+
+echo ""
+
+# --- Step 3: Shared infrastructure (MariaDB + Redis) ---
+
+info "Step 3/4: Shared infrastructure (MariaDB + Redis)"
 
 COMPOSE_DIR="$BENCH_DIR/apps/benchpress/benchpress/config"
 COMPOSE_FILE="$COMPOSE_DIR/docker-compose.yml"
@@ -154,9 +193,9 @@ fi
 
 echo ""
 
-# --- Step 3: IP forwarding ---
+# --- Step 4: IP forwarding ---
 
-info "Step 3/3: IP forwarding"
+info "Step 4/4: IP forwarding"
 
 SYSCTL_CONF="/etc/sysctl.d/99-benchpress.conf"
 
