@@ -28,9 +28,9 @@
 					theme="blue"
 					variant="solid"
 					size="lg"
-					:loading="buildAction.loading || lab.doc.status === 'Building'"
+					:loading="buildAction.loading || isBuilding"
 					@click="buildLabImage"
-					>{{ lab.doc.status === "Building" ? "Building..." : "Build Image" }}</Button
+					>{{ isBuilding ? "Building..." : "Build Image" }}</Button
 				>
 				<!-- Lab ready, no instance or instance stopped/errored: show Deploy -->
 				<Button
@@ -739,24 +739,40 @@ watch(
 	{ immediate: true }
 );
 
+// Optimistic build flag: true from the moment the user clicks, before the
+// enqueued worker has flipped lab.status to "Building" in the DB. Without it
+// the button and polls race the background job and get stuck on "Build Image".
+const building = ref(false);
+const isBuilding = computed(() => building.value || lab.doc?.status === "Building");
+
+// Clear the optimistic flag once the build reaches a terminal state.
+watch(
+	() => lab.doc?.status,
+	(status) => {
+		if (status === "Ready" || status === "Error") {
+			building.value = false;
+		}
+	}
+);
+
 // Poll for build logs while building
 let buildPollInterval = null;
 
 watch(
-	() => lab.doc?.status,
-	(status) => {
-		if (status === "Building") {
-			buildPollInterval = setInterval(() => {
-				buildLogs.reload();
-			}, 3000);
+	isBuilding,
+	(active) => {
+		if (active) {
+			if (!buildPollInterval) {
+				buildPollInterval = setInterval(() => {
+					buildLogs.reload();
+				}, 3000);
+			}
 		} else {
 			if (buildPollInterval) {
 				clearInterval(buildPollInterval);
 				buildPollInterval = null;
 			}
-			if (status === "Ready" || status === "Error") {
-				buildLogs.reload();
-			}
+			buildLogs.reload();
 		}
 	},
 	{ immediate: true }
@@ -766,17 +782,20 @@ watch(
 let labPollInterval = null;
 
 watch(
-	() => lab.doc?.status,
-	(status) => {
-		if (status === "Building") {
-			labPollInterval = setInterval(() => {
-				lab.reload();
-			}, 5000);
+	isBuilding,
+	(active) => {
+		if (active) {
+			if (!labPollInterval) {
+				labPollInterval = setInterval(() => {
+					lab.reload();
+				}, 5000);
+			}
 		} else if (labPollInterval) {
 			clearInterval(labPollInterval);
 			labPollInterval = null;
 		}
-	}
+	},
+	{ immediate: true }
 );
 
 // Sync build logs into live display
@@ -867,10 +886,15 @@ const buildAction = createResource({
 		lab.reload();
 		buildLogs.reload();
 	},
+	onError() {
+		// Enqueue failed (e.g. permission/500) — drop back out of the building state.
+		building.value = false;
+	},
 });
 
 function buildLabImage() {
 	liveBuildLog.value = "";
+	building.value = true;
 	buildAction.submit({ lab_name: labId });
 }
 
