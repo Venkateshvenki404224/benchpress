@@ -487,4 +487,4 @@ def stop_bench(bench_name: str) -> None:
 
 	bench.status = "Stopped"
 	bench.save(ignore_permissions=True)
-	frappe.db.commit()  # nosemgrep: intentional commit to persist status before response
+	frappe.db.commit()  # nosemgrep -- intentional commit to persist status before response
