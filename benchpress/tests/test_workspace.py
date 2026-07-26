@@ -11,6 +11,9 @@ from frappe.tests import IntegrationTestCase
 APP_NAME = "benchpress"
 MODULE_NAME = "benchpress"
 
+# The Module Def every fixture this app ships must belong to.
+MODULE_LABEL = "Benchpress"
+
 # Colors the workspace editor offers for a shortcut.
 SHORTCUT_COLORS = {"Grey", "Green", "Red", "Orange", "Pink", "Yellow", "Blue", "Cyan"}
 
@@ -30,6 +33,16 @@ def load_fixtures(folder_name):
 	"""Return (filename, parsed json) for every fixture under benchpress/<folder_name>/."""
 	folder = Path(frappe.get_app_path(APP_NAME), MODULE_NAME, folder_name)
 	return [(path.name, json.loads(path.read_text())) for path in sorted(folder.glob("*/*.json"))]
+
+
+def load_app_fixtures(folder_name):
+	"""Return (filename, parsed json) for every fixture in the flat app-level benchpress/<folder_name>/.
+
+	`workspace_sidebar` is one of sync.py's `app_level_folders`, so it sits beside the module rather
+	than inside it and holds one file per record instead of a folder per record.
+	"""
+	folder = Path(frappe.get_app_path(APP_NAME), folder_name)
+	return [(path.name, json.loads(path.read_text())) for path in sorted(folder.glob("*.json"))]
 
 
 def card_break_groups(links):
@@ -210,3 +223,100 @@ class TestWorkspaceFixtures(IntegrationTestCase):
 			for shortcut in workspace["shortcuts"]:
 				with self.subTest(fixture=filename, shortcut=shortcut["label"]):
 					self.assertIn(shortcut["color"], SHORTCUT_COLORS, f"{filename}: unsupported color")
+
+
+class TestOnboardingFixtures(IntegrationTestCase):
+	"""Guards the onboarding checklist and the hand-authored sidebar that renders it.
+
+	A step pointing at a missing DocType, or a sidebar naming an onboarding that was never
+	imported, leaves an empty checklist rather than an error.
+	"""
+
+	@classmethod
+	def setUpClass(cls):
+		super().setUpClass()
+		cls.steps = load_fixtures("onboarding_step")
+		cls.onboardings = load_fixtures("module_onboarding")
+		cls.sidebars = load_app_fixtures("workspace_sidebar")
+
+	@property
+	def steps_by_name(self):
+		return {step["name"]: step for _filename, step in self.steps}
+
+	def test_step_reference_documents_are_installed(self):
+		for filename, step in self.steps:
+			if not step.get("reference_document"):
+				continue
+			with self.subTest(fixture=filename, doctype=step["reference_document"]):
+				self.assertTrue(
+					frappe.db.exists("DocType", step["reference_document"]),
+					f"{filename}: no DocType named {step['reference_document']!r}",
+				)
+
+	def test_step_is_single_matches_the_doctype(self):
+		"""A wrong `is_single` routes the step to /new on a single, or to a single on a list."""
+		for filename, step in self.steps:
+			if not step.get("reference_document"):
+				continue
+			issingle = frappe.get_meta(step["reference_document"]).issingle
+			with self.subTest(fixture=filename):
+				self.assertEqual(
+					bool(step.get("is_single")),
+					bool(issingle),
+					f"{filename}: is_single does not match {step['reference_document']}.issingle",
+				)
+
+	def test_update_settings_steps_name_a_real_field(self):
+		"""`Update Settings` scrolls to `field` and compares it after save."""
+		for filename, step in self.steps:
+			if step["action"] != "Update Settings":
+				continue
+			with self.subTest(fixture=filename, fieldname=step.get("field")):
+				self.assertTrue(
+					is_real_fieldname(step["reference_document"], step.get("field")),
+					f"{filename}: {step['reference_document']} has no field {step.get('field')!r}",
+				)
+
+	def test_every_step_the_onboarding_names_is_shipped(self):
+		shipped = self.steps_by_name
+		for filename, onboarding in self.onboardings:
+			for row in onboarding["steps"]:
+				with self.subTest(fixture=filename, step=row["step"]):
+					self.assertIn(row["step"], shipped, f"{filename}: no Onboarding Step {row['step']!r}")
+
+	def test_onboardings_belong_to_the_app_module(self):
+		"""`get_onboarding_data` looks the onboarding up by name, but sync places it by module."""
+		for filename, onboarding in self.onboardings:
+			with self.subTest(fixture=filename):
+				self.assertEqual(onboarding["module"], MODULE_LABEL, f"{filename}: wrong module")
+
+	def test_sidebar_onboarding_is_shipped_and_synced(self):
+		"""An empty `module_onboarding` on the DB row means a stale `modified` skipped the import."""
+		shipped = {onboarding["name"] for _filename, onboarding in self.onboardings}
+		for filename, sidebar in self.sidebars:
+			named = sidebar.get("module_onboarding")
+			with self.subTest(fixture=filename):
+				self.assertIn(named, shipped, f"{filename}: no Module Onboarding {named!r}")
+				self.assertEqual(
+					frappe.db.get_value("Workspace Sidebar", sidebar["name"], "module_onboarding"),
+					named,
+					f"{filename}: the synced sidebar does not name it — bump `modified`",
+				)
+
+	def test_sidebar_links_resolve(self):
+		"""A sidebar item whose target is missing renders a dead row."""
+		for filename, sidebar in self.sidebars:
+			for item in sidebar["items"]:
+				if item["type"] != "Link":
+					continue
+				with self.subTest(fixture=filename, label=item["label"]):
+					self.assert_link_resolves(filename, item)
+
+	def assert_link_resolves(self, filename, item):
+		if item["link_type"] == "URL":
+			self.assertTrue(item.get("url"), f"{filename}: {item['label']} is a URL link with no url")
+			return
+		self.assertTrue(
+			frappe.db.exists(item["link_type"], item["link_to"]),
+			f"{filename}: no {item['link_type']} named {item['link_to']!r}",
+		)

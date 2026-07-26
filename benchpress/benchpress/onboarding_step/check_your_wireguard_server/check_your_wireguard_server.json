@@ -1,0 +1,23 @@
+{
+ "action": "Go to Page",
+ "action_label": "Check your WireGuard server",
+ "callback_message": "Installing BenchPress already seeded a `wg0` WireGuard Server and its `pool-wg0` Network Pool, so there is nothing to create here — confirm `wg0` reads **Up** and move on. Peers are handed out per bench later.",
+ "callback_title": "Your VPN is already wired up",
+ "creation": "2026-07-26 19:00:00.000000",
+ "description": "BenchPress reaches every bench over WireGuard. `vpn_management` seeds the `wg0` server on install, so this step is a look, not a build.\n\nIf the status is not **Up**, fix the tunnel before deploying anything — a bench on a down tunnel is unreachable.",
+ "docstatus": 0,
+ "doctype": "Onboarding Step",
+ "idx": 0,
+ "is_complete": 0,
+ "is_single": 0,
+ "is_skipped": 0,
+ "modified": "2026-07-26 19:00:00.000000",
+ "modified_by": "Administrator",
+ "name": "Check your WireGuard server",
+ "owner": "Administrator",
+ "path": "/app/wireguard-server",
+ "show_form_tour": 0,
+ "show_full_form": 0,
+ "title": "Check your WireGuard server",
+ "validate_action": 0
+}

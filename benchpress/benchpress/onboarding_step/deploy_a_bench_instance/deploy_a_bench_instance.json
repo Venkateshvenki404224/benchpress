@@ -1,0 +1,21 @@
+{
+ "action": "Create Entry",
+ "action_label": "Deploy a Bench Instance",
+ "creation": "2026-07-26 19:00:00.000000",
+ "description": "A Bench Instance is one running container built from a Lab, with its own VPN peer and database.\n\nPick the Lab you just made. Watch the Deploy Log if it does not reach **Running**.",
+ "docstatus": 0,
+ "doctype": "Onboarding Step",
+ "idx": 0,
+ "is_complete": 0,
+ "is_single": 0,
+ "is_skipped": 0,
+ "modified": "2026-07-26 19:00:00.000000",
+ "modified_by": "Administrator",
+ "name": "Deploy a Bench Instance",
+ "owner": "Administrator",
+ "reference_document": "Bench Instance",
+ "show_form_tour": 0,
+ "show_full_form": 0,
+ "title": "Deploy a Bench Instance",
+ "validate_action": 0
+}

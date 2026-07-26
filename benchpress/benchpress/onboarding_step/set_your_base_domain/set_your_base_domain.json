@@ -1,0 +1,22 @@
+{
+ "action": "Update Settings",
+ "action_label": "Set your base domain",
+ "creation": "2026-07-26 19:00:00.000000",
+ "description": "Every bench and site BenchPress creates is reachable at `<name>.<base_domain>`, so nothing routes until this is set.\n\nUse a domain whose DNS wildcard already points at this host — for local work, `localhost` is fine.",
+ "docstatus": 0,
+ "doctype": "Onboarding Step",
+ "field": "base_domain",
+ "idx": 0,
+ "is_complete": 0,
+ "is_single": 1,
+ "is_skipped": 0,
+ "modified": "2026-07-26 19:00:00.000000",
+ "modified_by": "Administrator",
+ "name": "Set your base domain",
+ "owner": "Administrator",
+ "reference_document": "BenchPress Settings",
+ "show_form_tour": 0,
+ "show_full_form": 0,
+ "title": "Set your base domain",
+ "validate_action": 1
+}
