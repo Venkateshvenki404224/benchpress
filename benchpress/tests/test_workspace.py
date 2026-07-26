@@ -51,14 +51,16 @@ def child_row_labels(workspace, child_table):
 	return {row["label"] for row in rows}
 
 
-def linked_doctypes(workspace):
-	"""Yield every DocType name a workspace points at through its links and shortcuts."""
+def referenced_doctypes(workspace):
+	"""Yield every DocType a workspace points at through its links, shortcuts, and quick lists."""
 	for link in workspace["links"]:
 		if link["type"] == "Link" and link["link_type"] == "DocType":
 			yield link["link_to"]
 	for shortcut in workspace["shortcuts"]:
 		if shortcut["type"] == "DocType":
 			yield shortcut["link_to"]
+	for quick_list in workspace["quick_lists"]:
+		yield quick_list["document_type"]
 
 
 def is_real_fieldname(doctype, fieldname):
@@ -125,7 +127,7 @@ class TestWorkspaceFixtures(IntegrationTestCase):
 
 	def test_referenced_doctypes_are_installed(self):
 		for filename, workspace in self.workspaces:
-			for doctype in linked_doctypes(workspace):
+			for doctype in referenced_doctypes(workspace):
 				with self.subTest(fixture=filename, doctype=doctype):
 					self.assertTrue(frappe.db.exists("DocType", doctype), f"{filename}: no such DocType")
 		for _doctype, filename, widget in self.widgets:
@@ -134,10 +136,10 @@ class TestWorkspaceFixtures(IntegrationTestCase):
 					frappe.db.exists("DocType", widget["document_type"]), f"{filename}: no such DocType"
 				)
 
-	def test_no_child_table_is_linked_or_shortcut(self):
+	def test_no_child_table_is_referenced(self):
 		"""A child table has no list view, so linking one produces a dead end."""
 		for filename, workspace in self.workspaces:
-			for doctype in linked_doctypes(workspace):
+			for doctype in referenced_doctypes(workspace):
 				with self.subTest(fixture=filename, doctype=doctype):
 					self.assertFalse(
 						frappe.get_meta(doctype).istable, f"{filename}: {doctype} is a child table"
@@ -162,18 +164,29 @@ class TestWorkspaceFixtures(IntegrationTestCase):
 						f"{card_break['link_count']} links but {len(rows)} follow it",
 					)
 
+	def assert_filters_are_runnable(self, filename, document_type, filters):
+		"""A filter naming a missing field leaves the widget empty rather than raising."""
+		for _doctype, fieldname, _operator, _value in filters:
+			with self.subTest(fixture=filename, fieldname=fieldname):
+				self.assertTrue(
+					is_real_fieldname(document_type, fieldname),
+					f"{filename}: {document_type} has no field {fieldname!r}",
+				)
+		with self.subTest(fixture=filename):
+			frappe.db.count(document_type, filters)
+
 	def test_widget_filters_are_runnable(self):
 		for _doctype, filename, widget in self.widgets:
-			document_type = widget["document_type"]
-			filters = json.loads(widget["filters_json"])
-			for _doctype, fieldname, _operator, _value in filters:
-				with self.subTest(fixture=filename, fieldname=fieldname):
-					self.assertTrue(
-						is_real_fieldname(document_type, fieldname),
-						f"{filename}: {document_type} has no field {fieldname!r}",
-					)
-			with self.subTest(fixture=filename):
-				frappe.db.count(document_type, filters)
+			self.assert_filters_are_runnable(
+				filename, widget["document_type"], json.loads(widget["filters_json"])
+			)
+
+	def test_quick_list_filters_are_runnable(self):
+		for filename, workspace in self.workspaces:
+			for row in workspace["quick_lists"]:
+				self.assert_filters_are_runnable(
+					filename, row["document_type"], json.loads(row["quick_list_filter"])
+				)
 
 	def test_charts_resolve_and_plot_a_real_time_axis(self):
 		"""A timeseries chart silently plots nothing when `based_on` is not a date field."""

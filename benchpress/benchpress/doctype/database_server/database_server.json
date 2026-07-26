@@ -150,8 +150,13 @@
   }
  ],
  "issingle": 0,
- "links": [],
- "modified": "2026-03-29 12:00:00.000000",
+ "links": [
+  {
+   "link_doctype": "Bench Instance",
+   "link_fieldname": "database_server"
+  }
+ ],
+ "modified": "2026-07-26 18:30:00.000000",
  "modified_by": "Administrator",
  "module": "Benchpress",
  "name": "Database Server",
@@ -183,8 +188,10 @@
    "write": 1
   }
  ],
+ "show_title_field_in_link": 1,
  "sort_field": "creation",
  "sort_order": "DESC",
  "states": [],
+ "title_field": "container_name",
  "track_changes": 1
 }
