@@ -65,6 +65,11 @@ def is_real_fieldname(doctype, fieldname):
 	return fieldname in default_fields or frappe.get_meta(doctype).has_field(fieldname)
 
 
+def field_type(doctype, fieldname):
+	field = frappe.get_meta(doctype).get_field(fieldname)
+	return field.fieldtype if field else None
+
+
 class TestWorkspaceFixtures(IntegrationTestCase):
 	"""Guards the hand-authored desk fixtures, which fail silently rather than loudly.
 
@@ -77,6 +82,14 @@ class TestWorkspaceFixtures(IntegrationTestCase):
 		super().setUpClass()
 		cls.workspaces = load_fixtures("workspace")
 		cls.number_cards = load_fixtures("number_card")
+		cls.dashboard_charts = load_fixtures("dashboard_chart")
+
+	@property
+	def widgets(self):
+		"""(DocType, filename, fixture) for every widget a workspace can embed."""
+		return [("Number Card", *card) for card in self.number_cards] + [
+			("Dashboard Chart", *chart) for chart in self.dashboard_charts
+		]
 
 	def test_fixtures_are_synced_to_the_database(self):
 		"""bench migrate skips a fixture whose `modified` is not newer than the DB row."""
@@ -87,11 +100,11 @@ class TestWorkspaceFixtures(IntegrationTestCase):
 					workspace["content"],
 					f"{filename}: disk content differs from the synced Workspace — bump `modified`",
 				)
-		for filename, card in self.number_cards:
+		for doctype, filename, widget in self.widgets:
 			with self.subTest(fixture=filename):
 				self.assertTrue(
-					frappe.db.exists("Number Card", card["name"]),
-					f"{filename}: Number Card {card['name']} was never imported",
+					frappe.db.exists(doctype, widget["name"]),
+					f"{filename}: {doctype} {widget['name']} was never imported",
 				)
 
 	def test_content_blocks_resolve_to_child_rows(self):
@@ -115,10 +128,10 @@ class TestWorkspaceFixtures(IntegrationTestCase):
 			for doctype in linked_doctypes(workspace):
 				with self.subTest(fixture=filename, doctype=doctype):
 					self.assertTrue(frappe.db.exists("DocType", doctype), f"{filename}: no such DocType")
-		for filename, card in self.number_cards:
-			with self.subTest(fixture=filename, doctype=card["document_type"]):
+		for _doctype, filename, widget in self.widgets:
+			with self.subTest(fixture=filename, doctype=widget["document_type"]):
 				self.assertTrue(
-					frappe.db.exists("DocType", card["document_type"]), f"{filename}: no such DocType"
+					frappe.db.exists("DocType", widget["document_type"]), f"{filename}: no such DocType"
 				)
 
 	def test_no_child_table_is_linked_or_shortcut(self):
@@ -149,10 +162,10 @@ class TestWorkspaceFixtures(IntegrationTestCase):
 						f"{card_break['link_count']} links but {len(rows)} follow it",
 					)
 
-	def test_number_card_filters_are_runnable(self):
-		for filename, card in self.number_cards:
-			document_type = card["document_type"]
-			filters = json.loads(card["filters_json"])
+	def test_widget_filters_are_runnable(self):
+		for _doctype, filename, widget in self.widgets:
+			document_type = widget["document_type"]
+			filters = json.loads(widget["filters_json"])
 			for _doctype, fieldname, _operator, _value in filters:
 				with self.subTest(fixture=filename, fieldname=fieldname):
 					self.assertTrue(
@@ -161,6 +174,23 @@ class TestWorkspaceFixtures(IntegrationTestCase):
 					)
 			with self.subTest(fixture=filename):
 				frappe.db.count(document_type, filters)
+
+	def test_charts_resolve_and_plot_a_real_time_axis(self):
+		"""A timeseries chart silently plots nothing when `based_on` is not a date field."""
+		for filename, workspace in self.workspaces:
+			for row in workspace["charts"]:
+				with self.subTest(fixture=filename, chart=row["chart_name"]):
+					self.assertTrue(
+						frappe.db.exists("Dashboard Chart", row["chart_name"]),
+						f"{filename}: no Dashboard Chart named {row['chart_name']!r}",
+					)
+		for filename, chart in self.dashboard_charts:
+			with self.subTest(fixture=filename, based_on=chart["based_on"]):
+				self.assertIn(
+					field_type(chart["document_type"], chart["based_on"]),
+					{"Date", "Datetime"},
+					f"{filename}: {chart['document_type']}.{chart['based_on']} is not a date field",
+				)
 
 	def test_shortcut_colors_are_allowed(self):
 		for filename, workspace in self.workspaces:

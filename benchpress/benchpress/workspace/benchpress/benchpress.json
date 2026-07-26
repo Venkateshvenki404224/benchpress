@@ -1,7 +1,12 @@
 {
  "app": "benchpress",
- "charts": [],
- "content": "[{\"id\":\"bp_shortcut_site\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Visit the Site\",\"col\":3}},{\"id\":\"bp_shortcut_lab\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Lab\",\"col\":3}},{\"id\":\"bp_shortcut_bench\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Bench Instance\",\"col\":3}},{\"id\":\"bp_shortcut_peer\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"VPN Peer\",\"col\":3}},{\"id\":\"bp_header_status\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\">System Status</span>\",\"col\":12}},{\"id\":\"bp_number_card_error\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Benches in Error\",\"col\":3}},{\"id\":\"bp_spacer_status\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"bp_header_build_run\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\">Build &amp; Run</span>\",\"col\":12}},{\"id\":\"bp_card_build\",\"type\":\"card\",\"data\":{\"card_name\":\"Build\",\"col\":4}},{\"id\":\"bp_card_run\",\"type\":\"card\",\"data\":{\"card_name\":\"Run\",\"col\":4}},{\"id\":\"bp_card_network\",\"type\":\"card\",\"data\":{\"card_name\":\"Network\",\"col\":4}},{\"id\":\"bp_header_observe_configure\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\">Observe &amp; Configure</span>\",\"col\":12}},{\"id\":\"bp_card_observe\",\"type\":\"card\",\"data\":{\"card_name\":\"Observe\",\"col\":4}},{\"id\":\"bp_card_configure\",\"type\":\"card\",\"data\":{\"card_name\":\"Configure\",\"col\":4}}]",
+ "charts": [
+  {
+   "chart_name": "Deploy Activity",
+   "label": "Deploy Activity"
+  }
+ ],
+ "content": "[{\"id\":\"bp_shortcut_site\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Visit the Site\",\"col\":3}},{\"id\":\"bp_shortcut_lab\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Lab\",\"col\":3}},{\"id\":\"bp_shortcut_bench\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Bench Instance\",\"col\":3}},{\"id\":\"bp_shortcut_peer\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"VPN Peer\",\"col\":3}},{\"id\":\"bp_header_status\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\">System Status</span>\",\"col\":12}},{\"id\":\"bp_number_card_labs_ready\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Labs Ready\",\"col\":2}},{\"id\":\"bp_number_card_benches_running\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Benches Running\",\"col\":2}},{\"id\":\"bp_number_card_benches_error\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Benches in Error\",\"col\":2}},{\"id\":\"bp_number_card_active_sites\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Active Sites\",\"col\":2}},{\"id\":\"bp_number_card_active_peers\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Active VPN Peers\",\"col\":2}},{\"id\":\"bp_number_card_stale_peers\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Stale VPN Peers\",\"col\":2}},{\"id\":\"bp_chart_deploy_activity\",\"type\":\"chart\",\"data\":{\"chart_name\":\"Deploy Activity\",\"col\":12}},{\"id\":\"bp_spacer_status\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"bp_header_build_run\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\">Build &amp; Run</span>\",\"col\":12}},{\"id\":\"bp_card_build\",\"type\":\"card\",\"data\":{\"card_name\":\"Build\",\"col\":4}},{\"id\":\"bp_card_run\",\"type\":\"card\",\"data\":{\"card_name\":\"Run\",\"col\":4}},{\"id\":\"bp_card_network\",\"type\":\"card\",\"data\":{\"card_name\":\"Network\",\"col\":4}},{\"id\":\"bp_header_observe_configure\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\">Observe &amp; Configure</span>\",\"col\":12}},{\"id\":\"bp_card_observe\",\"type\":\"card\",\"data\":{\"card_name\":\"Observe\",\"col\":4}},{\"id\":\"bp_card_configure\",\"type\":\"card\",\"data\":{\"card_name\":\"Configure\",\"col\":4}}]",
  "creation": "2026-03-26 12:00:00",
  "custom_blocks": [],
  "docstatus": 0,
@@ -194,14 +199,34 @@
    "type": "Link"
   }
  ],
- "modified": "2026-07-26 17:30:00.000000",
+ "modified": "2026-07-26 18:10:00.000000",
  "modified_by": "Administrator",
  "module": "Benchpress",
  "name": "BenchPress",
  "number_cards": [
   {
+   "label": "Labs Ready",
+   "number_card_name": "Labs Ready"
+  },
+  {
+   "label": "Benches Running",
+   "number_card_name": "Benches Running"
+  },
+  {
    "label": "Benches in Error",
    "number_card_name": "Benches in Error"
+  },
+  {
+   "label": "Active Sites",
+   "number_card_name": "Active Sites"
+  },
+  {
+   "label": "Active VPN Peers",
+   "number_card_name": "Active VPN Peers"
+  },
+  {
+   "label": "Stale VPN Peers",
+   "number_card_name": "Stale VPN Peers"
   }
  ],
  "owner": "Administrator",
