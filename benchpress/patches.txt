@@ -7,3 +7,4 @@ benchpress.patches.delete_bench_device_doctype
 # Patches added in this section will be executed after doctypes are migrated
 benchpress.patches.create_default_database_server
 benchpress.patches.drop_legacy_wireguard_fields
+benchpress.patches.grant_vpn_access_to_benchpress_admin
