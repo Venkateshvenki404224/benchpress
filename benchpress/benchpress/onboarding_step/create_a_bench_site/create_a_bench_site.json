@@ -1,0 +1,21 @@
+{
+ "action": "Create Entry",
+ "action_label": "Create a Bench Site",
+ "creation": "2026-07-26 19:00:00.000000",
+ "description": "A Bench Site is the Frappe site people actually log in to, hosted on a Bench Instance.\n\nChoose the bench you deployed and the apps to install. When the status reads **Active**, the lifecycle is complete end to end.",
+ "docstatus": 0,
+ "doctype": "Onboarding Step",
+ "idx": 0,
+ "is_complete": 0,
+ "is_single": 0,
+ "is_skipped": 0,
+ "modified": "2026-07-26 19:00:00.000000",
+ "modified_by": "Administrator",
+ "name": "Create a Bench Site",
+ "owner": "Administrator",
+ "reference_document": "Bench Site",
+ "show_form_tour": 0,
+ "show_full_form": 0,
+ "title": "Create a Bench Site",
+ "validate_action": 0
+}

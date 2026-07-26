@@ -232,8 +232,17 @@
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
- "links": [],
- "modified": "2026-07-02 16:00:00.000000",
+ "links": [
+  {
+   "link_doctype": "Bench Site",
+   "link_fieldname": "bench"
+  },
+  {
+   "link_doctype": "Deploy Log",
+   "link_fieldname": "bench"
+  }
+ ],
+ "modified": "2026-07-26 18:30:00.000000",
  "modified_by": "Administrator",
  "module": "Benchpress",
  "name": "Bench Instance",

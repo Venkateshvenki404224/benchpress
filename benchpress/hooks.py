@@ -47,7 +47,16 @@ add_to_apps_screen = [
 
 # include js in doctype views
 # doctype_js = {"doctype" : "public/js/doctype.js"}
-# doctype_list_js = {"doctype" : "public/js/doctype_list.js"}
+
+# Colour-coded status pills in the desk list views. Frappe inlines these files into the DocType
+# meta, so they are independent of the (still commented out) app_include_js bundle.
+doctype_list_js = {
+	"Lab": "public/js/list_view/lab_list.js",
+	"Bench Instance": "public/js/list_view/bench_instance_list.js",
+	"Bench Site": "public/js/list_view/bench_site_list.js",
+	"Database Server": "public/js/list_view/database_server_list.js",
+}
+
 # doctype_tree_js = {"doctype" : "public/js/doctype_tree.js"}
 # doctype_calendar_js = {"doctype" : "public/js/doctype_calendar.js"}
 

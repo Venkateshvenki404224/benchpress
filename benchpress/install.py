@@ -6,6 +6,8 @@ import subprocess
 
 import frappe
 
+from benchpress.vpn_access import grant_vpn_access
+
 
 def after_install():
 	site = frappe.local.site
@@ -15,6 +17,10 @@ def after_install():
 	print("\n" + "=" * 60)
 	print("  BenchPress — Running post-install setup")
 	print("=" * 60 + "\n")
+
+	# Fresh installs mark every patch as executed without running it, so the VPN
+	# permissions the desk workspace needs have to be granted here as well.
+	grant_vpn_access()
 
 	# setup.sh requires host-level access (docker group, sysctl, sudoers).
 	# Skip it when running inside a container.

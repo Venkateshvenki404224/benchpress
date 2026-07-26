@@ -1,24 +1,29 @@
 {
  "app": "benchpress",
- "charts": [],
- "content": "[{\"id\":\"OcuW-m6eNb\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Visit the Site\",\"col\":3}},{\"id\":\"bp_shortcut_1\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Lab\",\"col\":3}},{\"id\":\"bp_shortcut_2\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Bench Instance\",\"col\":3}},{\"id\":\"bp_shortcut_3\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Bench Site\",\"col\":3}},{\"id\":\"bp_spacer_1\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"bp_card_1\",\"type\":\"card\",\"data\":{\"card_name\":\"Bench Management\",\"col\":4}},{\"id\":\"bp_card_2\",\"type\":\"card\",\"data\":{\"card_name\":\"Logs\",\"col\":4}},{\"id\":\"bp_card_3\",\"type\":\"card\",\"data\":{\"card_name\":\"Settings\",\"col\":4}}]",
+ "charts": [
+  {
+   "chart_name": "Deploy Activity",
+   "label": "Deploy Activity"
+  }
+ ],
+ "content": "[{\"id\":\"bp_shortcut_site\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Visit the Site\",\"col\":3}},{\"id\":\"bp_shortcut_lab\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Lab\",\"col\":3}},{\"id\":\"bp_shortcut_bench\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Bench Instance\",\"col\":3}},{\"id\":\"bp_shortcut_peer\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"VPN Peer\",\"col\":3}},{\"id\":\"bp_header_status\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\">System Status</span>\",\"col\":12}},{\"id\":\"bp_number_card_labs_ready\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Labs Ready\",\"col\":2}},{\"id\":\"bp_number_card_benches_running\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Benches Running\",\"col\":2}},{\"id\":\"bp_number_card_benches_error\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Benches in Error\",\"col\":2}},{\"id\":\"bp_number_card_active_sites\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Active Sites\",\"col\":2}},{\"id\":\"bp_number_card_active_peers\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Active VPN Peers\",\"col\":2}},{\"id\":\"bp_number_card_stale_peers\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Stale VPN Peers\",\"col\":2}},{\"id\":\"bp_chart_deploy_activity\",\"type\":\"chart\",\"data\":{\"chart_name\":\"Deploy Activity\",\"col\":12}},{\"id\":\"bp_quick_list_needs_attention\",\"type\":\"quick_list\",\"data\":{\"quick_list_name\":\"Needs Attention\",\"col\":6}},{\"id\":\"bp_quick_list_recent_sites\",\"type\":\"quick_list\",\"data\":{\"quick_list_name\":\"Recent Sites\",\"col\":6}},{\"id\":\"bp_spacer_status\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"bp_header_build_run\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\">Build &amp; Run</span>\",\"col\":12}},{\"id\":\"bp_card_build\",\"type\":\"card\",\"data\":{\"card_name\":\"Build\",\"col\":4}},{\"id\":\"bp_card_run\",\"type\":\"card\",\"data\":{\"card_name\":\"Run\",\"col\":4}},{\"id\":\"bp_card_network\",\"type\":\"card\",\"data\":{\"card_name\":\"Network\",\"col\":4}},{\"id\":\"bp_header_observe_configure\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\">Observe &amp; Configure</span>\",\"col\":12}},{\"id\":\"bp_card_observe\",\"type\":\"card\",\"data\":{\"card_name\":\"Observe\",\"col\":4}},{\"id\":\"bp_card_configure\",\"type\":\"card\",\"data\":{\"card_name\":\"Configure\",\"col\":4}}]",
  "creation": "2026-03-26 12:00:00",
  "custom_blocks": [],
  "docstatus": 0,
  "doctype": "Workspace",
  "for_user": "",
- "hide_custom": 0,
+ "hide_custom": 1,
  "icon": "server",
  "idx": 0,
  "is_hidden": 0,
  "label": "BenchPress",
  "links": [
   {
-   "description": "Create and manage bench environments",
+   "description": "Blueprints. Pick a Frappe version and app list, then build the image.",
    "hidden": 0,
    "is_query_report": 0,
-   "label": "Bench Management",
-   "link_count": 3,
+   "label": "Build",
+   "link_count": 1,
    "link_type": "DocType",
    "onboard": 0,
    "type": "Card Break"
@@ -32,6 +37,16 @@
    "link_type": "DocType",
    "onboard": 1,
    "type": "Link"
+  },
+  {
+   "description": "Live containers and the sites inside them.",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Run",
+   "link_count": 2,
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Card Break"
   },
   {
    "hidden": 0,
@@ -54,11 +69,61 @@
    "type": "Link"
   },
   {
-   "description": "View deploy and build logs",
+   "description": "WireGuard interfaces, address pools, and the peer behind each container.",
    "hidden": 0,
    "is_query_report": 0,
-   "label": "Logs",
-   "link_count": 2,
+   "label": "Network",
+   "link_count": 4,
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "WireGuard Server",
+   "link_count": 0,
+   "link_to": "WireGuard Server",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "VPN Peer",
+   "link_count": 0,
+   "link_to": "VPN Peer",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Network Pool",
+   "link_count": 0,
+   "link_to": "Network Pool",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "IP Allocation",
+   "link_count": 0,
+   "link_to": "IP Allocation",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "description": "Raw events the app UI does not show \u2014 deploy output, docker build output, privileged VPN actions.",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Observe",
+   "link_count": 3,
    "link_type": "DocType",
    "onboard": 0,
    "type": "Card Break"
@@ -84,11 +149,21 @@
    "type": "Link"
   },
   {
-   "description": "Configure Docker, WireGuard, and resource limits",
    "hidden": 0,
    "is_query_report": 0,
-   "label": "Settings",
-   "link_count": 1,
+   "label": "VPN Audit Log",
+   "link_count": 0,
+   "link_to": "VPN Audit Log",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "description": "Environment-wide settings. Change rarely.",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Configure",
+   "link_count": 3,
    "link_type": "DocType",
    "onboard": 0,
    "type": "Card Break"
@@ -102,17 +177,73 @@
    "link_type": "DocType",
    "onboard": 0,
    "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "VPN Settings",
+   "link_count": 0,
+   "link_to": "VPN Settings",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Database Server",
+   "link_count": 0,
+   "link_to": "Database Server",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
   }
  ],
- "modified": "2026-03-26 17:35:52.964251",
+ "modified": "2026-07-26 18:30:00.000000",
  "modified_by": "Administrator",
  "module": "Benchpress",
  "name": "BenchPress",
- "number_cards": [],
+ "number_cards": [
+  {
+   "label": "Labs Ready",
+   "number_card_name": "Labs Ready"
+  },
+  {
+   "label": "Benches Running",
+   "number_card_name": "Benches Running"
+  },
+  {
+   "label": "Benches in Error",
+   "number_card_name": "Benches in Error"
+  },
+  {
+   "label": "Active Sites",
+   "number_card_name": "Active Sites"
+  },
+  {
+   "label": "Active VPN Peers",
+   "number_card_name": "Active VPN Peers"
+  },
+  {
+   "label": "Stale VPN Peers",
+   "number_card_name": "Stale VPN Peers"
+  }
+ ],
  "owner": "Administrator",
  "parent_page": "",
  "public": 1,
- "quick_lists": [],
+ "quick_lists": [
+  {
+   "document_type": "Bench Instance",
+   "label": "Needs Attention",
+   "quick_list_filter": "[[\"Bench Instance\",\"status\",\"in\",[\"Error\",\"Stopped\"]]]"
+  },
+  {
+   "document_type": "Bench Site",
+   "label": "Recent Sites",
+   "quick_list_filter": "[]"
+  }
+ ],
  "restrict_to_domain": "",
  "roles": [],
  "sequence_id": 1.0,
@@ -139,10 +270,10 @@
    "type": "DocType"
   },
   {
-   "color": "Grey",
+   "color": "Cyan",
    "doc_view": "List",
-   "label": "Bench Site",
-   "link_to": "Bench Site",
+   "label": "VPN Peer",
+   "link_to": "VPN Peer",
    "type": "DocType"
   }
  ],
