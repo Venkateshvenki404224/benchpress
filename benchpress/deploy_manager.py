@@ -3,8 +3,11 @@
 
 import json
 import secrets
+import time
 
 import frappe
+from frappe.query_builder import DocType
+from frappe.query_builder.functions import Coalesce, Concat
 from frappe.utils.file_lock import LockTimeoutError
 from frappe.utils.synchronization import filelock
 
@@ -100,18 +103,75 @@ def build_linkuser_args(bench, lab, settings, ssh_password: str) -> list[str]:
 	]
 
 
-def _make_log_appender(doctype: str, log_name: str, event: str, context: dict):
-	def append_log(line: str, log_type: str = "info") -> None:
+class LogStream:
+	"""Buffered appender for a Deploy Log / Build Log ``message`` field.
+
+	Writing one line at a time meant a read-modify-write per line, which is
+	O(n²) in bytes for n lines: every append re-transferred the whole
+	accumulated ``longtext`` in both directions. Buffering in memory and
+	concatenating DB-side moves persistence to O(n) bytes in roughly
+	``n / flush_every`` writes. A Frappe image build emits 2,000-8,000 lines,
+	so this is the difference between gigabytes and megabytes of traffic.
+
+	Callable, so every existing ``append_log(line, log_type)`` call site keeps
+	working unchanged.
+	"""
+
+	FLUSH_INTERVAL = 2.0
+	TERMINAL_TYPES = ("success", "error")
+
+	def __init__(self, doctype: str, log_name: str, event: str, context: dict, flush_every: int = 50) -> None:
+		self.doctype = doctype
+		self.log_name = log_name
+		self.event = event
+		self.context = context
+		self.flush_every = flush_every
+		self.pending: list[str] = []
+		self.last_flush = time.monotonic()
+
+	def __call__(self, line: str, log_type: str = "info") -> None:
+		self.pending.append(line + "\n")
+		if self._should_flush(log_type):
+			self.flush()
+		# Publish last, after the write has landed. On a "success"/"error" line
+		# the SPA reloads the persisted log (frontend/src/pages/LabDetail.vue:829-832),
+		# so publishing first would race the flush and show a truncated tail.
 		frappe.publish_realtime(  # nosemgrep -- the SPA listens via raw socket.io without doc-room subscription; room-scoping would drop its events
-			event=event,
-			message={**context, "log": line, "type": log_type},
+			event=self.event,
+			message={**self.context, "log": line, "type": log_type},
 			after_commit=False,
 		)
-		current = frappe.db.get_value(doctype, log_name, "message") or ""
-		frappe.db.set_value(doctype, log_name, "message", current + line + "\n", update_modified=False)
-		frappe.db.commit()
 
-	return append_log
+	def _should_flush(self, log_type: str) -> bool:
+		"""True on a terminal line, a full buffer, or a stale buffer.
+
+		The elapsed-time trigger is durability, not throughput: the bare
+		``except Exception`` in ``_deploy_bench`` cannot catch a worker SIGTERM
+		or the 1800s job timeout, so without it a killed build would lose its
+		entire unflushed tail instead of just the last couple of seconds.
+		"""
+		if log_type in self.TERMINAL_TYPES:
+			return True
+		if len(self.pending) >= self.flush_every:
+			return True
+		return time.monotonic() - self.last_flush >= self.FLUSH_INTERVAL
+
+	def flush(self) -> None:
+		"""Append the buffered chunk in one write, with no read-back.
+
+		``Coalesce`` is required: MariaDB ``CONCAT(NULL, x)`` returns NULL, so a
+		log whose ``message`` is NULL would silently discard every line.
+		"""
+		if not self.pending:
+			return
+		chunk = "".join(self.pending)
+		self.pending.clear()
+		table = DocType(self.doctype)
+		frappe.qb.update(table).set(table.message, Concat(Coalesce(table.message, ""), chunk)).where(
+			table.name == self.log_name
+		).run()
+		frappe.db.commit()
+		self.last_flush = time.monotonic()
 
 
 def _notify_owner(user: str, subject: str, document_type: str, document_name: str) -> None:
@@ -208,7 +268,7 @@ def _deploy_bench(bench_name: str) -> None:
 	frappe.db.commit()
 	deploy_log_name = deploy_log.name
 
-	append_log = _make_log_appender(
+	append_log = LogStream(
 		"Deploy Log",
 		deploy_log_name,
 		"bench_deploy_log",
@@ -452,7 +512,7 @@ def build_lab(lab_name: str) -> None:
 	frappe.db.commit()
 	build_log_name = build_log.name
 
-	append_log = _make_log_appender(
+	append_log = LogStream(
 		"Build Log", build_log_name, "lab_build_log", {"lab": lab_name, "build_log": build_log_name}
 	)
 

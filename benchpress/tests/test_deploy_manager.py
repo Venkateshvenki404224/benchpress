@@ -340,6 +340,91 @@ class TestDeployManager(IntegrationTestCase):
 		self.assertEqual(bench.container_ip, "172.30.0.50")
 		self.assertEqual(bench.wg_ip, "10.8.0.20")
 
+	# --- LogStream batching (deploy-pipeline-performance phase 1) ---
+
+	def _new_deploy_log(self, bench_name):
+		"""An empty Deploy Log, cleaned up the way the rest of this file does it."""
+		self._cleanup_deploy_logs(bench_name)
+		log = frappe.get_doc(
+			{
+				"doctype": "Deploy Log",
+				"bench": bench_name,
+				"log_type": "info",
+				"timestamp": frappe.utils.now_datetime(),
+			}
+		).insert(ignore_permissions=True)
+		frappe.db.commit()
+		return log.name
+
+	def _log_stream(self, log_name, bench_name, flush_every=50):
+		"""LogStream with the elapsed-time trigger pinned far out of reach, so
+		write-count assertions measure the line-count and terminal triggers only.
+		"""
+		from benchpress.deploy_manager import LogStream
+
+		stream = LogStream(
+			"Deploy Log",
+			log_name,
+			"bench_deploy_log",
+			{"bench": bench_name, "deploy_log": log_name},
+			flush_every=flush_every,
+		)
+		stream.FLUSH_INTERVAL = 3600
+		return stream
+
+	@patch("frappe.publish_realtime")
+	def test_log_stream_batches_writes(self, mock_publish):
+		"""The O(n²) regression guard: assert the write count AND the content.
+
+		Either assertion alone passes for a broken writer — a no-op writer hits
+		the count, and the old read-modify-write appender hits the content.
+		"""
+		bench = self._fresh_bench()
+		log_name = self._new_deploy_log(bench.name)
+		# A NULL message exercises the Coalesce in flush(): CONCAT(NULL, x) is NULL.
+		frappe.db.set_value("Deploy Log", log_name, "message", None, update_modified=False)
+		frappe.db.commit()
+		stream = self._log_stream(log_name, bench.name)
+
+		with patch.object(stream, "flush", wraps=stream.flush) as flush_spy:
+			for index in range(200):
+				stream(f"line {index}")
+
+		self.assertEqual(flush_spy.call_count, 4)  # 200 lines at flush_every=50
+		message = frappe.db.get_value("Deploy Log", log_name, "message")
+		self.assertEqual(message.splitlines(), [f"line {index}" for index in range(200)])
+		# The realtime contract is unchanged: still one event per line, batching or not.
+		# Count only our event — frappe.db.commit() publishes its own events too.
+		line_events = [c for c in mock_publish.call_args_list if c.kwargs.get("event") == "bench_deploy_log"]
+		self.assertEqual(len(line_events), 200)
+
+	@patch("frappe.publish_realtime")
+	def test_log_stream_flushes_on_terminal_type(self, mock_publish):
+		bench = self._fresh_bench()
+		log_name = self._new_deploy_log(bench.name)
+		stream = self._log_stream(log_name, bench.name)
+
+		for index in range(3):
+			stream(f"line {index}")
+		self.assertFalse(frappe.db.get_value("Deploy Log", log_name, "message"))
+
+		stream("=== Deploy complete ===", "success")
+
+		message = frappe.db.get_value("Deploy Log", log_name, "message")
+		self.assertEqual(message.splitlines(), ["line 0", "line 1", "line 2", "=== Deploy complete ==="])
+
+	@patch("frappe.publish_realtime")
+	def test_log_stream_flushes_stale_buffer(self, mock_publish):
+		"""A SIGTERM'd or timed-out build keeps everything but the last seconds."""
+		bench = self._fresh_bench()
+		log_name = self._new_deploy_log(bench.name)
+		stream = self._log_stream(log_name, bench.name)
+		stream.FLUSH_INTERVAL = 0  # every buffer counts as stale
+
+		stream("line 0")
+
+		self.assertEqual(frappe.db.get_value("Deploy Log", log_name, "message"), "line 0\n")
+
 	# --- enqueue-time dedupe (issue #92 phase 2) ---
 
 	@patch("frappe.enqueue")
