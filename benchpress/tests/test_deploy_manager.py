@@ -356,11 +356,11 @@ class TestDeployManager(IntegrationTestCase):
 		frappe.db.commit()
 		return log.name
 
-	def _log_stream(self, log_name, bench_name, flush_every=50):
+	def _log_stream(self, log_name, bench_name, flush_every=50, max_bytes=None):
 		"""LogStream with the elapsed-time trigger pinned far out of reach, so
 		write-count assertions measure the line-count and terminal triggers only.
 		"""
-		from benchpress.deploy_manager import LogStream
+		from benchpress.deploy_manager import MAX_LOG_BYTES, LogStream
 
 		stream = LogStream(
 			"Deploy Log",
@@ -368,6 +368,7 @@ class TestDeployManager(IntegrationTestCase):
 			"bench_deploy_log",
 			{"bench": bench_name, "deploy_log": log_name},
 			flush_every=flush_every,
+			max_bytes=max_bytes or MAX_LOG_BYTES,
 		)
 		stream.FLUSH_INTERVAL = 3600
 		return stream
@@ -424,6 +425,96 @@ class TestDeployManager(IntegrationTestCase):
 		stream("line 0")
 
 		self.assertEqual(frappe.db.get_value("Deploy Log", log_name, "message"), "line 0\n")
+
+	# --- LogStream bounding (deploy-pipeline-performance phase 2) ---
+
+	@patch("frappe.publish_realtime")
+	def test_log_stream_caps_total_size(self, mock_publish):
+		"""A runaway build stops growing the stored log, and says so exactly once."""
+		from benchpress.deploy_manager import TRUNCATION_MARKER
+
+		bench = self._fresh_bench()
+		log_name = self._new_deploy_log(bench.name)
+		cap = 2048
+		stream = self._log_stream(log_name, bench.name, flush_every=10, max_bytes=cap)
+		line = "x" * 200
+
+		for _ in range(40):  # 40 * 201 bytes, ~4x the cap
+			stream(line)
+		stream.flush()
+		message_at_cap = frappe.db.get_value("Deploy Log", log_name, "message")
+
+		for _ in range(200):  # far past the cap: nothing more may be stored
+			stream(line)
+		stream("=== Deploy complete ===", "success")
+
+		message = frappe.db.get_value("Deploy Log", log_name, "message")
+		self.assertEqual(message, message_at_cap)
+		self.assertLessEqual(len(message.encode("utf-8")), cap + len(TRUNCATION_MARKER))
+		self.assertEqual(message.count(TRUNCATION_MARKER), 1)
+		# The cap bounds persistence only — every line still reaches the SPA.
+		line_events = [c for c in mock_publish.call_args_list if c.kwargs.get("event") == "bench_deploy_log"]
+		self.assertEqual(len(line_events), 241)
+
+	@patch("frappe.publish_realtime")
+	def test_log_stream_tails_long_line(self, mock_publish):
+		"""One pathological line (a base64 blob, a minified traceback) cannot flood the log."""
+		from benchpress.deploy_manager import MAX_LOG_LINE_BYTES
+
+		bench = self._fresh_bench()
+		log_name = self._new_deploy_log(bench.name)
+		stream = self._log_stream(log_name, bench.name, flush_every=1)
+
+		stream("head" + "y" * (MAX_LOG_LINE_BYTES * 2) + "tail")
+
+		stored = frappe.db.get_value("Deploy Log", log_name, "message").splitlines()[0]
+		self.assertLessEqual(len(stored.encode("utf-8")), MAX_LOG_LINE_BYTES)
+		self.assertTrue(stored.endswith("tail"))  # the tail is what a failure message carries
+		self.assertNotIn("head", stored)
+
+	# --- bench build failure visibility (deploy-pipeline-performance phase 2) ---
+
+	def test_deploy_fails_when_bench_build_fails(self):
+		"""A non-zero `bench build` must fail the deploy, not report Running."""
+		from benchpress import deploy_manager
+
+		bench = self._fresh_bench()
+		self._cleanup_deploy_logs(bench.name)
+		frappe.db.set_value("Lab", self.lab.name, {"status": "Ready", "image_tag": "benchpress/test:latest"})
+		frappe.db.commit()
+
+		def exec_result(container_id, command, **kwargs):
+			if "bench build" in command:
+				return (1, "asset build failed: node heap out of memory")
+			return (0, "")
+
+		with (
+			patch.object(deploy_manager, "ensure_infrastructure", autospec=True) as mock_infra,
+			patch.object(deploy_manager, "wait_for_mariadb", autospec=True),
+			patch.object(deploy_manager, "_remove_stale_container", autospec=True),
+			patch.object(deploy_manager, "create_bench_container", autospec=True) as mock_create,
+			patch.object(deploy_manager, "start_container", autospec=True),
+			patch.object(deploy_manager, "wait_for_container_running", autospec=True) as mock_wait,
+			patch.object(deploy_manager, "_setup_container_vpn", autospec=True),
+			patch.object(deploy_manager, "write_file_to_container", autospec=True),
+			patch.object(deploy_manager, "exec_in_container", autospec=True) as mock_exec,
+			patch.object(deploy_manager, "create_site_in_container", autospec=True) as mock_site,
+			patch.object(deploy_manager, "remove_container", autospec=True),
+			patch.object(deploy_manager, "_notify_owner", autospec=True),
+			patch("benchpress.vpn_adapter.remove_bench_peer", autospec=True),
+		):
+			mock_infra.return_value = self.db_server_name
+			mock_create.return_value = "cid-build-fail"
+			mock_wait.return_value = "172.30.0.11"
+			mock_exec.side_effect = exec_result
+			mock_site.return_value = (0, "site created")
+
+			deploy_manager.deploy_bench(bench.name)
+
+		bench.reload()
+		self.assertEqual(bench.status, "Error")
+		message = frappe.db.get_value("Deploy Log", {"bench": bench.name, "log_type": "error"}, "message")
+		self.assertIn("asset build failed", message)
 
 	# --- enqueue-time dedupe (issue #92 phase 2) ---
 

@@ -28,6 +28,27 @@ from benchpress.mariadb_manager import (
 	wait_for_mariadb,
 )
 
+MAX_LOG_LINE_BYTES = 8 * 1024
+MAX_LOG_BYTES = 512 * 1024
+TRUNCATION_MARKER = "=== log truncated ===\n"
+ELISION_MARKER = "...[line truncated]... "
+
+
+def _tail(text: str, max_bytes: int) -> str:
+	"""The last ``max_bytes`` of ``text``, marked when it actually truncated.
+
+	Tails rather than heads because the end of a command's output is where the
+	failure is. The marker is charged against the budget, so the result never
+	exceeds ``max_bytes``.
+	"""
+	encoded = text.encode("utf-8", errors="replace")
+	if len(encoded) <= max_bytes:
+		return text
+	keep = max_bytes - len(ELISION_MARKER)
+	if keep <= 0:
+		return ELISION_MARKER[:max_bytes]
+	return ELISION_MARKER + encoded[-keep:].decode("utf-8", errors="ignore")
+
 
 def _remove_stale_container(bench) -> None:
 	"""Remove any existing container, preserving the data volume."""
@@ -113,6 +134,11 @@ class LogStream:
 	``n / flush_every`` writes. A Frappe image build emits 2,000-8,000 lines,
 	so this is the difference between gigabytes and megabytes of traffic.
 
+	Every line passes through the per-line cap here rather than at each call
+	site, so no caller can write an unbounded line however the output was
+	produced, and the whole document stops at ``max_bytes``. The cap bounds the
+	stored audit trail only — dropped lines are still published live.
+
 	Callable, so every existing ``append_log(line, log_type)`` call site keeps
 	working unchanged.
 	"""
@@ -120,17 +146,29 @@ class LogStream:
 	FLUSH_INTERVAL = 2.0
 	TERMINAL_TYPES = ("success", "error")
 
-	def __init__(self, doctype: str, log_name: str, event: str, context: dict, flush_every: int = 50) -> None:
+	def __init__(
+		self,
+		doctype: str,
+		log_name: str,
+		event: str,
+		context: dict,
+		flush_every: int = 50,
+		max_bytes: int = MAX_LOG_BYTES,
+	) -> None:
 		self.doctype = doctype
 		self.log_name = log_name
 		self.event = event
 		self.context = context
 		self.flush_every = flush_every
+		self.max_bytes = max_bytes
 		self.pending: list[str] = []
+		self.written_bytes = 0
+		self.truncated = False
 		self.last_flush = time.monotonic()
 
 	def __call__(self, line: str, log_type: str = "info") -> None:
-		self.pending.append(line + "\n")
+		line = _tail(line, MAX_LOG_LINE_BYTES)
+		self._buffer(line)
 		if self._should_flush(log_type):
 			self.flush()
 		# Publish last, after the write has landed. On a "success"/"error" line
@@ -141,6 +179,25 @@ class LogStream:
 			message={**self.context, "log": line, "type": log_type},
 			after_commit=False,
 		)
+
+	def _buffer(self, line: str) -> None:
+		"""Buffer the line until the ceiling, then one truncation marker.
+
+		``written_bytes`` is exact without any read-back: the stream owns the
+		document from creation, so it already knows everything it has written.
+		Reading the stored size back per line would reintroduce the O(n²) cost
+		this class exists to remove.
+		"""
+		if self.truncated:
+			return
+		entry = line + "\n"
+		size = len(entry.encode("utf-8"))
+		if self.written_bytes + size > self.max_bytes:
+			self.pending.append(TRUNCATION_MARKER)
+			self.truncated = True
+			return
+		self.written_bytes += size
+		self.pending.append(entry)
 
 	def _should_flush(self, log_type: str) -> bool:
 		"""True on a terminal line, a full buffer, or a stale buffer.
@@ -343,11 +400,15 @@ def _deploy_bench(bench_name: str) -> None:
 			container_id, db_server, site_name, admin_password, apps_csv
 		)
 		if exit_code != 0:
-			raise Exception(f"bench new-site failed (exit {exit_code}): {output}")
+			raise Exception(f"bench new-site failed (exit {exit_code}): {_tail(output, MAX_LOG_LINE_BYTES)}")
 		append_log("Site created successfully")
 
 		append_log("Building assets...")
-		exec_in_container(container_id, "bench build", user="frappe", workdir=bench_dir)
+		exit_code, output = exec_in_container(container_id, "bench build", user="frappe", workdir=bench_dir)
+		if output:
+			append_log(_tail(output.strip(), MAX_LOG_LINE_BYTES))
+		if exit_code != 0:
+			raise Exception(f"bench build failed (exit {exit_code}): {_tail(output, MAX_LOG_LINE_BYTES)}")
 
 		if not bench.ssh_username:
 			bench.ssh_username = bench._derive_username(bench.owner)
@@ -358,9 +419,9 @@ def _deploy_bench(bench_name: str) -> None:
 		linkuser_cmd = "bash /opt/benchpress/scripts/linkuser.sh " + " ".join(f"'{a}'" for a in linkuser_args)
 		exit_code, output = exec_in_container(container_id, linkuser_cmd, user="root")
 		if output:
-			append_log(output.strip())
+			append_log(_tail(output.strip(), MAX_LOG_LINE_BYTES))
 		if exit_code != 0:
-			raise Exception(f"linkuser.sh failed (exit {exit_code}): {output}")
+			raise Exception(f"linkuser.sh failed (exit {exit_code}): {_tail(output, MAX_LOG_LINE_BYTES)}")
 
 		bench.ssh_password = ssh_password
 
