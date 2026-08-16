@@ -3,13 +3,29 @@ import { LabDetailPage } from "./pages/LabDetailPage";
 import {
   createTestBench,
   createTestBuildLog,
+  createTestDeployLog,
   createTestLab,
   deleteTestDoc,
+  deployStepLine,
 } from "./fixtures/test-data";
 
 let labName: string;
 let benchName: string | null = null;
 let buildLogName: string | null = null;
+let deployLogName: string | null = null;
+
+/** A run that reached the WireGuard peer and is still working on it. */
+const MID_RUN_LOG = [
+  "=== Deploy started ===",
+  deployStepLine(1, "Checking shared infrastructure", "infrastructure", 0.2),
+  "MariaDB reachable at benchpress-mariadb:3306",
+  deployStepLine(2, "Preparing the lab image", "image", 3.4),
+  "Using cached lab image: benchpress/e2e:version-16",
+  deployStepLine(3, "Creating the container", "container", 9.1),
+  deployStepLine(4, "Waiting for the container IP", "container_ip", 11.6),
+  "container_ip 172.30.0.99",
+  deployStepLine(5, "Configuring the WireGuard peer", "vpn_peer", 14.2),
+].join("\n");
 
 async function newLab(page, overrides = {}) {
   const lab = await createTestLab(page, {
@@ -28,6 +44,12 @@ async function newLab(page, overrides = {}) {
 
 test.describe("Lab detail", () => {
   test.afterEach(async ({ page }) => {
+    // The deploy log links its bench, so it goes first or the bench delete
+    // fails on a link that still exists.
+    if (deployLogName) {
+      await deleteTestDoc(page, "Deploy Log", deployLogName);
+      deployLogName = null;
+    }
     if (benchName) {
       await deleteTestDoc(page, "Bench Instance", benchName);
       benchName = null;
@@ -200,6 +222,69 @@ test.describe("Lab detail", () => {
 
     await detail.clickTab("Sites");
     await expect(page.getByText("No site yet")).toBeVisible();
+  });
+
+  test("the deploy log tab renders the pipeline the log recorded", async ({ page }) => {
+    const lab = await newLab(page);
+    benchName = (await createTestBench(page, lab.name, { status: "Deploying" })).name;
+    deployLogName = (await createTestDeployLog(page, benchName, MID_RUN_LOG)).name;
+
+    const detail = new LabDetailPage(page);
+    await detail.goto(labName);
+    await detail.clickTab("Deploy log");
+
+    await expect(detail.pipeline).toBeVisible();
+    // State is derived from the emitted step lines, never from a timer.
+    await detail.expectStepState("infrastructure", "done");
+    await detail.expectStepState("vpn_peer", "active");
+    await detail.expectStepState("site", "pending");
+    await detail.expectStepState("complete", "pending");
+    await expect(detail.testId("step-detail-container_ip")).toContainText("172.30.0.99");
+    await expect(detail.testId("step-timing-image")).toHaveText("6s");
+  });
+
+  test("the raw log sits collapsed under the stepper", async ({ page }) => {
+    const lab = await newLab(page);
+    benchName = (await createTestBench(page, lab.name, { status: "Deploying" })).name;
+    deployLogName = (await createTestDeployLog(page, benchName, MID_RUN_LOG)).name;
+
+    const detail = new LabDetailPage(page);
+    await detail.goto(labName);
+    await detail.clickTab("Deploy log");
+
+    await expect(detail.rawLog).toBeVisible();
+    await expect(detail.testId("raw-log-body")).toHaveCount(0);
+    await expect(detail.testId("raw-log-count")).toHaveText("9 lines");
+
+    await detail.openRawLog();
+    await expect(detail.testId("raw-log-body")).toContainText("container_ip 172.30.0.99");
+  });
+
+  test("a failed run marks the failing step and nothing after it", async ({ page }) => {
+    const lab = await newLab(page);
+    benchName = (await createTestBench(page, lab.name, { status: "Error" })).name;
+    deployLogName = (
+      await createTestDeployLog(
+        page,
+        benchName,
+        [
+          MID_RUN_LOG,
+          deployStepLine(6, "Writing common_site_config.json", "site_config", 15.0),
+          deployStepLine(7, "Creating the site", "site", 16.2),
+          "=== Deploy failed: bench new-site failed (exit 1) ===",
+          "Cleanup: nothing to roll back — no container was created",
+        ].join("\n"),
+        "error"
+      )
+    ).name;
+
+    const detail = new LabDetailPage(page);
+    await detail.goto(labName);
+    await detail.clickTab("Deploy log");
+
+    await detail.expectStepState("site", "failed");
+    await detail.expectStepState("assets", "pending");
+    await expect(detail.testId("step-timing-site")).toHaveText("failed");
   });
 
   test("the log tabs are named, not positional", async ({ page }) => {

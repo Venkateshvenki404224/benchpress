@@ -10,15 +10,17 @@ together. The bench goes through ``frappe.get_list``, so the registered
 their own deployment and never about another owner's health, address or site.
 
 When a run failed, the failing step and its reason are extracted here rather
-than parsed out of the raw log in the browser. Nothing structured is emitted by
-the pipeline yet, so the `=== … ===` markers are all there is to read; phase 4
-adds real step metadata and ``_parse_failure`` is the single place that changes
-when it does.
+than parsed out of the raw log in the browser. A run from the current pipeline
+names its steps (``deploy_pipeline``), so the failing one is read from that
+metadata; runs recorded before it, and image builds — which stream Docker's own
+output — still only have `=== … ===` markers, so both are read.
 """
 
 import re
 
 import frappe
+
+from benchpress.deploy_pipeline import parse_step_line
 
 BENCH_FIELDS = [
 	"name",
@@ -162,7 +164,10 @@ def _parse_failure(message: str) -> tuple[str, str]:
 	"""The last step to open, and the reason the run ended with.
 
 	Cleanup lines carry no `=== … ===` marker, so the last marker that is not
-	itself the failure line is the step that was running when the run died.
+	itself the failure line is the step that was running when the run died. A
+	structured step line is checked first: it is also a `=== … ===` marker, so
+	the plain read would report "Step 7/11: Creating the site [site @61.4s]"
+	where the step's own label is what the banner wants.
 	"""
 	step = ""
 	reason = ""
@@ -171,6 +176,10 @@ def _parse_failure(message: str) -> tuple[str, str]:
 		failed = FAILED_MARKER.match(stripped)
 		if failed:
 			reason = failed.group(1)
+			continue
+		structured = parse_step_line(stripped)
+		if structured:
+			step = structured["step_label"]
 			continue
 		marker = STEP_MARKER.match(stripped)
 		if marker:

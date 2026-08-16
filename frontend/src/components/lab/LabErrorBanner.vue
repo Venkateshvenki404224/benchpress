@@ -23,7 +23,11 @@
 					>
 						Edit apps and rebuild
 					</Button>
-					<Button variant="subtle" data-test="view-failing-log" @click="emit('view-log')">
+					<Button
+						variant="subtle"
+						data-test="view-failing-log"
+						@click="emit('view-log')"
+					>
 						View failing log lines
 					</Button>
 				</div>

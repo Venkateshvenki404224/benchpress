@@ -60,11 +60,16 @@
 				</main>
 			</div>
 		</div>
+
+		<!-- A deploy can be started from three screens and outlives all of
+		     them, so the dialog that follows it is mounted once, here. -->
+		<DeployDialog />
 	</FrappeUIProvider>
 </template>
 
 <script setup>
 import AppSearch from "@/components/AppSearch.vue";
+import DeployDialog from "@/components/deploy/DeployDialog.vue";
 import { session } from "@/data/session";
 import { userContext } from "@/data/userContext";
 import { vpnStatus } from "@/data/vpnStatus";

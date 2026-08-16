@@ -2,12 +2,18 @@
 	<SectionCard title="Connection" data-test="connection-card">
 		<div
 			class="rounded-md border p-3"
-			:class="connected ? 'border-outline-green-1 bg-surface-green-1' : 'border-outline-amber-1 bg-surface-amber-1'"
+			:class="
+				connected
+					? 'border-outline-green-1 bg-surface-green-1'
+					: 'border-outline-amber-1 bg-surface-amber-1'
+			"
 		>
 			<div class="flex items-center gap-2">
 				<span
 					class="size-[5px] rounded-full"
-					:class="connected ? 'bg-surface-green-3' : 'bg-surface-amber-2 animate-vpn-pulse'"
+					:class="
+						connected ? 'bg-surface-green-3' : 'bg-surface-amber-2 animate-vpn-pulse'
+					"
 				/>
 				<p
 					class="text-sm font-semibold"

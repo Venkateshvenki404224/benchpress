@@ -1,5 +1,8 @@
 <template>
-	<div class="space-y-2 rounded-lg bg-gray-950 p-3">
+	<!-- Espresso tokens throughout: this and LogStep were the last two files in
+	     the SPA still on raw Tailwind greys, which do not answer `data-theme`
+	     and rendered black-on-black in dark mode. -->
+	<div class="space-y-2 rounded-card border border-outline-gray-1 bg-surface-white p-3">
 		<LogStep
 			v-for="(step, idx) in steps"
 			:key="idx"
@@ -9,7 +12,7 @@
 			:duration="step.duration"
 			:defaultOpen="step.defaultOpen"
 		/>
-		<div v-if="!steps.length" class="py-8 text-center text-sm text-gray-500">
+		<div v-if="!steps.length" class="py-8 text-center text-body text-ink-gray-5">
 			No log output yet.
 		</div>
 	</div>

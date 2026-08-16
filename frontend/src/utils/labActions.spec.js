@@ -1,5 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { DEPLOY, OPEN, REBUILD, WAIT, primaryAction, siteLabel, siteUrl } from "./labActions";
+import {
+	CONNECT_VPN,
+	DEPLOY,
+	OPEN,
+	REBUILD,
+	VIEW_LOG,
+	WAIT,
+	deployDialogAction,
+	primaryAction,
+	siteLabel,
+	siteUrl,
+} from "./labActions";
 
 const SITE = "http://172.27.0.2:8000";
 
@@ -101,5 +112,46 @@ describe("siteLabel", () => {
 		expect(siteLabel({ wg_ip: "172.27.0.2" }, { full_domain: "crm.lab" })).toBe("crm.lab");
 		expect(siteLabel({ domain: "bench.lab" }, null)).toBe("bench.lab");
 		expect(siteLabel({ wg_ip: "172.27.0.2" }, null)).toBe("172.27.0.2:8000");
+	});
+});
+
+describe("deployDialogAction", () => {
+	it("stays disabled while the run is still going", () => {
+		for (const runState of ["idle", "running"]) {
+			expect(
+				deployDialogAction({ runState, vpnConnected: true, siteUrl: SITE })
+			).toMatchObject({
+				action: WAIT,
+				label: "Deploying…",
+				disabled: true,
+				loading: true,
+			});
+		}
+	});
+
+	it("offers the site once the backend says the run finished", () => {
+		expect(
+			deployDialogAction({ runState: "success", vpnConnected: true, siteUrl: SITE })
+		).toMatchObject({ action: OPEN, label: "Open site", disabled: false });
+	});
+
+	it("routes to Devices instead of a site the tunnel cannot reach", () => {
+		expect(
+			deployDialogAction({ runState: "success", vpnConnected: false, siteUrl: SITE })
+		).toMatchObject({ action: CONNECT_VPN, label: "Connect VPN to open", disabled: false });
+	});
+
+	it("cannot open a deployed bench that has no address yet", () => {
+		expect(
+			deployDialogAction({ runState: "success", vpnConnected: true, siteUrl: null })
+		).toMatchObject({ action: OPEN, disabled: true });
+	});
+
+	it("sends a failed run to its log", () => {
+		expect(deployDialogAction({ runState: "failed", vpnConnected: true })).toMatchObject({
+			action: VIEW_LOG,
+			label: "View the failing log",
+			disabled: false,
+		});
 	});
 });

@@ -90,7 +90,7 @@
 			</EmptyState>
 		</SectionCard>
 
-		<ErrorMessage class="mt-3" :message="createAction.error" />
+		<ErrorMessage class="mt-3" :message="createAction.error || deployAction.error" />
 	</div>
 </template>
 
@@ -99,6 +99,7 @@ import AppChip from "@/components/AppChip.vue";
 import AppIcon from "@/components/AppIcon.vue";
 import EmptyState from "@/components/EmptyState.vue";
 import SectionCard from "@/components/SectionCard.vue";
+import { openDeployRun } from "@/data/deployRun";
 import { labsResource } from "@/data/labs";
 import { cpuLabel, etaLabel, memoryLabel } from "@/utils/labSpecs";
 import { Badge, Button, ErrorMessage, createResource, toast } from "frappe-ui";
@@ -115,18 +116,8 @@ const templates = createResource({ url: "benchpress.api.get_lab_templates", auto
 
 const rows = computed(() => templates.data ?? []);
 
-const createAction = createResource({
-	url: "benchpress.api.create_lab_from_template",
-	onSuccess(lab) {
-		pendingKey.value = "";
-		labsResource.reload();
-		toast.success("Lab created — build the image when you are ready.");
-		router.push({ name: "LabDetail", params: { labId: lab.name } });
-	},
-	onError() {
-		pendingKey.value = "";
-	},
-});
+const createAction = createResource({ url: "benchpress.api.create_lab_from_template" });
+const deployAction = createResource({ url: "benchpress.api.create_bench" });
 
 /** Every app a template installs; a bare bench is still Frappe. */
 function appsOf(template) {
@@ -143,10 +134,26 @@ function resourceChips(template) {
 	return [memoryLabel(template.memory_limit), cpuLabel(template.cpu_cores)];
 }
 
-// Phase 4 replaces this with the deploy dialog. Until then the lab is created
-// and opened; the backend picks a free id from the template key.
-function useTemplate(template) {
+/**
+ * The whole loop from one click: the lab is created from the template, its
+ * bench is deployed, and the deploy dialog follows the run. `createResource`
+ * resolves with the last successful payload even when a call fails, so each
+ * step checks `error` before using its result.
+ */
+async function useTemplate(template) {
 	pendingKey.value = template.key;
-	createAction.submit({ template: template.key });
+	try {
+		const lab = await createAction.submit({ template: template.key });
+		if (createAction.error || !lab?.name) return;
+		labsResource.reload();
+
+		const bench = await deployAction.submit({ data: JSON.stringify({ lab: lab.name }) });
+		if (deployAction.error || !bench?.name) return;
+
+		toast.success(`Deploying ${lab.name}.`);
+		openDeployRun({ labId: lab.name, benchName: bench.name });
+	} finally {
+		pendingKey.value = "";
+	}
 }
 </script>

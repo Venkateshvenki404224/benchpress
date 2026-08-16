@@ -73,7 +73,18 @@
 					</div>
 
 					<div v-else class="pt-4">
-						<LogViewer v-if="logText(tab.key)" :rawLog="logText(tab.key)" />
+						<!-- The deploy log is the pipeline; the build log is Docker's
+						     own output, which has no steps of ours to report. -->
+						<DeployPipeline
+							v-if="tab.key === 'deploy' && deployText"
+							:raw-log="deployText"
+							title="Latest deploy"
+							:file-name="`${labId}-deploy.log`"
+						/>
+						<LogViewer
+							v-else-if="tab.key === 'build' && buildText"
+							:rawLog="buildText"
+						/>
 						<SectionCard v-else :padded="false">
 							<EmptyState :message="LOG_EMPTY[tab.key]" />
 						</SectionCard>
@@ -93,12 +104,14 @@
 import EmptyState from "@/components/EmptyState.vue";
 import LogViewer from "@/components/LogViewer.vue";
 import SectionCard from "@/components/SectionCard.vue";
+import DeployPipeline from "@/components/deploy/DeployPipeline.vue";
 import ConnectionCard from "@/components/lab/ConnectionCard.vue";
 import ConnectionDetails from "@/components/lab/ConnectionDetails.vue";
 import ContainerStatusCard from "@/components/lab/ContainerStatusCard.vue";
 import LabErrorBanner from "@/components/lab/LabErrorBanner.vue";
 import LabHeader from "@/components/lab/LabHeader.vue";
 import SitesCard from "@/components/lab/SitesCard.vue";
+import { openDeployRun } from "@/data/deployRun";
 import { userContext } from "@/data/userContext";
 import { vpnStatus } from "@/data/vpnStatus";
 import { siteUrl } from "@/utils/labActions";
@@ -187,12 +200,12 @@ const tabs = computed(() => {
 	return list;
 });
 
-/** What a log tab renders — the live stream while one runs, the stored log after. */
-function logText(key) {
-	return key === "build"
-		? liveBuildLog.value || buildLogs.data?.[0]?.message || ""
-		: liveDeployLog.value || deployLogs.data?.[0]?.message || "";
-}
+// The stored log and the live stream are one run: a page opened mid-deploy
+// reads the lines it missed from the document and appends the rest as they
+// arrive. Reading only the live stream would restart the stepper at step one
+// on every reload.
+const deployText = computed(() => (deployLogs.data?.[0]?.message ?? "") + liveDeployLog.value);
+const buildText = computed(() => (buildLogs.data?.[0]?.message ?? "") + liveBuildLog.value);
 
 // Credentials and deploy history belong to a bench, so both follow its identity.
 watch(
@@ -213,9 +226,11 @@ watch(
 	}
 );
 
-function deployLab() {
+async function deployLab() {
 	liveDeployLog.value = "";
-	deployAction.submit({ data: JSON.stringify({ lab: labId }) });
+	const bench = await deployAction.submit({ data: JSON.stringify({ lab: labId }) });
+	if (deployAction.error || !bench?.name) return;
+	openDeployRun({ labId, benchName: bench.name });
 }
 
 function buildImage() {
@@ -269,22 +284,25 @@ function goToTab(key) {
 
 const socket = useSocket();
 
-function onDeployLog(data) {
+// On a terminal line the stored document already holds every line the stream
+// delivered, so the live buffer is dropped once the reload lands — clearing it
+// any earlier would flash the previous run.
+async function onDeployLog(data) {
 	if (!bench.value || data.bench !== bench.value.name) return;
 	liveDeployLog.value += `${data.log}\n`;
-	if (TERMINAL_LOG_TYPES.includes(data.type)) {
-		refresh();
-		deployLogs.reload();
-	}
+	if (!TERMINAL_LOG_TYPES.includes(data.type)) return;
+	refresh();
+	await deployLogs.reload();
+	liveDeployLog.value = "";
 }
 
-function onBuildLog(data) {
+async function onBuildLog(data) {
 	if (data.lab !== labId) return;
 	liveBuildLog.value += `${data.log}\n`;
-	if (TERMINAL_LOG_TYPES.includes(data.type)) {
-		refresh();
-		buildLogs.reload();
-	}
+	if (!TERMINAL_LOG_TYPES.includes(data.type)) return;
+	refresh();
+	await buildLogs.reload();
+	liveBuildLog.value = "";
 }
 
 onMounted(() => {

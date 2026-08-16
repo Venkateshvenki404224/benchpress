@@ -1,7 +1,12 @@
 <template>
 	<SectionCard title="Connection details" :padded="false" data-test="connection-details">
 		<template #action>
-			<Button variant="subtle" size="sm" data-test="reveal-secrets" @click="revealed = !revealed">
+			<Button
+				variant="subtle"
+				size="sm"
+				data-test="reveal-secrets"
+				@click="revealed = !revealed"
+			>
 				<template #prefix>
 					<component :is="revealed ? EyeOffIcon : EyeIcon" class="size-3.5" />
 				</template>
@@ -105,7 +110,12 @@ const rows = computed(() =>
 		{ key: "wg-ip", label: "WireGuard IP", value: props.bench.wg_ip },
 		codeServerRow(),
 		sshRow(),
-		{ key: "ssh-password", label: "SSH password", value: secret("ssh_password"), secret: true },
+		{
+			key: "ssh-password",
+			label: "SSH password",
+			value: secret("ssh_password"),
+			secret: true,
+		},
 		{
 			key: "admin-password",
 			label: "Admin password",
@@ -117,7 +127,11 @@ const rows = computed(() =>
 		.filter(Boolean)
 		// A secret that does not exist yet has nothing to hide: masking the
 		// em-dash would render one bullet and read as a one-character password.
-		.map((row) => ({ ...row, secret: !!(row.secret && row.value), value: row.value || MISSING }))
+		.map((row) => ({
+			...row,
+			secret: !!(row.secret && row.value),
+			value: row.value || MISSING,
+		}))
 );
 
 function codeServerRow() {

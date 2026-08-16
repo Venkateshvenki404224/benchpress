@@ -71,6 +71,46 @@ function openAction({ vpnConnected, siteUrl }) {
 	return { action: OPEN, label: "Open site", disabled: false, hint: "" };
 }
 
+export const VIEW_LOG = "view-log";
+export const CONNECT_VPN = "connect-vpn";
+
+/**
+ * The deploy dialog's solid button, from the state of the run it is watching.
+ *
+ * It stays disabled and honest while the pipeline runs — the run ends when the
+ * backend says it ended — and then offers the thing the user came for. With the
+ * tunnel down the site is unreachable, so it routes to Devices instead of
+ * opening an address that cannot answer.
+ *
+ * @param {object} state
+ * @param {string} state.runState "running" / "success" / "failed" / "idle".
+ * @param {boolean} state.vpnConnected Whether this device's tunnel is up.
+ * @param {string|null} state.siteUrl Where the new site answers, if it has an address.
+ * @returns {{action: string, label: string, disabled: boolean, loading: boolean}}
+ */
+export function deployDialogAction({ runState, vpnConnected, siteUrl } = {}) {
+	if (runState === "failed") {
+		return {
+			action: VIEW_LOG,
+			label: "View the failing log",
+			disabled: false,
+			loading: false,
+		};
+	}
+	if (runState !== "success") {
+		return { action: WAIT, label: "Deploying…", disabled: true, loading: true };
+	}
+	if (!vpnConnected) {
+		return {
+			action: CONNECT_VPN,
+			label: "Connect VPN to open",
+			disabled: false,
+			loading: false,
+		};
+	}
+	return { action: OPEN, label: "Open site", disabled: !siteUrl, loading: false };
+}
+
 /**
  * Where a bench's site actually answers.
  *

@@ -17,6 +17,8 @@ export class LabDetailPage extends BasePage {
   readonly connectionDetails: Locator;
   readonly revealSecrets: Locator;
   readonly errorBanner: Locator;
+  readonly pipeline: Locator;
+  readonly rawLog: Locator;
 
   constructor(page: Page) {
     super(page);
@@ -28,6 +30,22 @@ export class LabDetailPage extends BasePage {
     this.connectionDetails = this.testId("connection-details");
     this.revealSecrets = this.testId("reveal-secrets");
     this.errorBanner = this.testId("lab-error-banner");
+    this.pipeline = this.testId("deploy-pipeline");
+    this.rawLog = this.testId("raw-log");
+  }
+
+  /** One row of the deploy stepper; its state is a `data-state` attribute. */
+  step(key: string): Locator {
+    return this.testId(`step-${key}`);
+  }
+
+  async expectStepState(key: string, state: string) {
+    await expect(this.step(key)).toHaveAttribute("data-state", state);
+  }
+
+  async openRawLog() {
+    await this.testId("raw-log-toggle").click();
+    await expect(this.testId("raw-log-body")).toBeVisible();
   }
 
   async goto(labName: string) {

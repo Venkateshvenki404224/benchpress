@@ -105,6 +105,41 @@ export async function createTestBuildLog(
   return data.data;
 }
 
+/** A deploy log for a bench — how a pipeline run is staged without running one. */
+export async function createTestDeployLog(
+  page: Page,
+  bench: string,
+  message: string,
+  logType = "info"
+) {
+  const response = await page.request.post(`${API_BASE}/Deploy Log`, {
+    headers: await csrfHeaders(page),
+    data: JSON.stringify({
+      bench,
+      log_type: logType,
+      message,
+      timestamp: new Date().toISOString().slice(0, 19).replace("T", " "),
+    }),
+  });
+  const data = await unwrap(response, "Creating a test Deploy Log");
+  return data.data;
+}
+
+/**
+ * A step marker exactly as `benchpress/deploy_pipeline.py` writes it.
+ *
+ * The suite builds runs out of these rather than copying whole logs, so a
+ * change to the line format fails here instead of silently rendering nothing.
+ */
+export function deployStepLine(
+  index: number,
+  label: string,
+  key: string,
+  elapsed: number
+) {
+  return `=== Step ${index}/11: ${label} [${key} @${elapsed.toFixed(1)}s] ===`;
+}
+
 export async function deleteTestDoc(
   page: Page,
   doctype: string,
