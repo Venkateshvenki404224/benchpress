@@ -94,6 +94,7 @@
   },
   {
    "default": "1",
+   "description": "Minimum 1 core. See docs/SIZING.md for the measured baseline.",
    "fieldname": "cpu_cores",
    "fieldtype": "Int",
    "label": "CPU Cores"
