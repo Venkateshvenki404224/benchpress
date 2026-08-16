@@ -80,6 +80,15 @@ class TestApiAuthorization(IntegrationTestCase):
 		cls.norole_user = _ensure_user("authz-norole@example.com", "Authz NoRole")
 		cls.lab = _ensure_lab("authz-lab")
 		cls.bench = _ensure_owned_bench(cls.user_a, cls.lab)
+		cls.build_log = frappe.get_doc(
+			{
+				"doctype": "Build Log",
+				"lab": cls.lab.name,
+				"log_type": "error",
+				"message": "authz fixture build line",
+				"timestamp": frappe.utils.now_datetime(),
+			}
+		).insert(ignore_permissions=True)
 		cls.deploy_log = frappe.get_doc(
 			{
 				"doctype": "Deploy Log",
@@ -95,6 +104,7 @@ class TestApiAuthorization(IntegrationTestCase):
 	def tearDownClass(cls):
 		frappe.set_user("Administrator")
 		frappe.delete_doc("Deploy Log", cls.deploy_log.name, force=True, ignore_permissions=True)
+		frappe.delete_doc("Build Log", cls.build_log.name, force=True, ignore_permissions=True)
 		frappe.delete_doc("Bench Instance", cls.bench.name, force=True, ignore_permissions=True)
 		frappe.delete_doc("Lab", cls.lab.name, force=True, ignore_permissions=True)
 		for email in (cls.user_a, cls.user_b, cls.admin_user, cls.norole_user):
@@ -120,6 +130,11 @@ class TestApiAuthorization(IntegrationTestCase):
 		self.assert_denied(lambda: api.create_lab_from_template("frappe", "authz-guest"))
 		self.assert_denied(lambda: api.build_lab_image(self.lab.name))
 		self.assert_denied(lambda: api.run_diagnostics())
+
+	def test_guest_denied_from_overview_endpoints(self):
+		frappe.set_user("Guest")
+		self.assert_denied(api.get_overview)
+		self.assert_denied(api.get_vpn_status)
 
 	def test_guest_denied_from_bench_scoped_endpoints(self):
 		frappe.set_user("Guest")
@@ -222,6 +237,58 @@ class TestApiAuthorization(IntegrationTestCase):
 	def test_roleless_denied_from_get_bench_credentials(self):
 		frappe.set_user(self.norole_user)
 		self.assert_denied(lambda: api.get_bench_credentials(self.bench.name))
+
+	def test_roleless_denied_from_get_overview(self):
+		frappe.set_user(self.norole_user)
+		self.assert_denied(api.get_overview)
+
+	def test_roleless_denied_from_get_vpn_status(self):
+		frappe.set_user(self.norole_user)
+		self.assert_denied(api.get_vpn_status)
+
+	# --- Overview is scoped to the caller ------------------------------------
+
+	def test_overview_shows_a_user_only_their_own_environments(self):
+		frappe.set_user(self.user_b)
+		names = [row["name"] for row in api.get_overview()["environments"]]
+		self.assertNotIn(self.bench.name, names)
+
+		frappe.set_user(self.user_a)
+		names = [row["name"] for row in api.get_overview()["environments"]]
+		self.assertIn(self.bench.name, names)
+
+	def test_overview_withholds_infrastructure_from_a_user(self):
+		frappe.set_user(self.user_a)
+		self.assertIsNone(api.get_overview()["infrastructure"])
+
+		frappe.set_user(self.admin_user)
+		with patch("benchpress.diagnostics.run_diagnostics", return_value=[]):
+			self.assertEqual(api.get_overview()["infrastructure"], [])
+
+	def test_overview_activity_never_leaks_build_logs_to_a_user(self):
+		# Build Log carries no permission query condition, so the feed must
+		# exclude it for non-admins rather than rely on one.
+		frappe.set_user(self.user_a)
+		activity = api.get_overview()["activity"]
+		self.assertTrue(activity, "user_a's own deploy log should still appear")
+		for event in activity:
+			self.assertNotIn("lab", event)
+
+		frappe.set_user(self.admin_user)
+		with patch("benchpress.diagnostics.run_diagnostics", return_value=[]):
+			admin_activity = api.get_overview()["activity"]
+		self.assertTrue(any("lab" in event for event in admin_activity))
+
+	def test_overview_activity_hides_another_users_deploys(self):
+		frappe.set_user(self.user_b)
+		activity = api.get_overview()["activity"]
+		self.assertFalse([event for event in activity if event.get("bench") == self.bench.name])
+
+	def test_app_user_allowed_to_read_vpn_status(self):
+		frappe.set_user(self.user_a)
+		status = api.get_vpn_status()
+		self.assertFalse(status["connected"])
+		self.assertEqual(status["peer_count"], 0)
 
 	# --- Positive controls: require_app_user permits a BenchPress User --------
 

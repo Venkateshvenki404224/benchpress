@@ -8,9 +8,19 @@ export {}
 /* prettier-ignore */
 declare module 'vue' {
   export interface GlobalComponents {
+    ActivityFeed: typeof import('./src/components/overview/ActivityFeed.vue')['default']
+    AppChip: typeof import('./src/components/AppChip.vue')['default']
+    AppIcon: typeof import('./src/components/AppIcon.vue')['default']
+    EmptyState: typeof import('./src/components/EmptyState.vue')['default']
+    EnvironmentList: typeof import('./src/components/overview/EnvironmentList.vue')['default']
+    InfrastructureCard: typeof import('./src/components/overview/InfrastructureCard.vue')['default']
     LogStep: typeof import('./src/components/LogStep.vue')['default']
     LogViewer: typeof import('./src/components/LogViewer.vue')['default']
+    OnboardingPanel: typeof import('./src/components/overview/OnboardingPanel.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
+    SectionCard: typeof import('./src/components/SectionCard.vue')['default']
+    StatTile: typeof import('./src/components/StatTile.vue')['default']
+    StatusBadge: typeof import('./src/components/StatusBadge.vue')['default']
   }
 }

@@ -19,9 +19,12 @@ import re
 
 import frappe
 from frappe import _
+from frappe.utils.data import cint, now_datetime, time_diff_in_seconds
 
 DEFAULT_INTERFACE = "wg0"
 CONTAINER_KEEPALIVE_SECONDS = 25
+# Fallback when VPN Settings has never been saved; matches its own default.
+DEFAULT_STATUS_POLL_MINUTES = 5
 DEVICE_TYPES = ["Mobile", "Laptop", "Desktop", "Tablet", "Server", "IoT", "Embedded"]
 DEVICE_PEER_PATTERN = re.compile(r"^\[(?P<device_type>[A-Za-z]+)\] (?P<device_name>.+)$")
 
@@ -142,11 +145,55 @@ def list_devices() -> list[dict]:
 	peers = frappe.get_all(
 		"VPN Peer",
 		filters=_device_peer_filters(),
-		fields=["name", "peer_name", "status", "assigned_ip", "public_key", "rx_bytes", "tx_bytes"],
+		fields=[
+			"name",
+			"peer_name",
+			"status",
+			"assigned_ip",
+			"public_key",
+			"rx_bytes",
+			"tx_bytes",
+			"last_handshake",
+		],
 		order_by="creation desc",
 		limit=100,
 	)
 	return [_as_device_row(peer) for peer in peers]
+
+
+def get_device_vpn_status() -> dict:
+	"""Whether the session user has a device peer with a fresh handshake.
+
+	"Fresh" is one status poll old: `VPN Settings.status_poll_interval_min`,
+	the same interval vpn_management writes handshakes on. Inventing a second
+	threshold here would make the UI disagree with the poller.
+	"""
+	peers = frappe.get_all(
+		"VPN Peer",
+		filters=_device_peer_filters(),
+		fields=["name", "status", "last_handshake"],
+		order_by="last_handshake desc",
+		limit=100,
+	)
+	last_handshake = peers[0].last_handshake if peers else None
+	stale_after_seconds = _handshake_stale_seconds()
+	return {
+		"connected": _is_fresh(last_handshake, stale_after_seconds),
+		"last_handshake": last_handshake,
+		"peer_count": len(peers),
+		"stale_after_seconds": stale_after_seconds,
+	}
+
+
+def _is_fresh(last_handshake, stale_after_seconds: int) -> bool:
+	if not last_handshake:
+		return False
+	return time_diff_in_seconds(now_datetime(), last_handshake) <= stale_after_seconds
+
+
+def _handshake_stale_seconds() -> int:
+	minutes = cint(frappe.db.get_single_value("VPN Settings", "status_poll_interval_min"))
+	return (minutes or DEFAULT_STATUS_POLL_MINUTES) * 60
 
 
 def get_device_config(device_docname: str) -> str:
@@ -174,6 +221,7 @@ def _as_device_row(peer) -> dict:
 		"wg_public_key": peer.public_key,
 		"wg_rx_bytes": peer.rx_bytes,
 		"wg_tx_bytes": peer.tx_bytes,
+		"last_handshake": peer.last_handshake,
 	}
 
 

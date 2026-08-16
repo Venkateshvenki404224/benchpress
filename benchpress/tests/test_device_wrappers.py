@@ -38,6 +38,7 @@ def _peer_row(**overrides):
 		public_key="PUB==",
 		rx_bytes=1024,
 		tx_bytes=2048,
+		last_handshake="2026-08-16 10:00:00",
 	)
 	row.update(overrides)
 	return row
@@ -96,6 +97,8 @@ class TestListDevices(IntegrationTestCase):
 					"wg_public_key": "PUB==",
 					"wg_rx_bytes": 1024,
 					"wg_tx_bytes": 2048,
+					# Phase 5 needs the handshake; _as_device_row used to drop it.
+					"last_handshake": "2026-08-16 10:00:00",
 				}
 			],
 		)

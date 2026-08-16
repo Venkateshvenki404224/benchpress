@@ -34,7 +34,19 @@ BUDGETS_MS = {
 	"enqueue_redeploy": 400,
 	"enqueue_stop": 500,
 	"enqueue_start": 500,
+	"get_overview": 1200,
+	"get_vpn_status": 400,
 }
+
+# The five rows benchpress.diagnostics always returns; the real checks talk to
+# Docker and MariaDB, so the Overview timing test never runs them.
+DIAGNOSTICS_ROWS = [
+	{"check": "docker_socket", "status": "pass", "hint": "Docker daemon reachable"},
+	{"check": "docker_network", "status": "pass", "hint": "benchpress network exists"},
+	{"check": "mariadb", "status": "pass", "hint": "MariaDB responding"},
+	{"check": "redis", "status": "fail", "hint": "benchpress-redis container not found"},
+	{"check": "vpn_server", "status": "pass", "hint": "WireGuard server 'wg0' configured"},
+]
 
 
 def _timed(function):
@@ -185,6 +197,68 @@ class TestApi(IntegrationTestCase):
 		for key in ("name", "message", "log_type", "timestamp"):
 			self.assertIn(key, logs[0])
 		self.assert_within_budget("get_deploy_logs", elapsed_ms)
+
+	def test_get_overview_shape_and_timing(self):
+		with patch("benchpress.diagnostics.run_diagnostics", return_value=DIAGNOSTICS_ROWS):
+			overview, elapsed_ms = _timed(api.get_overview)
+
+		for key in ("is_admin", "first_name", "counts", "deploy_time", "environments", "activity"):
+			self.assertIn(key, overview)
+		for key in ("total", "running", "stopped", "needs_attention"):
+			self.assertIn(key, overview["counts"])
+		self.assertEqual(overview["counts"]["total"], overview["environment_count"])
+		self.assertIn(self.bench.name, [row["name"] for row in overview["environments"]])
+		self.assert_within_budget("get_overview", elapsed_ms)
+
+	def test_get_overview_deploy_time_states_its_window(self):
+		with patch("benchpress.diagnostics.run_diagnostics", return_value=DIAGNOSTICS_ROWS):
+			deploy_time = api.get_overview()["deploy_time"]
+
+		# The caption may never outrun log retention (hooks.py: 7 days).
+		self.assertEqual(deploy_time["window_days"], 7)
+		self.assertIn("sample_size", deploy_time)
+		self.assertIn("average_label", deploy_time)
+
+	def test_get_overview_ignores_logs_older_than_retention(self):
+		# Log clearing only runs when the scheduler does, so rows past the
+		# horizon can still be in the table — the window is enforced in the query.
+		window_start = frappe.utils.add_days(frappe.utils.now_datetime(), -7)
+		stale = frappe.get_doc(
+			{
+				"doctype": "Deploy Log",
+				"bench": self.bench.name,
+				"log_type": "success",
+				"message": "run from a month ago",
+				"timestamp": frappe.utils.add_days(frappe.utils.now_datetime(), -30),
+			}
+		).insert(ignore_permissions=True)
+		self.addCleanup(frappe.delete_doc, "Deploy Log", stale.name, force=True, ignore_permissions=True)
+
+		with patch("benchpress.diagnostics.run_diagnostics", return_value=DIAGNOSTICS_ROWS):
+			overview = api.get_overview()
+
+		for event in overview["activity"]:
+			self.assertGreaterEqual(frappe.utils.get_datetime(event["timestamp"]), window_start)
+		average = overview["deploy_time"]["average_seconds"]
+		self.assertTrue(average is None or average < 86400, f"stale run leaked into the average: {average}")
+
+	def test_get_overview_infrastructure_is_the_real_diagnostics(self):
+		with patch("benchpress.diagnostics.run_diagnostics", return_value=DIAGNOSTICS_ROWS):
+			infrastructure = api.get_overview()["infrastructure"]
+
+		self.assertEqual([row["check"] for row in infrastructure], [r["check"] for r in DIAGNOSTICS_ROWS])
+		self.assertEqual(infrastructure[0]["status"], "Active")
+		self.assertEqual(infrastructure[3]["status"], "Error")
+		self.assertEqual(infrastructure[2]["label"], "MariaDB")
+
+	def test_get_vpn_status_shape_and_timing(self):
+		status, elapsed_ms = _timed(api.get_vpn_status)
+		for key in ("connected", "last_handshake", "peer_count", "stale_after_seconds"):
+			self.assertIn(key, status)
+		self.assertIsInstance(status["connected"], bool)
+		# One status poll interval, never a second threshold of our own.
+		self.assertEqual(status["stale_after_seconds"] % 60, 0)
+		self.assert_within_budget("get_vpn_status", elapsed_ms)
 
 	def test_get_code_server_credentials_shape_and_timing(self):
 		creds, elapsed_ms = _timed(lambda: api.get_code_server_credentials(self.bench.name))

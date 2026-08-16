@@ -43,7 +43,8 @@ repos:
                 .*node_modules.*|
                 .*boilerplate.*|
                 benchpress/templates/includes/.*|
-                benchpress/public/js/lib/.*
+                benchpress/public/js/lib/.*|
+                docs/design_handoff_benchpress_ui/.*
             )$
 
 
@@ -62,7 +63,8 @@ repos:
                 .*node_modules.*|
                 .*boilerplate.*|
                 benchpress/templates/includes/.*|
-                benchpress/public/js/lib/.*
+                benchpress/public/js/lib/.*|
+                docs/design_handoff_benchpress_ui/.*
             )$
 
 ci:

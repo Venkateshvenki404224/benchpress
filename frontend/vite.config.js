@@ -14,17 +14,17 @@ export default defineConfig({
 				outDir: "../benchpress/public/frontend",
 				indexHtmlPath: "../benchpress/www/frontend.html",
 				emptyOutDir: true,
-				sourcemap: true,
+				// A 3.2 MB .js.map used to ship to every browser. This block is the
+				// only place outDir/emptyOutDir/sourcemap are declared — the plugin
+				// writes them into `build`, so repeating them below only invited drift.
+				sourcemap: false,
 			},
 		}),
 		vue(),
 	],
 	build: {
 		chunkSizeWarningLimit: 1500,
-		outDir: "../benchpress/public/frontend",
-		emptyOutDir: true,
 		target: "es2015",
-		sourcemap: true,
 	},
 	resolve: {
 		alias: {

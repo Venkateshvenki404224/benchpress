@@ -425,6 +425,22 @@ def restart_code_server(bench_name: str) -> dict:
 
 
 @frappe.whitelist()
+def get_overview() -> dict:
+	require_app_user()
+	from benchpress.overview import get_overview as _get_overview
+
+	return _get_overview()
+
+
+@frappe.whitelist()
+def get_vpn_status() -> dict:
+	require_app_user()
+	from benchpress.vpn_adapter import get_device_vpn_status
+
+	return get_device_vpn_status()
+
+
+@frappe.whitelist()
 def run_diagnostics() -> list[dict]:
 	require_admin()
 	from benchpress.diagnostics import run_diagnostics as _run_diagnostics
