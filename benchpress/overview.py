@@ -268,15 +268,9 @@ def _infrastructure(admin: bool) -> list[dict] | None:
 	"""The five real diagnostics checks — admins only, never a placeholder."""
 	if not admin:
 		return None
-	from benchpress.diagnostics import run_diagnostics
+	from benchpress.diagnostics import display_row, run_diagnostics
 
-	return [_infrastructure_row(check) for check in run_diagnostics()]
-
-
-def _infrastructure_row(check: dict) -> dict:
-	return {
-		"check": check["check"],
-		"label": INFRASTRUCTURE_LABELS.get(check["check"], check["check"]),
-		"status": "Active" if check["status"] == "pass" else "Error",
-		"hint": check["hint"],
-	}
+	return [
+		display_row(check, INFRASTRUCTURE_LABELS.get(check["check"], check["check"]))
+		for check in run_diagnostics()
+	]

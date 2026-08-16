@@ -29,9 +29,7 @@ test.describe("Navigation & Routing", () => {
     await page.goto("/frontend/devices");
     await page.waitForLoadState("networkidle");
 
-    await expect(
-      page.locator("h1", { hasText: "VPN Devices" })
-    ).toBeVisible();
+    await expect(page.locator('[data-test="devices"]')).toBeVisible();
   });
 
   test("sidebar is five items and each one navigates", async ({ page }) => {
@@ -43,7 +41,7 @@ test.describe("Navigation & Routing", () => {
     await expect(basePage.testId("instances")).toBeVisible();
 
     await basePage.clickNav("devices");
-    await expect(page.locator("h1", { hasText: "VPN Devices" })).toBeVisible();
+    await expect(page.locator('[data-test="devices"]')).toBeVisible();
 
     await basePage.clickNav("labs");
     await expect(page.locator("h1", { hasText: "Labs" })).toBeVisible();

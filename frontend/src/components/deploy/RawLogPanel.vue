@@ -1,5 +1,8 @@
 <template>
-	<section class="rounded-card border border-outline-gray-1 bg-surface-white" data-test="raw-log">
+	<section
+		class="rounded-card border border-outline-gray-1 bg-surface-white"
+		data-test="raw-log"
+	>
 		<header class="flex items-center gap-2 px-4 py-2.5">
 			<button
 				class="flex min-w-0 flex-1 items-center gap-2 text-left"

@@ -16,7 +16,9 @@ import {
 function marker(key, elapsed) {
 	const index = DEPLOY_STEPS.findIndex((step) => step.key === key) + 1;
 	const { label } = DEPLOY_STEPS[index - 1];
-	return `=== Step ${index}/${DEPLOY_STEPS.length}: ${label} [${key} @${elapsed.toFixed(1)}s] ===`;
+	return `=== Step ${index}/${DEPLOY_STEPS.length}: ${label} [${key} @${elapsed.toFixed(
+		1
+	)}s] ===`;
 }
 
 function stepsOf(log) {
@@ -61,7 +63,9 @@ describe("a run still in flight", () => {
 		const steps = stepsOf(MID_RUN);
 
 		expect(steps.get("container_ip").detail).toBe("container_ip 172.19.0.7");
-		expect(steps.get("image").detail).toBe("Using cached lab image: benchpress/crm:version-16");
+		expect(steps.get("image").detail).toBe(
+			"Using cached lab image: benchpress/crm:version-16"
+		);
 		expect(steps.get("container").detail).toBe("");
 	});
 
@@ -147,9 +151,11 @@ describe("a log the size ceiling truncated", () => {
 });
 
 describe("a log from before the pipeline emitted steps", () => {
-	const log = ["=== Deploy started ===", "=== Creating container ===", "=== Deploy complete ==="].join(
-		"\n"
-	);
+	const log = [
+		"=== Deploy started ===",
+		"=== Creating container ===",
+		"=== Deploy complete ===",
+	].join("\n");
 
 	it("says it has no step data instead of showing eleven empty rows", () => {
 		const run = deriveRun(log);

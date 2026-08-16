@@ -9,14 +9,13 @@
 				{{ summary }}
 			</p>
 
-			<ol class="mt-3 divide-y divide-outline-gray-1 rounded-card border border-outline-gray-1">
+			<ol
+				class="mt-3 divide-y divide-outline-gray-1 rounded-card border border-outline-gray-1"
+			>
 				<DeployStepRow v-for="step in run.steps" :key="step.key" :step="step" />
 			</ol>
 
-			<div
-				class="mt-3 rounded-md bg-surface-gray-2 px-3 py-2"
-				data-test="deploy-log-tail"
-			>
+			<div class="mt-3 rounded-md bg-surface-gray-2 px-3 py-2" data-test="deploy-log-tail">
 				<p
 					v-for="(line, index) in tail"
 					:key="index"
@@ -137,7 +136,10 @@ watch(
 	(open) => open && deployRun.labId && lab.submit({ name: deployRun.labId })
 );
 
-watch(() => run.value.state, (state) => ["success", "failed"].includes(state) && onTerminalState());
+watch(
+	() => run.value.state,
+	(state) => ["success", "failed"].includes(state) && onTerminalState()
+);
 
 onMounted(() => socket?.on("bench_deploy_log", onDeployLog));
 onUnmounted(() => socket?.off("bench_deploy_log", onDeployLog));

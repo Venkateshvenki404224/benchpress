@@ -37,6 +37,8 @@ BUDGETS_MS = {
 	"enqueue_start": 500,
 	"get_overview": 1200,
 	"get_vpn_status": 400,
+	"get_device_types": 200,
+	"run_connection_test": 800,
 }
 
 # The five rows benchpress.diagnostics always returns; the real checks talk to
@@ -386,6 +388,76 @@ class TestApi(IntegrationTestCase):
 		# One status poll interval, never a second threshold of our own.
 		self.assertEqual(status["stale_after_seconds"] % 60, 0)
 		self.assert_within_budget("get_vpn_status", elapsed_ms)
+
+	def test_get_device_types_is_the_backend_list(self):
+		from benchpress.vpn_adapter import DEVICE_TYPES
+
+		types, elapsed_ms = _timed(api.get_device_types)
+		self.assertEqual(types, DEVICE_TYPES)
+		self.assert_within_budget("get_device_types", elapsed_ms)
+
+	def test_run_connection_test_shape_and_timing(self):
+		checks, elapsed_ms = _timed(api.run_connection_test)
+
+		self.assertEqual(
+			[check["check"] for check in checks],
+			["vpn_server", "device_registered", "peer_active", "handshake"],
+		)
+		for check in checks:
+			for key in ("check", "label", "status", "hint"):
+				self.assertIn(key, check)
+			self.assertIn(check["status"], ("Active", "Error"))
+			# A boolean is not an answer — every row says what to do about it.
+			self.assertTrue(check["hint"])
+		self.assert_within_budget("run_connection_test", elapsed_ms)
+
+	def test_run_connection_test_names_the_failing_step_without_a_device(self):
+		with patch("benchpress.connection_test.list_devices", return_value=[]):
+			checks = api.run_connection_test()
+
+		by_check = {check["check"]: check for check in checks}
+		self.assertEqual(by_check["device_registered"]["status"], "Error")
+		self.assertIn("no device", by_check["device_registered"]["hint"])
+		self.assertEqual(by_check["handshake"]["status"], "Error")
+
+	def test_run_connection_test_passes_on_a_fresh_handshake(self):
+		device = {
+			"name": "PEER-CONN-1",
+			"device_name": "Contract Laptop",
+			"last_handshake": frappe.utils.now_datetime(),
+		}
+		peer_status = {
+			"name": "PEER-CONN-1",
+			"status": "Active",
+			"assigned_ip": "172.27.0.9",
+			"endpoint": "203.0.113.7:51820",
+		}
+		with (
+			patch("benchpress.connection_test.list_devices", return_value=[device]),
+			patch("benchpress.connection_test.get_device_peer_status", return_value=peer_status),
+		):
+			checks = api.run_connection_test()
+
+		by_check = {check["check"]: check for check in checks}
+		self.assertEqual(by_check["peer_active"]["status"], "Active")
+		self.assertIn("172.27.0.9", by_check["peer_active"]["hint"])
+		self.assertEqual(by_check["handshake"]["status"], "Active")
+
+	def test_run_connection_test_explains_a_peer_that_never_connected(self):
+		device = {"name": "PEER-CONN-2", "device_name": "New Phone", "last_handshake": None}
+		with (
+			patch("benchpress.connection_test.list_devices", return_value=[device]),
+			patch(
+				"benchpress.connection_test.get_device_peer_status",
+				return_value={"status": "Pending", "assigned_ip": "172.27.0.10", "endpoint": None},
+			),
+		):
+			checks = api.run_connection_test()
+
+		by_check = {check["check"]: check for check in checks}
+		self.assertEqual(by_check["peer_active"]["status"], "Error")
+		self.assertIn("New Phone has never connected", by_check["peer_active"]["hint"])
+		self.assertIn("never heard from New Phone", by_check["handshake"]["hint"])
 
 	def test_get_code_server_credentials_shape_and_timing(self):
 		creds, elapsed_ms = _timed(lambda: api.get_code_server_credentials(self.bench.name))

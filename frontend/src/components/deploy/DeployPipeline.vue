@@ -12,12 +12,16 @@
 					</span>
 				</header>
 
-				<ol v-if="run.structured" class="divide-y divide-outline-gray-1" data-test="step-list">
+				<ol
+					v-if="run.structured"
+					class="divide-y divide-outline-gray-1"
+					data-test="step-list"
+				>
 					<DeployStepRow v-for="step in run.steps" :key="step.key" :step="step" />
 				</ol>
 				<p v-else class="px-4 py-3 text-body text-ink-gray-5" data-test="no-step-data">
-					This run was recorded before the pipeline reported its steps — only the raw
-					log below was kept.
+					This run was recorded before the pipeline reported its steps — only the raw log
+					below was kept.
 				</p>
 			</template>
 		</SectionCard>

@@ -243,6 +243,15 @@ def list_devices() -> list[dict]:
 
 
 @frappe.whitelist()
+def get_device_types() -> list[str]:
+	"""The device types register_device accepts, so no screen hand-types them."""
+	require_app_user()
+	from benchpress.vpn_adapter import DEVICE_TYPES
+
+	return DEVICE_TYPES
+
+
+@frappe.whitelist()
 def get_device_wg_config(device_name: str) -> str:
 	require_app_user()
 	from benchpress.vpn_adapter import get_device_config
@@ -397,6 +406,15 @@ def get_vpn_status() -> dict:
 	from benchpress.vpn_adapter import get_device_vpn_status
 
 	return get_device_vpn_status()
+
+
+@frappe.whitelist()
+def run_connection_test() -> list[dict]:
+	"""The user-facing tunnel test: their own peer, never the shared infrastructure."""
+	require_app_user()
+	from benchpress.connection_test import run_connection_test as _run_connection_test
+
+	return _run_connection_test()
 
 
 @frappe.whitelist()

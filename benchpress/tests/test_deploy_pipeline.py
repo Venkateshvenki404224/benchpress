@@ -91,9 +91,7 @@ class TestDeployLogWriter(IntegrationTestCase):
 		).insert(ignore_permissions=True)
 		frappe.db.commit()
 		self.addCleanup(
-			lambda name=log.name: frappe.delete_doc(
-				"Build Log", name, force=True, ignore_permissions=True
-			)
+			lambda name=log.name: frappe.delete_doc("Build Log", name, force=True, ignore_permissions=True)
 		)
 		return log, DeployLogWriter(
 			"Build Log", log.name, "lab_build_log", {"lab": self.lab.name, "build_log": log.name}, user

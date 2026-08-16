@@ -10,7 +10,7 @@ Each denial test has a positive control so a guard that vacuously throws for
 everyone — or silently returns an empty result — is caught as a failure.
 """
 
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import frappe
 from frappe.tests import IntegrationTestCase
@@ -278,6 +278,14 @@ class TestApiAuthorization(IntegrationTestCase):
 		frappe.set_user(self.norole_user)
 		self.assert_denied(api.get_vpn_status)
 
+	def test_roleless_denied_from_run_connection_test(self):
+		frappe.set_user(self.norole_user)
+		self.assert_denied(api.run_connection_test)
+
+	def test_roleless_denied_from_get_device_types(self):
+		frappe.set_user(self.norole_user)
+		self.assert_denied(api.get_device_types)
+
 	# --- Overview is scoped to the caller ------------------------------------
 
 	def test_overview_shows_a_user_only_their_own_environments(self):
@@ -321,6 +329,52 @@ class TestApiAuthorization(IntegrationTestCase):
 		status = api.get_vpn_status()
 		self.assertFalse(status["connected"])
 		self.assertEqual(status["peer_count"], 0)
+
+	# --- The connection test is the user's, and only theirs ------------------
+
+	def test_app_user_may_run_the_connection_test_for_their_own_peer(self):
+		frappe.set_user(self.user_a)
+		checks = api.run_connection_test()
+
+		self.assertEqual(
+			[check["check"] for check in checks],
+			["vpn_server", "device_registered", "peer_active", "handshake"],
+		)
+		# No device of their own, so the test says so instead of throwing.
+		self.assertEqual(checks[1]["status"], "Error")
+
+	def test_connection_test_never_leaks_the_admin_only_checks(self):
+		frappe.set_user(self.user_a)
+		with patch("benchpress.diagnostics.run_diagnostics") as run_diagnostics:
+			checks = api.run_connection_test()
+
+		# The infrastructure probes are admin-only; the user path must not run them.
+		run_diagnostics.assert_not_called()
+		leaked = {"docker_socket", "docker_network", "mariadb", "redis"}
+		self.assertFalse(leaked & {check["check"] for check in checks})
+
+	def test_connection_test_reports_only_the_callers_own_devices(self):
+		other_device = {
+			"name": "PEER-OTHER",
+			"device_name": "Someone else's laptop",
+			"last_handshake": None,
+		}
+		frappe.set_user(self.user_b)
+		with patch("benchpress.connection_test.list_devices", return_value=[other_device]) as list_devices:
+			checks = api.run_connection_test()
+
+		# The device list is the owner-scoped wrapper, never a raw peer query.
+		list_devices.assert_called_once_with()
+		self.assertIn("Someone else's laptop", checks[3]["hint"])
+
+	def test_app_user_denied_another_users_peer_status(self):
+		from benchpress.vpn_adapter import get_device_peer_status
+
+		peer = MagicMock()
+		peer.owner_user = self.user_a
+		frappe.set_user(self.user_b)
+		with patch("benchpress.vpn_adapter.frappe.get_doc", return_value=peer):
+			self.assert_denied(lambda: get_device_peer_status("PEER-OTHER"))
 
 	# --- Positive controls: require_app_user permits a BenchPress User --------
 
