@@ -14,11 +14,17 @@ from frappe import _
 
 # Bumped whenever the template set or its fields change so an install can tell
 # which catalog a lab was created against.
-CATALOG_VERSION = 3
+CATALOG_VERSION = 4
+
+# "Use template" names the lab itself, so a taken id is retried with a numeric
+# suffix. The ceiling only exists so a pathological catalog cannot spin.
+MAX_LAB_ID_ATTEMPTS = 50
 
 LAB_TEMPLATES = [
 	{
 		"key": "frappe",
+		"eta_minutes": 3,
+		"most_used": False,
 		"title": "Frappe Framework",
 		"description": "Bare Frappe bench with no extra apps — the lightest starting point.",
 		"frappe_version": "version-15",
@@ -28,6 +34,8 @@ LAB_TEMPLATES = [
 	},
 	{
 		"key": "erpnext",
+		"eta_minutes": 6,
+		"most_used": True,
 		"title": "ERPNext",
 		"description": "Full ERP suite: accounting, inventory, manufacturing and more.",
 		"frappe_version": "version-15",
@@ -44,6 +52,8 @@ LAB_TEMPLATES = [
 	},
 	{
 		"key": "crm",
+		"eta_minutes": 4,
+		"most_used": False,
 		"title": "Frappe CRM",
 		"description": "Lightweight sales CRM on Frappe — leads, deals and contacts.",
 		"frappe_version": "version-15",
@@ -60,6 +70,8 @@ LAB_TEMPLATES = [
 	},
 	{
 		"key": "hrms",
+		"eta_minutes": 5,
+		"most_used": False,
 		"title": "Frappe HR",
 		"description": "HR & payroll suite — employees, leaves, attendance and payroll.",
 		"frappe_version": "version-15",
@@ -76,6 +88,8 @@ LAB_TEMPLATES = [
 	},
 	{
 		"key": "lms",
+		"eta_minutes": 4,
+		"most_used": False,
 		"title": "Frappe Learning",
 		"description": "Learning management system — courses, quizzes and batches.",
 		"frappe_version": "version-15",
@@ -92,6 +106,8 @@ LAB_TEMPLATES = [
 	},
 	{
 		"key": "helpdesk",
+		"eta_minutes": 4,
+		"most_used": False,
 		"title": "Frappe Helpdesk",
 		"description": "Customer support desk — tickets, SLAs and a knowledge base.",
 		"frappe_version": "version-15",
@@ -108,6 +124,8 @@ LAB_TEMPLATES = [
 	},
 	{
 		"key": "india-compliance",
+		"eta_minutes": 7,
+		"most_used": False,
 		"title": "ERPNext + India Compliance",
 		"description": "ERPNext with GST, e-invoicing and TDS for Indian businesses.",
 		"frappe_version": "version-15",
@@ -146,13 +164,29 @@ def get_template(key: str) -> dict:
 	frappe.throw(_("Unknown lab template '{0}'.").format(key or ""))
 
 
-def create_lab_from_template(template_key: str, lab_id: str, title: str | None = None) -> str:
+def available_lab_id(base: str) -> str:
+	"""A free lab id derived from `base`, suffixed only as far as it must be.
+
+	"Use template" creates the lab without asking for a name, so the id is
+	picked here. An id the caller typed is never rewritten — it fails loudly on
+	collision, as it always did.
+	"""
+	if not frappe.db.exists("Lab", base):
+		return base
+	for suffix in range(2, MAX_LAB_ID_ATTEMPTS + 2):
+		candidate = f"{base}-{suffix}"
+		if not frappe.db.exists("Lab", candidate):
+			return candidate
+	frappe.throw(_("Too many labs already use the id '{0}'.").format(base))
+
+
+def create_lab_from_template(template_key: str, lab_id: str | None = None, title: str | None = None) -> str:
 	"""Build a Lab document from a template and return its name."""
 	template = get_template(template_key)
 	lab = frappe.get_doc(
 		{
 			"doctype": "Lab",
-			"lab_id": lab_id,
+			"lab_id": lab_id or available_lab_id(template_key),
 			"title": title or template["title"],
 			"description": template["description"],
 			"frappe_version": template["frappe_version"],

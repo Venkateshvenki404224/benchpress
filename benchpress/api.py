@@ -4,7 +4,7 @@
 import frappe
 from frappe import _
 
-from benchpress import lab_templates
+from benchpress import lab_templates, labs
 from benchpress.permissions import (
 	get_bench_owner_filter,
 	is_admin,
@@ -17,33 +17,7 @@ from benchpress.permissions import (
 @frappe.whitelist()
 def get_labs() -> list[dict]:
 	require_app_user()
-	labs = frappe.get_list(
-		"Lab",
-		fields=[
-			"name",
-			"lab_id",
-			"title",
-			"description",
-			"frappe_version",
-			"status",
-			"image_tag",
-			"memory_limit",
-			"cpu_cores",
-		],
-		order_by="creation desc",
-	)
-	for lab in labs:
-		apps = frappe.get_list(
-			"Lab App",
-			filters={"parent": lab["name"]},
-			fields=["app_name"],
-			limit_page_length=50,
-			parent_doctype="Lab",
-		)
-		lab["app_names"] = [a["app_name"] for a in apps]
-		lab["app_count"] = len(apps)
-		lab["bench_count"] = frappe.db.count("Bench Instance", {"lab": lab["name"]})
-	return labs
+	return labs.get_labs()
 
 
 @frappe.whitelist()
@@ -74,7 +48,7 @@ def get_lab_templates() -> list[dict]:
 
 
 @frappe.whitelist()
-def create_lab_from_template(template: str, lab_id: str, title: str | None = None) -> dict:
+def create_lab_from_template(template: str, lab_id: str | None = None, title: str | None = None) -> dict:
 	require_admin()
 	name = lab_templates.create_lab_from_template(template, lab_id, title)
 	return {"name": name, "status": "Draft"}

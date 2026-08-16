@@ -191,6 +191,25 @@ class TestApiAuthorization(IntegrationTestCase):
 		names = [bench["name"] for bench in api.get_benches()]
 		self.assertNotIn(self.bench.name, names)
 
+	def test_get_labs_hides_another_users_deployment(self):
+		"""The Labs table must not tell user_b where user_a's bench lives."""
+		frappe.set_user(self.user_b)
+		row = self._lab_row(api.get_labs())
+		self.assertIsNone(row["deployed_as"])
+		self.assertEqual(row["bench_count"], 0)
+
+	def test_get_labs_shows_the_owner_their_own_deployment(self):
+		"""Positive control: the same row is populated for the bench's owner."""
+		frappe.set_user(self.user_a)
+		row = self._lab_row(api.get_labs())
+		self.assertEqual(row["deployed_as"]["bench"], self.bench.name)
+		self.assertEqual(row["bench_count"], 1)
+
+	def _lab_row(self, labs):
+		row = next((lab for lab in labs if lab["name"] == self.lab.name), None)
+		self.assertIsNotNone(row, "the fixture lab is readable by every app user")
+		return row
+
 	# --- Role-less user blocked by require_app_user (issue #88) ---------------
 	# No mocks: the guard raises before any side effect can happen.
 

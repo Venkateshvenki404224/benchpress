@@ -30,8 +30,7 @@
 				>
 					<Breadcrumbs :items="breadcrumbs" />
 					<div class="ml-auto flex items-center gap-2.5">
-						<!-- Phase 2 fills this slot with CommandPalette. -->
-						<slot name="search" />
+						<AppSearch />
 						<router-link
 							to="/devices"
 							class="flex h-7 items-center gap-1.5 rounded-control border border-outline-gray-1 px-2.5 text-2xs"
@@ -65,6 +64,7 @@
 </template>
 
 <script setup>
+import AppSearch from "@/components/AppSearch.vue";
 import { session } from "@/data/session";
 import { userContext } from "@/data/userContext";
 import { vpnStatus } from "@/data/vpnStatus";
@@ -110,8 +110,6 @@ const headerConfig = computed(() => ({
 	menuItems: [],
 }));
 
-// "Keyboard shortcuts" joins this menu in phase 2, with the ⌘K palette that
-// is the only shortcut to list.
 const accountMenu = computed(() => {
 	const items = [];
 	if (userContext.isAdmin) {

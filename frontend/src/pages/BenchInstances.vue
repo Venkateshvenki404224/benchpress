@@ -1,109 +1,154 @@
 <template>
-	<div class="p-4">
-		<div class="mb-4 flex items-center justify-between">
-			<h1 class="text-xl font-semibold text-ink-gray-9">Bench Instances</h1>
+	<div class="mx-auto max-w-[1180px] px-6 pb-10 pt-[22px]" data-test="instances">
+		<div class="mb-3.5 flex flex-wrap items-start gap-3">
+			<div>
+				<h1 class="text-title font-semibold text-ink-gray-9">Instances</h1>
+				<p class="mt-0.5 text-body text-ink-gray-5" data-test="instances-scope">
+					{{ scopeLine }}
+				</p>
+			</div>
+			<Button
+				class="ml-auto"
+				variant="subtle"
+				data-test="deploy-history"
+				@click="router.push('/deploy-logs')"
+			>
+				<template #prefix><ListIcon class="size-3.5" /></template>
+				Deploy history
+			</Button>
 		</div>
 
-		<ListView
-			v-if="benches.data?.length"
-			:columns="columns"
-			:rows="benches.data"
-			:options="{
-				showTooltip: true,
-				resizeColumn: true,
-				selectable: false,
-			}"
-			row-key="name"
-		/>
-		<div v-else-if="benches.loading" class="text-base text-ink-gray-5">Loading...</div>
-		<div v-else class="py-12 text-center text-base text-ink-gray-5">
-			No bench instances found. Deploy a lab to create one.
-		</div>
+		<p v-if="benchesResource.loading && !benches.length" class="text-body text-ink-gray-5">
+			Loading instances…
+		</p>
+
+		<DataTable
+			v-else-if="benches.length"
+			:columns="COLUMNS"
+			:rows="benches"
+			:row-route="benchRoute"
+			data-test="instances-table"
+		>
+			<template #cell="{ column, row }">
+				<div v-if="column.key === 'bench'" class="flex min-w-0 items-center gap-2.5">
+					<span
+						class="grid size-7 flex-none place-items-center rounded-md border border-outline-gray-1 bg-surface-white"
+					>
+						<AppIcon :app="primaryApp(row)" :size="17" />
+					</span>
+					<span class="min-w-0" :data-test="`bench-${row.name}`">
+						<span class="block truncate text-body font-medium text-ink-gray-9">
+							{{ benchLabel(row.lab) }}
+						</span>
+						<span class="block truncate font-mono text-2xs text-ink-gray-4">
+							{{ row.wg_ip || row.container_ip || "no address" }}
+						</span>
+					</span>
+				</div>
+
+				<StatusBadge v-else-if="column.key === 'status'" :status="row.status" />
+
+				<!-- The second axis. A Running bench can be Unhealthy, and a bench
+				     that has never been polled carries an empty string — which
+				     StatusBadge reads as Unknown rather than a blank pill. -->
+				<StatusBadge
+					v-else-if="column.key === 'container_health'"
+					:status="row.container_health"
+				/>
+
+				<UsageBar v-else-if="column.key === 'usage'" :usage="usageOf(row)" />
+
+				<span v-else-if="column.key === 'site'" class="truncate text-xs text-ink-blue-3">
+					{{ row.domain || row.site_name || "—" }}
+				</span>
+
+				<span
+					v-else-if="column.key === 'owner'"
+					class="truncate text-meta text-ink-gray-5"
+				>
+					{{ row.owner }}
+				</span>
+			</template>
+		</DataTable>
+
+		<SectionCard v-else :padded="false">
+			<EmptyState
+				message="No instances yet — deploying a lab builds one, with its own site, SSH user and IDE."
+			>
+				<template #action>
+					<Button variant="solid" @click="router.push('/labs/templates')">
+						Start from a template
+					</Button>
+				</template>
+			</EmptyState>
+		</SectionCard>
 	</div>
 </template>
 
 <script setup>
-import { ListView, Badge, createListResource } from "frappe-ui";
-import { h } from "vue";
+import AppIcon from "@/components/AppIcon.vue";
+import DataTable from "@/components/DataTable.vue";
+import EmptyState from "@/components/EmptyState.vue";
+import SectionCard from "@/components/SectionCard.vue";
+import StatusBadge from "@/components/StatusBadge.vue";
+import UsageBar from "@/components/UsageBar.vue";
+import { BENCH_PAGE_LENGTH, benchesResource } from "@/data/benches";
+import { labsResource } from "@/data/labs";
+import { userContext } from "@/data/userContext";
+import { usageFor } from "@/utils/benchUsage";
+import { benchLabel } from "@/utils/labSpecs";
+import { Button, dayjsLocal } from "frappe-ui";
+import { computed, onMounted } from "vue";
+import { useRouter } from "vue-router";
 
-const columns = [
-	{ label: "Bench Name", key: "bench_name", width: "200px" },
-	{ label: "Lab", key: "lab", width: "150px" },
-	{ label: "Version", key: "frappe_version", width: "120px" },
-	{
-		label: "Status",
-		key: "status",
-		width: "120px",
-		getLabel: ({ row }) => row.status,
-		prefix: ({ row }) => {
-			const color =
-				{
-					Running: "green",
-					Deploying: "orange",
-					Stopped: "red",
-					Error: "red",
-					Draft: "gray",
-				}[row.status] || "gray";
-			return h(Badge, { label: row.status, theme: color, size: "sm" });
-		},
-	},
-	{
-		label: "IP Address",
-		key: "wg_ip",
-		width: "140px",
-		getLabel: ({ row }) => row.wg_ip || row.container_ip || "—",
-	},
-	{ label: "CPU %", key: "cpu_usage", width: "80px" },
-	{ label: "Memory %", key: "memory_usage", width: "100px" },
-	{
-		label: "Health",
-		key: "container_health",
-		width: "110px",
-		getLabel: ({ row }) => row.container_health || "—",
-		prefix: ({ row }) => {
-			if (!row.container_health) return null;
-			const color =
-				{
-					Healthy: "green",
-					Unhealthy: "red",
-					Unknown: "gray",
-				}[row.container_health] || "gray";
-			return h(Badge, { label: row.container_health, theme: color, size: "sm" });
-		},
-	},
-	{
-		label: "Last Check",
-		key: "last_health_check",
-		width: "150px",
-		getLabel: ({ row }) => formatCheckTime(row.last_health_check),
-	},
+import ListIcon from "~icons/lucide/list";
+
+// Fixed widths for the same reason as the Labs table: ListView's grid sits in
+// a `w-max` container, so a fractional track sizes to its longest cell.
+const COLUMNS = [
+	{ label: "Bench", key: "bench", width: "240px" },
+	{ label: "Status", key: "status", width: "110px" },
+	{ label: "Health", key: "container_health", width: "104px" },
+	{ label: "CPU / memory", key: "usage", width: "150px" },
+	{ label: "Site", key: "site", width: "170px" },
+	{ label: "Owner", key: "owner", width: "100px" },
 ];
 
-function formatCheckTime(value) {
-	if (!value) return "—";
-	return value.slice(0, 16).replace("T", " ");
+const router = useRouter();
+
+onMounted(() => benchesResource.reload());
+
+const benches = computed(() => benchesResource.data ?? []);
+
+// The list is row-scoped on the server, so an empty table means two very
+// different things depending on the role. Say which, rather than leaving the
+// user to guess whether the list is empty or filtered.
+const scopeLine = computed(() => {
+	const scope = userContext.isAdmin
+		? "Every container on this server, across all owners."
+		: "Containers you own. Ask an admin if you need access to another.";
+	return benchesResource.hasNextPage
+		? `${scope} Showing the first ${BENCH_PAGE_LENGTH}.`
+		: scope;
+});
+
+/** The lab's first non-Frappe app decides the mark this bench wears. */
+function primaryApp(bench) {
+	const lab = (labsResource.data ?? []).find((row) => row.name === bench.lab);
+	return (lab?.app_names ?? []).find((app) => app.toLowerCase() !== "frappe") || "frappe";
 }
 
-let benches = createListResource({
-	doctype: "Bench Instance",
-	fields: [
-		"name",
-		"bench_name",
-		"lab",
-		"frappe_version",
-		"domain",
-		"status",
-		"container_id",
-		"container_ip",
-		"wg_ip",
-		"cpu_usage",
-		"memory_usage",
-		"container_health",
-		"last_health_check",
-		"started_at",
-	],
-	orderBy: "creation desc",
-	pageLength: 100,
-	auto: true,
-});
+function usageOf(bench) {
+	return usageFor(bench, readingAgeSeconds(bench.last_health_check));
+}
+
+/** Seconds since the stats sweep last wrote, or null if it never has. */
+function readingAgeSeconds(lastHealthCheck) {
+	if (!lastHealthCheck) return null;
+	return Math.max(0, dayjsLocal().diff(dayjsLocal(lastHealthCheck), "second"));
+}
+
+function benchRoute(bench) {
+	return { name: "LabDetail", params: { labId: bench.lab } };
+}
 </script>

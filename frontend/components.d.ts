@@ -11,6 +11,8 @@ declare module 'vue' {
     ActivityFeed: typeof import('./src/components/overview/ActivityFeed.vue')['default']
     AppChip: typeof import('./src/components/AppChip.vue')['default']
     AppIcon: typeof import('./src/components/AppIcon.vue')['default']
+    AppSearch: typeof import('./src/components/AppSearch.vue')['default']
+    DataTable: typeof import('./src/components/DataTable.vue')['default']
     EmptyState: typeof import('./src/components/EmptyState.vue')['default']
     EnvironmentList: typeof import('./src/components/overview/EnvironmentList.vue')['default']
     InfrastructureCard: typeof import('./src/components/overview/InfrastructureCard.vue')['default']
@@ -22,5 +24,6 @@ declare module 'vue' {
     SectionCard: typeof import('./src/components/SectionCard.vue')['default']
     StatTile: typeof import('./src/components/StatTile.vue')['default']
     StatusBadge: typeof import('./src/components/StatusBadge.vue')['default']
+    UsageBar: typeof import('./src/components/UsageBar.vue')['default']
   }
 }

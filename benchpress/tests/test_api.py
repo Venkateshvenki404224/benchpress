@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 import frappe
 from frappe.tests import IntegrationTestCase
+from frappe.utils.data import get_datetime
 
 from benchpress import api
 from benchpress.benchpress.doctype.bench_instance import get_instance_id
@@ -94,6 +95,37 @@ def _ensure_bench(lab, **extra):
 	).insert(ignore_permissions=True)
 
 
+def _count_queries(action) -> int:
+	"""How many statements `action` sends to MariaDB.
+
+	`assertQueryCount` asserts a ceiling, which cannot express "flat regardless
+	of row count" — an absolute number would also be dominated by frappe's
+	one-off DocType and permission meta loads and would pass or fail on test
+	ordering. Counting twice and comparing does express it.
+	"""
+	count = 0
+	original_sql = frappe.db.__class__.sql
+
+	def counting_sql(*args, **kwargs):
+		nonlocal count
+		count += 1
+		return original_sql(*args, **kwargs)
+
+	frappe.db.__class__.sql = counting_sql
+	try:
+		action()
+	finally:
+		frappe.db.__class__.sql = original_sql
+	return count
+
+
+def _delete_labs(labs):
+	frappe.set_user("Administrator")
+	for lab in labs:
+		frappe.delete_doc("Lab", lab.name, force=True, ignore_permissions=True)
+	frappe.db.commit()
+
+
 class TestApi(IntegrationTestCase):
 	@classmethod
 	def setUpClass(cls):
@@ -149,10 +181,50 @@ class TestApi(IntegrationTestCase):
 		labs, elapsed_ms = _timed(api.get_labs)
 		self.assertIsInstance(labs, list)
 		for lab in labs:
-			self.assertIn("app_names", lab)
-			self.assertIn("app_count", lab)
-			self.assertIn("bench_count", lab)
+			for key in ("app_names", "app_count", "bench_count", "deployed_as", "last_run"):
+				self.assertIn(key, lab)
 		self.assert_within_budget("get_labs", elapsed_ms)
+
+	def test_get_labs_reports_where_a_lab_is_deployed(self):
+		row = self._lab_row(api.get_labs(), self.lab.name)
+		self.assertEqual(row["deployed_as"]["bench"], self.bench.name)
+		self.assertEqual(row["deployed_as"]["status"], "Running")
+		self.assertEqual(row["bench_count"], 1)
+
+	def test_get_labs_says_never_deployed_rather_than_leaving_a_blank(self):
+		row = self._lab_row(api.get_labs(), self.create_lab.name)
+		self.assertIsNone(row["deployed_as"])
+		self.assertIsNone(row["last_run"])
+		self.assertEqual(row["bench_count"], 0)
+
+	def test_get_labs_last_run_is_the_newest_container_start(self):
+		started = frappe.utils.now_datetime()
+		frappe.db.set_value("Bench Instance", self.bench.name, "started_at", started)
+		row = self._lab_row(api.get_labs(), self.lab.name)
+		self.assertEqual(get_datetime(row["last_run"]), get_datetime(started))
+
+	def test_get_labs_query_count_does_not_scale_with_lab_count(self):
+		"""An N+1 regression fails here: four more labs must cost no more queries."""
+		api.get_labs()  # warm the DocType meta and permission caches
+		baseline = _count_queries(api.get_labs)
+
+		extra = [_ensure_lab(f"api-timing-n1-{index}", apps=[_lab_app()]) for index in range(4)]
+		self.addCleanup(_delete_labs, extra)
+		frappe.db.commit()
+		api.get_labs()
+
+		grown = _count_queries(api.get_labs)
+		self.assertEqual(
+			grown,
+			baseline,
+			f"{len(extra)} more labs cost {grown - baseline} more queries — the N+1 is back",
+		)
+		self.assertGreaterEqual(len(api.get_labs()), len(extra) + 3)
+
+	def _lab_row(self, labs, name):
+		row = next((lab for lab in labs if lab["name"] == name), None)
+		self.assertIsNotNone(row, f"{name} missing from get_labs")
+		return row
 
 	def test_get_lab_shape_and_timing(self):
 		lab, elapsed_ms = _timed(lambda: api.get_lab(self.lab.name))

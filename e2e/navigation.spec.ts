@@ -18,15 +18,11 @@ test.describe("Navigation & Routing", () => {
     await expect(page.locator("h1", { hasText: "Labs" })).toBeVisible();
   });
 
-  test("/bench-instances route loads bench instances page", async ({
-    page,
-  }) => {
+  test("/bench-instances route loads the instances page", async ({ page }) => {
     await page.goto("/frontend/bench-instances");
     await page.waitForLoadState("networkidle");
 
-    await expect(
-      page.locator("h1", { hasText: "Bench Instances" })
-    ).toBeVisible();
+    await expect(page.locator('[data-test="instances"]')).toBeVisible();
   });
 
   test("/devices route loads devices page", async ({ page }) => {
@@ -44,9 +40,7 @@ test.describe("Navigation & Routing", () => {
     await basePage.waitForUserContext();
 
     await basePage.clickNav("instances");
-    await expect(
-      page.locator("h1", { hasText: "Bench Instances" })
-    ).toBeVisible();
+    await expect(basePage.testId("instances")).toBeVisible();
 
     await basePage.clickNav("devices");
     await expect(page.locator("h1", { hasText: "VPN Devices" })).toBeVisible();
