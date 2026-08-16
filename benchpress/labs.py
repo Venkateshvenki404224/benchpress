@@ -41,9 +41,7 @@ BENCH_FIELDS = [
 
 def get_labs() -> list[dict]:
 	"""Every lab the caller may see, each with its apps and its deployment."""
-	labs = frappe.get_list(
-		"Lab", fields=LAB_FIELDS, order_by="creation desc", limit_page_length=0
-	)
+	labs = frappe.get_list("Lab", fields=LAB_FIELDS, order_by="creation desc", limit_page_length=0)
 	if not labs:
 		return []
 

@@ -8,21 +8,24 @@
 
 <script setup>
 // frappe-ui's Progress paints its fill `bg-surface-gray-7` with no colour prop.
-// A measured, busy container is green in the design and a stale or idle one is
-// neutral, so the tone is applied by re-colouring that fill from the wrapper
-// rather than forking the component. If the class ever moves, the bar falls
-// back to the stock fill — it never disappears.
+// A measured, busy container is green in the design, memory past its warning
+// threshold is amber and a stale or idle one is neutral, so the tone is applied
+// by re-colouring that fill from the wrapper rather than forking the component.
+// If the class ever moves, the bar falls back to the stock fill — it never
+// disappears.
 import { Progress } from "frappe-ui";
 import { computed } from "vue";
 
+const FILLS = {
+	green: "[&_.bg-surface-gray-7]:bg-surface-green-3",
+	orange: "[&_.bg-surface-gray-7]:bg-surface-amber-2",
+	gray: "[&_.bg-surface-gray-7]:bg-surface-gray-3",
+};
+
 const props = defineProps({
-	// The object `utils/benchUsage.usageFor` returns.
+	// The object `utils/benchUsage.usageFor` or `utils/containerStats` returns.
 	usage: { type: Object, required: true },
 });
 
-const fillClass = computed(() =>
-	props.usage.tone === "green"
-		? "[&_.bg-surface-gray-7]:bg-surface-green-3"
-		: "[&_.bg-surface-gray-7]:bg-surface-gray-3"
-);
+const fillClass = computed(() => FILLS[props.usage.tone] ?? FILLS.gray);
 </script>

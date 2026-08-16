@@ -46,11 +46,18 @@ function usageLabel(bench) {
 
 function usageNote(measured, stale, readingAgeSeconds) {
 	if (!measured) return NEVER_MEASURED_NOTE;
-	if (stale) return `stale — last read ${describeAge(readingAgeSeconds)} ago`;
+	if (stale) return `stale — last read ${shortAge(readingAgeSeconds)} ago`;
 	return "";
 }
 
-function describeAge(seconds) {
+/**
+ * An age in seconds, in the one unit worth reading — "45s", "4m", "2h", "3d".
+ *
+ * Both surfaces that report the age of a stats reading share this, so a stale
+ * Instances row and a "checked N ago" health timestamp never disagree.
+ */
+export function shortAge(seconds) {
+	if (seconds < 60) return `${Math.max(0, Math.round(seconds))}s`;
 	const minutes = Math.round(seconds / 60);
 	if (minutes < 60) return `${minutes}m`;
 	const hours = Math.round(minutes / 60);

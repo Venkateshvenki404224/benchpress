@@ -191,6 +191,19 @@ class TestApiAuthorization(IntegrationTestCase):
 		names = [bench["name"] for bench in api.get_benches()]
 		self.assertNotIn(self.bench.name, names)
 
+	def test_get_lab_hides_another_users_bench_health(self):
+		"""Lab detail must not report user_a's container, address or sites to user_b."""
+		frappe.set_user(self.user_b)
+		self.assertIsNone(api.get_lab(self.lab.name)["bench"])
+		self.assertEqual(api.get_lab(self.lab.name)["sites"], [])
+
+		frappe.set_user(self.user_a)
+		self.assertEqual(api.get_lab(self.lab.name)["bench"]["name"], self.bench.name)
+
+	def test_get_lab_denied_to_a_user_without_an_app_role(self):
+		frappe.set_user(self.norole_user)
+		self.assert_denied(lambda: api.get_lab(self.lab.name))
+
 	def test_get_labs_hides_another_users_deployment(self):
 		"""The Labs table must not tell user_b where user_a's bench lives."""
 		frappe.set_user(self.user_b)

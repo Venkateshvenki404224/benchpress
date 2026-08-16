@@ -4,7 +4,7 @@
 import frappe
 from frappe import _
 
-from benchpress import lab_templates, labs
+from benchpress import lab_detail, lab_templates, labs
 from benchpress.permissions import (
 	get_bench_owner_filter,
 	is_admin,
@@ -23,22 +23,7 @@ def get_labs() -> list[dict]:
 @frappe.whitelist()
 def get_lab(name: str) -> dict:
 	require_app_user()
-	lab = frappe.get_cached_doc("Lab", name)
-	return {
-		"name": lab.name,
-		"lab_id": lab.lab_id,
-		"title": lab.title,
-		"description": lab.description,
-		"frappe_version": lab.frappe_version,
-		"status": lab.status,
-		"image_tag": lab.image_tag,
-		"memory_limit": lab.memory_limit,
-		"cpu_cores": lab.cpu_cores,
-		"apps": [
-			{"app_name": a.app_name, "app_label": a.app_label, "git_url": a.git_url, "branch": a.branch}
-			for a in lab.apps
-		],
-	}
+	return lab_detail.get_lab(name)
 
 
 @frappe.whitelist()

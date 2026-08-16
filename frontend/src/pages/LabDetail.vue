@@ -1,1001 +1,299 @@
 <template>
-	<div class="p-6" v-if="lab.doc">
-		<!-- Header -->
-		<div class="mb-6 flex items-start justify-between">
-			<div>
-				<div class="flex items-center gap-3">
-					<h1 class="text-2xl font-bold text-ink-gray-9">{{ lab.doc.title }}</h1>
-				</div>
-				<div class="mt-2 flex items-center gap-2 text-sm text-ink-gray-5">
-					<span>Lab ID:</span>
-					<code
-						class="rounded bg-surface-gray-2 px-1.5 py-0.5 font-mono text-xs text-ink-gray-7"
-						>{{ lab.doc.lab_id }}</code
-					>
-				</div>
-				<p v-if="lab.doc.description" class="mt-3 max-w-xl text-sm text-ink-gray-6">
-					{{ lab.doc.description }}
-				</p>
-				<div class="mt-3 flex gap-3">
-					<Badge :label="lab.doc.frappe_version" theme="blue" variant="outline" />
-					<Badge :label="`${lab.doc.memory_limit} RAM`" theme="gray" variant="outline" />
-					<Badge :label="`${lab.doc.cpu_cores} CPU`" theme="gray" variant="outline" />
-				</div>
-			</div>
-			<div class="flex gap-2">
-				<Button
-					v-if="lab.doc.status !== 'Ready' && userContext.isAdmin"
-					theme="blue"
-					variant="solid"
-					size="lg"
-					:loading="buildAction.loading || isBuilding"
-					@click="buildLabImage"
-					>{{ isBuilding ? "Building..." : "Build Image" }}</Button
-				>
-				<!-- Lab ready, no instance or instance stopped/errored: show Deploy -->
-				<Button
-					v-if="
-						lab.doc.status === 'Ready' &&
-						(!activeBench ||
-							activeBench.status === 'Stopped' ||
-							activeBench.status === 'Error')
-					"
-					theme="green"
-					variant="solid"
-					size="lg"
-					:loading="deployAction.loading"
-					@click="showDeployConfirm = true"
-					>Deploy</Button
-				>
-				<Button
-					v-if="
-						activeBench &&
-						activeBench.status === 'Running' &&
-						lab.doc.enable_code_server &&
-						codeServerUrl
-					"
-					theme="blue"
-					variant="solid"
-					size="lg"
-					@click="openCodeServer"
-					>Open VS Code</Button
-				>
-				<!-- Instance running: show Stop -->
-				<Button
-					v-if="activeBench && activeBench.status === 'Running'"
-					theme="red"
-					variant="solid"
-					size="lg"
-					:loading="benchAction.loading"
-					@click="showStopConfirm = true"
-					>Stop</Button
-				>
-			</div>
-		</div>
+	<div class="mx-auto max-w-[1180px] px-6 pb-10 pt-[22px]" data-test="lab-detail">
+		<p v-if="!lab.data" class="text-body text-ink-gray-5">Loading lab…</p>
 
-		<ErrorMessage class="mb-4" :message="buildAction.error" />
-		<ErrorMessage class="mb-4" :message="deployAction.error" />
-		<ErrorMessage class="mb-4" :message="benchAction.error" />
-		<ErrorMessage class="mb-4" :message="createSiteAction.error" />
+		<template v-else>
+			<LabHeader
+				:lab="labView"
+				:bench="bench"
+				:site-url="siteAddress"
+				:vpn-connected="vpnStatus.connected"
+				:is-admin="userContext.isAdmin"
+				:busy="busy"
+				@deploy="deployLab"
+				@rebuild="buildImage"
+				@open="openSite"
+				@code-server="openCodeServer"
+				@stop="runBenchAction('stop')"
+				@delete="deleteBench"
+			/>
 
-		<!-- Tabs -->
-		<Tabs :tabs="tabs" v-model="activeTab">
-			<template #tab-panel="{ tab }">
-				<!-- Dashboard Tab -->
-				<div v-if="tab.label === 'Dashboard'" class="p-4">
-					<div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
-						<!-- Left column -->
-						<div class="flex flex-col gap-6">
-							<!-- Lab Information -->
-							<div
-								class="rounded-lg border border-outline-gray-1 bg-surface-white p-5"
-							>
-								<h2 class="mb-3 text-base font-semibold text-ink-gray-9">
-									Lab Information
-								</h2>
-								<p v-if="lab.doc.description" class="mb-4 text-sm text-ink-gray-6">
-									{{ lab.doc.description }}
-								</p>
-								<p
-									v-if="!activeBench && !lab.doc.description"
-									class="mb-4 text-sm text-ink-gray-5"
-								>
-									This lab is not deployed yet. Click "Deploy" to start.
-								</p>
-								<div v-if="lab.doc.apps?.length" class="mt-4">
-									<h3 class="mb-2 text-sm font-medium text-ink-gray-7">
-										Installed Apps
-									</h3>
-									<div class="flex flex-wrap gap-2">
-										<Badge
-											v-for="app in lab.doc.apps"
-											:key="app.app_name"
-											:label="app.app_label || app.app_name"
-											theme="blue"
-											variant="outline"
-										/>
-									</div>
-								</div>
-							</div>
+			<ErrorMessage class="mt-3" :message="actionError" />
 
-							<!-- Copy alert -->
-							<Teleport to="body">
-								<Transition name="slide-in">
-									<Alert
-										v-if="copyAlert"
-										title="Copied to clipboard"
-										description="Connection info has been copied. You can paste it in your terminal."
-										theme="green"
-										class="fixed right-4 top-4 z-50 w-80 shadow-lg"
-									/>
-								</Transition>
-							</Teleport>
+			<LabErrorBanner
+				v-if="lab.data.failure"
+				class="mt-4"
+				:failure="lab.data.failure"
+				:is-admin="userContext.isAdmin"
+				@edit="editLab"
+				@view-log="showFailingLog"
+			/>
 
-							<!-- Connection Info -->
-							<div
-								v-if="activeBench && activeBench.status === 'Running'"
-								class="rounded-lg border border-outline-gray-1 bg-surface-white p-5"
-							>
-								<h2 class="mb-3 text-base font-semibold text-ink-gray-9">
-									Connection Information
-								</h2>
-								<p class="mb-5 text-sm leading-relaxed text-ink-gray-6">
-									This server is accessible through
-									<strong class="text-ink-gray-8">Code</strong> or
-									<strong class="text-ink-gray-8">SSH</strong>. Code is
-									accessible under VPN in one click and you do not have to SSH
-									into your lab. Just ensure you are connected to VPN. To keep
-									you secure, this password changes during every redeploy.
-								</p>
-								<div class="space-y-0 divide-y divide-outline-gray-1">
-									<div class="flex items-center gap-4 py-3">
-										<label
-											class="w-36 shrink-0 text-sm font-medium text-ink-gray-9"
-											>Device IP</label
-										>
-										<div class="flex flex-1 items-center gap-2">
-											<code
-												class="flex-1 rounded bg-surface-gray-1 px-4 py-2.5 font-mono text-sm text-ink-gray-8"
-												>{{ benchIp ?? "—" }}</code
-											>
-											<Button
-												icon="copy"
-												appearance="minimal"
-												size="sm"
-												@click="copyText(benchIp)"
-											/>
-										</div>
-									</div>
-									<div class="flex items-center gap-4 py-3">
-										<label
-											class="w-36 shrink-0 text-sm font-medium text-ink-gray-9"
-											>SSH Command</label
-										>
-										<div class="flex flex-1 items-center gap-2">
-											<code
-												class="flex-1 rounded bg-surface-gray-1 px-4 py-2.5 font-mono text-sm text-ink-gray-8"
-												>{{ sshCommand ?? "—" }}</code
-											>
-											<Button
-												icon="copy"
-												appearance="minimal"
-												size="sm"
-												@click="copyText(sshCommand)"
-											/>
-										</div>
-									</div>
-									<div class="flex items-center gap-4 py-3">
-										<label
-											class="w-36 shrink-0 text-sm font-medium text-ink-gray-9"
-											>Username</label
-										>
-										<div class="flex flex-1 items-center gap-2">
-											<code
-												class="flex-1 rounded bg-surface-gray-1 px-4 py-2.5 font-mono text-sm text-ink-gray-8"
-												>{{ sshUsername ?? "—" }}</code
-											>
-											<Button
-												icon="copy"
-												appearance="minimal"
-												size="sm"
-												@click="copyText(sshUsername)"
-											/>
-										</div>
-									</div>
-									<div class="flex items-center gap-4 py-3">
-										<label
-											class="w-36 shrink-0 text-sm font-medium text-ink-gray-9"
-											>su Password</label
-										>
-										<div class="flex flex-1 items-center gap-2">
-											<code
-												class="flex-1 rounded bg-surface-gray-1 px-4 py-2.5 font-mono text-sm text-ink-gray-8"
-												>{{ sshPassword ? "••••••••••••" : "—" }}</code
-											>
-											<Button
-												icon="copy"
-												appearance="minimal"
-												size="sm"
-												@click="copyText(sshPassword)"
-											/>
-										</div>
-									</div>
-									<div class="flex items-center gap-4 py-3">
-										<label
-											class="w-36 shrink-0 text-sm font-medium text-ink-gray-9"
-											>Admin Password</label
-										>
-										<div class="flex flex-1 items-center gap-2">
-											<code
-												class="flex-1 rounded bg-surface-gray-1 px-4 py-2.5 font-mono text-sm text-ink-gray-8"
-												>{{ adminPassword ? "••••••••••••" : "—" }}</code
-											>
-											<Button
-												icon="copy"
-												appearance="minimal"
-												size="sm"
-												@click="copyText(adminPassword)"
-											/>
-										</div>
-									</div>
-									<div class="flex items-center gap-4 py-3">
-										<label
-											class="w-36 shrink-0 text-sm font-medium text-ink-gray-9"
-											>VS Port Forward</label
-										>
-										<div class="flex flex-1 items-center gap-2">
-											<code
-												class="flex-1 rounded bg-surface-gray-1 px-4 py-2.5 font-mono text-sm text-ink-gray-8"
-												>{{ siteUrl ?? "—" }}</code
-											>
-											<Button
-												icon="copy"
-												appearance="minimal"
-												size="sm"
-												@click="copyText(siteUrl)"
-											/>
-										</div>
-									</div>
-									<div
-										v-if="lab.doc.enable_code_server && codeServerUrl"
-										class="flex items-center gap-4 py-3"
-									>
-										<label
-											class="w-36 shrink-0 text-sm font-medium text-ink-gray-9"
-											>VS Code URL</label
-										>
-										<div class="flex flex-1 items-center gap-2">
-											<code
-												class="flex-1 rounded bg-surface-gray-1 px-4 py-2.5 font-mono text-sm text-ink-gray-8"
-												>{{ codeServerUrl }}</code
-											>
-											<Button
-												icon="copy"
-												appearance="minimal"
-												size="sm"
-												@click="copyText(codeServerUrl)"
-											/>
-										</div>
-									</div>
-									<div
-										v-if="lab.doc.enable_code_server && codeServerPassword"
-										class="flex items-center gap-4 py-3"
-									>
-										<label
-											class="w-36 shrink-0 text-sm font-medium text-ink-gray-9"
-											>VS Code Password</label
-										>
-										<div class="flex flex-1 items-center gap-2">
-											<code
-												class="flex-1 rounded bg-surface-gray-1 px-4 py-2.5 font-mono text-sm text-ink-gray-8"
-												>{{
-													codeServerPassword ? "••••••••••••" : "—"
-												}}</code
-											>
-											<Button
-												icon="copy"
-												appearance="minimal"
-												size="sm"
-												@click="copyText(codeServerPassword)"
-											/>
-										</div>
-									</div>
-								</div>
-							</div>
-						</div>
-
-						<!-- Right column -->
-						<div class="flex flex-col gap-6">
-							<!-- Container Status -->
-							<div
-								v-if="activeBench"
-								class="rounded-lg border border-outline-gray-1 bg-surface-white p-5"
-							>
-								<div class="mb-4 flex items-center justify-between">
-									<h2 class="text-base font-semibold text-ink-gray-9">
-										Container Status
-									</h2>
-									<Badge
-										:label="activeBench.status"
-										:theme="statusColor(activeBench.status)"
-									/>
-								</div>
-								<div class="grid grid-cols-2 gap-4">
-									<div class="rounded-lg border border-outline-gray-1 p-4">
-										<div class="text-xs text-ink-gray-5">CPU Usage</div>
-										<div class="mt-1 text-lg font-semibold text-ink-gray-9">
-											{{ activeBench.cpu_usage || 0 }}%
-										</div>
-										<div
-											class="mt-2 h-2 w-full rounded-full bg-surface-gray-2"
-										>
-											<div
-												class="h-2 rounded-full bg-surface-blue-2"
-												:style="{
-													width: `${Math.min(
-														activeBench.cpu_usage || 0,
-														100
-													)}%`,
-												}"
-											/>
-										</div>
-									</div>
-									<div class="rounded-lg border border-outline-gray-1 p-4">
-										<div class="text-xs text-ink-gray-5">Memory Usage</div>
-										<div class="mt-1 text-lg font-semibold text-ink-gray-9">
-											{{ activeBench.memory_usage || 0 }}%
-										</div>
-										<div
-											class="mt-2 h-2 w-full rounded-full bg-surface-gray-2"
-										>
-											<div
-												class="h-2 rounded-full bg-surface-blue-2"
-												:style="{
-													width: `${Math.min(
-														activeBench.memory_usage || 0,
-														100
-													)}%`,
-												}"
-											/>
-										</div>
-									</div>
-								</div>
-								<div
-									v-if="activeBench.started_at"
-									class="mt-3 text-xs text-ink-gray-5"
-								>
-									Started: {{ activeBench.started_at }}
-								</div>
-							</div>
-
-							<!-- No deployment yet -->
-							<div
-								v-if="!activeBench && !benches.loading"
-								class="rounded-lg border border-outline-gray-1 bg-surface-white p-5"
-							>
-								<div class="py-6 text-center">
-									<div class="text-sm text-ink-gray-5">No active deployment</div>
-									<p class="mt-1 text-xs text-ink-gray-4">
-										Click "Deploy" to create a new bench instance from this
-										lab.
-									</p>
-								</div>
-							</div>
-						</div>
-					</div>
-				</div>
-
-				<!-- Sites Tab -->
-				<div v-if="tab.label === 'Sites'" class="p-4">
-					<div class="mb-4 flex items-center justify-between">
-						<h2 class="text-base font-semibold text-ink-gray-9">Sites</h2>
-						<Button
-							appearance="primary"
-							icon-left="plus"
-							:disabled="!activeBench"
-							@click="showNewSite = true"
-							>New Site</Button
-						>
-					</div>
-
-					<!-- Sites list -->
-					<ListView
-						v-if="sites.data?.length"
-						:columns="siteColumns"
-						:rows="sites.data"
-						:options="{ selectable: false, showTooltip: true, resizeColumn: true }"
-						row-key="name"
-					/>
-					<div
-						v-else-if="!activeBench"
-						class="rounded-lg border border-outline-gray-1 bg-surface-white p-8 text-center"
-					>
-						<div class="text-sm text-ink-gray-5">
-							Deploy this lab first to create sites.
-						</div>
-					</div>
-					<div
-						v-else
-						class="rounded-lg border border-outline-gray-1 bg-surface-white p-8 text-center"
-					>
-						<div class="text-sm text-ink-gray-5">
-							No sites yet. Create your first site.
-						</div>
-					</div>
-
-					<!-- New Site Dialog -->
-					<Dialog
-						:options="{ title: 'Create New Site', size: 'sm' }"
-						v-model="showNewSite"
-					>
-						<template #body-content>
-							<div class="space-y-4">
-								<FormControl
-									label="Site Name"
-									v-model="newSiteName"
-									type="text"
-									placeholder="e.g. mysite"
-									:required="true"
+			<Tabs v-model="activeTab" class="mt-5" :tabs="tabs">
+				<template #tab-panel="{ tab }">
+					<div v-if="tab.key === 'dashboard'" class="grid gap-4 pt-4 lg:grid-cols-2">
+						<div class="flex min-w-0 flex-col gap-4">
+							<ContainerStatusCard
+								v-if="bench"
+								:bench="bench"
+								:lab="lab.data"
+								:health-age-seconds="healthAgeSeconds"
+							/>
+							<SectionCard v-else :padded="false">
+								<EmptyState
+									message="This lab has never been deployed. Deploying builds a container, a site, an SSH user and an IDE."
 								/>
-								<div v-if="lab.doc.apps?.length">
-									<label class="mb-2 block text-xs font-medium text-ink-gray-6"
-										>Apps to Install</label
-									>
-									<div class="flex flex-wrap gap-2">
-										<label
-											v-for="app in lab.doc.apps"
-											:key="app.app_name"
-											class="flex cursor-pointer items-center gap-2 rounded border border-outline-gray-1 px-3 py-2 text-sm"
-											:class="
-												selectedApps.includes(app.app_name)
-													? 'border-outline-blue-2 bg-surface-blue-1'
-													: ''
-											"
-										>
-											<input
-												type="checkbox"
-												:value="app.app_name"
-												v-model="selectedApps"
-												class="accent-surface-blue-2"
-											/>
-											{{ app.app_label || app.app_name }}
-										</label>
-									</div>
-								</div>
-							</div>
-						</template>
-						<template #actions>
-							<Button
-								appearance="primary"
-								class="w-full"
-								:loading="createSiteAction.loading"
-								@click="createSite"
-								>Create Site</Button
-							>
-						</template>
-					</Dialog>
-				</div>
+							</SectionCard>
 
-				<!-- Deploy Log Tab -->
-				<div v-if="tab.label === 'Deploy Log'" class="p-4">
-					<div v-if="liveDeployLog || deployLogs.data?.length">
-						<LogViewer
-							:rawLog="liveDeployLog || deployLogs.data?.[0]?.message || ''"
+							<ConnectionDetails
+								v-if="bench"
+								:lab="lab.data"
+								:bench="bench"
+								:credentials="credentials.data ?? {}"
+								:site-url="siteAddress"
+							/>
+						</div>
+
+						<div class="flex min-w-0 flex-col gap-4">
+							<ConnectionCard
+								:connected="vpnStatus.connected"
+								@register="router.push('/devices')"
+							/>
+							<SitesCard v-bind="sitesProps" :can-create="false" @open="openSite" />
+						</div>
+					</div>
+
+					<div v-else-if="tab.key === 'sites'" class="pt-4">
+						<SitesCard
+							v-bind="sitesProps"
+							:can-create="!!bench"
+							@create="createSite"
+							@open="openSite"
 						/>
 					</div>
-					<div v-else-if="deployLogs.loading" class="text-base text-ink-gray-5">
-						Loading deploy logs...
-					</div>
-					<div
-						v-else
-						class="rounded-lg border border-outline-gray-1 bg-surface-white p-8 text-center"
-					>
-						<div class="text-sm text-ink-gray-5">
-							No active deployment. Click "Deploy" to start.
-						</div>
-					</div>
-				</div>
 
-				<!-- Build Log Tab -->
-				<div v-if="tab.label === 'Build Log'" class="p-4">
-					<div v-if="liveBuildLog || buildLogs.data?.length">
-						<LogViewer :rawLog="liveBuildLog || buildLogs.data?.[0]?.message || ''" />
+					<div v-else class="pt-4">
+						<LogViewer v-if="logText(tab.key)" :rawLog="logText(tab.key)" />
+						<SectionCard v-else :padded="false">
+							<EmptyState :message="LOG_EMPTY[tab.key]" />
+						</SectionCard>
 					</div>
-					<div v-else-if="buildLogs.loading" class="text-base text-ink-gray-5">
-						Loading build log...
-					</div>
-					<div
-						v-else
-						class="rounded-lg border border-outline-gray-1 bg-surface-white p-8 text-center"
-					>
-						<div class="text-sm text-ink-gray-5">
-							No build logs yet. Click "Build Image" to start.
-						</div>
-					</div>
-				</div>
-			</template>
-		</Tabs>
+				</template>
+			</Tabs>
+		</template>
 	</div>
-
-	<!-- Loading state -->
-	<div v-else class="flex items-center justify-center p-12">
-		<div class="text-base text-ink-gray-5">Loading lab details...</div>
-	</div>
-
-	<!-- Deploy Confirmation Dialog -->
-	<Dialog v-model="showDeployConfirm">
-		<template #body-title>
-			<h3 class="text-lg font-semibold text-ink-gray-9">Deploy Lab</h3>
-		</template>
-		<template #body-content>
-			<p class="text-sm text-ink-gray-6">
-				This will create a container and set up a Frappe bench. Continue?
-			</p>
-		</template>
-		<template #actions="{ close }">
-			<div class="flex flex-row-reverse gap-2">
-				<Button
-					variant="solid"
-					theme="green"
-					:loading="deployAction.loading"
-					@click="
-						deployLab();
-						close();
-					"
-					>Deploy</Button
-				>
-				<Button variant="outline" @click="close">Cancel</Button>
-			</div>
-		</template>
-	</Dialog>
-
-	<!-- Stop Confirmation Dialog -->
-	<Dialog v-model="showStopConfirm">
-		<template #body-title>
-			<h3 class="text-lg font-semibold text-ink-gray-9">Stop Bench</h3>
-		</template>
-		<template #body-content>
-			<p class="text-sm text-ink-gray-6">
-				This will stop the running container. The bench will go offline until redeployed.
-				Continue?
-			</p>
-		</template>
-		<template #actions="{ close }">
-			<div class="flex flex-row-reverse gap-2">
-				<Button
-					variant="solid"
-					theme="red"
-					:loading="benchAction.loading"
-					@click="
-						doBenchAction('stop');
-						close();
-					"
-					>Stop</Button
-				>
-				<Button variant="outline" @click="close">Cancel</Button>
-			</div>
-		</template>
-	</Dialog>
 </template>
 
 <script setup>
-import { computed, ref, watch, onMounted, onUnmounted } from "vue";
-import { useRoute } from "vue-router";
-import { useSocket } from "@/socket";
-import {
-	createResource,
-	createDocumentResource,
-	createListResource,
-	Badge,
-	Button,
-	Tabs,
-	ListView,
-	Dialog,
-	FormControl,
-	ErrorMessage,
-	Alert,
-} from "frappe-ui";
+// The page owns routing, the data resources and the tab state; every region is
+// a component. Nothing here polls: the deploy and build logs already arrive over
+// socket.io, and the three timers this file used to run raced those handlers —
+// `stats_collector` writes with `update_modified=False`, so a poll on `modified`
+// would never have seen a stat change anyway.
+import EmptyState from "@/components/EmptyState.vue";
 import LogViewer from "@/components/LogViewer.vue";
+import SectionCard from "@/components/SectionCard.vue";
+import ConnectionCard from "@/components/lab/ConnectionCard.vue";
+import ConnectionDetails from "@/components/lab/ConnectionDetails.vue";
+import ContainerStatusCard from "@/components/lab/ContainerStatusCard.vue";
+import LabErrorBanner from "@/components/lab/LabErrorBanner.vue";
+import LabHeader from "@/components/lab/LabHeader.vue";
+import SitesCard from "@/components/lab/SitesCard.vue";
 import { userContext } from "@/data/userContext";
+import { vpnStatus } from "@/data/vpnStatus";
+import { siteUrl } from "@/utils/labActions";
+import { useSocket } from "@/socket";
+import { ErrorMessage, Tabs, createListResource, createResource, dayjsLocal } from "frappe-ui";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import { useRoute, useRouter } from "vue-router";
+
+const TERMINAL_LOG_TYPES = ["success", "error"];
+
+const LOG_EMPTY = {
+	deploy: "No deploy has run yet — deploying this lab streams its log here.",
+	build: "No image build has run yet — rebuilding this lab streams its log here.",
+};
 
 const route = useRoute();
+const router = useRouter();
 const labId = route.params.labId;
+
 const activeTab = ref(0);
-const showNewSite = ref(false);
-const showDeployConfirm = ref(false);
-const showStopConfirm = ref(false);
-const newSiteName = ref("");
-const selectedApps = ref([]);
-
-const tabs = computed(() => {
-	const base = [{ label: "Dashboard" }, { label: "Sites" }];
-	if (lab.doc?.status === "Ready" || activeBench.value) {
-		base.push({ label: "Deploy Log" });
-	} else if (userContext.isAdmin) {
-		base.push({ label: "Build Log" });
-	}
-	return base;
-});
-
-const siteColumns = [
-	{ label: "Site Name", key: "site_name", width: "200px" },
-	{ label: "Domain", key: "full_domain", width: "250px" },
-	{ label: "Status", key: "status", width: "120px" },
-];
-
-const sshUsername = computed(() => activeBench.value?.ssh_username || null);
-const sshPassword = computed(() => benchCredentials.data?.ssh_password || null);
-const adminPassword = computed(() => benchCredentials.data?.admin_password || null);
-const codeServerUrl = computed(() => activeBench.value?.code_server_url || null);
-const codeServerPassword = computed(() => benchCredentials.data?.code_server_password || null);
-const benchIp = computed(
-	() => activeBench.value?.wg_ip || activeBench.value?.container_ip || null
-);
-const sshCommand = computed(() => {
-	const ip = benchIp.value;
-	const user = sshUsername.value;
-	if (!ip || !user) return null;
-	return `ssh ${user}@${ip}`;
-});
-const siteUrl = computed(() => {
-	const ip = benchIp.value;
-	if (!ip) return null;
-	return `${ip}:8000`;
-});
-
-const lab = createDocumentResource({
-	doctype: "Lab",
-	name: labId,
-});
-
-const benches = createResource({
-	url: "benchpress.api.get_benches",
-	auto: true,
-});
-
-const activeBench = computed(() => {
-	if (!benches.data) return null;
-	return benches.data.find((b) => b.lab === labId) || null;
-});
-
-const benchCredentials = createResource({
-	url: "benchpress.api.get_bench_credentials",
-});
-
-// Passwords are no longer in get_benches; fetch them per bench once it resolves.
-watch(
-	() => activeBench.value?.name,
-	(name) => {
-		if (name) benchCredentials.submit({ bench_name: name });
-	},
-	{ immediate: true }
-);
-
-const sites = createListResource({
-	doctype: "Bench Site",
-	fields: ["name", "site_name", "full_domain", "status"],
-	filters: computed(() => ({ bench: activeBench.value?.name || "" })),
-	orderBy: "creation desc",
-	auto: computed(() => !!activeBench.value),
-});
-
-const deployLogs = createResource({
-	url: "benchpress.api.get_deploy_logs",
-});
-
 const liveDeployLog = ref("");
-const deployComplete = ref(false);
-let pollInterval = null;
-
-// Fetch deploy logs when bench is available
-function fetchDeployLogs() {
-	if (!activeBench.value) return;
-	deployLogs.submit({ bench_name: activeBench.value.name });
-}
-
-// Sync fetched logs into live display and detect completion
-watch(
-	() => deployLogs.data,
-	(data) => {
-		if (data?.length) {
-			liveDeployLog.value = data[0].message || "";
-			if (data[0].log_type === "success" && !deployComplete.value) {
-				deployComplete.value = true;
-				if (pollInterval) {
-					clearInterval(pollInterval);
-					pollInterval = null;
-				}
-				benches.reload();
-			}
-		}
-	}
-);
-
-// Reload logs when the actual bench changes (watch name, not object ref)
-watch(
-	() => activeBench.value?.name,
-	(name, oldName) => {
-		if (name && name !== oldName) {
-			deployComplete.value = false;
-			if (activeTab.value === 2) {
-				fetchDeployLogs();
-			}
-		}
-	}
-);
-
-// Poll for new logs while deploying (only on Deploy Log tab)
-watch(
-	[() => activeBench.value?.status, activeTab],
-	([status, tab]) => {
-		if (pollInterval) {
-			clearInterval(pollInterval);
-			pollInterval = null;
-		}
-		if (status === "Deploying" && tab === 2 && !deployComplete.value) {
-			pollInterval = setInterval(fetchDeployLogs, 3000);
-		}
-	},
-	{ immediate: true }
-);
-
-// Optimistic build flag: true from the moment the user clicks, before the
-// enqueued worker has flipped lab.status to "Building" in the DB. Without it
-// the button and polls race the background job and get stuck on "Build Image".
-const building = ref(false);
-const isBuilding = computed(() => building.value || lab.doc?.status === "Building");
-
-// Clear the optimistic flag once the build reaches a terminal state.
-watch(
-	() => lab.doc?.status,
-	(status) => {
-		if (status === "Ready" || status === "Error") {
-			building.value = false;
-		}
-	}
-);
-
-// Poll for build logs while building
-let buildPollInterval = null;
-
-watch(
-	isBuilding,
-	(active) => {
-		if (active) {
-			if (!buildPollInterval) {
-				buildPollInterval = setInterval(() => {
-					buildLogs.reload();
-				}, 3000);
-			}
-		} else {
-			if (buildPollInterval) {
-				clearInterval(buildPollInterval);
-				buildPollInterval = null;
-			}
-			buildLogs.reload();
-		}
-	},
-	{ immediate: true }
-);
-
-// Also poll lab status while building to detect completion
-let labPollInterval = null;
-
-watch(
-	isBuilding,
-	(active) => {
-		if (active) {
-			if (!labPollInterval) {
-				labPollInterval = setInterval(() => {
-					lab.reload();
-				}, 5000);
-			}
-		} else if (labPollInterval) {
-			clearInterval(labPollInterval);
-			labPollInterval = null;
-		}
-	},
-	{ immediate: true }
-);
-
-// Sync build logs into live display
-watch(
-	() => buildLogs.data,
-	(data) => {
-		if (data?.length) {
-			liveBuildLog.value = data[0].message || "";
-		}
-	}
-);
-
-// Refetch when switching to log tabs (one-time fetch, not continuous)
-watch(activeTab, (tab) => {
-	if (tab === 2) {
-		if (activeBench.value && !deployComplete.value) {
-			fetchDeployLogs();
-		} else if (!activeBench.value) {
-			buildLogs.reload();
-		}
-	}
-});
-
-// Socket listeners for live logs
-const socket = useSocket();
 const liveBuildLog = ref("");
+// True from the click, before the enqueued worker has flipped the lab to
+// Building in the database — without it the button races the background job.
+const building = ref(false);
 
-function onDeployLog(data) {
-	if (activeBench.value && data.bench === activeBench.value.name) {
-		liveDeployLog.value += data.log + "\n";
-		if (data.type === "success" || data.type === "error") {
-			benches.reload();
-			deployLogs.reload();
-		}
-	}
-}
-
-function onBuildLog(data) {
-	if (data.lab === labId) {
-		liveBuildLog.value += data.log + "\n";
-		// Reload lab status when build completes
-		if (data.type === "success" || data.type === "error") {
-			lab.reload();
-			buildLogs.reload();
-		}
-	}
-}
-
-onMounted(() => {
-	if (socket) {
-		socket.on("bench_deploy_log", onDeployLog);
-		socket.on("lab_build_log", onBuildLog);
-	}
-	// Initial fetch (only if on deploy log tab)
-	if (activeBench.value && activeTab.value === 2) {
-		fetchDeployLogs();
-	}
-});
-
-onUnmounted(() => {
-	if (socket) {
-		socket.off("bench_deploy_log", onDeployLog);
-		socket.off("lab_build_log", onBuildLog);
-	}
-	if (pollInterval) {
-		clearInterval(pollInterval);
-	}
-	if (buildPollInterval) {
-		clearInterval(buildPollInterval);
-	}
-	if (labPollInterval) {
-		clearInterval(labPollInterval);
-	}
-});
-
+const lab = createResource({ url: "benchpress.api.get_lab", params: { name: labId }, auto: true });
+const credentials = createResource({ url: "benchpress.api.get_bench_credentials" });
+const deployLogs = createResource({ url: "benchpress.api.get_deploy_logs" });
 const buildLogs = createListResource({
 	doctype: "Build Log",
 	fields: ["name", "message", "log_type", "timestamp"],
 	filters: { lab: labId },
 	orderBy: "timestamp desc",
-	pageLength: 20,
+	pageLength: 1,
 	auto: true,
 });
 
+// Every action reloads the lab, which is what carries the bench, its sites and
+// the failure back to the page.
+const refresh = () => lab.reload();
 const buildAction = createResource({
 	url: "benchpress.api.build_lab_image",
-	onSuccess() {
-		lab.reload();
-		buildLogs.reload();
-	},
-	onError() {
-		// Enqueue failed (e.g. permission/500) — drop back out of the building state.
-		building.value = false;
-	},
+	onError: () => (building.value = false),
+});
+const deployAction = createResource({ url: "benchpress.api.create_bench", onSuccess: refresh });
+const benchAction = createResource({ url: "benchpress.api.bench_action", onSuccess: refresh });
+const createSiteAction = createResource({ url: "benchpress.api.create_site", onSuccess: refresh });
+
+const bench = computed(() => lab.data?.bench ?? null);
+const sites = computed(() => lab.data?.sites ?? []);
+const siteAddress = computed(() => siteUrl(bench.value));
+const busy = computed(
+	() => buildAction.loading || deployAction.loading || benchAction.loading || !!building.value
+);
+const actionError = computed(
+	() => buildAction.error || deployAction.error || benchAction.error || ""
+);
+
+// The lab as the header should read it, including the optimistic build state.
+const labView = computed(() => (building.value ? { ...lab.data, status: "Building" } : lab.data));
+
+const sitesProps = computed(() => ({
+	sites: sites.value,
+	labApps: lab.data?.apps ?? [],
+	reachable: vpnStatus.connected,
+	creating: createSiteAction.loading,
+	createError: createSiteAction.error || "",
+}));
+
+/** Age of the health reading in seconds; null when the bench was never polled. */
+const healthAgeSeconds = computed(() => {
+	const checkedAt = bench.value?.last_health_check;
+	return checkedAt ? dayjsLocal().diff(dayjsLocal(checkedAt), "second") : null;
 });
 
-function buildLabImage() {
+// Panels switch on a stable key, never on a tab's position: the polling this
+// page used to run compared `tab === 2`, so adding a tab silently repointed it.
+const tabs = computed(() => {
+	const list = [
+		{ key: "dashboard", label: "Dashboard" },
+		{ key: "sites", label: "Sites" },
+		{ key: "deploy", label: "Deploy log" },
+	];
+	if (userContext.isAdmin) list.push({ key: "build", label: "Build log" });
+	return list;
+});
+
+/** What a log tab renders — the live stream while one runs, the stored log after. */
+function logText(key) {
+	return key === "build"
+		? liveBuildLog.value || buildLogs.data?.[0]?.message || ""
+		: liveDeployLog.value || deployLogs.data?.[0]?.message || "";
+}
+
+// Credentials and deploy history belong to a bench, so both follow its identity.
+watch(
+	() => bench.value?.name,
+	(name) => {
+		if (!name) return;
+		credentials.submit({ bench_name: name });
+		deployLogs.submit({ bench_name: name });
+	},
+	{ immediate: true }
+);
+
+// Drop the optimistic flag once the build reaches a terminal state.
+watch(
+	() => lab.data?.status,
+	(status) => {
+		if (status === "Ready" || status === "Error") building.value = false;
+	}
+);
+
+function deployLab() {
+	liveDeployLog.value = "";
+	deployAction.submit({ data: JSON.stringify({ lab: labId }) });
+}
+
+function buildImage() {
 	liveBuildLog.value = "";
 	building.value = true;
 	buildAction.submit({ lab_name: labId });
 }
 
-const deployAction = createResource({
-	url: "benchpress.api.create_bench",
-	onSuccess() {
-		liveDeployLog.value = "";
-		deployComplete.value = false;
-		benches.reload();
-	},
-});
-
-function deployLab() {
-	deployAction.submit({
-		data: JSON.stringify({ lab: labId }),
-	});
+function runBenchAction(action) {
+	if (!bench.value) return;
+	benchAction.submit({ bench_name: bench.value.name, action });
 }
 
-const benchAction = createResource({
-	url: "benchpress.api.bench_action",
-	onSuccess() {
-		benches.reload();
-	},
-});
-
-function openCodeServer() {
-	const url = codeServerUrl.value;
-	if (url) {
-		window.open(url, "_blank");
-	}
+async function deleteBench() {
+	if (!bench.value) return;
+	await benchAction.submit({ bench_name: bench.value.name, action: "delete" });
+	router.push("/labs");
 }
 
-function doBenchAction(action) {
-	if (!activeBench.value) return;
-	benchAction.submit({
-		bench_name: activeBench.value.name,
-		action,
-	});
-}
-
-const createSiteAction = createResource({
-	url: "benchpress.api.create_site",
-	onSuccess() {
-		showNewSite.value = false;
-		newSiteName.value = "";
-		selectedApps.value = [];
-		sites.reload();
-	},
-});
-
-function createSite() {
-	if (!newSiteName.value || !activeBench.value) return;
+function createSite({ siteName, apps }) {
 	createSiteAction.submit({
 		data: JSON.stringify({
-			site_name: newSiteName.value,
-			bench: activeBench.value.name,
-			apps: selectedApps.value.map((name) => ({ name })),
+			site_name: siteName,
+			bench: bench.value?.name,
+			apps: apps.map((name) => ({ name })),
 		}),
 	});
 }
 
-const copyAlert = ref("");
-
-function copyText(text) {
-	navigator.clipboard.writeText(text);
-	copyAlert.value = "Copied to clipboard!";
-	setTimeout(() => {
-		copyAlert.value = "";
-	}, 2000);
+function openSite() {
+	if (siteAddress.value) window.open(siteAddress.value, "_blank");
 }
 
-function statusColor(status) {
-	const map = {
-		Draft: "gray",
-		Building: "orange",
-		Ready: "green",
-		Running: "green",
-		Deploying: "orange",
-		Stopped: "red",
-		Error: "red",
-		Active: "green",
-		Creating: "orange",
-		Inactive: "gray",
-	};
-	return map[status] || "gray";
+function openCodeServer() {
+	if (bench.value?.code_server_url) window.open(bench.value.code_server_url, "_blank");
 }
+
+/** Lab recipes are edited on the desk form; the SPA has no editor yet. */
+function editLab() {
+	window.open(`/app/lab/${labId}`, "_blank");
+}
+
+function showFailingLog() {
+	goToTab(lab.data?.failure?.source === "build" ? "build" : "deploy");
+}
+
+function goToTab(key) {
+	const index = tabs.value.findIndex((tab) => tab.key === key);
+	if (index >= 0) activeTab.value = index;
+}
+
+const socket = useSocket();
+
+function onDeployLog(data) {
+	if (!bench.value || data.bench !== bench.value.name) return;
+	liveDeployLog.value += `${data.log}\n`;
+	if (TERMINAL_LOG_TYPES.includes(data.type)) {
+		refresh();
+		deployLogs.reload();
+	}
+}
+
+function onBuildLog(data) {
+	if (data.lab !== labId) return;
+	liveBuildLog.value += `${data.log}\n`;
+	if (TERMINAL_LOG_TYPES.includes(data.type)) {
+		refresh();
+		buildLogs.reload();
+	}
+}
+
+onMounted(() => {
+	socket?.on("bench_deploy_log", onDeployLog);
+	socket?.on("lab_build_log", onBuildLog);
+});
+
+onUnmounted(() => {
+	socket?.off("bench_deploy_log", onDeployLog);
+	socket?.off("lab_build_log", onBuildLog);
+});
 </script>
-
-<style scoped>
-.slide-in-enter-active {
-	transition: all 0.3s ease-out;
-}
-.slide-in-leave-active {
-	transition: all 0.2s ease-in;
-}
-.slide-in-enter-from {
-	transform: translateX(100%);
-	opacity: 0;
-}
-.slide-in-leave-to {
-	transform: translateX(100%);
-	opacity: 0;
-}
-</style>

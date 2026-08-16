@@ -50,6 +50,20 @@ DIAGNOSTICS_ROWS = [
 ]
 
 
+# A real failed build tail: the pipeline brackets each step with `=== … ===`
+# and ends the run with its own failure marker.
+FAILED_BUILD_LOG = "\n".join(
+	[
+		"=== Build started ===",
+		"Step 1/3 : FROM frappe/base:version-15",
+		"=== Installing apps ===",
+		"fatal: repository 'https://github.com/frappe/nope' not found",
+		"=== Build failed: app install exited 128 ===",
+		"Cleanup: removed the half-built image",
+	]
+)
+
+
 def _timed(function):
 	start = time.perf_counter()
 	result = function()
@@ -136,9 +150,21 @@ class TestApi(IntegrationTestCase):
 			cls.lab,
 			status="Running",
 			container_id="ci-container",
+			container_health="Unhealthy",
+			last_health_check=frappe.utils.now_datetime(),
 			code_server_url="http://localhost:8443",
 			code_server_password="cs-secret",
 		)
+		cls.failed_lab = _ensure_lab("api-timing-failed-lab", status="Error")
+		cls.failed_build_log = frappe.get_doc(
+			{
+				"doctype": "Build Log",
+				"lab": cls.failed_lab.name,
+				"log_type": "error",
+				"message": FAILED_BUILD_LOG,
+				"timestamp": frappe.utils.now_datetime(),
+			}
+		).insert(ignore_permissions=True)
 		cls.action_lab = _ensure_lab("api-timing-action-lab")
 		cls.action_bench = _ensure_bench(cls.action_lab, status="Stopped", container_id="ci-action")
 		cls.create_lab = _ensure_lab("api-timing-create-lab", apps=[_lab_app()])
@@ -157,7 +183,8 @@ class TestApi(IntegrationTestCase):
 	def tearDownClass(cls):
 		frappe.set_user("Administrator")
 		frappe.delete_doc("Deploy Log", cls.deploy_log.name, force=True, ignore_permissions=True)
-		for lab in (cls.lab, cls.action_lab, cls.create_lab):
+		frappe.delete_doc("Build Log", cls.failed_build_log.name, force=True, ignore_permissions=True)
+		for lab in (cls.lab, cls.action_lab, cls.create_lab, cls.failed_lab):
 			bench_name = get_instance_id("Administrator", lab.name)
 			if frappe.db.exists("Bench Instance", bench_name):
 				frappe.delete_doc("Bench Instance", bench_name, force=True, ignore_permissions=True)
@@ -230,7 +257,35 @@ class TestApi(IntegrationTestCase):
 		lab, elapsed_ms = _timed(lambda: api.get_lab(self.lab.name))
 		self.assertEqual(lab["name"], self.lab.name)
 		self.assertIsInstance(lab["apps"], list)
+		for key in ("bench", "sites", "failure", "enable_ssh", "enable_code_server"):
+			self.assertIn(key, lab)
 		self.assert_within_budget("get_lab", elapsed_ms)
+
+	def test_get_lab_carries_both_status_axes_of_the_bench(self):
+		"""A Running bench can be Unhealthy — the card cannot draw one from the other."""
+		bench = api.get_lab(self.lab.name)["bench"]
+
+		self.assertEqual(bench["name"], self.bench.name)
+		self.assertEqual(bench["status"], "Running")
+		self.assertEqual(bench["container_health"], "Unhealthy")
+		self.assertIsNotNone(bench["last_health_check"])
+
+	def test_get_lab_reports_no_bench_for_an_undeployed_lab(self):
+		lab = api.get_lab(self.create_lab.name)
+
+		self.assertIsNone(lab["bench"])
+		self.assertEqual(lab["sites"], [])
+
+	def test_get_lab_names_the_failing_step_and_its_reason(self):
+		failure = api.get_lab(self.failed_lab.name)["failure"]
+
+		self.assertEqual(failure["source"], "build")
+		self.assertEqual(failure["step"], "Installing apps")
+		self.assertEqual(failure["reason"], "app install exited 128")
+		self.assertEqual(failure["log"], self.failed_build_log.name)
+
+	def test_get_lab_reports_no_failure_when_nothing_failed(self):
+		self.assertIsNone(api.get_lab(self.lab.name)["failure"])
 
 	def test_get_lab_templates_shape_and_timing(self):
 		templates, elapsed_ms = _timed(api.get_lab_templates)

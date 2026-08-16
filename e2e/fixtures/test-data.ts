@@ -52,6 +52,59 @@ export async function createTestLab(
   return data.data;
 }
 
+/**
+ * A bench for a lab, in whatever state the test needs.
+ *
+ * `Bench Instance` autonames from `md5(session user + lab)`, so the name is a
+ * function of the lab — one bench per lab per user, and the caller never picks
+ * it. Every state field is `read_only`, which is a form concern only: the REST
+ * insert persists them.
+ */
+export async function createTestBench(
+  page: Page,
+  lab: string,
+  overrides: Record<string, unknown> = {}
+) {
+  const response = await page.request.post(`${API_BASE}/Bench Instance`, {
+    headers: await csrfHeaders(page),
+    data: JSON.stringify({
+      lab,
+      frappe_version: overrides.frappe_version || "version-16",
+      status: overrides.status || "Running",
+      container_id: overrides.container_id || "e2e-container",
+      container_ip: overrides.container_ip || "172.30.0.99",
+      // A deployed bench always has credentials; the connection panel only
+      // masks a secret that exists, so an empty one would render as an
+      // em-dash instead of a password field.
+      ssh_password: overrides.ssh_password || "e2e-ssh-password",
+      admin_password: overrides.admin_password || "e2e-admin-password",
+      ...overrides,
+    }),
+  });
+  const data = await unwrap(response, "Creating a test Bench Instance");
+  return data.data;
+}
+
+/** A build log for a lab — how a failed run is staged without running one. */
+export async function createTestBuildLog(
+  page: Page,
+  lab: string,
+  message: string,
+  logType = "error"
+) {
+  const response = await page.request.post(`${API_BASE}/Build Log`, {
+    headers: await csrfHeaders(page),
+    data: JSON.stringify({
+      lab,
+      log_type: logType,
+      message,
+      timestamp: new Date().toISOString().slice(0, 19).replace("T", " "),
+    }),
+  });
+  const data = await unwrap(response, "Creating a test Build Log");
+  return data.data;
+}
+
 export async function deleteTestDoc(
   page: Page,
   doctype: string,

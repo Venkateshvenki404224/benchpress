@@ -50,7 +50,10 @@
 						</button>
 					</template>
 
-					<p v-if="!results.length" class="px-4 py-6 text-center text-body text-ink-gray-5">
+					<p
+						v-if="!results.length"
+						class="px-4 py-6 text-center text-body text-ink-gray-5"
+					>
 						Nothing matches “{{ query }}”.
 					</p>
 				</div>
