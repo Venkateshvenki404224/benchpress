@@ -74,6 +74,20 @@ def _ensure_lab(lab_id: str, owner: str):
 		frappe.set_user("Administrator")
 
 
+def _ensure_database_server() -> str:
+	"""A server row for the teardown to drop a database on.
+
+	A dev site already has one from `create_default_database_server`; a CI site does not, and a
+	teardown test that silently skipped the database drop was the whole point of the test. Creating
+	one is safe — `DatabaseServer.before_insert` only fills defaults and touches no container.
+	"""
+	existing = frappe.db.get_value("Database Server", {}, "name")
+	if existing:
+		return existing
+	server = frappe.get_doc({"doctype": "Database Server", "container_name": "sweep-mariadb"})
+	return server.insert(ignore_permissions=True).name
+
+
 def _ensure_bench(lab, owner: str, **extra):
 	from benchpress.benchpress.doctype.bench_instance import get_instance_id
 
@@ -107,7 +121,7 @@ class TestCreditSweep(IntegrationTestCase):
 		cls.settings_at_start = {
 			field: frappe.db.get_single_value(CREDIT_SETTINGS, field) for field in TUNED_SETTINGS
 		}
-		cls.database_server = frappe.db.get_value("Database Server", {}, "name")
+		cls.database_server = _ensure_database_server()
 		cls.user = _ensure_user(USER)
 		cls.lab = _ensure_lab("sweep-lab", cls.user)
 		cls.bench = _ensure_bench(cls.lab, cls.user)
