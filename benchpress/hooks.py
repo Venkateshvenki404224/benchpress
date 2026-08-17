@@ -127,16 +127,26 @@ after_install = "benchpress.install.after_install"
 # -----------
 # Permissions evaluated in scripted ways
 
+# Every tenant-owned doctype needs BOTH dicts. `permission_query_conditions` has only two
+# consumers, both in the list engine, so a single-document read never consults it — and with no
+# `has_permission` hook registered Frappe's controller check returns True and the role grant alone
+# decides, which covers the whole table. `test_doctype_scoping` fails when a doctype has one half
+# without the other.
 permission_query_conditions = {
 	"Bench Instance": "benchpress.permissions.bench_instance_query_conditions",
 	"Deploy Log": "benchpress.permissions.deploy_log_query_conditions",
+	"Build Log": "benchpress.permissions.build_log_query_conditions",
 	"Credit Account": "benchpress.permissions.credit_account_query_conditions",
 	"Credit Ledger Entry": "benchpress.permissions.credit_ledger_query_conditions",
 }
 
-# has_permission = {
-# 	"Event": "frappe.desk.doctype.event.event.has_permission",
-# }
+# Not the `has_permission` key inside `add_to_apps_screen` above — that one gates the apps screen.
+has_permission = {
+	"Credit Account": "benchpress.permissions.credit_account_has_permission",
+	"Credit Ledger Entry": "benchpress.permissions.credit_ledger_has_permission",
+	"Deploy Log": "benchpress.permissions.deploy_log_has_permission",
+	"Build Log": "benchpress.permissions.build_log_has_permission",
+}
 
 # DocType Class
 # ---------------
