@@ -24,9 +24,9 @@ export const DEPLOY_STEPS = [
 	{ key: "vpn_peer", label: "Configuring the WireGuard peer" },
 	{ key: "site_config", label: "Writing common_site_config.json" },
 	{ key: "site", label: "Creating the site" },
-	{ key: "assets", label: "Building assets" },
+	{ key: "assets", label: "Preparing assets" },
 	{ key: "ssh_user", label: "Provisioning the SSH user" },
-	{ key: "code_server", label: "Provisioning code-server" },
+	{ key: "code_server", label: "Starting the lab's services" },
 	{ key: "complete", label: "Deploy complete" },
 ];
 

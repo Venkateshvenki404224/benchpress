@@ -34,10 +34,22 @@ def _make_bench(lab_name):
 	return bench
 
 
+def _delete_bench_sites(bench_name):
+	"""Drop the `Bench Site` rows a deploy records, before the instance they point at.
+
+	A deploy under test commits (its log writer commits per line), so these rows outlive the
+	class rollback while the instance they link to does not — that is how orphan sites appeared
+	on the dev site. Cleaned explicitly rather than relied on being rolled back.
+	"""
+	for name in frappe.get_all("Bench Site", filters={"bench": bench_name}, pluck="name"):
+		frappe.delete_doc("Bench Site", name, force=True, ignore_permissions=True)
+
+
 def _fresh_bench(case, lab_name):
 	frappe.set_user("Administrator")
 	existing = get_instance_id("Administrator", lab_name)
 	if frappe.db.exists("Bench Instance", existing):
+		_delete_bench_sites(existing)
 		frappe.delete_doc("Bench Instance", existing, force=True, ignore_permissions=True)
 		frappe.db.commit()
 	bench = _make_bench(lab_name)
@@ -48,6 +60,7 @@ def _fresh_bench(case, lab_name):
 			else None
 		)
 	)
+	case.addCleanup(lambda n=bench.name: _delete_bench_sites(n))
 	case.addCleanup(frappe.db.commit)
 	return bench
 
@@ -504,6 +517,7 @@ class TestDeployStepMarkers(IntegrationTestCase):
 		frappe.set_user("Administrator")
 		for name in frappe.get_all("Bench Instance", filters={"lab": cls.lab.name}, pluck="name"):
 			frappe.db.delete("Deploy Log", {"bench": name})
+			_delete_bench_sites(name)
 			frappe.delete_doc("Bench Instance", name, force=True, ignore_permissions=True)
 		if cls.db_server_name and frappe.db.exists("Database Server", cls.db_server_name):
 			frappe.delete_doc("Database Server", cls.db_server_name, force=True, ignore_permissions=True)
@@ -848,3 +862,59 @@ class TestTerminalStateNotifications(IntegrationTestCase):
 
 		self.assertEqual(frappe.db.get_value("Bench Instance", bench.name, "status"), "Error")
 		self.assertFalse(frappe.db.exists("Notification Log", {"for_user": self.owner}))
+
+
+class TestRecordPrimarySite(IntegrationTestCase):
+	"""The site a deploy makes must be visible, and pressing Deploy twice must not duplicate it."""
+
+	@classmethod
+	def setUpClass(cls):
+		super().setUpClass()
+		frappe.set_user("Administrator")
+		cls.lab = _make_lab("test-lab-primary-site")
+
+	@classmethod
+	def tearDownClass(cls):
+		frappe.set_user("Administrator")
+		cls.lab.delete(ignore_permissions=True)
+		frappe.db.commit()
+		super().tearDownClass()
+
+	def _bench(self):
+		bench = _fresh_bench(self, self.lab.name)
+		bench.site_name = f"{bench.name}.localhost"
+		bench.save(ignore_permissions=True)
+		return bench
+
+	def test_records_the_site_the_deploy_created(self):
+		from benchpress.deploy_manager import _record_primary_site
+
+		bench = self._bench()
+
+		_record_primary_site(bench, self.lab, "secret-one")
+
+		site = frappe.get_doc("Bench Site", {"bench": bench.name})
+		self.assertEqual(site.site_name, bench.site_name)
+		self.assertEqual(site.full_domain, bench.site_name)
+		self.assertEqual(site.status, "Active")
+		self.assertEqual([row.app_name for row in site.apps_installed], ["frappe"])
+
+	def test_a_second_deploy_refreshes_the_row_instead_of_duplicating_it(self):
+		from benchpress.deploy_manager import _record_primary_site
+
+		bench = self._bench()
+
+		_record_primary_site(bench, self.lab, "secret-one")
+		_record_primary_site(bench, self.lab, "secret-two")
+
+		self.assertEqual(frappe.db.count("Bench Site", {"bench": bench.name}), 1)
+
+	def test_teardown_marks_the_site_inactive(self):
+		from benchpress.deploy_manager import _deactivate_bench_sites, _record_primary_site
+
+		bench = self._bench()
+		_record_primary_site(bench, self.lab, "secret-one")
+
+		_deactivate_bench_sites(bench)
+
+		self.assertEqual(frappe.db.get_value("Bench Site", {"bench": bench.name}, "status"), "Inactive")
