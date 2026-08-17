@@ -1,6 +1,7 @@
 # Copyright (c) 2026, Venkatesh and Contributors
 # See license.txt
 
+from contextlib import nullcontext
 from unittest.mock import MagicMock, patch
 
 import frappe
@@ -516,12 +517,15 @@ class TestDeployStepMarkers(IntegrationTestCase):
 		self.addCleanup(lambda name=bench.name: frappe.db.delete("Deploy Log", {"bench": name}))
 		return bench
 
-	def _run_deploy(self, bench, site_result=(0, "site created")):
-		"""A whole deploy with every side effect mocked but the log itself."""
+	def _run_deploy(self, bench, site_result=(0, "site created"), cache_hit=True):
+		"""A whole deploy with every side effect mocked but the log itself.
+
+		`cache_hit=False` leaves the image step to the caller, so it has to build.
+		"""
 		from benchpress import deploy_manager
 
 		with (
-			_cached_image(),
+			_cached_image() if cache_hit else nullcontext(),
 			patch.object(deploy_manager, "ensure_infrastructure", autospec=True) as mock_infra,
 			patch.object(deploy_manager, "wait_for_mariadb", autospec=True),
 			patch.object(deploy_manager, "_remove_stale_container", autospec=True),
@@ -641,6 +645,38 @@ class TestDeployStepMarkers(IntegrationTestCase):
 		self.assertEqual({call["user"] for call in published}, {"Administrator"})
 		# A room would broadcast past the user scoping the leak fix relies on.
 		self.assertFalse(any(call.get("room") for call in published))
+
+	def test_a_build_inside_a_deploy_writes_the_build_log_not_the_deploy_log(self):
+		"""The image step's Docker output belongs to the Build log tab."""
+		from benchpress import deploy_manager
+
+		bench = self._bench()
+		self.addCleanup(frappe.db.delete, "Build Log", {"lab": self.lab.name})
+
+		def fake_build(lab, log_fn=None, **kwargs):
+			log_fn("Compiling translations for hrms")
+			return "benchpress/steps:built"
+
+		with (
+			patch.object(deploy_manager.image_cache, "resolve", return_value=("fresh:tag", False)),
+			patch.object(deploy_manager, "build_lab_image", side_effect=fake_build),
+		):
+			self._run_deploy(bench, cache_hit=False)
+
+		deploy_log = self._log(bench.name)
+		self.assertIn("output goes to the build log", deploy_log)
+		self.assertNotIn("Compiling translations for hrms", deploy_log)
+
+		build_log = frappe.get_all(
+			"Build Log",
+			filters={"lab": self.lab.name},
+			fields=["message", "log_type"],
+			order_by="creation desc",
+			limit_page_length=1,
+		)[0]
+		self.assertIn("Compiling translations for hrms", build_log.message)
+		self.assertIn("=== Build complete: benchpress/steps:built ===", build_log.message)
+		self.assertEqual(build_log.log_type, "success")
 
 	def test_step_lines_are_published_as_the_step_type(self):
 		bench = self._bench()

@@ -78,3 +78,27 @@ class TestLabTemplates(IntegrationTestCase):
 	def test_create_lab_from_template_unknown_throws(self):
 		with self.assertRaises(frappe.ValidationError):
 			lab_templates.create_lab_from_template("nope", "tmpl-nope-test")
+
+	def test_created_lab_names_the_template_it_came_from(self):
+		lab = self._make_lab("erpnext", "tmpl-erpnext-stamp")
+		self.assertEqual(lab.template, "erpnext")
+
+	def test_catalog_points_a_used_template_at_the_lab_it_built(self):
+		lab = self._make_lab("hrms", "tmpl-hrms-used")
+		catalog = {template["key"]: template for template in lab_templates.get_catalog()}
+
+		self.assertEqual(catalog["hrms"]["lab"]["name"], lab.name)
+		self.assertEqual(catalog["hrms"]["lab"]["status"], lab.status)
+
+	def test_catalog_reports_a_lab_only_where_one_was_built(self):
+		for template in lab_templates.get_catalog():
+			built = bool(frappe.db.exists("Lab", {"template": template["key"]}))
+			self.assertEqual(bool(template["lab"]), built, template["key"])
+
+	def test_catalog_carries_every_template_field(self):
+		for template in lab_templates.get_catalog():
+			self.assertTrue(REQUIRED_FIELDS.issubset(template))
+
+	def test_catalog_does_not_mutate_the_module_catalog(self):
+		lab_templates.get_catalog()
+		self.assertFalse(any("lab" in template for template in lab_templates.get_templates()))

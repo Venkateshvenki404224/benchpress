@@ -156,6 +156,27 @@ def get_templates() -> list[dict]:
 	return LAB_TEMPLATES
 
 
+def get_catalog() -> list[dict]:
+	"""The catalog as the Templates page reads it: each template and the lab it built."""
+	built = _labs_by_template()
+	return [{**template, "lab": built.get(template["key"])} for template in LAB_TEMPLATES]
+
+
+def _labs_by_template() -> dict[str, dict]:
+	"""The newest lab built from each template, of the labs the caller may see."""
+	labs = frappe.get_list(
+		"Lab",
+		filters={"template": ("in", [template["key"] for template in LAB_TEMPLATES])},
+		fields=["name", "title", "status", "template"],
+		order_by="creation desc",
+		limit_page_length=0,
+	)
+	newest: dict[str, dict] = {}
+	for lab in labs:
+		newest.setdefault(lab.template, lab)
+	return newest
+
+
 def get_template(key: str) -> dict:
 	"""Return a single template by key, or throw if it is unknown."""
 	for template in LAB_TEMPLATES:
@@ -187,6 +208,7 @@ def create_lab_from_template(template_key: str, lab_id: str | None = None, title
 		{
 			"doctype": "Lab",
 			"lab_id": lab_id or available_lab_id(template_key),
+			"template": template_key,
 			"title": title or template["title"],
 			"description": template["description"],
 			"frappe_version": template["frappe_version"],
