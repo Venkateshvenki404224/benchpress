@@ -9,6 +9,7 @@ export {}
 declare module 'vue' {
   export interface GlobalComponents {
     ActivityFeed: typeof import('./src/components/overview/ActivityFeed.vue')['default']
+    ActivityRow: typeof import('./src/components/ActivityRow.vue')['default']
     AddDeviceDialog: typeof import('./src/components/device/AddDeviceDialog.vue')['default']
     AppChip: typeof import('./src/components/AppChip.vue')['default']
     AppIcon: typeof import('./src/components/AppIcon.vue')['default']
@@ -35,6 +36,7 @@ declare module 'vue' {
     LogStep: typeof import('./src/components/LogStep.vue')['default']
     LogViewer: typeof import('./src/components/LogViewer.vue')['default']
     NewLabSummary: typeof import('./src/components/lab/NewLabSummary.vue')['default']
+    NotificationsPanel: typeof import('./src/components/NotificationsPanel.vue')['default']
     OnboardingPanel: typeof import('./src/components/overview/OnboardingPanel.vue')['default']
     QrPanel: typeof import('./src/components/device/QrPanel.vue')['default']
     RawLogPanel: typeof import('./src/components/deploy/RawLogPanel.vue')['default']
@@ -42,6 +44,7 @@ declare module 'vue' {
     RouterView: typeof import('vue-router')['RouterView']
     RunHistory: typeof import('./src/components/RunHistory.vue')['default']
     SectionCard: typeof import('./src/components/SectionCard.vue')['default']
+    SettingsDialog: typeof import('./src/components/settings/SettingsDialog.vue')['default']
     SitesCard: typeof import('./src/components/lab/SitesCard.vue')['default']
     StatTile: typeof import('./src/components/StatTile.vue')['default']
     StatusBadge: typeof import('./src/components/StatusBadge.vue')['default']

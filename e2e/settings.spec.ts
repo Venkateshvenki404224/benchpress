@@ -1,22 +1,36 @@
 import { expect, test } from "@playwright/test";
 import { SettingsPage } from "./pages/SettingsPage";
 
-/** Settings is a page with three grouped cards and one save bar, not a dialog. */
+/** Settings is a dialog with three grouped panels and one save bar. */
 test.describe("Settings", () => {
-  test("renders the three groups rather than a modal over /labs", async ({ page }) => {
+  test("opens over Overview from /settings and switches between the groups", async ({
+    page,
+  }) => {
     const settings = new SettingsPage(page);
     await settings.goto();
 
     await expect(page).toHaveURL(/\/settings$/);
     for (const group of ["domains", "docker", "container"]) {
+      await expect(settings.tab(group)).toBeVisible();
+      await settings.openTab(group);
       await expect(settings.group(group)).toBeVisible();
     }
     await expect(settings.lastSaved).toBeVisible();
   });
 
+  test("closing the dialog takes the URL off /settings", async ({ page }) => {
+    const settings = new SettingsPage(page);
+    await settings.goto();
+
+    await settings.close.click();
+    await expect(settings.root).toBeHidden();
+    await expect(page).toHaveURL(/\/frontend\/?$/);
+  });
+
   test("save and discard stay disabled until something changes", async ({ page }) => {
     const settings = new SettingsPage(page);
     await settings.goto();
+    await settings.openTab("docker");
 
     await expect(settings.save).toBeDisabled();
     await expect(settings.discard).toBeDisabled();
@@ -45,6 +59,7 @@ test.describe("Settings", () => {
   test("saves and reports who saved it", async ({ page }) => {
     const settings = new SettingsPage(page);
     await settings.goto();
+    await settings.openTab("docker");
 
     const original = await settings.traefikNetwork.inputValue();
     await settings.traefikNetwork.fill(`${original}`.replace(/-e2e$/, "") + "-e2e");

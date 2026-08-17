@@ -1,2 +1,18 @@
 @import "./assets/Inter/inter.css";
 @import "frappe-ui/style.css";
+
+/*
+ * frappe-ui paints no page background, so the browser canvas stays white and
+ * shows through anything transparent — in dark mode that read as a white top
+ * bar. color-scheme carries the theme to scrollbars and native controls too.
+ */
+html {
+	background-color: var(--surface-white);
+	color-scheme: light;
+}
+
+html[data-theme="dark"] {
+	color-scheme: dark;
+}
+</content>
+</invoke>

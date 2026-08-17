@@ -1,16 +1,5 @@
 <template>
-	<button
-		type="button"
-		class="flex h-7 items-center gap-2 rounded-control border border-outline-gray-1 px-2.5 text-2xs text-ink-gray-5 hover:bg-surface-gray-2"
-		data-test="search-trigger"
-		@click="open()"
-	>
-		<SearchIcon class="size-3.5" />
-		Search
-		<kbd class="font-sans text-ink-gray-4">{{ shortcut }}</kbd>
-	</button>
-
-	<Dialog v-model="show" :options="{ size: 'xl', position: 'top' }">
+	<Dialog v-model="isSearchOpen" :options="{ size: 'xl', position: 'top' }">
 		<template #body>
 			<div data-test="search-palette">
 				<div class="flex items-center gap-3 px-4">
@@ -73,6 +62,7 @@
 // list cannot filter. The same Dialog-plus-input shape is built here instead.
 import { benchesResource } from "@/data/benches";
 import { labsResource } from "@/data/labs";
+import { isSearchOpen, openSearch } from "@/data/searchPalette";
 import { benchLabel } from "@/utils/labSpecs";
 import { Dialog } from "frappe-ui";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
@@ -85,14 +75,9 @@ import ServerIcon from "~icons/lucide/server";
 const RESULTS_PER_GROUP = 6;
 
 const router = useRouter();
-const show = ref(false);
 const query = ref("");
 const active = ref(0);
 const input = ref(null);
-
-const shortcut = computed(() =>
-	/Mac|iPhone|iPad/.test(navigator.platform ?? "") ? "⌘K" : "Ctrl K"
-);
 
 const groups = computed(() =>
 	[
@@ -142,12 +127,12 @@ watch(query, () => {
 	active.value = 0;
 });
 
-async function open() {
-	show.value = true;
+watch(isSearchOpen, async (open) => {
+	if (!open) return;
 	ensureLoaded();
 	await nextTick();
 	input.value?.focus();
-}
+});
 
 // Both resources are shared with the pages that render them, so opening the
 // palette from Labs or Instances costs nothing; from anywhere else it fetches
@@ -164,7 +149,7 @@ function move(step) {
 
 function choose(item) {
 	if (!item) return;
-	show.value = false;
+	isSearchOpen.value = false;
 	query.value = "";
 	router.push(item.route);
 }
@@ -172,7 +157,7 @@ function choose(item) {
 function onKeydown(event) {
 	if (event.key === "k" && (event.metaKey || event.ctrlKey)) {
 		event.preventDefault();
-		open();
+		openSearch();
 	}
 }
 
