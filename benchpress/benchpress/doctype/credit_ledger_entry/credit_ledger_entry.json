@@ -1,0 +1,131 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "hash",
+ "creation": "2026-08-17 09:31:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "field_order": [
+  "account",
+  "entry_type",
+  "column_break_identity",
+  "credits",
+  "balance_after",
+  "description_section",
+  "description",
+  "reference_section",
+  "reference_doctype",
+  "column_break_reference",
+  "reference_name"
+ ],
+ "fields": [
+  {
+   "fieldname": "account",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Account",
+   "options": "Credit Account",
+   "reqd": 1
+  },
+  {
+   "fieldname": "entry_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Entry Type",
+   "options": "Grant\nPurchase\nUsage\nRefund\nAdjustment",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_identity",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Signed: negative spends, positive adds. The signed sum of an account's entries is its settled balance.",
+   "fieldname": "credits",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Credits",
+   "precision": "6"
+  },
+  {
+   "description": "The settled balance this entry left behind, so no screen ever sums the ledger.",
+   "fieldname": "balance_after",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Balance After",
+   "precision": "6"
+  },
+  {
+   "fieldname": "description_section",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "description",
+   "fieldtype": "Small Text",
+   "label": "Description"
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "reference_section",
+   "fieldtype": "Section Break",
+   "label": "Reference"
+  },
+  {
+   "fieldname": "reference_doctype",
+   "fieldtype": "Link",
+   "label": "Reference Doctype",
+   "options": "DocType"
+  },
+  {
+   "fieldname": "column_break_reference",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "reference_name",
+   "fieldtype": "Dynamic Link",
+   "label": "Reference Name",
+   "options": "reference_doctype"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-08-17 09:31:00.000000",
+ "modified_by": "Administrator",
+ "module": "Benchpress",
+ "name": "Credit Ledger Entry",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1
+  },
+  {
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "BenchPress Admin",
+   "share": 1
+  },
+  {
+   "read": 1,
+   "role": "BenchPress User"
+  }
+ ],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 0
+}

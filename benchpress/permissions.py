@@ -43,6 +43,24 @@ def bench_instance_query_conditions(user):
 	return f"`tabBench Instance`.owner = {frappe.db.escape(user)}"
 
 
+def credit_account_query_conditions(user):
+	"""A balance is nobody else's business. The account's name *is* the user's email."""
+	return _own_rows_only(user, "`tabCredit Account`.name")
+
+
+def credit_ledger_query_conditions(user):
+	"""Same rule one level down: the ledger's `account` is the account name, so the email."""
+	return _own_rows_only(user, "`tabCredit Ledger Entry`.account")
+
+
+def _own_rows_only(user, column: str) -> str:
+	if not user:
+		user = frappe.session.user
+	if user == "Administrator" or not set(frappe.get_roles(user)).isdisjoint(ADMIN_ROLES):
+		return ""
+	return f"{column} = {frappe.db.escape(user)}"
+
+
 def deploy_log_query_conditions(user):
 	if not user:
 		user = frappe.session.user

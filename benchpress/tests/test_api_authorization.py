@@ -10,13 +10,48 @@ Each denial test has a positive control so a guard that vacuously throws for
 everyone — or silently returns an empty result — is caught as a failure.
 """
 
+import importlib
+import json
+import pkgutil
 from unittest.mock import MagicMock, patch
 
 import frappe
 from frappe.tests import IntegrationTestCase
 
-from benchpress import api
+import benchpress
+from benchpress import api, waitlist
 from benchpress.benchpress.doctype.bench_instance import get_instance_id
+
+GUEST_WAITLIST_EMAIL = "authz-guest-waitlist@example.com"
+
+
+def _delete_waitlist_entry(email):
+	frappe.set_user("Administrator")
+	if frappe.db.exists("Waitlist Entry", email):
+		frappe.delete_doc("Waitlist Entry", email, force=True, ignore_permissions=True)
+
+
+def _guest_endpoints() -> set[str]:
+	"""Every `allow_guest` method this app registers.
+
+	Whitelisting happens at import time, so the whole package is walked first — otherwise the
+	inventory would only cover the modules this test file happens to import, and a guest endpoint
+	added elsewhere would go unnoticed.
+	"""
+	_import_every_module()
+	return {
+		f"{method.__module__}.{method.__name__}"
+		for method in frappe.guest_methods
+		if method.__module__.startswith("benchpress.")
+	}
+
+
+def _import_every_module() -> None:
+	for module in pkgutil.walk_packages(benchpress.__path__, prefix="benchpress."):
+		try:
+			importlib.import_module(module.name)
+		except Exception:
+			continue  # a module that cannot be imported cannot be serving guests either
 
 
 def _ensure_user(email, first_name, role=None):
@@ -129,6 +164,7 @@ class TestApiAuthorization(IntegrationTestCase):
 		frappe.set_user("Guest")
 		self.assert_denied(lambda: api.create_lab_from_template("frappe", "authz-guest"))
 		self.assert_denied(lambda: api.build_lab_image(self.lab.name))
+		self.assert_denied(lambda: api.prewarm_catalog())
 		self.assert_denied(lambda: api.run_diagnostics())
 
 	def test_guest_denied_from_overview_endpoints(self):
@@ -145,6 +181,34 @@ class TestApiAuthorization(IntegrationTestCase):
 		self.assert_denied(lambda: api.get_bench_credentials(bench))
 		self.assert_denied(lambda: api.restart_code_server(bench))
 
+	def test_only_the_two_signup_doors_are_open_to_guests(self):
+		"""Whitelisting an endpoint for Guest is a decision, not an accident.
+
+		Two methods have been argued for: `waitlist.join`, which the landing page's form posts to,
+		and `signup.sign_up`, which *replaces* a method Frappe already exposes to guests and only
+		narrows it. Anything else appearing in this inventory means somebody opened an endpoint to
+		the internet without saying so.
+
+		The two are never both accepting — `Credit Settings.waitlist_open` decides which — but they
+		are both reachable, which is what this counts.
+		"""
+		self.assertEqual(
+			_guest_endpoints(),
+			{"benchpress.waitlist.join", "benchpress.signup.sign_up"},
+		)
+
+	def test_guest_can_reach_the_waitlist(self):
+		frappe.set_user("Guest")
+		self.addCleanup(_delete_waitlist_entry, GUEST_WAITLIST_EMAIL)
+		self.addCleanup(setattr, frappe.flags, "mute_emails", frappe.flags.mute_emails)
+		frappe.flags.mute_emails = True
+
+		self.assertTrue(waitlist.join(GUEST_WAITLIST_EMAIL)["joined"])
+
+	def test_guest_denied_from_approving_the_waitlist(self):
+		frappe.set_user("Guest")
+		self.assert_denied(lambda: waitlist.approve([GUEST_WAITLIST_EMAIL]))
+
 	# --- Wrong-role (BenchPress User) blocked from admin-only endpoints -------
 
 	def test_non_admin_denied_from_create_lab_from_template(self):
@@ -154,6 +218,10 @@ class TestApiAuthorization(IntegrationTestCase):
 	def test_non_admin_denied_from_build_lab_image(self):
 		frappe.set_user(self.user_a)
 		self.assert_denied(lambda: api.build_lab_image(self.lab.name))
+
+	def test_non_admin_denied_from_prewarm_catalog(self):
+		frappe.set_user(self.user_a)
+		self.assert_denied(lambda: api.prewarm_catalog())
 
 	def test_non_admin_denied_from_run_diagnostics(self):
 		frappe.set_user(self.user_a)
@@ -304,6 +372,72 @@ class TestApiAuthorization(IntegrationTestCase):
 	def test_roleless_denied_from_get_device_wg_config(self):
 		frappe.set_user(self.norole_user)
 		self.assert_denied(lambda: api.get_device_wg_config("authz-dev"))
+
+	def test_roleless_denied_from_the_credit_endpoints(self):
+		frappe.set_user(self.norole_user)
+		self.assert_denied(api.get_credit_summary)
+		self.assert_denied(api.get_credit_statement)
+
+	def test_roleless_denied_from_the_purchase_endpoints(self):
+		"""A stranger may not price what is for sale, let alone open an order against an account."""
+		frappe.set_user(self.norole_user)
+		self.assert_denied(api.get_purchase_options)
+		self.assert_denied(lambda: api.buy_credits("Starter"))
+		self.assert_denied(lambda: api.buy_always_on_pass(self.bench.name))
+
+	# --- The phase-5 credit gate must never answer a permission question -----
+
+	def test_the_credit_gate_never_precedes_an_endpoints_own_guard(self):
+		"""With credits armed, a role-less caller must still meet `PermissionError` — not a price.
+
+		`requires_credits` wraps these endpoints, so it runs before their `require_app_user()`. It
+		passes a caller without an app role straight through for exactly this reason: a stranger
+		must not be answered with an accounting sentence, and must not have a `Credit Account`
+		opened in their name on the way to being refused.
+		"""
+		self.with_credits_armed()
+		frappe.set_user(self.norole_user)
+		self.assert_denied(lambda: api.create_bench(json.dumps({"lab": self.lab.name})))
+		self.assert_denied(lambda: api.create_site(json.dumps({"bench": self.bench.name})))
+		self.assert_denied(lambda: api.add_device("authz-dev", "Laptop"))
+		frappe.set_user("Administrator")
+		self.assertFalse(frappe.db.exists("Credit Account", self.norole_user))
+
+	def test_a_guest_meets_the_same_wall_with_credits_armed(self):
+		self.with_credits_armed()
+		frappe.set_user("Guest")
+		self.assert_denied(lambda: api.build_lab_image(self.lab.name))
+		self.assert_denied(lambda: api.create_bench(json.dumps({"lab": self.lab.name})))
+
+	def test_an_app_user_still_reaches_the_endpoint_with_credits_armed(self):
+		"""The positive control: the gate charges, it does not deny by existing."""
+		self.with_credits_armed()
+		frappe.set_user(self.user_a)
+		with patch("frappe.enqueue"):
+			self.assertEqual(api.create_bench(json.dumps({"lab": self.lab.name}))["status"], "Deploying")
+
+	def with_credits_armed(self):
+		"""Turn the feature on for one test, and take every trace of it away again.
+
+		This class commits its fixtures, so anything left pending here becomes durable alongside
+		them — including the `Credit Account` the gate opens for a caller who gets through it.
+		"""
+		frappe.db.set_single_value("BenchPress Settings", "enable_credits", 1)
+		frappe.clear_cache(doctype="BenchPress Settings")
+		self.addCleanup(self.forget_credit_rows)
+		self.addCleanup(frappe.clear_cache, doctype="BenchPress Settings")
+		self.addCleanup(frappe.db.set_single_value, "BenchPress Settings", "enable_credits", 0)
+
+	def forget_credit_rows(self):
+		for user in (self.user_a, self.user_b, self.admin_user, self.norole_user):
+			frappe.db.delete("Credit Ledger Entry", {"account": user})
+			frappe.db.delete("Credit Account", {"user": user})
+
+	def test_a_credit_statement_is_only_ever_the_callers_own(self):
+		"""Positive control, and the scoping rule: the filter is the session, not an argument."""
+		frappe.set_user(self.user_a)
+		self.assertEqual(api.get_credit_statement()["rows"], [])
+		self.assertIn("enabled", api.get_credit_summary())
 
 	def test_roleless_denied_from_get_labs(self):
 		frappe.set_user(self.norole_user)
@@ -540,6 +674,12 @@ class TestApiAuthorization(IntegrationTestCase):
 			result = api.create_lab_from_template("frappe", "authz-admin")
 		create.assert_called_once()
 		self.assertEqual(result, {"name": "LAB-authz", "status": "Draft"})
+
+	def test_admin_allowed_to_prewarm_the_catalog(self):
+		frappe.set_user(self.admin_user)
+		with patch("frappe.enqueue") as enqueue:
+			self.assertEqual(api.prewarm_catalog()["status"], "Queued")
+		enqueue.assert_called_once()
 
 	def test_admin_allowed_to_run_diagnostics(self):
 		frappe.set_user(self.admin_user)

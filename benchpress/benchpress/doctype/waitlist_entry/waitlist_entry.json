@@ -1,0 +1,122 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "field:email",
+ "creation": "2026-08-17 09:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "email",
+  "full_name",
+  "company",
+  "column_break_identity",
+  "status",
+  "approved_on",
+  "invite_sent_on",
+  "context_section",
+  "use_case"
+ ],
+ "fields": [
+  {
+   "description": "The address the invite is sent to. Also the primary key, so a duplicate signup is a key conflict rather than a lookup.",
+   "fieldname": "email",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Email",
+   "options": "Email",
+   "reqd": 1
+  },
+  {
+   "fieldname": "full_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Full Name"
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Company"
+  },
+  {
+   "fieldname": "column_break_identity",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "Pending",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "options": "Pending\nApproved\nRejected",
+   "reqd": 1
+  },
+  {
+   "description": "Stamped when the entry is approved and the user is invited.",
+   "fieldname": "approved_on",
+   "fieldtype": "Datetime",
+   "label": "Approved On",
+   "read_only": 1
+  },
+  {
+   "description": "Stamped when the waitlist-is-retired email went out. Set means never mail this address about it again.",
+   "fieldname": "invite_sent_on",
+   "fieldtype": "Datetime",
+   "label": "Invite Sent On",
+   "read_only": 1
+  },
+  {
+   "fieldname": "context_section",
+   "fieldtype": "Section Break",
+   "label": "Context"
+  },
+  {
+   "description": "What the person said they want to run. Free text, self-reported.",
+   "fieldname": "use_case",
+   "fieldtype": "Small Text",
+   "label": "Use Case"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-08-17 12:10:00.000000",
+ "modified_by": "Administrator",
+ "module": "Benchpress",
+ "name": "Waitlist Entry",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "BenchPress Admin",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

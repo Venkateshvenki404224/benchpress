@@ -1,0 +1,132 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "field:size_label",
+ "creation": "2026-08-17 08:10:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "size_label",
+  "credits_per_hour",
+  "column_break_identity",
+  "is_default",
+  "sort_order",
+  "resources_section",
+  "memory_limit",
+  "cpu_cores",
+  "column_break_resources",
+  "max_sites"
+ ],
+ "fields": [
+  {
+   "description": "Shown to users when they pick a size, e.g. Small",
+   "fieldname": "size_label",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Size Label",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "description": "Credits burnt per running hour. 0 = this size is free.",
+   "fieldname": "credits_per_hour",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Credits per Hour",
+   "precision": "2"
+  },
+  {
+   "fieldname": "column_break_identity",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "0",
+   "description": "Exactly one size is the default. Clear the current default before setting another.",
+   "fieldname": "is_default",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Is Default"
+  },
+  {
+   "default": "0",
+   "description": "Ascending display order on the pricing table and the size picker.",
+   "fieldname": "sort_order",
+   "fieldtype": "Int",
+   "label": "Sort Order"
+  },
+  {
+   "fieldname": "resources_section",
+   "fieldtype": "Section Break",
+   "label": "Resources"
+  },
+  {
+   "description": "Docker memory limit, e.g. 1g. Copied to Lab.memory_limit.",
+   "fieldname": "memory_limit",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Memory Limit"
+  },
+  {
+   "description": "Copied to Lab.cpu_cores. Minimum 1.",
+   "fieldname": "cpu_cores",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "CPU Cores"
+  },
+  {
+   "fieldname": "column_break_resources",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Sites allowed on one instance of this size. 0 = unlimited.",
+   "fieldname": "max_sites",
+   "fieldtype": "Int",
+   "label": "Max Sites"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-08-17 08:10:00.000000",
+ "modified_by": "Administrator",
+ "module": "Benchpress",
+ "name": "Instance Size",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "BenchPress Admin",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "read": 1,
+   "role": "BenchPress User"
+  }
+ ],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "sort_order",
+ "sort_order": "ASC",
+ "states": [],
+ "track_changes": 1
+}

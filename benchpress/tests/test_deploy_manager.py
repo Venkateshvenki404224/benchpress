@@ -51,6 +51,19 @@ def _fresh_bench(case, lab_name):
 	return bench
 
 
+def _cached_image():
+	"""Report a cache hit so a test that is not about the image step performs no real build.
+
+	The image step resolves the shared cache by content hash, so a lab whose `image_tag` is a
+	fixture string now counts as a miss — and a miss shells out to Docker and builds a multi-GB
+	image. Every deploy that reaches step 2 in this file patches the resolve instead.
+	"""
+	return patch(
+		"benchpress.deploy_manager.image_cache.resolve",
+		return_value=("benchpress/cache:cachedfixture", True),
+	)
+
+
 def _ensure_owner(email):
 	if not frappe.db.exists("User", email):
 		frappe.get_doc(
@@ -289,6 +302,7 @@ class TestDeployManager(IntegrationTestCase):
 		frappe.db.commit()
 
 		with (
+			_cached_image(),
 			patch.object(deploy_manager, "ensure_infrastructure", autospec=True) as mock_infra,
 			patch.object(deploy_manager, "wait_for_mariadb", autospec=True),
 			patch.object(deploy_manager, "_remove_stale_container", autospec=True),
@@ -335,6 +349,7 @@ class TestDeployManager(IntegrationTestCase):
 		frappe.db.commit()
 
 		with (
+			_cached_image(),
 			patch.object(deploy_manager, "ensure_infrastructure", autospec=True) as mock_infra,
 			patch.object(deploy_manager, "remove_container", autospec=True) as mock_remove_container,
 			patch.object(deploy_manager, "_notify_owner", autospec=True),
@@ -506,6 +521,7 @@ class TestDeployStepMarkers(IntegrationTestCase):
 		from benchpress import deploy_manager
 
 		with (
+			_cached_image(),
 			patch.object(deploy_manager, "ensure_infrastructure", autospec=True) as mock_infra,
 			patch.object(deploy_manager, "wait_for_mariadb", autospec=True),
 			patch.object(deploy_manager, "_remove_stale_container", autospec=True),
@@ -723,6 +739,7 @@ class TestTerminalStateNotifications(IntegrationTestCase):
 		frappe.db.commit()
 
 		with (
+			_cached_image(),
 			patch.object(deploy_manager, "ensure_infrastructure", autospec=True) as mock_infra,
 			patch.object(deploy_manager, "wait_for_mariadb", autospec=True),
 			patch.object(deploy_manager, "_remove_stale_container", autospec=True),

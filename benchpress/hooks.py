@@ -55,6 +55,7 @@ doctype_list_js = {
 	"Bench Instance": "public/js/list_view/bench_instance_list.js",
 	"Bench Site": "public/js/list_view/bench_site_list.js",
 	"Database Server": "public/js/list_view/database_server_list.js",
+	"Waitlist Entry": "public/js/list_view/waitlist_entry_list.js",
 }
 
 # doctype_tree_js = {"doctype" : "public/js/doctype_tree.js"}
@@ -129,6 +130,8 @@ after_install = "benchpress.install.after_install"
 permission_query_conditions = {
 	"Bench Instance": "benchpress.permissions.bench_instance_query_conditions",
 	"Deploy Log": "benchpress.permissions.deploy_log_query_conditions",
+	"Credit Account": "benchpress.permissions.credit_account_query_conditions",
+	"Credit Ledger Entry": "benchpress.permissions.credit_ledger_query_conditions",
 }
 
 # has_permission = {
@@ -147,13 +150,37 @@ permission_query_conditions = {
 # ---------------
 # Hook on document methods and events
 
-# doc_events = {
-# 	"*": {
-# 		"on_update": "method",
-# 		"on_cancel": "method",
-# 		"on_trash": "method"
-# 	}
-# }
+# The payment seam. `razorpay_frappe` is optional and deliberately not in `required_apps`, so this
+# entry simply never fires on a site without it — a hook on an absent DocType is inert, which is
+# exactly the coupling we want with a gateway a self-hoster must never be forced to install.
+#
+# `on_update` rather than a webhook route on purpose: it catches the checkout callback, the
+# `payment.captured` webhook, its retries and an operator's manual "Sync Status" through one path.
+# That makes redelivery the normal case, which is why the handler is idempotent by construction.
+#
+# `User.after_insert` is the self-serve onboarding seam: it hands a signup the app role, and the
+# signup grant when the signup has already proved the address (an OAuth flow). The email path's
+# grant waits for `on_session_creation` below, because a `User` row proves nothing about who owns
+# the address it holds.
+doc_events = {
+	"Razorpay Order": {
+		"on_update": "benchpress.credits.payments.on_razorpay_update",
+	},
+	"User": {
+		"after_insert": "benchpress.credits.onboarding.after_user_insert",
+	},
+}
+
+# Fires once per new session, which is the first moment an email signup has demonstrably received
+# its verification mail — `sign_up` sets a password the user never sees.
+on_session_creation = ["benchpress.credits.onboarding.after_login"]
+
+# The login page's own signup form keeps posting `frappe.core.doctype.user.user.sign_up`; this
+# routes that `cmd` through the hosted plan's rate limit, waitlist switch and domain blocklist
+# without a second signup endpoint existing anywhere.
+override_whitelisted_methods = {
+	"frappe.core.doctype.user.user.sign_up": "benchpress.signup.sign_up",
+}
 
 # Website route rules
 website_route_rules = [
@@ -167,15 +194,21 @@ scheduler_events = {
 	# "all": [
 	# 	"benchpress.tasks.all"
 	# ],
-	# "daily": [
-	# 	"benchpress.tasks.daily"
-	# ],
+	# Its own job, never folded into the `*/1` stats cron: that one already spends ~2s per
+	# container and blows its window past ~25 benches. This one makes no Docker calls at all.
+	"daily": [
+		"benchpress.credits.reconcile.reconcile_burn_rates",
+		"benchpress.credits.reaper.reap_stopped_instances",
+	],
 	# "hourly": [
 	# 	"benchpress.tasks.hourly"
 	# ],
-	# "weekly": [
-	# 	"benchpress.tasks.weekly"
-	# ],
+	# Both hand the real work to `queue-long`: the scheduler's own worker is
+	# `queue-short`, which has no Docker socket mounted.
+	"weekly": [
+		"benchpress.image_cache.enqueue_prewarm_catalog",
+		"benchpress.image_cache.enqueue_sweep",
+	],
 	# "monthly": [
 	# 	"benchpress.tasks.monthly"
 	# ],
@@ -185,6 +218,10 @@ scheduler_events = {
 		],
 		"*/5 * * * *": [
 			"benchpress.mariadb_manager.scheduled_health_check",
+			# Never on the `*/1` stats cron: that job spends ~2s per container on the Docker
+			# socket, and an enforcement decision queued behind Docker I/O arrives late. Five
+			# minutes is fine enough for a TTL measured in hours and for the 15-minute warning.
+			"benchpress.credits.sweep.enforce_limits",
 		],
 		"0 2 * * *": [
 			"benchpress.mariadb_manager.scheduled_backup",
@@ -199,10 +236,8 @@ scheduler_events = {
 
 # Overriding Methods
 # --------------------
-#
-# override_whitelisted_methods = {
-# 	"frappe.desk.doctype.event.event.get_events": "benchpress.event.get_events"
-# }
+# `override_whitelisted_methods` is declared beside the document events above, next to the hook it
+# belongs with.
 #
 # each overriding function accepts a `data` argument;
 # generated from the base implementation of the doctype dashboard,

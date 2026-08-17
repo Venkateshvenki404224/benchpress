@@ -1,0 +1,153 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "field:user",
+ "creation": "2026-08-17 09:30:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "field_order": [
+  "user",
+  "balance",
+  "column_break_identity",
+  "burn_rate",
+  "burn_since",
+  "lifetime_section",
+  "lifetime_purchased",
+  "column_break_lifetime",
+  "lifetime_spent",
+  "state_section",
+  "is_suspended",
+  "low_balance_warned"
+ ],
+ "fields": [
+  {
+   "description": "Also the primary key, so every balance read is one indexed lookup and no secondary index is needed.",
+   "fieldname": "user",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "User",
+   "options": "User",
+   "reqd": 1
+  },
+  {
+   "description": "Settled credits. The live balance subtracts the burn accrued since Burn Since; it is never stored.",
+   "fieldname": "balance",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Balance",
+   "precision": "6",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_identity",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Credits per hour, summed over this user's running instances. 0 = nothing is burning.",
+   "fieldname": "burn_rate",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Burn Rate",
+   "precision": "6",
+   "read_only": 1
+  },
+  {
+   "description": "When Burn Rate last changed. Everything between then and now is unsettled burn.",
+   "fieldname": "burn_since",
+   "fieldtype": "Datetime",
+   "label": "Burn Since",
+   "read_only": 1
+  },
+  {
+   "fieldname": "lifetime_section",
+   "fieldtype": "Section Break",
+   "label": "Lifetime"
+  },
+  {
+   "fieldname": "lifetime_purchased",
+   "fieldtype": "Float",
+   "label": "Lifetime Purchased",
+   "precision": "6",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_lifetime",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "lifetime_spent",
+   "fieldtype": "Float",
+   "label": "Lifetime Spent",
+   "precision": "6",
+   "read_only": 1
+  },
+  {
+   "fieldname": "state_section",
+   "fieldtype": "Section Break"
+  },
+  {
+   "default": "0",
+   "description": "Set by an operator. Phase 5 refuses new instances for a suspended account; metering never sets it.",
+   "fieldname": "is_suspended",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Is Suspended"
+  },
+  {
+   "default": "0",
+   "description": "Set when the low-balance warning was sent, cleared by the sweep once the balance is back above the threshold. Keeps the warning to one per depletion.",
+   "fieldname": "low_balance_warned",
+   "fieldtype": "Check",
+   "label": "Low Balance Warned",
+   "read_only": 1
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 0,
+ "links": [
+  {
+   "link_doctype": "Credit Ledger Entry",
+   "link_fieldname": "account"
+  }
+ ],
+ "modified": "2026-08-17 09:30:00.000000",
+ "modified_by": "Administrator",
+ "module": "Benchpress",
+ "name": "Credit Account",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "BenchPress Admin",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "read": 1,
+   "role": "BenchPress User"
+  }
+ ],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 0
+}

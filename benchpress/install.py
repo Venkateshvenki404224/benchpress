@@ -6,6 +6,7 @@ import subprocess
 
 import frappe
 
+from benchpress.credits.seed import seed_defaults
 from benchpress.vpn_access import grant_vpn_access
 
 
@@ -21,6 +22,9 @@ def after_install():
 	# Fresh installs mark every patch as executed without running it, so the VPN
 	# permissions the desk workspace needs have to be granted here as well.
 	grant_vpn_access()
+
+	# Same reason: seed_credit_config would never fire on a fresh install.
+	seed_defaults()
 
 	# setup.sh requires host-level access (docker group, sysctl, sudoers).
 	# Skip it when running inside a container.

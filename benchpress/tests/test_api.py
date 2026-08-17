@@ -18,10 +18,13 @@ BUDGETS_MS = {
 	"get_lab": 300,
 	"get_lab_templates": 200,
 	"get_user_context": 250,
+	"get_credit_summary": 250,
+	"get_credit_statement": 400,
 	"get_benches": 600,
 	"list_devices": 500,
 	"create_lab_from_template": 300,
 	"build_lab_image": 300,
+	"prewarm_catalog": 300,
 	"create_bench": 1500,
 	"create_site": 1500,
 	"bench_action": 800,
@@ -302,9 +305,24 @@ class TestApi(IntegrationTestCase):
 
 	def test_get_user_context_shape_and_timing(self):
 		context, elapsed_ms = _timed(api.get_user_context)
-		for key in ("is_admin", "user", "roles"):
+		for key in ("is_admin", "user", "roles", "credits"):
 			self.assertIn(key, context)
 		self.assert_within_budget("get_user_context", elapsed_ms)
+
+	def test_get_user_context_carries_the_credit_gate(self):
+		"""Every credit surface hides behind this flag, so it is part of the contract."""
+		self.assertIn("enabled", api.get_user_context()["credits"])
+
+	def test_get_credit_summary_shape_and_timing(self):
+		summary, elapsed_ms = _timed(api.get_credit_summary)
+		self.assertIn("enabled", summary)
+		self.assert_within_budget("get_credit_summary", elapsed_ms)
+
+	def test_get_credit_statement_shape_and_timing(self):
+		statement, elapsed_ms = _timed(api.get_credit_statement)
+		for key in ("enabled", "rows", "total", "summary"):
+			self.assertIn(key, statement)
+		self.assert_within_budget("get_credit_statement", elapsed_ms)
 
 	def test_get_benches_shape_and_timing(self):
 		benches, elapsed_ms = _timed(api.get_benches)
@@ -524,6 +542,15 @@ class TestApi(IntegrationTestCase):
 		enqueue.assert_called_once()
 		self.assertEqual(result, {"name": self.lab.name, "status": "Building"})
 		self.assert_within_budget("build_lab_image", elapsed_ms)
+
+	def test_prewarm_catalog_contract_and_timing(self):
+		with patch("frappe.enqueue") as enqueue:
+			result, elapsed_ms = _timed(api.prewarm_catalog)
+		enqueue.assert_called_once()
+		# `queue-short` has no Docker socket, so the pre-warm must be handed to `queue-long`.
+		self.assertEqual(enqueue.call_args.kwargs["queue"], "long")
+		self.assertEqual(result["status"], "Queued")
+		self.assert_within_budget("prewarm_catalog", elapsed_ms)
 
 	def test_create_bench_contract_and_timing(self):
 		data = frappe.as_json({"lab": self.create_lab.name, "bench_name": "cli-bench"})

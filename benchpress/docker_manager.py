@@ -11,6 +11,8 @@ import docker
 import frappe
 from frappe import _
 
+from benchpress.image_cache import cache_tag, clear_cached_tags
+
 DEFAULT_PIDS_LIMIT = 500
 DEFAULT_IOPS = 1000
 DEFAULT_BPS = 40 * 1024 * 1024
@@ -75,10 +77,14 @@ def ensure_network(client: docker.DockerClient | None = None) -> None:
 
 
 def build_lab_image(lab_doc, log_fn=None, no_cache: bool = False) -> str:
-	"""Build Docker image with bench + apps (site created at runtime against shared MariaDB)."""
+	"""Build Docker image with bench + apps (site created at runtime against shared MariaDB).
+
+	The tag is the build spec's content hash, not the lab id, so every lab with the same recipe
+	shares one image instead of holding a private copy — see `image_cache`.
+	"""
 	validate_lab_id(lab_doc.lab_id)
 	template_dir = get_lab_template_dir()
-	image_tag = f"benchpress/{lab_doc.lab_id}:latest"
+	image_tag = cache_tag(lab_doc)
 	version_branch = lab_doc.frappe_version
 
 	apps = [{"app_name": a.app_name.lower(), "git_url": a.git_url, "branch": a.branch} for a in lab_doc.apps]
@@ -117,6 +123,8 @@ def build_lab_image(lab_doc, log_fn=None, no_cache: bool = False) -> str:
 				log_fn(f"ERROR: {error_msg}")
 			raise Exception(f"Docker build failed: {error_msg}")
 
+	# The tag exists now, so a resolve later in this same job must not read a stale set.
+	clear_cached_tags()
 	return image_tag
 
 

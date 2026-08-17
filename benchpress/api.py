@@ -4,7 +4,17 @@
 import frappe
 from frappe import _
 
-from benchpress import lab_detail, lab_templates, labs
+from benchpress import image_cache, lab_detail, lab_templates, labs
+from benchpress.credits import account, metering, payments
+from benchpress.credits.guard import (
+	build_charge,
+	cap_builds_per_day,
+	cap_concurrent_instances,
+	cap_devices,
+	cap_sites_per_instance,
+	payload_runway,
+	requires_credits,
+)
 from benchpress.permissions import (
 	get_bench_owner_filter,
 	is_admin,
@@ -47,6 +57,7 @@ def create_lab_from_template(template: str, lab_id: str | None = None, title: st
 
 
 @frappe.whitelist()
+@requires_credits(cost=build_charge, caps=(cap_builds_per_day,))
 def build_lab_image(lab_name: str) -> dict:
 	require_admin()
 	frappe.enqueue(
@@ -56,6 +67,17 @@ def build_lab_image(lab_name: str) -> dict:
 		timeout=3600,
 	)
 	return {"name": lab_name, "status": "Building"}
+
+
+@frappe.whitelist()
+def prewarm_catalog() -> dict:
+	"""Build the shared image for every catalog template that has none yet.
+
+	Returns as soon as the work is queued: the builds themselves take minutes each and run on
+	`queue-long`, the only worker that can reach the Docker socket.
+	"""
+	require_admin()
+	return image_cache.enqueue_prewarm_catalog()
 
 
 @frappe.whitelist()
@@ -93,6 +115,7 @@ def get_benches() -> list[dict]:
 
 
 @frappe.whitelist()
+@requires_credits(cost=payload_runway, caps=(cap_concurrent_instances,))
 def create_bench(data: str) -> dict:
 	require_app_user()
 	from benchpress.benchpress.doctype.bench_instance import get_instance_id
@@ -167,13 +190,19 @@ def bench_action(bench_name: str, action: str) -> dict:
 		start_container(bench.container_id)
 		bench.status = "Running"
 		bench.started_at = frappe.utils.now_datetime()
+		metering.on_bench_running(bench)
 	elif action == "stop":
 		stop_container(bench.container_id)
 		bench.status = "Stopped"
+		metering.on_bench_stopped(bench)
 	elif action == "restart":
 		restart_container(bench.container_id)
 		bench.status = "Running"
+		# A restart does not interrupt the session — the instance was billable before and is
+		# billable after — so this only starts a meter that was not already running.
+		metering.on_bench_running(bench)
 	elif action == "delete":
+		metering.on_bench_stopped(bench)
 		if bench.database_server:
 			from benchpress.mariadb_manager import drop_site_database
 
@@ -240,6 +269,7 @@ def get_deploy_history() -> dict:
 
 
 @frappe.whitelist()
+@requires_credits(caps=(cap_devices,))
 def add_device(device_name: str, device_type: str, public_key: str | None = None) -> dict:
 	require_app_user()
 	from benchpress.vpn_adapter import register_device
@@ -282,6 +312,7 @@ def get_device_wg_config(device_name: str) -> str:
 
 
 @frappe.whitelist()
+@requires_credits(caps=(cap_sites_per_instance,))
 def create_site(data: str) -> dict:
 	require_app_user()
 	data = frappe.parse_json(data)
@@ -361,11 +392,53 @@ def _create_site_on_bench(site_doc_name: str) -> None:
 
 @frappe.whitelist()
 def get_user_context() -> dict:
+	"""Who the caller is, and whether credits exist at all.
+
+	The switch is exposed here rather than through an endpoint of its own so the SPA learns it in
+	the call it already makes on boot, and every credit surface hides behind the same gate the API
+	enforces.
+	"""
 	return {
 		"is_admin": is_admin(),
 		"user": frappe.session.user,
 		"roles": frappe.get_roles(frappe.session.user),
+		"credits": account.summary(frappe.session.user),
 	}
+
+
+@frappe.whitelist()
+def get_credit_summary() -> dict:
+	"""The balance chip's refresh: one indexed read, no ledger scan."""
+	require_app_user()
+	return account.summary(frappe.session.user)
+
+
+@frappe.whitelist()
+def get_credit_statement(limit_start: int = 0, limit_page_length: int = 20) -> dict:
+	"""One page of the caller's own ledger. Never another user's — the filter is the session."""
+	require_app_user()
+	return account.statement(frappe.session.user, limit_start, limit_page_length)
+
+
+@frappe.whitelist()
+def get_purchase_options() -> dict:
+	"""What is for sale, and whether a gateway exists to sell it."""
+	require_app_user()
+	return payments.purchase_options()
+
+
+@frappe.whitelist()
+def buy_credits(pack: str) -> dict:
+	"""Open a Razorpay order for a credit pack. The price is the pack's, never the caller's."""
+	require_app_user()
+	return payments.buy_credits(pack)
+
+
+@frappe.whitelist()
+def buy_always_on_pass(bench_name: str) -> dict:
+	"""Open a Razorpay order for a pass on one instance the caller is allowed to see."""
+	require_bench_access(bench_name)
+	return payments.buy_always_on_pass(bench_name)
 
 
 @frappe.whitelist()

@@ -17,6 +17,8 @@
 								:label="item.label"
 								:icon="item.icon"
 								:suffix="item.suffix"
+								:to="item.to"
+								:isActive="item.isActive"
 								:onClick="item.onClick"
 								:data-test="item.dataTest"
 							/>
@@ -31,6 +33,11 @@
 						:isActive="item.isActive"
 						:data-test="item.dataTest"
 					/>
+				</template>
+				<!-- The balance sits at the foot of the rail, above the collapse
+				     control, and only on a hosted site. -->
+				<template #footer-items="{ isCollapsed }">
+					<CreditMeter v-if="creditsEnabled" :is-collapsed="isCollapsed" />
 				</template>
 			</Sidebar>
 
@@ -82,9 +89,11 @@
 <script setup>
 import AppSearch from "@/components/AppSearch.vue";
 import NotificationsPanel from "@/components/NotificationsPanel.vue";
+import CreditMeter from "@/components/credit/CreditMeter.vue";
 import DeployDialog from "@/components/deploy/DeployDialog.vue";
 import SettingsDialog from "@/components/settings/SettingsDialog.vue";
 import { openSettings } from "@/data/benchpressSettings";
+import { creditsEnabled, primeCreditSummary, refreshCreditSummary } from "@/data/credits";
 import { attentionCount, toggleNotifications } from "@/data/notifications";
 import { openSearch, searchShortcut } from "@/data/searchPalette";
 import { session } from "@/data/session";
@@ -99,7 +108,7 @@ import {
 	SidebarSection,
 	useTheme,
 } from "frappe-ui";
-import { computed } from "vue";
+import { computed, watch } from "vue";
 import { useRoute } from "vue-router";
 
 import BellIcon from "~icons/lucide/bell";
@@ -117,6 +126,12 @@ import ShieldIcon from "~icons/lucide/shield";
 // the hand-rolled toggle it replaces always resolved to dark on first click.
 const { toggleTheme } = useTheme();
 const route = useRoute();
+
+// The balance falls while nobody clicks anything — a running instance burns by the
+// hour — so the meter starts from the context call the SPA already made and is
+// re-read on every navigation. Each read is one indexed lookup, never a ledger sum.
+watch(() => userContext.ready, primeCreditSummary, { immediate: true });
+watch(() => route.fullPath, refreshCreditSummary);
 
 function switchToDesk() {
 	window.location.href = "/app";
@@ -155,7 +170,9 @@ const accountMenu = computed(() => {
 	];
 });
 
-// The two items above the nav. Both open a dialog, so neither carries a route.
+// The items above the nav proper: the two dialogs that belong to the account
+// rather than to any screen. The balance used to sit here as a third chip and
+// now lives in the sidebar footer, where a gauge fits — see CreditMeter.vue.
 const utilityItems = computed(() => [
 	{
 		label: "Search",

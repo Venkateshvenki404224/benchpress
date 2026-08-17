@@ -173,6 +173,15 @@ def list_devices() -> list[dict]:
 	return [_as_device_row(peer) for peer in peers]
 
 
+def count_devices() -> int:
+	"""How many device peers the session user holds — one count, not a fetch-and-len.
+
+	Lives here so the device cap and the device list agree on what a device *is*: the filters
+	exclude bench container peers, and that definition should exist once.
+	"""
+	return frappe.db.count("VPN Peer", _device_peer_filters())
+
+
 def get_device_peer_status(device_docname: str) -> dict:
 	"""Live tunnel status for an owned device peer.
 

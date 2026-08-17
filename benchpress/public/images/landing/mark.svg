@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <rect width="32" height="32" rx="5.5" fill="#0a0d14"></rect>
+
+  
+  <rect x="1" y="13" width="1.5" height="6" rx="0.5" fill="#06b6d4"></rect>
+  
+  <rect x="2.5" y="10" width="3" height="12" rx="1" fill="#1a2235" stroke="#22c55e" stroke-width="0.4"></rect>
+  
+  <rect x="5.5" y="12" width="2" height="8" rx="0.8" fill="#1a2235" stroke="#22c55e" stroke-width="0.3"></rect>
+  
+  <rect x="7.5" y="14.5" width="3.5" height="3" rx="0.6" fill="#1e2d45" stroke="#06b6d4" stroke-width="0.3"></rect>
+
+  
+  <rect x="11" y="10" width="10" height="12" rx="2.5" fill="#0d1525" stroke="#22c55e" stroke-width="0.8"></rect>
+  <text x="16" y="18.5" font-family="&#39;Courier New&#39;,Courier,monospace" font-weight="700" font-size="7.5" fill="#22c55e" text-anchor="middle">BP</text>
+
+  
+  <rect x="21" y="14.5" width="3.5" height="3" rx="0.6" fill="#1e2d45" stroke="#06b6d4" stroke-width="0.3"></rect>
+  
+  <rect x="24.5" y="12" width="2" height="8" rx="0.8" fill="#1a2235" stroke="#22c55e" stroke-width="0.3"></rect>
+  
+  <rect x="26.5" y="10" width="3" height="12" rx="1" fill="#1a2235" stroke="#22c55e" stroke-width="0.4"></rect>
+  
+  <rect x="29.5" y="13" width="1.5" height="6" rx="0.5" fill="#06b6d4"></rect>
+</svg>

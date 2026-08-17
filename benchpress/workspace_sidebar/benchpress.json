@@ -223,9 +223,55 @@
    "link_type": "DocType",
    "show_arrow": 0,
    "type": "Link"
+  },
+  {
+   "child": 0,
+   "collapsible": 1,
+   "icon": "credit-card",
+   "indent": 1,
+   "keep_closed": 1,
+   "label": "Credits",
+   "show_arrow": 0,
+   "type": "Section Break"
+  },
+  {
+   "child": 1,
+   "collapsible": 0,
+   "icon": "settings",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Credit Settings",
+   "link_to": "Credit Settings",
+   "link_type": "DocType",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 1,
+   "collapsible": 0,
+   "icon": "layers",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Instance Size",
+   "link_to": "Instance Size",
+   "link_type": "DocType",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 1,
+   "collapsible": 0,
+   "icon": "credit-card",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Credit Pack",
+   "link_to": "Credit Pack",
+   "link_type": "DocType",
+   "show_arrow": 0,
+   "type": "Link"
   }
  ],
- "modified": "2026-07-26 19:00:00.000000",
+ "modified": "2026-08-17 08:35:00.000000",
  "modified_by": "Administrator",
  "module": "Benchpress",
  "module_onboarding": "Lets set up BenchPress",

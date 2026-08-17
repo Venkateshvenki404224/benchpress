@@ -1,0 +1,89 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "hash",
+ "creation": "2026-08-17 10:10:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "bench_instance",
+  "valid_until",
+  "column_break_identity",
+  "razorpay_order"
+ ],
+ "fields": [
+  {
+   "description": "The instance this pass exempts from the TTL auto-stop and the hourly burn.",
+   "fieldname": "bench_instance",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Bench Instance",
+   "options": "Bench Instance",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "description": "The last day the pass is honoured. A pass expires at the end of this day.",
+   "fieldname": "valid_until",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Valid Until",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "column_break_identity",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "The payment this pass was bought with. Blank for a pass an operator created from Desk; filled in by the purchase flow.",
+   "fieldname": "razorpay_order",
+   "fieldtype": "Data",
+   "label": "Razorpay Order",
+   "read_only": 1,
+   "search_index": 1
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-08-17 10:10:00.000000",
+ "modified_by": "Administrator",
+ "module": "Benchpress",
+ "name": "Always On Pass",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "BenchPress Admin",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "valid_until",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "bench_instance",
+ "track_changes": 1
+}

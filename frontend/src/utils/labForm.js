@@ -12,6 +12,9 @@
  * static copy.
  */
 
+import { rateLabel } from "@/utils/credits";
+import { cpuLabel, memoryLabel } from "@/utils/labSpecs";
+
 // `docker_manager.LAB_ID_RE` / `LAB_ID_MAX_LENGTH`, verbatim.
 const LAB_ID_RE = /^[a-z0-9]+([._-][a-z0-9]+)*$/;
 export const LAB_ID_MAX_LENGTH = 64;
@@ -69,27 +72,49 @@ export function completeApps(apps) {
 	return (apps ?? []).filter((app) => app.app_name && app.git_url && app.branch);
 }
 
-/** The image this lab builds into — the tag `docker_manager` gives every build. */
-export function imageTag(labId) {
-	return labId ? `benchpress/${labId}:latest` : "";
+/**
+ * The image line — a lab no longer owns its image.
+ *
+ * `docker_manager` tags every build with the build spec's content hash
+ * (`benchpress/cache:<hash>`), so a lab whose recipe someone already built reuses that image and
+ * skips the build entirely. The tag itself is not derivable here, since the hash is computed
+ * server-side, so the line says what the sharing means rather than naming a tag.
+ */
+export function imagePhrase(apps) {
+	return completeApps(apps).length
+		? "Docker image shared with every lab that builds these same apps"
+		: "Docker image shared with every bare-bench lab — likely built already";
 }
 
 /**
- * "What gets built", as four sentences derived from the form.
+ * The size line — the only line on the rail that names a price.
+ *
+ * Empty when no size is chosen, so a lab with hand-typed limits (a self-hoster's,
+ * or one written before sizes existed) simply has one fewer sentence rather than
+ * a sentence about nothing. The rate is omitted when credits are off.
+ */
+export function sizePhrase(size, creditsEnabled) {
+	if (!size) return "";
+	const specs = `${memoryLabel(size.memory_limit)}, ${cpuLabel(size.cpu_cores)}`;
+	const price = creditsEnabled ? ` at ${rateLabel(size.credits_per_hour)}` : "";
+	return `${size.size_label} — ${specs}${price}`;
+}
+
+/**
+ * "What gets built", as sentences derived from the form.
  *
  * The rail is the only place the form says what the user is actually creating,
  * so every line is computed — nothing here is a fixed string describing a
  * default that the fields above may already have changed.
  */
-export function buildSummary(form) {
+export function buildSummary(form, size, creditsEnabled) {
 	return [
-		imageTag(form.lab_id)
-			? `Docker image ${imageTag(form.lab_id)}`
-			: "Docker image tag — set once the lab has a title",
+		sizePhrase(size, creditsEnabled),
+		imagePhrase(form.apps),
 		`Frappe ${form.frappe_version} ${appsPhrase(form.apps)}`,
 		accessPhrase(form),
 		"A site is created on first deploy, not at build time",
-	];
+	].filter(Boolean);
 }
 
 function appsPhrase(apps) {

@@ -38,6 +38,7 @@
 								:bench="bench"
 								:lab="lab.data"
 								:health-age-seconds="healthAgeSeconds"
+								@bought="refresh"
 							/>
 							<SectionCard v-else :padded="false">
 								<EmptyState
