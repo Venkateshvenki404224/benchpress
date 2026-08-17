@@ -161,7 +161,14 @@ def _failure(lab, bench: dict | None) -> dict | None:
 
 
 def _read_failure(doctype: str, filters: dict, source: str) -> dict | None:
-	logs = frappe.get_list(
+	"""The failing step and reason, read past the caller's own row scoping.
+
+	Deliberately `get_all`: labs are global recipes, so the build that failed is usually an
+	admin's, and `build_log_query_conditions` would empty this banner for everyone else. Only
+	the derived step and reason leave the server — never `message`. The `Deploy Log` arm needs
+	no scoping either, since `_failure` only ever passes a bench `_caller_bench` returned.
+	"""
+	logs = frappe.get_all(
 		doctype,
 		filters=filters,
 		fields=["name", "message"],

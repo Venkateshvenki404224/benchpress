@@ -48,6 +48,10 @@ WORKDIR /home/frappe/frappe-bench
 ARG APPS_JSON=[]
 RUN /opt/benchpress/scripts/install-apps.sh "$APPS_JSON"
 
+# --- Layer 5: Bundle every app's assets, once per image ---
+# install-apps.sh passes --skip-assets, so only frappe's bundles come from bench init.
+RUN bench build --production
+
 USER root
 
 EXPOSE 8000 9000 22 8080

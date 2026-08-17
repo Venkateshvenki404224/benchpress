@@ -21,5 +21,13 @@ if [ -f "/etc/wireguard/wg0.conf" ]; then
     wg-quick up wg0 || true
 fi
 
+# Restart path only: on first boot the deploy starts the server itself, once the site exists.
+# Gated on the root-written config as well as the site, so a container that has never been
+# through a deploy does not start running code out of the mounted volume.
+if [ -f /.benchpress_config ] && compgen -G "/home/frappe/frappe-bench/sites/*/site_config.json" > /dev/null; then
+    echo "[*] Serving the site..."
+    /opt/benchpress/scripts/serve.sh || true
+fi
+
 echo "[*] Services ready."
 exec tail -f /dev/null

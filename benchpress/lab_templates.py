@@ -14,7 +14,10 @@ from frappe import _
 
 # Bumped whenever the template set or its fields change so an install can tell
 # which catalog a lab was created against.
-CATALOG_VERSION = 4
+CATALOG_VERSION = 5
+
+# Each template names its `Instance Size`. `memory_limit` / `cpu_cores` below must agree
+# with it: they are what the card renders, and `Lab.apply_instance_size` overwrites them.
 
 # "Use template" names the lab itself, so a taken id is retried with a numeric
 # suffix. The ceiling only exists so a pathological catalog cannot spin.
@@ -28,7 +31,8 @@ LAB_TEMPLATES = [
 		"title": "Frappe Framework",
 		"description": "Bare Frappe bench with no extra apps — the lightest starting point.",
 		"frappe_version": "version-15",
-		"memory_limit": "512m",
+		"instance_size": "Small",
+		"memory_limit": "1g",
 		"cpu_cores": 1,
 		"apps": [],
 	},
@@ -39,6 +43,7 @@ LAB_TEMPLATES = [
 		"title": "ERPNext",
 		"description": "Full ERP suite: accounting, inventory, manufacturing and more.",
 		"frappe_version": "version-15",
+		"instance_size": "Medium",
 		"memory_limit": "2g",
 		"cpu_cores": 2,
 		"apps": [
@@ -57,6 +62,7 @@ LAB_TEMPLATES = [
 		"title": "Frappe CRM",
 		"description": "Lightweight sales CRM on Frappe — leads, deals and contacts.",
 		"frappe_version": "version-15",
+		"instance_size": "Small",
 		"memory_limit": "1g",
 		"cpu_cores": 1,
 		"apps": [
@@ -75,6 +81,7 @@ LAB_TEMPLATES = [
 		"title": "Frappe HR",
 		"description": "HR & payroll suite — employees, leaves, attendance and payroll.",
 		"frappe_version": "version-15",
+		"instance_size": "Medium",
 		"memory_limit": "2g",
 		"cpu_cores": 2,
 		"apps": [
@@ -93,6 +100,7 @@ LAB_TEMPLATES = [
 		"title": "Frappe Learning",
 		"description": "Learning management system — courses, quizzes and batches.",
 		"frappe_version": "version-15",
+		"instance_size": "Small",
 		"memory_limit": "1g",
 		"cpu_cores": 1,
 		"apps": [
@@ -111,6 +119,7 @@ LAB_TEMPLATES = [
 		"title": "Frappe Helpdesk",
 		"description": "Customer support desk — tickets, SLAs and a knowledge base.",
 		"frappe_version": "version-15",
+		"instance_size": "Small",
 		"memory_limit": "1g",
 		"cpu_cores": 1,
 		"apps": [
@@ -129,6 +138,7 @@ LAB_TEMPLATES = [
 		"title": "ERPNext + India Compliance",
 		"description": "ERPNext with GST, e-invoicing and TDS for Indian businesses.",
 		"frappe_version": "version-15",
+		"instance_size": "Medium",
 		"memory_limit": "2g",
 		"cpu_cores": 2,
 		# india_compliance extends ERPNext, so ERPNext must install first. The
@@ -212,6 +222,7 @@ def create_lab_from_template(template_key: str, lab_id: str | None = None, title
 			"title": title or template["title"],
 			"description": template["description"],
 			"frappe_version": template["frappe_version"],
+			"instance_size": seeded_instance_size(template),
 			"memory_limit": template["memory_limit"],
 			"cpu_cores": template["cpu_cores"],
 			"apps": [dict(app) for app in template["apps"]],
@@ -219,3 +230,15 @@ def create_lab_from_template(template_key: str, lab_id: str | None = None, title
 	)
 	lab.insert()
 	return lab.name
+
+
+def seeded_instance_size(template: dict) -> str | None:
+	"""The template's `Instance Size`, or nothing when this install has no such row.
+
+	Without a size a template lab kept resources only this file declared, so it was
+	neither priced nor resized like any other lab. The existence check is what keeps
+	that true for a self-hoster who renamed the seeded sizes: `Lab` leaves the
+	declared `memory_limit` / `cpu_cores` alone when no size is set.
+	"""
+	size = template.get("instance_size")
+	return size if size and frappe.db.exists("Instance Size", size) else None

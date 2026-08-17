@@ -46,9 +46,9 @@ DEPLOY_STEPS = (
 	DeployStep("vpn_peer", "Configuring the WireGuard peer"),
 	DeployStep("site_config", "Writing common_site_config.json"),
 	DeployStep("site", "Creating the site"),
-	DeployStep("assets", "Building assets"),
+	DeployStep("assets", "Preparing assets"),
 	DeployStep("ssh_user", "Provisioning the SSH user"),
-	DeployStep("code_server", "Provisioning code-server"),
+	DeployStep("code_server", "Starting the lab's services"),
 	DeployStep("complete", "Deploy complete"),
 )
 

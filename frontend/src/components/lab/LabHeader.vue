@@ -45,9 +45,11 @@
 
 		<div class="flex flex-col items-end gap-1">
 			<div class="flex items-center gap-2">
+				<!-- Off-tunnel the IDE is unreachable; the caption below covers both buttons. -->
 				<Button
 					v-if="showCodeServer"
 					variant="subtle"
+					:disabled="!vpnConnected"
 					data-test="open-code-server"
 					@click="emit('code-server')"
 				>

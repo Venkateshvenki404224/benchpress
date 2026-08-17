@@ -3,6 +3,7 @@
 
 import json
 import secrets
+import shlex
 
 import frappe
 from frappe.utils.file_lock import LockTimeoutError
@@ -51,6 +52,11 @@ def _remove_stale_container(bench) -> None:
 
 
 NOTHING_TO_ROLL_BACK = "Cleanup: nothing to roll back — no container was created"
+
+# Kept in step with `frontend/src/utils/labActions.js`, which builds the URL from it.
+SITE_HTTP_PORT = 8000
+
+ADOPTED_MARKER = "already exists — adopting it"
 
 
 def _cleanup_failed_deploy(bench, container_id, append_log) -> None:
@@ -246,7 +252,7 @@ def _deploy_bench(bench_name: str) -> None:
 			"redis_queue": "redis://benchpress-redis:6379/1",
 			"redis_socketio": "redis://benchpress-redis:6379/2",
 			"socketio_port": 9000,
-			"webserver_port": 8000,
+			"webserver_port": SITE_HTTP_PORT,
 			"default_site": site_name,
 		}
 		pipeline.step("site_config")
@@ -257,17 +263,17 @@ def _deploy_bench(bench_name: str) -> None:
 
 		pipeline.step("site")
 		apps_csv = ",".join(a.app_name for a in lab.apps if a.app_name.lower() != "frappe")
-		pipeline.log(f"bench new-site {site_name} --install-app {apps_csv or 'frappe'}")
+		pipeline.log(f"Site {site_name} with {apps_csv or 'frappe'}")
 		exit_code, output = create_site_in_container(
 			container_id, db_server, site_name, admin_password, apps_csv
 		)
 		if exit_code != 0:
-			raise Exception(f"bench new-site failed (exit {exit_code}): {output}")
-		pipeline.log("Site created successfully")
+			raise Exception(f"Site setup failed (exit {exit_code}): {output}")
+		pipeline.log("Existing site adopted" if ADOPTED_MARKER in output else "Site created successfully")
+		_record_primary_site(bench, lab, admin_password)
 
 		pipeline.step("assets")
-		exec_in_container(container_id, "bench build", user="frappe", workdir=bench_dir)
-		pipeline.log("bench build finished")
+		_ensure_assets(container_id, bench_dir, lab, pipeline)
 
 		if not bench.ssh_username:
 			bench.ssh_username = bench._derive_username(bench.owner)
@@ -288,6 +294,19 @@ def _deploy_bench(bench_name: str) -> None:
 		# Emitted even when the lab has code-server off: a step the run decided
 		# to skip is information, and a stepper missing its tenth row is not.
 		pipeline.step("code_server")
+
+		# After linkuser.sh, not after site creation: that renames the bench user, and
+		# `usermod --login` refuses to rename a user owning a running process. The account is
+		# named here rather than derived inside the container from a path the tenant owns.
+		exit_code, output = exec_in_container(
+			container_id,
+			f"bash /opt/benchpress/scripts/serve.sh {shlex.quote(bench.ssh_username)}",
+			user="root",
+		)
+		if exit_code != 0:
+			raise Exception(f"serve.sh failed (exit {exit_code}): {output}")
+		pipeline.log(f"Site served on port {SITE_HTTP_PORT}")
+
 		if getattr(lab, "enable_code_server", 0):
 			cs_user = bench.ssh_username
 			cs_home = f"/home/{cs_user}"
@@ -351,6 +370,71 @@ def _deploy_bench(bench_name: str) -> None:
 		_notify_owner(bench.owner, f"Bench deploy failed: {bench.bench_name}", "Bench Instance", bench.name)
 
 
+def _record_primary_site(bench, lab, admin_password: str) -> None:
+	"""Record the deploy's site as a `Bench Site`, which is what every site list reads.
+
+	Idempotent: a deploy re-runs, so an existing row is refreshed rather than duplicated.
+
+	The owner is pinned to the bench's owner rather than left to the session: `Bench Site` grants
+	`BenchPress User` read `if_owner`, so an admin redeploying somebody else's instance would
+	take the row over and empty that tenant's Sites tab.
+	"""
+	existing = frappe.db.get_value("Bench Site", {"bench": bench.name, "site_name": bench.site_name})
+	site = frappe.get_doc("Bench Site", existing) if existing else frappe.new_doc("Bench Site")
+	site.bench = bench.name
+	site.site_name = bench.site_name
+	site.full_domain = bench.site_name
+	site.status = "Active"
+	site.admin_password = admin_password
+	site.owner = bench.owner
+	site.apps_installed = []
+	for app in _site_app_names(lab):
+		site.append("apps_installed", {"app_name": app})
+	site.save(ignore_permissions=True)
+	# No commit: the next log line commits, and committing here outlives a test rollback
+	# that discards the parent instance.
+
+
+def _site_app_names(lab) -> list[str]:
+	"""The apps this site was created with — frappe first, then the lab's own, in order."""
+	extras = [row.app_name for row in (lab.apps or []) if row.app_name and row.app_name.lower() != "frappe"]
+	return ["frappe", *extras]
+
+
+def _ensure_assets(container_id: str, bench_dir: str, lab, pipeline) -> None:
+	"""Bundle the apps the image did not already bundle — normally none of them.
+
+	Asked of the container, not assumed from the Dockerfile: the cache key does not cover
+	the Dockerfile, so an image built before assets moved into it must still build here.
+	"""
+	missing = sorted(_asset_app_names(lab) - _bundled_apps(container_id, bench_dir))
+	if not missing:
+		pipeline.log("Assets already bundled in the image — no build needed")
+		return
+	pipeline.log(f"bench build — no bundle in the image for: {', '.join(missing)}")
+	exec_in_container(container_id, "bench build", user="frappe", workdir=bench_dir)
+	pipeline.log("bench build finished")
+
+
+def _asset_app_names(lab) -> set[str]:
+	"""Every app whose bundle this instance serves. Frappe is always one of them."""
+	return {"frappe"} | {row.app_name.strip().lower() for row in (lab.apps or []) if row.app_name}
+
+
+def _bundled_apps(container_id: str, bench_dir: str) -> set[str]:
+	"""Apps that already carry a bundle, in one exec.
+
+	The glob is expanded by the container's shell: app names come from a Lab row and must
+	never be interpolated into a command string.
+	"""
+	exit_code, output = exec_in_container(
+		container_id, "ls -d sites/assets/*/dist 2>/dev/null", user="frappe", workdir=bench_dir
+	)
+	if exit_code != 0:
+		return set()
+	return {path.split("/")[2] for path in output.split() if path.count("/") == 3}
+
+
 def _setup_container_vpn(bench, container_id: str, pipeline) -> None:
 	"""Replace any stale peer, claim a fresh tunnel IP, and configure the container.
 
@@ -408,6 +492,9 @@ def teardown_bench(bench) -> None:
 
 	remove_bench_volume(bench.name)
 	_drop_site_database(bench)
+	# Marked, not deleted: a redeploy refreshes them, and the reaper leaves the instance
+	# one click from running.
+	_deactivate_bench_sites(bench)
 
 	# The container this bench was burning for is gone, so the session ends here. Without
 	# this the burning flag would survive the teardown and the fresh container — which
@@ -420,6 +507,14 @@ def teardown_bench(bench) -> None:
 	bench.started_at = None
 	bench.save(ignore_permissions=True)
 	frappe.db.commit()  # nosemgrep -- the caller may redeploy next, which must see Draft
+
+
+def _deactivate_bench_sites(bench) -> None:
+	"""Mark every `Bench Site` on this instance Inactive, since its data is gone.
+
+	One UPDATE: `set_value` takes the filter itself, so the row names never have to be read.
+	"""
+	frappe.db.set_value("Bench Site", {"bench": bench.name}, "status", "Inactive", update_modified=False)
 
 
 def _drop_site_database(bench) -> None:
@@ -512,12 +607,18 @@ def _run_build(lab, user: str) -> str:
 	"""Build the image into its own log, mark that log's outcome, return the tag.
 
 	Re-raises, so a deploy that needed the image fails with it.
+
+	A failure puts the lab's status back the way it was found. `Lab` is one admin-authored row
+	every tenant reads, and `_build_lab_with_logs` moves it to Building before it starts, so a
+	tenant whose deploy had to build would otherwise leave the whole catalog reading Error.
+	`build_lab`, the admin's own rebuild, is what records Error there.
 	"""
+	status_before = lab.status
 	append_log, build_log_name = _open_build_log(lab, user)
 	try:
 		_build_lab_with_logs(lab, append_log)
 	except Exception as e:
-		frappe.db.set_value("Lab", lab.name, "status", "Error")
+		frappe.db.set_value("Lab", lab.name, "status", status_before)
 		append_log(f"=== Build failed: {e!s} ===", "error")
 		frappe.db.set_value("Build Log", build_log_name, "log_type", "error")
 		frappe.db.commit()  # nosemgrep -- the run's outcome must survive its failure
@@ -545,6 +646,9 @@ def build_lab(lab_name: str) -> None:
 	try:
 		image_tag = _run_build(lab, lab.owner)
 	except Exception:
+		# The admin asked for this build, so the catalog is the right place to record that it broke.
+		frappe.db.set_value("Lab", lab_name, "status", "Error")
+		frappe.db.commit()  # nosemgrep -- the run is over; its verdict must survive the failure
 		_notify_owner(lab.owner, f"Lab build failed: {lab.title}", "Lab", lab_name)
 		return
 	_notify_owner(lab.owner, f"Lab build complete: {lab.title} ({image_tag})", "Lab", lab_name)

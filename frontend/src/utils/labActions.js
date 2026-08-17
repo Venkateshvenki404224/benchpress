@@ -57,7 +57,8 @@ function openAction({ vpnConnected, siteUrl }) {
 			action: OPEN,
 			label: "Open site — VPN off",
 			disabled: true,
-			hint: "Register this device on the VPN to reach the site.",
+			// Covers the IDE button too: both answer only on the bench's WireGuard address.
+			hint: "Register this device on the VPN to reach the site or the IDE.",
 		};
 	}
 	if (!siteUrl) {

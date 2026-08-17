@@ -116,10 +116,6 @@
    "report": 1,
    "role": "BenchPress Admin",
    "share": 1
-  },
-  {
-   "read": 1,
-   "role": "BenchPress User"
   }
  ],
  "row_format": "Dynamic",

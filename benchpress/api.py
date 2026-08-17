@@ -3,6 +3,8 @@
 
 import frappe
 from frappe import _
+from frappe.query_builder import DocType
+from frappe.query_builder.functions import Count
 
 from benchpress import image_cache, lab_detail, lab_templates, labs
 from benchpress.credits import account, metering, payments
@@ -107,11 +109,33 @@ def get_benches() -> list[dict]:
 		order_by="creation desc",
 	)
 
+	names = [bench["name"] for bench in benches]
+	apps = _counts_by_bench("Bench App", "parent", names)
+	sites = _counts_by_bench("Bench Site", "bench", names)
 	for bench in benches:
-		bench["app_count"] = frappe.db.count("Bench App", {"parent": bench["name"]})
-		bench["site_count"] = frappe.db.count("Bench Site", {"bench": bench["name"]})
+		bench["app_count"] = apps.get(bench["name"], 0)
+		bench["site_count"] = sites.get(bench["name"], 0)
 
 	return benches
+
+
+def _counts_by_bench(doctype: str, column: str, bench_names: list[str]) -> dict[str, int]:
+	"""Rows per bench, grouped in one query.
+
+	Counted one bench at a time before, so an admin's list cost two queries per row — and every
+	deploy now writes a `Bench Site`, so that table is no longer small enough to ignore.
+	"""
+	if not bench_names:
+		return {}
+	table = DocType(doctype)
+	rows = (
+		frappe.qb.from_(table)
+		.select(table[column].as_("bench"), Count("*").as_("total"))
+		.where(table[column].isin(bench_names))
+		.groupby(table[column])
+		.run(as_dict=True)
+	)
+	return {row.bench: row.total for row in rows}
 
 
 @frappe.whitelist()
@@ -173,12 +197,7 @@ def create_bench(data: str) -> dict:
 
 @frappe.whitelist()
 def bench_action(bench_name: str, action: str) -> dict:
-	from benchpress.docker_manager import (
-		remove_container,
-		restart_container,
-		start_container,
-		stop_container,
-	)
+	from benchpress.docker_manager import restart_container, start_container, stop_container
 
 	require_bench_access(bench_name)
 	if action == "delete" and not is_admin():
@@ -202,43 +221,51 @@ def bench_action(bench_name: str, action: str) -> dict:
 		# billable after — so this only starts a meter that was not already running.
 		metering.on_bench_running(bench)
 	elif action == "delete":
-		metering.on_bench_stopped(bench)
-		if bench.database_server:
-			from benchpress.mariadb_manager import drop_site_database
-
-			sites = frappe.get_list(
-				"Bench Site", filters={"bench": bench.name}, fields=["site_name", "full_domain"]
-			)
-			for s in sites:
-				try:
-					drop_site_database(bench.database_server, s.full_domain or s.site_name)
-				except Exception:
-					frappe.log_error(
-						title=f"Failed to drop DB for {s.site_name}", message=frappe.get_traceback()
-					)
-
-		if bench.container_id:
-			try:
-				stop_container(bench.container_id)
-			except Exception:
-				pass  # best-effort
-			remove_container(bench.container_id)
-
-		from benchpress.deploy_manager import remove_bench_volume
-		from benchpress.vpn_adapter import remove_bench_peer
-
-		remove_bench_volume(bench.bench_name)
-		remove_bench_peer(bench)
-
-		frappe.delete_doc("Bench Instance", bench_name, force=True)
-		frappe.db.commit()
-		return {"status": "deleted"}
+		return _delete_bench(bench)
 	else:
 		frappe.throw(_("Invalid action: {0}").format(action))
 
 	bench.save()
 	frappe.db.commit()
 	return {"name": bench.name, "status": bench.status}
+
+
+def _delete_bench(bench) -> dict:
+	"""Remove an instance and everything it owns, then the row itself.
+
+	Container, volume, site database and metering session go through
+	`deploy_manager.teardown_bench`, the one teardown path, where every removal is
+	best-effort. Only what it does not cover is left here.
+	"""
+	from benchpress.deploy_manager import teardown_bench
+	from benchpress.vpn_adapter import remove_bench_peer
+
+	teardown_bench(bench)
+	_drop_bench_site_databases(bench)
+	remove_bench_peer(bench)
+	# Before the instance: `force=True` skips the link check, so these would orphan.
+	for site in frappe.get_all("Bench Site", filters={"bench": bench.name}, pluck="name"):
+		frappe.delete_doc("Bench Site", site, force=True, ignore_permissions=True)
+	frappe.delete_doc("Bench Instance", bench.name, force=True)
+	frappe.db.commit()
+	return {"status": "deleted"}
+
+
+def _drop_bench_site_databases(bench) -> None:
+	"""Drop the database behind every extra site on this bench, one failure at a time."""
+	if not bench.database_server:
+		return
+	from benchpress.mariadb_manager import drop_site_database
+
+	# `get_all`, not `get_list`: a teardown has to be exhaustive, and `Bench Site` is read
+	# `if_owner`, so an admin deleting somebody else's instance would silently skip their sites
+	# and leave the databases behind.
+	sites = frappe.get_all("Bench Site", filters={"bench": bench.name}, fields=["site_name", "full_domain"])
+	for site in sites:
+		try:
+			drop_site_database(bench.database_server, site.full_domain or site.site_name)
+		except Exception:
+			frappe.log_error(title=f"Failed to drop DB for {site.site_name}", message=frappe.get_traceback())
 
 
 @frappe.whitelist()

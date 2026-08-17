@@ -4,7 +4,7 @@ Release-readiness verdict for every whitelisted endpoint and the security-sensit
 components behind them. Seeded from the phase-3 authorization suite
 (`benchpress/tests/test_api_authorization.py`), the phase-2 contract/timing suite
 (`benchpress/tests/test_api.py`), the branch security review
-(`specs/api-test-suite/security-review-phase-3.md`), and a sweep of
+(`specs/completed/api-test-suite/security-review-phase-3.md`), and a sweep of
 `ignore_permissions=True` and secret-handling (`get_decrypted_password` /
 `get_password`) paths.
 
