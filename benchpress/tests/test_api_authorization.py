@@ -11,6 +11,7 @@ everyone — or silently returns an empty result — is caught as a failure.
 """
 
 import importlib
+import json
 import pkgutil
 from unittest.mock import MagicMock, patch
 
@@ -369,6 +370,54 @@ class TestApiAuthorization(IntegrationTestCase):
 		frappe.set_user(self.norole_user)
 		self.assert_denied(api.get_credit_summary)
 		self.assert_denied(api.get_credit_statement)
+
+	# --- The phase-5 credit gate must never answer a permission question -----
+
+	def test_the_credit_gate_never_precedes_an_endpoints_own_guard(self):
+		"""With credits armed, a role-less caller must still meet `PermissionError` — not a price.
+
+		`requires_credits` wraps these endpoints, so it runs before their `require_app_user()`. It
+		passes a caller without an app role straight through for exactly this reason: a stranger
+		must not be answered with an accounting sentence, and must not have a `Credit Account`
+		opened in their name on the way to being refused.
+		"""
+		self.with_credits_armed()
+		frappe.set_user(self.norole_user)
+		self.assert_denied(lambda: api.create_bench(json.dumps({"lab": self.lab.name})))
+		self.assert_denied(lambda: api.create_site(json.dumps({"bench": self.bench.name})))
+		self.assert_denied(lambda: api.add_device("authz-dev", "Laptop"))
+		frappe.set_user("Administrator")
+		self.assertFalse(frappe.db.exists("Credit Account", self.norole_user))
+
+	def test_a_guest_meets_the_same_wall_with_credits_armed(self):
+		self.with_credits_armed()
+		frappe.set_user("Guest")
+		self.assert_denied(lambda: api.build_lab_image(self.lab.name))
+		self.assert_denied(lambda: api.create_bench(json.dumps({"lab": self.lab.name})))
+
+	def test_an_app_user_still_reaches_the_endpoint_with_credits_armed(self):
+		"""The positive control: the gate charges, it does not deny by existing."""
+		self.with_credits_armed()
+		frappe.set_user(self.user_a)
+		with patch("frappe.enqueue"):
+			self.assertEqual(api.create_bench(json.dumps({"lab": self.lab.name}))["status"], "Deploying")
+
+	def with_credits_armed(self):
+		"""Turn the feature on for one test, and take every trace of it away again.
+
+		This class commits its fixtures, so anything left pending here becomes durable alongside
+		them — including the `Credit Account` the gate opens for a caller who gets through it.
+		"""
+		frappe.db.set_single_value("BenchPress Settings", "enable_credits", 1)
+		frappe.clear_cache(doctype="BenchPress Settings")
+		self.addCleanup(self.forget_credit_rows)
+		self.addCleanup(frappe.clear_cache, doctype="BenchPress Settings")
+		self.addCleanup(frappe.db.set_single_value, "BenchPress Settings", "enable_credits", 0)
+
+	def forget_credit_rows(self):
+		for user in (self.user_a, self.user_b, self.admin_user, self.norole_user):
+			frappe.db.delete("Credit Ledger Entry", {"account": user})
+			frappe.db.delete("Credit Account", {"user": user})
 
 	def test_a_credit_statement_is_only_ever_the_callers_own(self):
 		"""Positive control, and the scoping rule: the filter is the session, not an argument."""

@@ -21,15 +21,22 @@ currently contributing `credit_burn_rate` to its owner's burn rate", and nothing
 import frappe
 from frappe.utils import flt, now_datetime
 
-from benchpress.credits import account, config
+from benchpress.credits import account, config, passes
 from benchpress.labs import bench_label
 
 BENCH = "Bench Instance"
 
 
 def on_bench_running(bench) -> None:
-	"""Begin metering a bench at its lab's size rate. Idempotent."""
+	"""Begin metering a bench at its lab's size rate. Idempotent.
+
+	An instance holding an unexpired `Always On Pass` is prepaid, so the hourly meter never starts
+	for it — the pass exempts it from the TTL stop as well, and charging by the hour on top of a
+	monthly price would sell the same time twice.
+	"""
 	if not config.credits_enabled() or bench.credit_burn_started:
+		return
+	if passes.has_active_pass(bench.name):
 		return
 	lab = frappe.get_cached_doc("Lab", bench.lab)
 	rate = rate_for_lab(lab)

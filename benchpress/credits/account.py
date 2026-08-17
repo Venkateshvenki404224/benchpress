@@ -192,8 +192,12 @@ def charge(user: str, credits, description: str, reference=None) -> None:
 
 	The accrual term is untouched by this, so there is nothing to settle: subtracting from
 	`balance` is exactly a debit of the live balance.
+
+	A charge of zero still writes its row. The ledger is the record that the event happened, and
+	the daily custom-build cap counts those rows — so an operator who sets `custom_build_credits`
+	to zero makes builds free without also making them uncountable.
 	"""
-	if not config.credits_enabled() or not flt(credits):
+	if not config.credits_enabled():
 		return
 	account = _locked(user)
 	account.balance = flt(flt(account.balance) - flt(credits), PRECISION)
@@ -208,6 +212,8 @@ def grant(user: str, credits, description: str) -> None:
 		return
 	account = _locked(user)
 	account.balance = flt(flt(account.balance) + flt(credits), PRECISION)
+	# The balance just rose, so the next depletion deserves its own warning.
+	account.low_balance_warned = 0
 	_save(account)
 	_write_entry(account, GRANT, flt(credits), description)
 

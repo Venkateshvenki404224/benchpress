@@ -17,7 +17,8 @@
   "column_break_lifetime",
   "lifetime_spent",
   "state_section",
-  "is_suspended"
+  "is_suspended",
+  "low_balance_warned"
  ],
  "fields": [
   {
@@ -92,6 +93,14 @@
    "fieldtype": "Check",
    "in_list_view": 1,
    "label": "Is Suspended"
+  },
+  {
+   "default": "0",
+   "description": "Set when the low-balance warning was sent, cleared by the sweep once the balance is back above the threshold. Keeps the warning to one per depletion.",
+   "fieldname": "low_balance_warned",
+   "fieldtype": "Check",
+   "label": "Low Balance Warned",
+   "read_only": 1
   }
  ],
  "grid_page_length": 50,

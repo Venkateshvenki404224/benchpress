@@ -74,12 +74,20 @@
 						<p class="text-meta text-ink-gray-5">Applied as container limits</p>
 					</div>
 
+					<InstanceSizePicker
+						v-if="instanceSizes.length"
+						class="mb-3.5"
+						:sizes="instanceSizes"
+						:priced="creditsPriced"
+						v-model="form.instance_size"
+					/>
+
 					<div
 						class="grid gap-3.5"
 						style="grid-template-columns: repeat(auto-fit, minmax(150px, 1fr))"
 					>
 						<FormControl
-							v-for="field in RESOURCE_FIELDS"
+							v-for="field in resourceFields"
 							:key="field.key"
 							:label="field.label"
 							:type="field.type"
@@ -123,6 +131,7 @@
 <script setup>
 import BackLink from "@/components/BackLink.vue";
 import SectionCard from "@/components/SectionCard.vue";
+import InstanceSizePicker from "@/components/lab/InstanceSizePicker.vue";
 import LabAppsTable from "@/components/lab/LabAppsTable.vue";
 import NewLabSummary from "@/components/lab/NewLabSummary.vue";
 import { openDeployRun } from "@/data/deployRun";
@@ -136,6 +145,11 @@ import { useRouter } from "vue-router";
 // and `docker_manager.validate_lab_id` rejects anything outside its grammar. The
 // form applies that grammar itself so a title that cannot become a valid ID is
 // caught here rather than by a server throw after the user has filled the page.
+//
+// Memory and cores are the *first two* deliberately: an instance size sets both,
+// so the picker replaces them whenever any size exists. They stay reachable for a
+// site with no sizes at all, which is the only way to hand-type limits.
+const SIZED_FIELDS = 2;
 const RESOURCE_FIELDS = [
 	{ key: "memory_limit", label: "Memory limit", type: "text" },
 	{ key: "cpu_cores", label: "CPU cores", type: "number" },
@@ -164,6 +178,7 @@ const form = reactive({
 	title: "",
 	description: "",
 	frappe_version: "version-16",
+	instance_size: "",
 	memory_limit: "512m",
 	cpu_cores: 1,
 	iops_limit: 0,
@@ -176,8 +191,8 @@ const form = reactive({
 	apps: [],
 });
 
-// The version list and the numeric defaults are declared on the Lab DocType;
-// this reads them rather than restating them.
+// The version list, the sizes and the numeric defaults are all declared
+// server-side; this reads them rather than restating them.
 const options = createResource({
 	url: "benchpress.api.get_lab_form_options",
 	auto: true,
@@ -187,7 +202,33 @@ const options = createResource({
 				form[field] = field.startsWith("enable_") ? Number(value) : value;
 			}
 		}
+		form.instance_size = defaultSize(data?.instance_sizes)?.name ?? "";
 	},
+});
+
+const instanceSizes = computed(() => options.data?.instance_sizes ?? []);
+const creditsPriced = computed(() => options.data?.credits_enabled === true);
+
+// A size owns memory and cores, so the two free-text fields disappear behind it.
+const resourceFields = computed(() =>
+	instanceSizes.value.length ? RESOURCE_FIELDS.slice(SIZED_FIELDS) : RESOURCE_FIELDS
+);
+
+const chosenSize = computed(() =>
+	instanceSizes.value.find((size) => size.name === form.instance_size)
+);
+
+function defaultSize(sizes) {
+	return (sizes ?? []).find((size) => size.is_default) ?? (sizes ?? [])[0];
+}
+
+// The server applies this too (`Lab.apply_instance_size`), but the form has to
+// carry it: the summary rail reads the limits, and the inserted document should
+// say what the user was shown rather than rely on a save-time rewrite.
+watch(chosenSize, (size) => {
+	if (!size) return;
+	form.memory_limit = size.memory_limit;
+	form.cpu_cores = size.cpu_cores;
 });
 
 const versionButtons = computed(() =>
@@ -218,7 +259,7 @@ const ssh = computed({
 	},
 });
 
-const summaryLines = computed(() => buildSummary(form));
+const summaryLines = computed(() => buildSummary(form, chosenSize.value, creditsPriced.value));
 
 // Validation appears once the user has tried to save, so an untouched form is
 // not scolded, and stays live afterwards so a fix clears it as it is typed.
@@ -282,6 +323,20 @@ function saveFailure(error) {
 	return `Could not save the lab: ${reason}`;
 }
 
+/**
+ * Why the deploy was refused, in the server's own words.
+ *
+ * A credit or cap refusal names the shortfall and the route out of it, so
+ * repeating it verbatim is the whole point — a generic "could not be started"
+ * would throw away the only actionable half of the message.
+ */
+function deployFailure(error) {
+	const reason = error?.messages?.[0] || error?.message || "";
+	return reason
+		? `The lab was saved, but the deploy was refused: ${reason}`
+		: "The lab was saved, but the build could not be started.";
+}
+
 async function saveDraft() {
 	savingDraft.value = true;
 	try {
@@ -308,7 +363,7 @@ async function saveAndBuild() {
 
 		const bench = await deployAction.submit({ data: JSON.stringify({ lab: lab.name }) });
 		if (deployAction.error || !bench?.name) {
-			toast.error("The lab was saved, but the build could not be started.");
+			toast.error(deployFailure(deployAction.error));
 			router.push({ name: "LabDetail", params: { labId: lab.name } });
 			return;
 		}

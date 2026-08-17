@@ -174,6 +174,7 @@ scheduler_events = {
 	# container and blows its window past ~25 benches. This one makes no Docker calls at all.
 	"daily": [
 		"benchpress.credits.reconcile.reconcile_burn_rates",
+		"benchpress.credits.reaper.reap_stopped_instances",
 	],
 	# "hourly": [
 	# 	"benchpress.tasks.hourly"
@@ -193,6 +194,10 @@ scheduler_events = {
 		],
 		"*/5 * * * *": [
 			"benchpress.mariadb_manager.scheduled_health_check",
+			# Never on the `*/1` stats cron: that job spends ~2s per container on the Docker
+			# socket, and an enforcement decision queued behind Docker I/O arrives late. Five
+			# minutes is fine enough for a TTL measured in hours and for the 15-minute warning.
+			"benchpress.credits.sweep.enforce_limits",
 		],
 		"0 2 * * *": [
 			"benchpress.mariadb_manager.scheduled_backup",

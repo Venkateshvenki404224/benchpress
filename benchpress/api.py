@@ -6,6 +6,15 @@ from frappe import _
 
 from benchpress import image_cache, lab_detail, lab_templates, labs
 from benchpress.credits import account, metering
+from benchpress.credits.guard import (
+	build_charge,
+	cap_builds_per_day,
+	cap_concurrent_instances,
+	cap_devices,
+	cap_sites_per_instance,
+	payload_runway,
+	requires_credits,
+)
 from benchpress.permissions import (
 	get_bench_owner_filter,
 	is_admin,
@@ -48,6 +57,7 @@ def create_lab_from_template(template: str, lab_id: str | None = None, title: st
 
 
 @frappe.whitelist()
+@requires_credits(cost=build_charge, caps=(cap_builds_per_day,))
 def build_lab_image(lab_name: str) -> dict:
 	require_admin()
 	frappe.enqueue(
@@ -105,6 +115,7 @@ def get_benches() -> list[dict]:
 
 
 @frappe.whitelist()
+@requires_credits(cost=payload_runway, caps=(cap_concurrent_instances,))
 def create_bench(data: str) -> dict:
 	require_app_user()
 	from benchpress.benchpress.doctype.bench_instance import get_instance_id
@@ -258,6 +269,7 @@ def get_deploy_history() -> dict:
 
 
 @frappe.whitelist()
+@requires_credits(caps=(cap_devices,))
 def add_device(device_name: str, device_type: str, public_key: str | None = None) -> dict:
 	require_app_user()
 	from benchpress.vpn_adapter import register_device
@@ -300,6 +312,7 @@ def get_device_wg_config(device_name: str) -> str:
 
 
 @frappe.whitelist()
+@requires_credits(caps=(cap_sites_per_instance,))
 def create_site(data: str) -> dict:
 	require_app_user()
 	data = frappe.parse_json(data)

@@ -8,6 +8,7 @@ from frappe import _
 from frappe.model.document import Document
 
 from benchpress.benchpress.doctype.bench_instance import get_instance_id
+from benchpress.credits.guard import cap_concurrent_instances, instance_runway, requires_credits
 
 
 class BenchInstance(Document):
@@ -39,6 +40,7 @@ class BenchInstance(Document):
 		return username
 
 	@frappe.whitelist()
+	@requires_credits(cost=instance_runway, caps=(cap_concurrent_instances,))
 	def enqueue_deploy(self):
 		job = frappe.enqueue(
 			"benchpress.deploy_manager.deploy_bench",
@@ -61,6 +63,7 @@ class BenchInstance(Document):
 		frappe.msgprint(_("Bench stopped."))
 
 	@frappe.whitelist()
+	@requires_credits(cost=instance_runway, caps=(cap_concurrent_instances,))
 	def enqueue_redeploy(self):
 		job = frappe.enqueue(
 			"benchpress.deploy_manager.redeploy_bench",
@@ -76,6 +79,7 @@ class BenchInstance(Document):
 		frappe.msgprint(_("Redeploy started. Watch the Deploy Log for progress."))
 
 	@frappe.whitelist()
+	@requires_credits(cost=instance_runway, caps=(cap_concurrent_instances,))
 	def enqueue_start(self):
 		from benchpress.credits import metering
 		from benchpress.docker_manager import start_container

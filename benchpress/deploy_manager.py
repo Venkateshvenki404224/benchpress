@@ -27,6 +27,7 @@ from benchpress.mariadb_manager import (
 	ensure_infrastructure,
 	wait_for_mariadb,
 )
+from benchpress.notifications import notify_owner
 
 
 def _remove_stale_container(bench) -> None:
@@ -110,32 +111,9 @@ def build_linkuser_args(bench, lab, settings, ssh_password: str) -> list[str]:
 	]
 
 
-def _notify_owner(user: str, subject: str, document_type: str, document_name: str) -> None:
-	"""Best-effort desk notification on a terminal deploy/build state.
-
-	type "Alert" both bypasses the for_user == from_user skip in
-	make_notification_logs (the job usually runs as the owner) and is exempt
-	from notification emails, so this stays desk-only. Never raises — a
-	notification failure must not disturb the deploy/build outcome.
-	"""
-	try:
-		from frappe.desk.doctype.notification_log.notification_log import enqueue_create_notification
-
-		email = frappe.db.get_value("User", user, "email") or user
-		enqueue_create_notification(
-			[email],
-			{
-				"type": "Alert",
-				"subject": subject,
-				"document_type": document_type,
-				"document_name": document_name,
-			},
-		)
-	except Exception:
-		frappe.log_error(
-			title=f"BenchPress notification failed: {document_name}",
-			message=frappe.get_traceback(),
-		)
+# The desk alert on a terminal deploy/build state. Shared with the enforcement sweep and the
+# reaper, which announce the same kind of thing about the same documents.
+_notify_owner = notify_owner
 
 
 def create_site_in_container(
@@ -404,8 +382,20 @@ def redeploy_bench(bench_name: str) -> None:
 
 
 def _redeploy_bench(bench_name: str) -> None:
-	bench = frappe.get_doc("Bench Instance", bench_name)
+	teardown_bench(frappe.get_doc("Bench Instance", bench_name))
+	_deploy_bench(bench_name)
 
+
+def teardown_bench(bench) -> None:
+	"""Return an instance to `Draft`: container, volume and site database all gone.
+
+	The one teardown path in the app. A redeploy runs it before building the instance again, and
+	the reaper runs it and stops there — which is what makes a reaped instance one click from
+	running: the `Lab` it was built from, with its apps, branches, version and size, is untouched.
+
+	Every removal is best-effort. A volume that was already gone, or a database that never
+	existed, must not leave the instance stuck describing resources it no longer has.
+	"""
 	if bench.container_id:
 		try:
 			stop_container(bench.container_id)
@@ -416,18 +406,11 @@ def _redeploy_bench(bench_name: str) -> None:
 		except Exception:
 			pass  # best-effort
 
-	remove_bench_volume(bench_name)
-
-	if bench.database_server and bench.site_name:
-		from benchpress.mariadb_manager import drop_site_database
-
-		try:
-			drop_site_database(bench.database_server, bench.site_name)
-		except Exception:
-			pass  # best-effort
+	remove_bench_volume(bench.name)
+	_drop_site_database(bench)
 
 	# The container this bench was burning for is gone, so the session ends here. Without
-	# this the burning flag would survive the redeploy and the fresh container — which
+	# this the burning flag would survive the teardown and the fresh container — which
 	# `_deploy_bench` bills through the same idempotence guard — would run unmetered.
 	metering.on_bench_stopped(bench)
 
@@ -436,9 +419,18 @@ def _redeploy_bench(bench_name: str) -> None:
 	bench.status = "Draft"
 	bench.started_at = None
 	bench.save(ignore_permissions=True)
-	frappe.db.commit()
+	frappe.db.commit()  # nosemgrep -- the caller may redeploy next, which must see Draft
 
-	_deploy_bench(bench_name)
+
+def _drop_site_database(bench) -> None:
+	if not (bench.database_server and bench.site_name):
+		return
+	from benchpress.mariadb_manager import drop_site_database
+
+	try:
+		drop_site_database(bench.database_server, bench.site_name)
+	except Exception:
+		pass  # best-effort
 
 
 def _prepare_lab_image(lab, pipeline) -> None:

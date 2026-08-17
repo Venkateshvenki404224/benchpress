@@ -6,6 +6,7 @@ import {
 	imagePhrase,
 	joinWords,
 	labIdError,
+	sizePhrase,
 	slugify,
 } from "./labForm";
 
@@ -159,4 +160,38 @@ describe("buildSummary", () => {
 		// The image line follows the apps, not the title: the tag is a hash of the recipe.
 		expect(buildSummary({ ...form(), apps: [] })[0]).toContain("bare-bench");
 	});
+
+	it("leads with the size, priced, once one is chosen", () => {
+		expect(buildSummary(form(), size(), true)[0]).toBe("Small — 1 GB, 1 vCPU at 1 credits/hr");
+	});
+
+	it("names the size without a price when credits are off", () => {
+		expect(buildSummary(form(), size(), false)[0]).toBe("Small — 1 GB, 1 vCPU");
+	});
+
+	it("has one fewer line when no size is chosen", () => {
+		expect(buildSummary(form())).toHaveLength(buildSummary(form(), size(), true).length - 1);
+	});
 });
+
+describe("sizePhrase", () => {
+	it("is empty without a size, so a hand-tuned lab says nothing about one", () => {
+		expect(sizePhrase(undefined, true)).toBe("");
+	});
+
+	it("reads the limits the way every other surface does", () => {
+		expect(sizePhrase({ ...size(), memory_limit: "2g", cpu_cores: 2 }, false)).toBe(
+			"Small — 2 GB, 2 vCPU"
+		);
+	});
+});
+
+function size() {
+	return {
+		name: "Small",
+		size_label: "Small",
+		memory_limit: "1g",
+		cpu_cores: 1,
+		credits_per_hour: 1,
+	};
+}

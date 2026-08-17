@@ -39,13 +39,20 @@ def default_size():
 
 
 def size_for_lab(lab_doc):
-	"""Resolve a Lab's memory and cores to an `Instance Size`. Falls back to the default.
+	"""The `Instance Size` a Lab deploys at. Falls back to its resources, then to the default.
 
-	One indexed read builds the whole lookup table per request, so this stays O(1) per call
-	and never becomes an N+1 when pricing a list of labs.
+	The chosen size wins: `Lab.instance_size` is what the user picked and paid attention to the
+	price of. Resources are the fallback for a lab written before sizes existed, or hand-tuned by
+	a self-hoster, and the patch that mapped existing labs used exactly the same rule.
+
+	One indexed read builds the whole lookup table per request, so this stays O(1) per call and
+	never becomes an N+1 when pricing a list of labs.
 	"""
 	index = size_index()
-	key = size_key(lab_doc.memory_limit, lab_doc.cpu_cores)
+	chosen = index["by_name"].get(lab_doc.get("instance_size"))
+	if chosen:
+		return chosen
+	key = size_key(lab_doc.get("memory_limit"), lab_doc.get("cpu_cores"))
 	return index["by_resources"].get(key) or index["default"]
 
 
@@ -70,7 +77,7 @@ def size_key(memory_limit, cpu_cores) -> tuple[str, int]:
 
 
 def size_index() -> dict:
-	"""`{"by_resources": {(memory, cores): row}, "default": row | None}`, once per request."""
+	"""`{"rows", "by_name", "by_resources", "default"}` — built once per request."""
 	return local_cache(SIZE_INDEX_ATTRIBUTE, build_size_index)
 
 
@@ -96,6 +103,7 @@ def build_size_index() -> dict:
 	)
 	return {
 		"rows": rows,
+		"by_name": {row.name: row for row in rows},
 		"by_resources": {size_key(row.memory_limit, row.cpu_cores): row for row in rows},
 		"default": next((row for row in rows if row.is_default), None),
 	}

@@ -12,6 +12,9 @@
  * static copy.
  */
 
+import { rateLabel } from "@/utils/credits";
+import { cpuLabel, memoryLabel } from "@/utils/labSpecs";
+
 // `docker_manager.LAB_ID_RE` / `LAB_ID_MAX_LENGTH`, verbatim.
 const LAB_ID_RE = /^[a-z0-9]+([._-][a-z0-9]+)*$/;
 export const LAB_ID_MAX_LENGTH = 64;
@@ -84,19 +87,34 @@ export function imagePhrase(apps) {
 }
 
 /**
- * "What gets built", as four sentences derived from the form.
+ * The size line — the only line on the rail that names a price.
+ *
+ * Empty when no size is chosen, so a lab with hand-typed limits (a self-hoster's,
+ * or one written before sizes existed) simply has one fewer sentence rather than
+ * a sentence about nothing. The rate is omitted when credits are off.
+ */
+export function sizePhrase(size, creditsEnabled) {
+	if (!size) return "";
+	const specs = `${memoryLabel(size.memory_limit)}, ${cpuLabel(size.cpu_cores)}`;
+	const price = creditsEnabled ? ` at ${rateLabel(size.credits_per_hour)}` : "";
+	return `${size.size_label} — ${specs}${price}`;
+}
+
+/**
+ * "What gets built", as sentences derived from the form.
  *
  * The rail is the only place the form says what the user is actually creating,
  * so every line is computed — nothing here is a fixed string describing a
  * default that the fields above may already have changed.
  */
-export function buildSummary(form) {
+export function buildSummary(form, size, creditsEnabled) {
 	return [
+		sizePhrase(size, creditsEnabled),
 		imagePhrase(form.apps),
 		`Frappe ${form.frappe_version} ${appsPhrase(form.apps)}`,
 		accessPhrase(form),
 		"A site is created on first deploy, not at build time",
-	];
+	].filter(Boolean);
 }
 
 function appsPhrase(apps) {

@@ -55,6 +55,7 @@ def get_lab(name: str) -> dict:
 		"frappe_version": lab.frappe_version,
 		"status": lab.status,
 		"image_tag": lab.image_tag,
+		"instance_size": lab.instance_size,
 		"memory_limit": lab.memory_limit,
 		"cpu_cores": lab.cpu_cores,
 		"enable_ssh": lab.enable_ssh,

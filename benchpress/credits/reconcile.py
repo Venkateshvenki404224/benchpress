@@ -20,7 +20,7 @@ Two rules shape it, both learned the hard way:
 import frappe
 from frappe.utils import flt
 
-from benchpress.credits import account, config
+from benchpress.credits import account, config, passes
 
 # Floats accrue rounding; a difference smaller than this is arithmetic noise, not drift.
 TOLERANCE = 0.000001
@@ -54,14 +54,20 @@ def _correct_if_drifted(row, expected: dict) -> bool:
 
 
 def expected_burn_rates() -> dict:
-	"""`{user: credits_per_hour}` summed over the instances that are actually running."""
-	benches = frappe.get_all(BENCH, filters={"status": "Running"}, fields=["owner", "lab"])
+	"""`{user: credits_per_hour}` summed over the instances that are actually running.
+
+	Instances holding an `Always On Pass` contribute nothing: `metering` never starts a meter for
+	them, so counting them here would invent drift and "correct" a rate into existence.
+	"""
+	benches = frappe.get_all(BENCH, filters={"status": "Running"}, fields=["name", "owner", "lab"])
 	if not benches:
 		return {}
+	exempt = passes.active_pass_benches([bench.name for bench in benches])
 	rates = lab_rates({bench.lab for bench in benches})
 	totals: dict[str, float] = {}
 	for bench in benches:
-		totals[bench.owner] = flt(totals.get(bench.owner, 0.0)) + flt(rates.get(bench.lab, 0.0))
+		rate = 0.0 if bench.name in exempt else flt(rates.get(bench.lab, 0.0))
+		totals[bench.owner] = flt(totals.get(bench.owner, 0.0)) + rate
 	return totals
 
 
@@ -70,7 +76,7 @@ def lab_rates(lab_names: set) -> dict:
 	labs = frappe.get_all(
 		LAB,
 		filters={"name": ("in", list(lab_names))},
-		fields=["name", "memory_limit", "cpu_cores"],
+		fields=["name", "instance_size", "memory_limit", "cpu_cores"],
 	)
 	return {lab.name: _rate_for(lab) for lab in labs}
 

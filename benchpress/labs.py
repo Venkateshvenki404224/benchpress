@@ -24,6 +24,7 @@ LAB_FIELDS = [
 	"frappe_version",
 	"status",
 	"image_tag",
+	"instance_size",
 	"memory_limit",
 	"cpu_cores",
 	"owner",
@@ -86,16 +87,21 @@ def bench_label(lab_id: str) -> str:
 
 
 def get_lab_form_options() -> dict:
-	"""What the New lab form must not hand-type: the version enum and the defaults.
+	"""What the New lab form must not hand-type: the version enum, the sizes, and the defaults.
 
-	Both are declared on the Lab DocType. Restating them in the SPA would make a
-	new Frappe version a two-file change and let the two copies disagree.
+	All three are declared server-side — the enum and the defaults on the Lab DocType, the sizes as
+	`Instance Size` rows. Restating any of them in the SPA would make a new Frappe version or a
+	retuned price a two-file change and let the two copies disagree.
 	"""
+	from benchpress.credits import config
+
 	meta = frappe.get_meta("Lab")
 	versions = meta.get_field("frappe_version").options or ""
 	return {
 		"frappe_versions": [version for version in versions.split("\n") if version],
 		"defaults": {fieldname: meta.get_field(fieldname).default for fieldname in FORM_DEFAULTS},
+		"instance_sizes": config.instance_sizes(),
+		"credits_enabled": config.credits_enabled(),
 	}
 
 

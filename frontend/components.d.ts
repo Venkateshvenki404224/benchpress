@@ -30,6 +30,7 @@ declare module 'vue' {
     EnvironmentList: typeof import('./src/components/overview/EnvironmentList.vue')['default']
     HowItWorksCard: typeof import('./src/components/device/HowItWorksCard.vue')['default']
     InfrastructureCard: typeof import('./src/components/overview/InfrastructureCard.vue')['default']
+    InstanceSizePicker: typeof import('./src/components/lab/InstanceSizePicker.vue')['default']
     LabAppsTable: typeof import('./src/components/lab/LabAppsTable.vue')['default']
     LabErrorBanner: typeof import('./src/components/lab/LabErrorBanner.vue')['default']
     LabHeader: typeof import('./src/components/lab/LabHeader.vue')['default']
