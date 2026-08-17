@@ -26,7 +26,7 @@ class CreditAccount(Document):
 			self.burn_since = now_datetime()
 
 	@frappe.whitelist()
-	def post_adjustment(self, credits, reason: str):
+	def post_adjustment(self, credits: float, reason: str):
 		"""Move this balance by hand, in either direction, with the reason on the row.
 
 		The operator's path into the ledger. It exists as a document action rather than as a
@@ -37,7 +37,7 @@ class CreditAccount(Document):
 		account.adjust(self.name, credits, reason)
 
 	@frappe.whitelist()
-	def post_refund(self, order: str, credits, reason: str):
+	def post_refund(self, order: str, credits: float, reason: str):
 		"""Give credits back against the Razorpay order that granted them.
 
 		The money leaves Razorpay by somebody's hand — there is no gateway automation here on

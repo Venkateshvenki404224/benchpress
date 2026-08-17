@@ -19,6 +19,7 @@ Two queries and a dict, whatever the volume. Never a `get_doc` per order.
 """
 
 import frappe
+from frappe import _
 from frappe.utils import cint, cstr, flt
 
 from benchpress.credits import account, payments
@@ -29,30 +30,49 @@ SETTLED = "Settled"
 NOT_CREDITED = "Paid, not credited"
 UNBACKED = "Credited, no paid order"
 
-COLUMNS = [
-	{"label": "Status", "fieldname": "state", "fieldtype": "Data", "width": 170},
-	{
-		"label": "Order",
-		"fieldname": "order",
-		"fieldtype": "Link",
-		"options": payments.ORDER,
-		"width": 90,
-	},
-	{"label": "Payment", "fieldname": "payment_id", "fieldtype": "Data", "width": 160},
-	{"label": "Buyer", "fieldname": "buyer", "fieldtype": "Link", "options": "User", "width": 200},
-	{"label": "Paid (INR)", "fieldname": "amount", "fieldtype": "Currency", "width": 110},
-	{"label": "Bought", "fieldname": "bought", "fieldtype": "Data", "width": 200},
-	{"label": "Ledger Entry", "fieldname": "entry", "fieldtype": "Link", "options": LEDGER, "width": 130},
-	{"label": "Credits", "fieldname": "credits", "fieldtype": "Float", "width": 90},
-]
+
+def columns() -> list[dict]:
+	"""Built per call, not held as a module constant.
+
+	The labels are translated, and `_()` resolves against whoever is asking. Frozen at import time
+	it would answer in the language of the worker that happened to load the module first.
+	"""
+	return [
+		{"label": _("Status"), "fieldname": "state", "fieldtype": "Data", "width": 170},
+		{
+			"label": _("Order"),
+			"fieldname": "order",
+			"fieldtype": "Link",
+			"options": payments.ORDER,
+			"width": 90,
+		},
+		{"label": _("Payment"), "fieldname": "payment_id", "fieldtype": "Data", "width": 160},
+		{
+			"label": _("Buyer"),
+			"fieldname": "buyer",
+			"fieldtype": "Link",
+			"options": "User",
+			"width": 200,
+		},
+		{"label": _("Paid (INR)"), "fieldname": "amount", "fieldtype": "Currency", "width": 110},
+		{"label": _("Bought"), "fieldname": "bought", "fieldtype": "Data", "width": 200},
+		{
+			"label": _("Ledger Entry"),
+			"fieldname": "entry",
+			"fieldtype": "Link",
+			"options": LEDGER,
+			"width": 130,
+		},
+		{"label": _("Credits"), "fieldname": "credits", "fieldtype": "Float", "width": 90},
+	]
 
 
 def execute(filters=None):
 	if not payments.payments_available():
-		return COLUMNS, []
+		return columns(), []
 	orders = _paid_orders()
 	entries = _purchase_entries()
-	return COLUMNS, _rows(orders, entries)
+	return columns(), _rows(orders, entries)
 
 
 def _rows(orders: list, entries: dict) -> list[dict]:
