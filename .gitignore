@@ -67,3 +67,6 @@ benchpress/www/frontend.html
 graphify-out/
 specs/
 .serena/
+
+# Playwright run artifacts
+test-results/

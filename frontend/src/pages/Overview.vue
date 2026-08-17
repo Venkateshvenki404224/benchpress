@@ -1,5 +1,5 @@
 <template>
-	<div class="mx-auto max-w-[1180px] px-6 pb-10 pt-[22px]" data-test="overview">
+	<div class="page-shell" data-test="overview">
 		<OnboardingPanel v-if="showOnboarding" />
 
 		<div class="mb-3.5 flex flex-wrap items-end gap-3">

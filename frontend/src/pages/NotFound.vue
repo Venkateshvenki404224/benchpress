@@ -1,5 +1,5 @@
 <template>
-	<div class="mx-auto max-w-[1180px] px-6 pb-10 pt-6" data-test="not-found">
+	<div class="page-shell" data-test="not-found">
 		<SectionCard>
 			<EmptyState message="That page does not exist. It may have been renamed or removed.">
 				<template #action>

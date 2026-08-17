@@ -1,5 +1,5 @@
 <template>
-	<div class="mx-auto max-w-[1180px] px-6 pb-10 pt-[22px]" data-test="instances">
+	<div class="page-shell" data-test="instances">
 		<div class="mb-3.5 flex flex-wrap items-start gap-3">
 			<div>
 				<h1 class="text-title font-semibold text-ink-gray-9">Instances</h1>
@@ -58,13 +58,18 @@
 
 				<UsageBar v-else-if="column.key === 'usage'" :usage="usageOf(row)" />
 
-				<span v-else-if="column.key === 'site'" class="truncate text-xs text-ink-blue-3">
+				<!-- `truncate` only earns its ellipsis on a block: an inline span
+				     sizes to its own text, so the cell clips it mid-hash instead. -->
+				<span
+					v-else-if="column.key === 'site'"
+					class="block truncate text-xs text-ink-blue-3"
+				>
 					{{ row.domain || row.site_name || "—" }}
 				</span>
 
 				<span
 					v-else-if="column.key === 'owner'"
-					class="truncate text-meta text-ink-gray-5"
+					class="block truncate text-meta text-ink-gray-5"
 				>
 					{{ row.owner }}
 				</span>

@@ -1,5 +1,5 @@
 <template>
-	<div class="mx-auto max-w-[1080px] px-6 pb-10 pt-[22px]" :data-test="dataTest">
+	<div class="page-shell" :data-test="dataTest">
 		<BackLink :to="backTo" :label="backLabel" />
 
 		<div class="mb-3.5">

@@ -7,8 +7,14 @@
 	>
 		<ListView :columns="columns" :rows="rows" :options="tableOptions" row-key="name">
 			<!-- The design's column header is a strip flush with the card, not
-			     frappe-ui's floating rounded pill. -->
-			<ListHeader class="!mb-0 !rounded-none !bg-surface-gray-1 !px-4 !py-2.5" />
+			     frappe-ui's floating rounded pill. It carries the card's top
+			     radius itself: ListView's inner `overflow-x-auto` scroller
+			     defeats the card's `overflow-hidden` clip in Chrome, so the
+			     strip painted square corners over the rounded card. 10px, not
+			     11 — concentric with the card's radius inside its 1px border. -->
+			<ListHeader
+				class="!mb-0 !rounded-b-none !rounded-t-[10px] !bg-surface-gray-1 !px-4 !py-2.5"
+			/>
 			<ListRows />
 			<template #cell="cell">
 				<slot name="cell" v-bind="cell" />

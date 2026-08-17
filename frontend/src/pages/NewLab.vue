@@ -1,5 +1,5 @@
 <template>
-	<div class="mx-auto max-w-[1080px] px-6 pb-10 pt-[22px]" data-test="new-lab">
+	<div class="page-shell" data-test="new-lab">
 		<BackLink to="/labs" label="Labs" />
 
 		<div class="mb-3.5">
