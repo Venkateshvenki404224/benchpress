@@ -3,6 +3,8 @@
 
 import frappe
 from frappe import _
+from frappe.query_builder import DocType
+from frappe.query_builder.functions import Count
 
 from benchpress import image_cache, lab_detail, lab_templates, labs
 from benchpress.credits import account, metering, payments
@@ -107,11 +109,33 @@ def get_benches() -> list[dict]:
 		order_by="creation desc",
 	)
 
+	names = [bench["name"] for bench in benches]
+	apps = _counts_by_bench("Bench App", "parent", names)
+	sites = _counts_by_bench("Bench Site", "bench", names)
 	for bench in benches:
-		bench["app_count"] = frappe.db.count("Bench App", {"parent": bench["name"]})
-		bench["site_count"] = frappe.db.count("Bench Site", {"bench": bench["name"]})
+		bench["app_count"] = apps.get(bench["name"], 0)
+		bench["site_count"] = sites.get(bench["name"], 0)
 
 	return benches
+
+
+def _counts_by_bench(doctype: str, column: str, bench_names: list[str]) -> dict[str, int]:
+	"""Rows per bench, grouped in one query.
+
+	Counted one bench at a time before, so an admin's list cost two queries per row — and every
+	deploy now writes a `Bench Site`, so that table is no longer small enough to ignore.
+	"""
+	if not bench_names:
+		return {}
+	table = DocType(doctype)
+	rows = (
+		frappe.qb.from_(table)
+		.select(table[column].as_("bench"), Count("*").as_("total"))
+		.where(table[column].isin(bench_names))
+		.groupby(table[column])
+		.run(as_dict=True)
+	)
+	return {row.bench: row.total for row in rows}
 
 
 @frappe.whitelist()
@@ -233,7 +257,10 @@ def _drop_bench_site_databases(bench) -> None:
 		return
 	from benchpress.mariadb_manager import drop_site_database
 
-	sites = frappe.get_list("Bench Site", filters={"bench": bench.name}, fields=["site_name", "full_domain"])
+	# `get_all`, not `get_list`: a teardown has to be exhaustive, and `Bench Site` is read
+	# `if_owner`, so an admin deleting somebody else's instance would silently skip their sites
+	# and leave the databases behind.
+	sites = frappe.get_all("Bench Site", filters={"bench": bench.name}, fields=["site_name", "full_domain"])
 	for site in sites:
 		try:
 			drop_site_database(bench.database_server, site.full_domain or site.site_name)
