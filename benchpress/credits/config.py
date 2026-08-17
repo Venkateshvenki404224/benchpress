@@ -47,6 +47,11 @@ def size_for_lab(lab_doc):
 	return index["by_resources"].get(key) or index["default"]
 
 
+def instance_sizes() -> list[dict]:
+	"""Every size in display order. Shares the request-scoped index, so it costs no extra query."""
+	return size_index()["rows"]
+
+
 def active_packs() -> list[dict]:
 	"""Purchasable packs in display order. Read by the landing page and the buy dialog."""
 	return frappe.get_all(
@@ -89,6 +94,7 @@ def build_size_index() -> dict:
 		order_by="sort_order asc",
 	)
 	return {
+		"rows": rows,
 		"by_resources": {size_key(row.memory_limit, row.cpu_cores): row for row in rows},
 		"default": next((row for row in rows if row.is_default), None),
 	}

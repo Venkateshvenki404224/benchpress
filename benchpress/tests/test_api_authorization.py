@@ -10,13 +10,47 @@ Each denial test has a positive control so a guard that vacuously throws for
 everyone — or silently returns an empty result — is caught as a failure.
 """
 
+import importlib
+import pkgutil
 from unittest.mock import MagicMock, patch
 
 import frappe
 from frappe.tests import IntegrationTestCase
 
-from benchpress import api
+import benchpress
+from benchpress import api, waitlist
 from benchpress.benchpress.doctype.bench_instance import get_instance_id
+
+GUEST_WAITLIST_EMAIL = "authz-guest-waitlist@example.com"
+
+
+def _delete_waitlist_entry(email):
+	frappe.set_user("Administrator")
+	if frappe.db.exists("Waitlist Entry", email):
+		frappe.delete_doc("Waitlist Entry", email, force=True, ignore_permissions=True)
+
+
+def _guest_endpoints() -> set[str]:
+	"""Every `allow_guest` method this app registers.
+
+	Whitelisting happens at import time, so the whole package is walked first — otherwise the
+	inventory would only cover the modules this test file happens to import, and a guest endpoint
+	added elsewhere would go unnoticed.
+	"""
+	_import_every_module()
+	return {
+		f"{method.__module__}.{method.__name__}"
+		for method in frappe.guest_methods
+		if method.__module__.startswith("benchpress.")
+	}
+
+
+def _import_every_module() -> None:
+	for module in pkgutil.walk_packages(benchpress.__path__, prefix="benchpress."):
+		try:
+			importlib.import_module(module.name)
+		except Exception:
+			continue  # a module that cannot be imported cannot be serving guests either
 
 
 def _ensure_user(email, first_name, role=None):
@@ -144,6 +178,27 @@ class TestApiAuthorization(IntegrationTestCase):
 		self.assert_denied(lambda: api.get_code_server_credentials(bench))
 		self.assert_denied(lambda: api.get_bench_credentials(bench))
 		self.assert_denied(lambda: api.restart_code_server(bench))
+
+	def test_the_waitlist_is_the_only_door_open_to_guests(self):
+		"""Whitelisting an endpoint for Guest is a decision, not an accident.
+
+		`waitlist.join` is the one method the landing page needs, so the inventory of
+		`allow_guest` methods in this app must be exactly that one — a second one appearing here
+		means someone opened an endpoint to the internet without saying so.
+		"""
+		self.assertEqual(_guest_endpoints(), {"benchpress.waitlist.join"})
+
+	def test_guest_can_reach_the_waitlist(self):
+		frappe.set_user("Guest")
+		self.addCleanup(_delete_waitlist_entry, GUEST_WAITLIST_EMAIL)
+		self.addCleanup(setattr, frappe.flags, "mute_emails", frappe.flags.mute_emails)
+		frappe.flags.mute_emails = True
+
+		self.assertTrue(waitlist.join(GUEST_WAITLIST_EMAIL)["joined"])
+
+	def test_guest_denied_from_approving_the_waitlist(self):
+		frappe.set_user("Guest")
+		self.assert_denied(lambda: waitlist.approve([GUEST_WAITLIST_EMAIL]))
 
 	# --- Wrong-role (BenchPress User) blocked from admin-only endpoints -------
 

@@ -55,6 +55,7 @@ doctype_list_js = {
 	"Bench Instance": "public/js/list_view/bench_instance_list.js",
 	"Bench Site": "public/js/list_view/bench_site_list.js",
 	"Database Server": "public/js/list_view/database_server_list.js",
+	"Waitlist Entry": "public/js/list_view/waitlist_entry_list.js",
 }
 
 # doctype_tree_js = {"doctype" : "public/js/doctype_tree.js"}
