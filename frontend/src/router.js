@@ -5,56 +5,73 @@ import { userContext, waitForUserContext } from "./data/userContext";
 
 const ADMIN_ONLY_ROUTES = new Set(["NewLab", "LabTemplates", "Settings", "BuildLogs"]);
 
+// `meta.title` is the current crumb in the header breadcrumb.
 const routes = [
 	{
 		path: "/",
-		name: "Home",
-		component: () => import("@/pages/Labs.vue"),
+		name: "Overview",
+		meta: { title: "Overview" },
+		component: () => import("@/pages/Overview.vue"),
 	},
 	{
 		path: "/labs",
 		name: "Labs",
+		meta: { title: "Labs" },
 		component: () => import("@/pages/Labs.vue"),
 	},
 	{
 		path: "/bench-instances",
 		name: "BenchInstances",
+		meta: { title: "Instances" },
 		component: () => import("@/pages/BenchInstances.vue"),
 	},
 	{
 		path: "/labs/new",
 		name: "NewLab",
+		meta: { title: "New lab" },
 		component: () => import("@/pages/NewLab.vue"),
 	},
 	{
 		path: "/labs/templates",
 		name: "LabTemplates",
+		meta: { title: "Templates" },
 		component: () => import("@/pages/LabTemplates.vue"),
 	},
 	{
 		path: "/labs/:labId",
 		name: "LabDetail",
+		meta: { title: "Lab detail" },
 		component: () => import("@/pages/LabDetail.vue"),
 	},
 	{
 		path: "/deploy-logs",
 		name: "DeployLogs",
+		meta: { title: "Deploy history" },
 		component: () => import("@/pages/DeployLogs.vue"),
 	},
 	{
 		path: "/build-logs",
 		name: "BuildLogs",
+		meta: { title: "Build history" },
 		component: () => import("@/pages/BuildLogs.vue"),
 	},
 	{
 		path: "/devices",
 		name: "Devices",
+		meta: { title: "Devices" },
 		component: () => import("@/pages/Devices.vue"),
 	},
 	{
 		path: "/settings",
 		name: "Settings",
+		meta: { title: "Settings" },
 		component: () => import("@/pages/Settings.vue"),
+	},
+	{
+		path: "/:pathMatch(.*)*",
+		name: "NotFound",
+		meta: { title: "Not found" },
+		component: () => import("@/pages/NotFound.vue"),
 	},
 ];
 

@@ -4,7 +4,7 @@
 import frappe
 from frappe import _
 
-from benchpress import lab_templates
+from benchpress import lab_detail, lab_templates, labs
 from benchpress.permissions import (
 	get_bench_owner_filter,
 	is_admin,
@@ -17,54 +17,20 @@ from benchpress.permissions import (
 @frappe.whitelist()
 def get_labs() -> list[dict]:
 	require_app_user()
-	labs = frappe.get_list(
-		"Lab",
-		fields=[
-			"name",
-			"lab_id",
-			"title",
-			"description",
-			"frappe_version",
-			"status",
-			"image_tag",
-			"memory_limit",
-			"cpu_cores",
-		],
-		order_by="creation desc",
-	)
-	for lab in labs:
-		apps = frappe.get_list(
-			"Lab App",
-			filters={"parent": lab["name"]},
-			fields=["app_name"],
-			limit_page_length=50,
-			parent_doctype="Lab",
-		)
-		lab["app_names"] = [a["app_name"] for a in apps]
-		lab["app_count"] = len(apps)
-		lab["bench_count"] = frappe.db.count("Bench Instance", {"lab": lab["name"]})
-	return labs
+	return labs.get_labs()
 
 
 @frappe.whitelist()
 def get_lab(name: str) -> dict:
 	require_app_user()
-	lab = frappe.get_cached_doc("Lab", name)
-	return {
-		"name": lab.name,
-		"lab_id": lab.lab_id,
-		"title": lab.title,
-		"description": lab.description,
-		"frappe_version": lab.frappe_version,
-		"status": lab.status,
-		"image_tag": lab.image_tag,
-		"memory_limit": lab.memory_limit,
-		"cpu_cores": lab.cpu_cores,
-		"apps": [
-			{"app_name": a.app_name, "app_label": a.app_label, "git_url": a.git_url, "branch": a.branch}
-			for a in lab.apps
-		],
-	}
+	return lab_detail.get_lab(name)
+
+
+@frappe.whitelist()
+def get_lab_form_options() -> dict:
+	"""The Lab enum and defaults the New lab form builds itself from."""
+	require_admin()
+	return labs.get_lab_form_options()
 
 
 @frappe.whitelist()
@@ -74,7 +40,7 @@ def get_lab_templates() -> list[dict]:
 
 
 @frappe.whitelist()
-def create_lab_from_template(template: str, lab_id: str, title: str | None = None) -> dict:
+def create_lab_from_template(template: str, lab_id: str | None = None, title: str | None = None) -> dict:
 	require_admin()
 	name = lab_templates.create_lab_from_template(template, lab_id, title)
 	return {"name": name, "status": "Draft"}
@@ -259,6 +225,21 @@ def get_deploy_logs(bench_name: str) -> list[dict]:
 
 
 @frappe.whitelist()
+def get_build_history() -> dict:
+	"""Image-build runs. Scoped in `run_history`: Build Log has no query condition."""
+	from benchpress.run_history import get_build_history as _get_build_history
+
+	return _get_build_history()
+
+
+@frappe.whitelist()
+def get_deploy_history() -> dict:
+	from benchpress.run_history import get_deploy_history as _get_deploy_history
+
+	return _get_deploy_history()
+
+
+@frappe.whitelist()
 def add_device(device_name: str, device_type: str, public_key: str | None = None) -> dict:
 	require_app_user()
 	from benchpress.vpn_adapter import register_device
@@ -281,6 +262,15 @@ def list_devices() -> list[dict]:
 	from benchpress.vpn_adapter import list_devices as _list
 
 	return _list()
+
+
+@frappe.whitelist()
+def get_device_types() -> list[str]:
+	"""The device types register_device accepts, so no screen hand-types them."""
+	require_app_user()
+	from benchpress.vpn_adapter import DEVICE_TYPES
+
+	return DEVICE_TYPES
 
 
 @frappe.whitelist()
@@ -422,6 +412,31 @@ def restart_code_server(bench_name: str) -> dict:
 	if exit_code != 0:
 		frappe.throw(_("restart failed: {0}").format(output))
 	return {"ok": True}
+
+
+@frappe.whitelist()
+def get_overview() -> dict:
+	require_app_user()
+	from benchpress.overview import get_overview as _get_overview
+
+	return _get_overview()
+
+
+@frappe.whitelist()
+def get_vpn_status() -> dict:
+	require_app_user()
+	from benchpress.vpn_adapter import get_device_vpn_status
+
+	return get_device_vpn_status()
+
+
+@frappe.whitelist()
+def run_connection_test() -> list[dict]:
+	"""The user-facing tunnel test: their own peer, never the shared infrastructure."""
+	require_app_user()
+	from benchpress.connection_test import run_connection_test as _run_connection_test
+
+	return _run_connection_test()
 
 
 @frappe.whitelist()

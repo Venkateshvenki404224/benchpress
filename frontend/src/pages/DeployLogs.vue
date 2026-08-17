@@ -1,65 +1,46 @@
 <template>
-	<div class="p-4">
-		<h1 class="mb-4 text-xl font-semibold text-ink-gray-9">Deploy Logs</h1>
-
-		<div v-if="deployLogs.data?.length" class="space-y-4">
-			<div
-				v-for="log in deployLogs.data"
-				:key="log.name"
-				class="rounded-lg border border-outline-gray-1 bg-surface-white"
-			>
-				<!-- Log header -->
-				<div
-					class="flex cursor-pointer items-center justify-between px-4 py-3"
-					@click="toggleLog(log.name)"
-				>
-					<div class="flex items-center gap-3">
-						<Badge
-							:label="log.log_type"
-							:theme="
-								log.log_type === 'error'
-									? 'red'
-									: log.log_type === 'success'
-									? 'green'
-									: 'gray'
-							"
-						/>
-						<span class="text-sm font-medium text-ink-gray-8">{{
-							log.bench || log.name
-						}}</span>
-					</div>
-					<span class="text-xs text-ink-gray-5">{{ log.timestamp }}</span>
-				</div>
-
-				<!-- Expanded log viewer -->
-				<div v-if="expandedLog === log.name" class="border-t border-outline-gray-1">
-					<LogViewer :rawLog="log.message" />
-				</div>
-			</div>
-		</div>
-
-		<div v-else-if="deployLogs.loading" class="text-base text-ink-gray-5">Loading...</div>
-		<div v-else class="py-12 text-center text-base text-ink-gray-5">No deploy logs found.</div>
-	</div>
+	<RunHistory
+		title="Deploy history"
+		description="Every deploy of the benches you can see, newest first. Open a run to read its log on the lab."
+		back-to="/bench-instances"
+		back-label="Instances"
+		:columns="COLUMNS"
+		:rows="rows"
+		:loading="deployHistoryResource.loading"
+		empty-message="Nothing has been deployed yet. Deploy a lab and the run appears here."
+		empty-action="Go to Instances"
+		:window-days="history.window_days ?? 7"
+		:limit="history.limit ?? 0"
+		:truncated="Boolean(history.truncated)"
+		data-test="deploy-history"
+	/>
 </template>
 
 <script setup>
-import { ref } from "vue";
-import { createListResource, Badge } from "frappe-ui";
-import LogViewer from "@/components/LogViewer.vue";
+// The same table as Build history, with a bench as the subject. `bench_name` is
+// an md5, so a deploy row is named after the lab it deployed — `benchLabel` is
+// the one place that convention lives.
+import RunHistory from "@/components/RunHistory.vue";
+import { deployHistoryResource } from "@/data/runHistory";
+import { benchLabel } from "@/utils/labSpecs";
+import { computed, onMounted } from "vue";
 
-const expandedLog = ref(null);
+const COLUMNS = [
+	{ label: "Bench", key: "subject", width: "240px" },
+	{ label: "Result", key: "result", width: "112px" },
+	{ label: "Last step", key: "last_step", width: "210px" },
+	{ label: "Duration", key: "duration", width: "88px" },
+	{ label: "Started", key: "started", width: "104px" },
+];
 
-function toggleLog(name) {
-	expandedLog.value = expandedLog.value === name ? null : name;
-}
+onMounted(() => deployHistoryResource.reload());
 
-let deployLogs = createListResource({
-	doctype: "Deploy Log",
-	fields: ["name", "bench", "message", "log_type", "timestamp"],
-	orderBy: "timestamp desc",
-	start: 0,
-	pageLength: 20,
-	auto: true,
-});
+const history = computed(() => deployHistoryResource.data ?? {});
+
+const rows = computed(() =>
+	(history.value.rows ?? []).map((run) => ({
+		...run,
+		subject: benchLabel(run.lab) || run.bench,
+	}))
+);
 </script>

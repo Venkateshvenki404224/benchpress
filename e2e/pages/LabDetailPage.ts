@@ -1,128 +1,121 @@
 import { type Page, type Locator, expect } from "@playwright/test";
 import { BasePage } from "./BasePage";
 
+/**
+ * Lab detail, addressed entirely through `data-test`.
+ *
+ * The previous version matched `p.text-sm.text-ink-gray-6`, `.dialog`,
+ * `button:has(svg)` and an input placeholder — every one of which the redesign
+ * moved. Nothing here asserts on a class, a tag or a heading.
+ */
 export class LabDetailPage extends BasePage {
   readonly title: Locator;
-  readonly labIdBadge: Locator;
-  readonly description: Locator;
-  readonly buildImageButton: Locator;
-  readonly deployButton: Locator;
-  readonly stopButton: Locator;
-  readonly dashboardTab: Locator;
-  readonly sitesTab: Locator;
-  readonly connectionInfo: Locator;
+  readonly labId: Locator;
+  readonly primaryAction: Locator;
+  readonly overflowTrigger: Locator;
   readonly containerStatus: Locator;
-  readonly newSiteButton: Locator;
+  readonly connectionDetails: Locator;
+  readonly revealSecrets: Locator;
+  readonly errorBanner: Locator;
+  readonly pipeline: Locator;
+  readonly rawLog: Locator;
 
   constructor(page: Page) {
     super(page);
-    this.title = page.locator("h1").first();
-    this.labIdBadge = page.locator("code").first();
-    this.description = page.locator("p.text-sm.text-ink-gray-6").first();
-    this.buildImageButton = page.getByRole("button", {
-      name: /Build Image|Building/,
-    });
-    this.deployButton = page.getByRole("button", { name: "Deploy" });
-    this.stopButton = page.getByRole("button", { name: "Stop" });
-    this.dashboardTab = page.getByRole("tab", { name: "Dashboard" });
-    this.sitesTab = page.getByRole("tab", { name: "Sites" });
-    this.connectionInfo = page.locator("text=Connection Information");
-    this.containerStatus = page.locator("text=Container Status");
-    this.newSiteButton = page.getByRole("button", { name: "New Site" });
+    this.title = this.testId("lab-title");
+    this.labId = this.testId("lab-id");
+    this.primaryAction = this.testId("primary-action");
+    this.overflowTrigger = this.testId("lab-overflow");
+    this.containerStatus = this.testId("container-status");
+    this.connectionDetails = this.testId("connection-details");
+    this.revealSecrets = this.testId("reveal-secrets");
+    this.errorBanner = this.testId("lab-error-banner");
+    this.pipeline = this.testId("deploy-pipeline");
+    this.rawLog = this.testId("raw-log");
   }
 
-  async goto(labId: string) {
-    await this.gotoFrontend(`/labs/${labId}`);
+  /** One row of the deploy stepper; its state is a `data-state` attribute. */
+  step(key: string): Locator {
+    return this.testId(`step-${key}`);
   }
 
-  async expectLabLoaded() {
+  async expectStepState(key: string, state: string) {
+    await expect(this.step(key)).toHaveAttribute("data-state", state);
+  }
+
+  async openRawLog() {
+    await this.testId("raw-log-toggle").click();
+    await expect(this.testId("raw-log-body")).toBeVisible();
+  }
+
+  async goto(labName: string) {
+    await this.gotoFrontend(`/labs/${encodeURIComponent(labName)}`);
+    await this.expectLoaded();
+  }
+
+  async expectLoaded() {
     await expect(this.title).toBeVisible({ timeout: 15_000 });
   }
 
-  async expectLabTitle(title: string) {
+  async expectTitle(title: string) {
     await expect(this.title).toContainText(title);
+  }
+
+  async expectPrimaryAction(label: string | RegExp) {
+    await expect(this.primaryAction).toHaveText(label);
   }
 
   async clickTab(name: string) {
     await this.page.getByRole("tab", { name }).click();
-    await this.page.waitForTimeout(500);
   }
 
-  async clickBuildImage() {
-    await this.buildImageButton.click();
+  /** A menu item in the `⋯` menu, which frappe-ui portals to the body. */
+  menuItem(name: string): Locator {
+    return this.page.getByRole("menuitem", { name });
   }
 
-  async clickDeploy() {
-    await this.deployButton.click();
-    await this.page.waitForTimeout(500);
+  async openOverflow() {
+    await this.overflowTrigger.click();
+    await expect(this.page.getByRole("menu")).toBeVisible();
   }
 
-  async confirmDeploy() {
-    const dialog = this.page.locator(".dialog, [class*='dialog']");
-    await expect(dialog.locator("text=Deploy Lab")).toBeVisible();
-    await dialog.getByRole("button", { name: "Deploy" }).click();
+  /** The confirmation frappe-ui's `ConfirmDialog` opens. */
+  dialog(): Locator {
+    return this.page.getByRole("dialog");
   }
 
-  async clickStop() {
-    await this.stopButton.click();
-    await this.page.waitForTimeout(500);
+  async confirm() {
+    await this.dialog().getByRole("button", { name: "Confirm" }).click();
   }
 
-  async confirmStop() {
-    const dialog = this.page.locator(".dialog, [class*='dialog']");
-    await expect(dialog.locator("text=Stop Bench")).toBeVisible();
-    await dialog.getByRole("button", { name: "Stop" }).click();
+  /**
+   * The masked input for a secret.
+   *
+   * `FormControl` forwards unrecognised attributes to the `<input>` itself, so
+   * the hook lands on the control, not on a wrapper around it.
+   */
+  secret(field: string): Locator {
+    return this.testId(`secret-${field}`);
   }
 
-  async expectConnectionInfoVisible() {
-    await expect(this.connectionInfo).toBeVisible();
-  }
-
-  async expectContainerStatusVisible() {
-    await expect(this.containerStatus).toBeVisible();
-  }
-
-  async expectNoActiveDeployment() {
-    await expect(
-      this.page.locator("text=No active deployment")
-    ).toBeVisible();
-  }
-
-  async getAppBadges(): Promise<string[]> {
-    const badges = this.page.locator(
-      "text=Installed Apps ~ .flex-wrap .badge, text=Installed Apps ~ div .badge"
-    );
-    const count = await badges.count();
-    const texts: string[] = [];
-    for (let i = 0; i < count; i++) {
-      texts.push((await badges.nth(i).textContent()) || "");
-    }
-    return texts;
+  async copyField(field: string) {
+    await this.testId(`copy-${field}`).click();
   }
 
   async openNewSiteDialog() {
     await this.clickTab("Sites");
-    await this.newSiteButton.click();
-    await expect(
-      this.page.locator("text=Create New Site")
-    ).toBeVisible();
+    await this.testId("new-site").click();
+    await expect(this.testId("site-name-input")).toBeVisible();
   }
 
   async fillNewSiteForm(siteName: string, apps: string[] = []) {
-    await this.page
-      .locator('input[placeholder*="mysite"]')
-      .fill(siteName);
+    await this.testId("site-name-input").fill(siteName);
     for (const app of apps) {
-      await this.page.locator(`label:has-text("${app}") input`).check();
+      await this.testId(`site-app-${app}`).check();
     }
   }
 
   async submitNewSite() {
-    await this.page.getByRole("button", { name: "Create Site" }).click();
-  }
-
-  async copyConnectionField(label: string) {
-    const row = this.page.locator(`label:has-text("${label}")`).locator("..");
-    await row.locator('button[class*="copy"], button:has(svg)').click();
+    await this.testId("create-site").click();
   }
 }

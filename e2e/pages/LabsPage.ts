@@ -1,78 +1,93 @@
-import { type Page, type Locator, expect } from "@playwright/test";
+import { type Locator, type Page, expect } from "@playwright/test";
 import { BasePage } from "./BasePage";
 
+/**
+ * Labs table. Every locator is a `data-test` hook, so the next redesign of the
+ * markup does not break this suite — the previous version matched a search
+ * placeholder string and a heading tag, both of which changed in phase 2.
+ */
 export class LabsPage extends BasePage {
-  readonly heading: Locator;
+  readonly page: Page;
+  readonly root: Locator;
+  readonly table: Locator;
   readonly searchInput: Locator;
-  readonly statusCombobox: Locator;
-  readonly versionCombobox: Locator;
-  readonly emptyState: Locator;
-  readonly loadingState: Locator;
+  readonly statusFilter: Locator;
+  readonly versionFilter: Locator;
+  readonly ownerFilter: Locator;
+  readonly onboardingPanel: Locator;
+  readonly clearFilters: Locator;
+  readonly newLabButton: Locator;
+  readonly fromTemplateButton: Locator;
+  readonly buildHistoryButton: Locator;
 
   constructor(page: Page) {
     super(page);
-    this.heading = page.locator("h1", { hasText: "Labs" });
-    this.searchInput = page.locator(
-      'input[placeholder*="Search by Lab ID"]'
-    );
-    this.statusCombobox = page
-      .locator('button[role="combobox"]')
-      .filter({ hasText: /Status/ })
-      .first();
-    this.versionCombobox = page
-      .locator('button[role="combobox"]')
-      .filter({ hasText: /Version/ })
-      .first();
-    this.emptyState = page.locator("text=No labs");
-    this.loadingState = page.locator("text=Loading...");
+    this.page = page;
+    this.root = this.testId("labs");
+    this.table = this.testId("labs-table");
+    // FormControl forwards attributes to the input itself, so the hook is the input.
+    this.searchInput = this.testId("labs-search");
+    this.statusFilter = this.testId("filter-status");
+    this.versionFilter = this.testId("filter-version");
+    this.ownerFilter = this.testId("filter-owner");
+    this.onboardingPanel = this.testId("onboarding-panel");
+    this.clearFilters = this.testId("clear-filters");
+    this.newLabButton = this.testId("new-lab");
+    this.fromTemplateButton = this.testId("from-template");
+    this.buildHistoryButton = this.testId("build-history");
   }
 
   async goto() {
     await this.gotoFrontend("/labs");
+    await this.root.waitFor({ timeout: 15_000 });
+  }
+
+  row(labName: string): Locator {
+    return this.testId(`lab-${labName}`);
   }
 
   async search(query: string) {
     await this.searchInput.fill(query);
-    await this.page.waitForTimeout(300);
   }
 
   async clearSearch() {
-    await this.searchInput.clear();
-    await this.page.waitForTimeout(300);
+    await this.searchInput.fill("");
   }
 
-  async selectComboboxOption(
-    combobox: Locator,
-    optionLabel: string
-  ) {
-    await combobox.click();
-    await this.page
-      .locator('[role="option"]', { hasText: optionLabel })
-      .click();
-    await this.page.waitForTimeout(300);
+  /** Pick an option in one of the three filter dropdowns. */
+  async selectFilter(filter: Locator, optionLabel: string) {
+    await filter.click();
+    await this.page.getByRole("option", { name: optionLabel, exact: true }).click();
   }
 
   async filterByStatus(status: string) {
-    await this.selectComboboxOption(this.statusCombobox, status);
+    await this.selectFilter(this.statusFilter, status);
   }
 
   async filterByVersion(version: string) {
-    await this.selectComboboxOption(this.versionCombobox, version);
+    await this.selectFilter(this.versionFilter, version);
   }
 
-  async getNewLabButton(): Promise<Locator> {
-    return this.page.locator('button:has-text("New Lab")');
+  async expectRowVisible(labName: string) {
+    await expect(this.row(labName)).toBeVisible({ timeout: 10_000 });
   }
 
-  async expectNewLabButtonVisible() {
-    await expect(
-      this.page.locator('button:has-text("New Lab")')
-    ).toBeVisible({ timeout: 10_000 });
+  async expectRowHidden(labName: string) {
+    await expect(this.row(labName)).toHaveCount(0);
   }
 
-  async expectNewLabButtonHidden() {
-    await expect(
-      this.page.locator('button:has-text("New Lab")')
-    ).not.toBeVisible();
+  /** The status pill for a row — proves the status is a badge, not grey text. */
+  statusBadge(labName: string, status: string): Locator {
+    return this.testId(`status-${status}`);
+  }
+
+  async expectAdminActionsVisible() {
+    await expect(this.newLabButton).toBeVisible({ timeout: 10_000 });
+    await expect(this.buildHistoryButton).toBeVisible();
+  }
+
+  async expectAdminActionsHidden() {
+    await expect(this.newLabButton).toHaveCount(0);
+    await expect(this.buildHistoryButton).toHaveCount(0);
   }
 }

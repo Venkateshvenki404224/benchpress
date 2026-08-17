@@ -1,40 +1,56 @@
-import { test, expect } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 import { BenchInstancesPage } from "./pages/BenchInstancesPage";
 
 test.describe("Bench Instances Page", () => {
-  test("loads and displays page heading", async ({ page }) => {
+  test("loads the page and states who the list is scoped to", async ({ page }) => {
     const instancesPage = new BenchInstancesPage(page);
     await instancesPage.goto();
-    await instancesPage.expectPageLoaded();
+
+    await expect(instancesPage.root).toBeVisible();
+    await instancesPage.expectScopedTo(/across all owners|Containers you own/);
   });
 
-  test("shows empty state when no instances exist", async ({ page }) => {
+  test("carries the Deploy history action", async ({ page }) => {
     const instancesPage = new BenchInstancesPage(page);
     await instancesPage.goto();
-    await instancesPage.waitForPageLoad();
 
-    const emptyVisible = await page
-      .locator("text=No bench instances found")
-      .isVisible();
+    await expect(instancesPage.deployHistoryButton).toBeVisible();
+    await instancesPage.deployHistoryButton.click();
+    await page.waitForURL("**/deploy-logs");
+  });
 
-    if (emptyVisible) {
-      await expect(
-        page.locator("text=Deploy a lab to create one")
-      ).toBeVisible();
+  test("shows the six columns, or an empty state that offers a next step", async ({
+    page,
+  }) => {
+    const instancesPage = new BenchInstancesPage(page);
+    await instancesPage.goto();
+
+    if (await instancesPage.table.count()) {
+      for (const column of [
+        "Bench",
+        "Status",
+        "Health",
+        "CPU / memory",
+        "Site",
+        "Owner",
+      ]) {
+        await expect(instancesPage.table).toContainText(column);
+      }
+    } else {
+      await instancesPage.expectEmptyState();
+      await expect(instancesPage.root).toContainText("Start from a template");
     }
   });
 
-  test("page renders without errors", async ({ page }) => {
+  test("never renders a blank health pill", async ({ page }) => {
     const instancesPage = new BenchInstancesPage(page);
     await instancesPage.goto();
-    await instancesPage.waitForPageLoad();
+    test.skip(!(await instancesPage.table.count()), "no benches on this site");
 
-    await expect(instancesPage.heading).toBeVisible();
-    const hasContent =
-      (await page
-        .locator("text=No bench instances found")
-        .isVisible()) ||
-      (await page.locator("text=Bench Name").isVisible());
-    expect(hasContent).toBeTruthy();
+    // container_health may be the empty string; it must read Unknown.
+    const pills = instancesPage.table.locator('[data-test^="status-"]');
+    for (const pill of await pills.all()) {
+      await expect(pill).not.toHaveText(/^\s*$/);
+    }
   });
 });

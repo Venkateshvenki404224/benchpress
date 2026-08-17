@@ -1,152 +1,159 @@
 <template>
-	<div class="p-4">
-		<div class="mb-4 flex items-center justify-between">
-			<div>
-				<h1 class="text-xl font-semibold text-ink-gray-9">Lab Templates</h1>
-				<p class="mt-1 text-sm text-ink-gray-5">
-					Spin up a ready-made stack in one click, then tweak it like any other lab.
-				</p>
-			</div>
-			<Button appearance="minimal" @click="$router.push('/labs')">Back to Labs</Button>
+	<div class="mx-auto max-w-[1180px] px-6 pb-10 pt-[22px]" data-test="templates">
+		<div class="mb-4">
+			<h1 class="text-title font-semibold text-ink-gray-9">Templates</h1>
+			<p class="mt-0.5 max-w-[600px] text-body text-ink-gray-5">
+				Ready-made recipes. Pick one and BenchPress creates the lab for you — no form to
+				fill in.
+			</p>
 		</div>
+
+		<p v-if="templates.loading && !rows.length" class="text-body text-ink-gray-5">
+			Loading templates…
+		</p>
 
 		<div
-			v-if="templates.data && templates.data.length"
-			class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3"
+			v-else-if="rows.length"
+			class="grid gap-3.5"
+			style="grid-template-columns: repeat(auto-fill, minmax(300px, 1fr))"
 		>
-			<div
-				v-for="template in templates.data"
+			<article
+				v-for="template in rows"
 				:key="template.key"
-				class="flex flex-col rounded-lg border border-outline-gray-1 bg-surface-white p-4"
+				class="flex flex-col rounded-card border border-outline-gray-1 bg-surface-white px-4 pb-3 pt-4 transition-shadow duration-150 ease-out hover:shadow-card-hover"
+				:data-test="`template-${template.key}`"
 			>
-				<div class="mb-2 flex items-start justify-between gap-2">
-					<h2 class="text-base font-medium text-ink-gray-8">{{ template.title }}</h2>
-					<Badge theme="blue" variant="subtle" :label="template.frappe_version" />
-				</div>
-				<p class="mb-3 flex-1 text-sm text-ink-gray-5">{{ template.description }}</p>
-
-				<div class="mb-3 flex flex-wrap gap-1">
-					<Badge
-						v-for="app in template.apps"
-						:key="app.app_name"
-						theme="gray"
-						variant="subtle"
-						:label="app.app_label || app.app_name"
-					/>
-					<Badge
-						v-if="!template.apps.length"
-						theme="gray"
-						variant="subtle"
-						label="Bare bench"
-					/>
-				</div>
-
-				<div class="mb-4 flex items-center gap-4 text-xs text-ink-gray-5">
-					<span>{{ template.memory_limit }} RAM</span>
+				<div class="flex items-center gap-2.5">
 					<span
-						>{{ template.cpu_cores }}
-						{{ template.cpu_cores === 1 ? "core" : "cores" }}</span
+						class="grid size-8 flex-none place-items-center rounded-md border border-outline-gray-1 bg-surface-white"
 					>
+						<AppIcon :app="markFor(template)" :size="20" />
+					</span>
+					<div class="min-w-0 flex-1">
+						<h2 class="truncate text-sm font-semibold text-ink-gray-9">
+							{{ template.title }}
+						</h2>
+						<p class="truncate text-meta text-ink-gray-4">
+							{{ template.frappe_version }}
+						</p>
+					</div>
+					<Badge
+						v-if="template.most_used"
+						theme="green"
+						variant="subtle"
+						size="sm"
+						label="Most used"
+						data-test="most-used"
+					/>
 				</div>
 
-				<Button class="w-full" appearance="primary" @click="openCreate(template)">
-					Use this template
-				</Button>
-			</div>
-		</div>
-		<div v-else-if="templates.loading" class="text-base text-ink-gray-5">Loading...</div>
-		<div v-else class="py-12 text-center text-base text-ink-gray-5">
-			No templates available.
+				<p class="mb-3 mt-2.5 min-h-[34px] text-xs text-ink-gray-6">
+					{{ template.description }}
+				</p>
+
+				<div class="mb-3 flex flex-wrap items-center gap-1.5">
+					<AppChip v-for="app in appsOf(template)" :key="app" :app="app" />
+					<span
+						v-for="chip in resourceChips(template)"
+						:key="chip"
+						class="rounded bg-surface-gray-2 px-1.5 py-0.5 text-2xs text-ink-gray-6"
+					>
+						{{ chip }}
+					</span>
+				</div>
+
+				<div class="mt-auto flex items-center gap-2 border-t border-outline-gray-1 pt-2.5">
+					<span class="text-meta text-ink-gray-4">{{
+						etaLabel(template.eta_minutes)
+					}}</span>
+					<Button
+						class="ml-auto"
+						variant="solid"
+						:loading="pendingKey === template.key"
+						:disabled="Boolean(pendingKey)"
+						:data-test="`use-template-${template.key}`"
+						@click="useTemplate(template)"
+					>
+						Use template
+					</Button>
+				</div>
+			</article>
 		</div>
 
-		<Dialog
-			:options="{ title: `New lab from ${selectedTemplate?.title || 'template'}` }"
-			v-model="showCreateDialog"
-		>
-			<template #body-content>
-				<div class="space-y-4">
-					<FormControl
-						label="Lab ID"
-						v-model="form.lab_id"
-						type="text"
-						placeholder="e.g. crm-lab"
-						description="Lowercase letters, numbers and single '.', '_' or '-' separators"
-						:required="true"
-					/>
-					<FormControl
-						label="Title"
-						v-model="form.title"
-						type="text"
-						:placeholder="selectedTemplate?.title"
-						description="Optional — defaults to the template name"
-					/>
-					<ErrorMessage :message="createAction.error" />
-				</div>
-			</template>
-			<template #actions>
-				<Button
-					appearance="primary"
-					class="w-full"
-					:loading="createAction.loading"
-					@click="createFromTemplate"
-				>
-					Create Lab
-				</Button>
-			</template>
-		</Dialog>
+		<SectionCard v-else :padded="false">
+			<EmptyState
+				message="The template catalog is empty — create a lab from scratch instead."
+			>
+				<template #action>
+					<Button variant="solid" @click="router.push('/labs/new')">New lab</Button>
+				</template>
+			</EmptyState>
+		</SectionCard>
+
+		<ErrorMessage class="mt-3" :message="createAction.error || deployAction.error" />
 	</div>
 </template>
 
 <script setup>
-import { reactive, ref } from "vue";
+import AppChip from "@/components/AppChip.vue";
+import AppIcon from "@/components/AppIcon.vue";
+import EmptyState from "@/components/EmptyState.vue";
+import SectionCard from "@/components/SectionCard.vue";
+import { openDeployRun } from "@/data/deployRun";
+import { labsResource } from "@/data/labs";
+import { cpuLabel, etaLabel, memoryLabel } from "@/utils/labSpecs";
+import { Badge, Button, ErrorMessage, createResource, toast } from "frappe-ui";
+import { computed, ref } from "vue";
 import { useRouter } from "vue-router";
-import {
-	Badge,
-	Button,
-	Dialog,
-	ErrorMessage,
-	FormControl,
-	createResource,
-	toast,
-} from "frappe-ui";
 
+// The catalog is `benchpress/lab_templates.py` — every entry, its apps, its
+// resources, its estimate and the "Most used" flag come from there. Nothing
+// about a template is restated in this file.
 const router = useRouter();
+const pendingKey = ref("");
 
-const showCreateDialog = ref(false);
-const selectedTemplate = ref(null);
-const form = reactive({ lab_id: "", title: "" });
+const templates = createResource({ url: "benchpress.api.get_lab_templates", auto: true });
 
-const templates = createResource({
-	url: "benchpress.api.get_lab_templates",
-	auto: true,
-});
+const rows = computed(() => templates.data ?? []);
 
-const createAction = createResource({
-	url: "benchpress.api.create_lab_from_template",
-	onSuccess(data) {
-		showCreateDialog.value = false;
-		toast.success("Lab created from template");
-		router.push({ name: "LabDetail", params: { labId: data.name } });
-	},
-});
+const createAction = createResource({ url: "benchpress.api.create_lab_from_template" });
+const deployAction = createResource({ url: "benchpress.api.create_bench" });
 
-function openCreate(template) {
-	selectedTemplate.value = template;
-	form.lab_id = "";
-	form.title = "";
-	createAction.error = null;
-	showCreateDialog.value = true;
+/** Every app a template installs; a bare bench is still Frappe. */
+function appsOf(template) {
+	const apps = template.apps.map((app) => app.app_name);
+	return apps.length ? apps : ["frappe"];
 }
 
-function createFromTemplate() {
-	if (!form.lab_id) {
-		toast.error("Lab ID is required");
-		return;
+/** The card's mark — the first app that is not Frappe itself. */
+function markFor(template) {
+	return appsOf(template).find((app) => app.toLowerCase() !== "frappe") || "frappe";
+}
+
+function resourceChips(template) {
+	return [memoryLabel(template.memory_limit), cpuLabel(template.cpu_cores)];
+}
+
+/**
+ * The whole loop from one click: the lab is created from the template, its
+ * bench is deployed, and the deploy dialog follows the run. `createResource`
+ * resolves with the last successful payload even when a call fails, so each
+ * step checks `error` before using its result.
+ */
+async function useTemplate(template) {
+	pendingKey.value = template.key;
+	try {
+		const lab = await createAction.submit({ template: template.key });
+		if (createAction.error || !lab?.name) return;
+		labsResource.reload();
+
+		const bench = await deployAction.submit({ data: JSON.stringify({ lab: lab.name }) });
+		if (deployAction.error || !bench?.name) return;
+
+		toast.success(`Deploying ${lab.name}.`);
+		openDeployRun({ labId: lab.name, benchName: bench.name });
+	} finally {
+		pendingKey.value = "";
 	}
-	createAction.submit({
-		template: selectedTemplate.value.key,
-		lab_id: form.lab_id,
-		title: form.title || null,
-	});
 }
 </script>

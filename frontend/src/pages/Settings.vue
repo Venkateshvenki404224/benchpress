@@ -1,124 +1,191 @@
 <template>
-	<div class="p-6">
-		<Dialog :options="{ title: 'Benchpress Settings', size: 'xl' }" v-model="showDialog">
-			<template #body-content>
-				<div v-if="settings.doc" class="space-y-6">
-					<!-- Docker Configuration -->
-					<div>
-						<h3 class="mb-3 text-sm font-semibold text-ink-gray-8">
-							Docker Configuration
-						</h3>
-						<div class="grid grid-cols-2 gap-4">
-							<FormControl
-								label="Base Domain"
-								v-model="form.base_domain"
-								type="text"
-							/>
-							<FormControl
-								label="Default Image"
-								v-model="form.default_image"
-								type="text"
-							/>
-							<FormControl
-								label="Traefik Network"
-								v-model="form.traefik_network"
-								type="text"
-							/>
-							<FormControl
-								label="Docker Socket"
-								v-model="form.docker_socket"
-								type="text"
-							/>
-						</div>
-					</div>
+	<div class="mx-auto max-w-[760px] px-6 pb-10 pt-[22px]" data-test="settings">
+		<div class="mb-4">
+			<h1 class="text-title font-semibold text-ink-gray-9">Settings</h1>
+			<p class="mt-0.5 max-w-[560px] text-body text-ink-gray-5">
+				Server-wide defaults. Changing them affects benches deployed from now on, not ones
+				already running.
+			</p>
+		</div>
 
-					<!-- Resource Limits -->
-					<div>
-						<h3 class="mb-3 text-sm font-semibold text-ink-gray-8">
-							Container Resource Limits
-						</h3>
-						<div class="grid grid-cols-2 gap-4">
+		<p v-if="!settings.doc" class="text-body text-ink-gray-5">Loading settings…</p>
+
+		<template v-else>
+			<div class="flex flex-col gap-4">
+				<SectionCard v-for="group in GROUPS" :key="group.title" :data-test="group.key">
+					<h2 class="text-sm font-semibold text-ink-gray-9">{{ group.title }}</h2>
+					<p class="mt-0.5 text-xs text-ink-gray-5">{{ group.note }}</p>
+
+					<div
+						class="mt-3.5 grid gap-3.5"
+						style="grid-template-columns: repeat(auto-fit, minmax(210px, 1fr))"
+					>
+						<div v-for="field in group.fields" :key="field.key">
 							<FormControl
-								label="Memory Limit"
-								v-model="form.container_memory_limit"
-								type="text"
-								description="e.g. 512m, 1g, 2g"
+								:label="field.label"
+								:type="field.type ?? 'text'"
+								:class="field.mono ? '[&_input]:font-mono [&_input]:text-xs' : ''"
+								v-model="form[field.key]"
+								:placeholder="field.placeholder"
+								:data-test="field.key"
 							/>
-							<FormControl
-								label="CPU Quota"
-								v-model="form.container_cpu_quota"
-								type="text"
-								description="Microseconds (100000 = 1 core)"
-							/>
+							<p v-if="field.help" class="mt-1.5 text-2xs text-ink-gray-5">
+								{{ field.help }}
+							</p>
+							<ErrorMessage class="mt-1" :message="errorFor(field.key)" />
 						</div>
 					</div>
+				</SectionCard>
+			</div>
+
+			<div
+				class="mt-4 flex flex-wrap items-center gap-2.5 rounded-card border border-outline-gray-1 bg-surface-white px-4 py-3"
+			>
+				<span class="text-xs text-ink-gray-5" data-test="last-saved">{{ lastSaved }}</span>
+				<div class="ml-auto flex items-center gap-2">
+					<Button
+						variant="subtle"
+						:disabled="!isDirty"
+						data-test="discard-settings"
+						@click="discard"
+					>
+						Discard
+					</Button>
+					<Button
+						variant="solid"
+						:loading="settings.setValue.loading"
+						:disabled="!isDirty"
+						data-test="save-settings"
+						@click="save"
+					>
+						Save settings
+					</Button>
 				</div>
-				<div v-else class="py-8 text-center text-sm text-ink-gray-5">
-					Loading settings...
-				</div>
-			</template>
-			<template #actions>
-				<div class="w-full space-y-2">
-					<ErrorMessage :message="settings.setValue.error" />
-					<div class="flex justify-end gap-2">
-						<Button @click="showDialog = false">Cancel</Button>
-						<Button
-							appearance="primary"
-							:loading="settings.setValue.loading"
-							@click="saveSettings"
-							>Save</Button
-						>
-					</div>
-				</div>
-			</template>
-		</Dialog>
+			</div>
+
+			<ErrorMessage class="mt-2" :message="settings.setValue.error" />
+		</template>
 	</div>
 </template>
 
 <script setup>
-import { ref, reactive, watch } from "vue";
-import { useRouter } from "vue-router";
-import { createDocumentResource, Dialog, FormControl, Button, ErrorMessage } from "frappe-ui";
+// Settings used to be a page whose entire body was a dialog opened on arrival,
+// closing back to /labs through a watcher — a modal over nothing. It is a page
+// now: three grouped cards on a narrow column and one save bar.
+//
+// `base_domain` is `reqd` on the DocType, so the form refuses an empty one
+// rather than letting the save come back as a server throw.
+import SectionCard from "@/components/SectionCard.vue";
+import {
+	Button,
+	ErrorMessage,
+	FormControl,
+	createDocumentResource,
+	dayjsLocal,
+	toast,
+} from "frappe-ui";
+import { computed, reactive } from "vue";
 
-const router = useRouter();
-const showDialog = ref(true);
+const GROUPS = [
+	{
+		key: "group-domains",
+		title: "Domains",
+		note: "How sites are addressed on the private network.",
+		fields: [
+			{
+				key: "base_domain",
+				label: "Base domain",
+				mono: true,
+				placeholder: "bp.local",
+				help: "Sites resolve as <site>.<base domain>",
+			},
+			{
+				key: "default_image",
+				label: "Default image",
+				mono: true,
+				help: "Used when a lab has no image of its own",
+			},
+		],
+	},
+	{
+		key: "group-docker",
+		title: "Docker",
+		note: "Where BenchPress talks to the daemon.",
+		fields: [
+			{ key: "docker_socket", label: "Docker socket", mono: true },
+			{
+				key: "traefik_network",
+				label: "Traefik network",
+				mono: true,
+				help: "Containers join this network",
+			},
+		],
+	},
+	{
+		key: "group-container",
+		title: "Container defaults",
+		note: "Applied to new labs unless overridden.",
+		fields: [
+			{ key: "container_memory_limit", label: "Memory limit", help: "e.g. 512m, 1g, 2g" },
+			{
+				key: "container_cpu_quota",
+				label: "CPU quota",
+				type: "number",
+				help: "Microseconds — 100000 is one core",
+			},
+			{ key: "code_server_version", label: "Code server version", mono: true },
+		],
+	},
+];
 
-const form = reactive({
-	base_domain: "",
-	default_image: "",
-	traefik_network: "",
-	docker_socket: "",
-	container_memory_limit: "",
-	container_cpu_quota: "",
-});
+const FIELDS = GROUPS.flatMap((group) => group.fields.map((field) => field.key));
+const REQUIRED = { base_domain: "A base domain is required — sites are addressed under it." };
+
+const form = reactive(Object.fromEntries(FIELDS.map((field) => [field, ""])));
 
 const settings = createDocumentResource({
 	doctype: "BenchPress Settings",
 	name: "BenchPress Settings",
-	onSuccess(doc) {
-		Object.assign(form, {
-			base_domain: doc.base_domain || "",
-			default_image: doc.default_image || "",
-			traefik_network: doc.traefik_network || "",
-			docker_socket: doc.docker_socket || "",
-			container_memory_limit: doc.container_memory_limit || "",
-			container_cpu_quota: doc.container_cpu_quota || "",
-		});
-	},
+	auto: true,
+	onSuccess: fillForm,
 	setValue: {
 		onSuccess() {
-			showDialog.value = false;
+			toast.success("Settings saved.");
 		},
 	},
 });
 
-function saveSettings() {
+function fillForm(doc) {
+	for (const field of FIELDS) {
+		form[field] = doc[field] ?? "";
+	}
+}
+
+const isDirty = computed(() =>
+	FIELDS.some((field) => String(form[field] ?? "") !== String(settings.doc?.[field] ?? ""))
+);
+
+/** Who last changed the server's defaults, and when. */
+const lastSaved = computed(() => {
+	const doc = settings.doc;
+	if (!doc?.modified) return "Never saved";
+	return `Last saved by ${doc.modified_by}, ${dayjsLocal(doc.modified).format("D MMMM")}`;
+});
+
+function errorFor(field) {
+	return String(form[field] ?? "").trim() ? "" : REQUIRED[field] ?? "";
+}
+
+function save() {
+	const missing = FIELDS.map(errorFor).filter(Boolean);
+	if (missing.length) {
+		toast.error(missing[0]);
+		return;
+	}
 	settings.setValue.submit({ ...form });
 }
 
-watch(showDialog, (val) => {
-	if (!val) {
-		router.push("/labs");
-	}
-});
+function discard() {
+	if (settings.doc) fillForm(settings.doc);
+}
 </script>

@@ -8,7 +8,9 @@ import frappe
 from frappe.tests import IntegrationTestCase
 
 from benchpress.vpn_adapter import (
+	PEER_STATUS_FIELDS,
 	get_device_config,
+	get_device_peer_status,
 	list_devices,
 	register_device,
 	unregister_device,
@@ -38,6 +40,8 @@ def _peer_row(**overrides):
 		public_key="PUB==",
 		rx_bytes=1024,
 		tx_bytes=2048,
+		last_handshake="2026-08-16 10:00:00",
+		creation="2026-08-01 09:30:00",
 	)
 	row.update(overrides)
 	return row
@@ -96,6 +100,9 @@ class TestListDevices(IntegrationTestCase):
 					"wg_public_key": "PUB==",
 					"wg_rx_bytes": 1024,
 					"wg_tx_bytes": 2048,
+					# Phase 5 needs the handshake; _as_device_row used to drop it.
+					"last_handshake": "2026-08-16 10:00:00",
+					"registered_on": "2026-08-01 09:30:00",
 				}
 			],
 		)
@@ -158,6 +165,14 @@ class TestDeviceOwnership(IntegrationTestCase):
 
 		self.assertEqual(get_device_config("PEER-00001"), "CONF")
 
+	@patch("benchpress.vpn_adapter.frappe.get_doc")
+	def test_non_owner_cannot_read_another_users_peer_status(self, mock_get_doc):
+		mock_get_doc.return_value = _fake_peer(owner_user="owner@example.com")
+		frappe.set_user("Guest")
+
+		with self.assertRaises(frappe.PermissionError):
+			get_device_peer_status("PEER-00001")
+
 
 class TestDeviceRoundTrip(IntegrationTestCase):
 	"""add → list → remove against real VPN Peer rows (reconcile enqueue stubbed out)."""
@@ -210,6 +225,16 @@ class TestDeviceRoundTrip(IntegrationTestCase):
 		self.assertEqual(rows[0]["device_name"], "Contract Phone")
 		self.assertEqual(rows[0]["device_type"], "Mobile")
 		self.assertEqual(rows[0]["wg_ip"], result["wg_ip"])
+
+		status = get_device_peer_status(result["name"])
+		# The owner-scoped status must stay the shape vpn_management's own
+		# endpoint returns — that endpoint is gated on VPN DocPerms no
+		# BenchPress role holds, so this wrapper is what the SPA reaches.
+		from vpn_management.api.peers import get_peer_status
+
+		self.assertEqual(set(status), set(get_peer_status(result["name"])))
+		self.assertEqual(set(status), set(PEER_STATUS_FIELDS))
+		self.assertEqual(status["assigned_ip"], result["wg_ip"])
 
 		unregister_device(result["name"])
 

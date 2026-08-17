@@ -10,5 +10,10 @@ def get_context(context):
 	"""Boot payload for the SPA shell — frappe-ui reads window.csrf_token from it."""
 	csrf_token = frappe.sessions.get_csrf_token()
 	frappe.db.commit()  # nosemgrep -- get_csrf_token writes the session store; the shell renders before the request transaction commits
-	context.boot = {"csrf_token": csrf_token}
+	context.boot = {
+		"csrf_token": csrf_token,
+		# Timestamps come back in the site's timezone; without this the SPA
+		# reads them as browser-local and relative times drift by the offset.
+		"system_timezone": frappe.utils.get_system_timezone(),
+	}
 	return context

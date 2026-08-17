@@ -62,8 +62,10 @@ yarn build
 ![Settings](images/settings.png)
 
 1. Start the bench: `bench start`
-2. Open BenchPress Settings in your browser: `/app/benchpress-settings`
-3. Set the **Base Domain** and review the container resource limits.
+2. Open **Settings** in the BenchPress sidebar: `/frontend/settings`
+3. Set the **Base domain** — it is required, and sites are addressed under it — then review the
+   Docker group and the container defaults. Both a System Manager and a BenchPress Admin can
+   save this screen.
 
 VPN configuration (server, pool, peers) lives in the vpn_management
 DocTypes in Desk — see [WireGuard Setup](wireguard-setup.md).
@@ -82,11 +84,20 @@ Open your browser to:
 http://your-site.localhost:8000/frontend
 ```
 
+The first screen is the **Overview**: what BenchPress is for, which of your environments are
+running, broken or building, and — when you have none — three steps to your first one.
+
+The sidebar is five items: Overview, Labs, Templates, Instances and Devices, with Settings at
+the bottom for admins. Build history and deploy history are not in the sidebar; they are
+reached from Labs and Instances respectively.
+
 ---
 
 ## Your First Lab and Bench
 
-Once BenchPress is running, follow the [Creating Labs](creating-labs.md) guide to create your first lab template and deploy a bench instance.
+The fastest route is **Templates** — pick a recipe and BenchPress creates the lab and deploys
+it in one click. To define an environment yourself, follow the
+[Creating Labs](creating-labs.md) guide.
 
 ---
 

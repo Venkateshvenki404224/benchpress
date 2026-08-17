@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 import frappe
 from frappe.tests import IntegrationTestCase
+from frappe.utils.data import get_datetime
 
 from benchpress import api
 from benchpress.benchpress.doctype.bench_instance import get_instance_id
@@ -34,7 +35,38 @@ BUDGETS_MS = {
 	"enqueue_redeploy": 400,
 	"enqueue_stop": 500,
 	"enqueue_start": 500,
+	"get_overview": 1200,
+	"get_vpn_status": 400,
+	"get_device_types": 200,
+	"run_connection_test": 800,
+	"get_lab_form_options": 200,
+	"get_build_history": 600,
+	"get_deploy_history": 600,
 }
+
+# The five rows benchpress.diagnostics always returns; the real checks talk to
+# Docker and MariaDB, so the Overview timing test never runs them.
+DIAGNOSTICS_ROWS = [
+	{"check": "docker_socket", "status": "pass", "hint": "Docker daemon reachable"},
+	{"check": "docker_network", "status": "pass", "hint": "benchpress network exists"},
+	{"check": "mariadb", "status": "pass", "hint": "MariaDB responding"},
+	{"check": "redis", "status": "fail", "hint": "benchpress-redis container not found"},
+	{"check": "vpn_server", "status": "pass", "hint": "WireGuard server 'wg0' configured"},
+]
+
+
+# A real failed build tail: the pipeline brackets each step with `=== … ===`
+# and ends the run with its own failure marker.
+FAILED_BUILD_LOG = "\n".join(
+	[
+		"=== Build started ===",
+		"Step 1/3 : FROM frappe/base:version-15",
+		"=== Installing apps ===",
+		"fatal: repository 'https://github.com/frappe/nope' not found",
+		"=== Build failed: app install exited 128 ===",
+		"Cleanup: removed the half-built image",
+	]
+)
 
 
 def _timed(function):
@@ -82,6 +114,37 @@ def _ensure_bench(lab, **extra):
 	).insert(ignore_permissions=True)
 
 
+def _count_queries(action) -> int:
+	"""How many statements `action` sends to MariaDB.
+
+	`assertQueryCount` asserts a ceiling, which cannot express "flat regardless
+	of row count" — an absolute number would also be dominated by frappe's
+	one-off DocType and permission meta loads and would pass or fail on test
+	ordering. Counting twice and comparing does express it.
+	"""
+	count = 0
+	original_sql = frappe.db.__class__.sql
+
+	def counting_sql(*args, **kwargs):
+		nonlocal count
+		count += 1
+		return original_sql(*args, **kwargs)
+
+	frappe.db.__class__.sql = counting_sql
+	try:
+		action()
+	finally:
+		frappe.db.__class__.sql = original_sql
+	return count
+
+
+def _delete_labs(labs):
+	frappe.set_user("Administrator")
+	for lab in labs:
+		frappe.delete_doc("Lab", lab.name, force=True, ignore_permissions=True)
+	frappe.db.commit()
+
+
 class TestApi(IntegrationTestCase):
 	@classmethod
 	def setUpClass(cls):
@@ -92,9 +155,21 @@ class TestApi(IntegrationTestCase):
 			cls.lab,
 			status="Running",
 			container_id="ci-container",
+			container_health="Unhealthy",
+			last_health_check=frappe.utils.now_datetime(),
 			code_server_url="http://localhost:8443",
 			code_server_password="cs-secret",
 		)
+		cls.failed_lab = _ensure_lab("api-timing-failed-lab", status="Error")
+		cls.failed_build_log = frappe.get_doc(
+			{
+				"doctype": "Build Log",
+				"lab": cls.failed_lab.name,
+				"log_type": "error",
+				"message": FAILED_BUILD_LOG,
+				"timestamp": frappe.utils.now_datetime(),
+			}
+		).insert(ignore_permissions=True)
 		cls.action_lab = _ensure_lab("api-timing-action-lab")
 		cls.action_bench = _ensure_bench(cls.action_lab, status="Stopped", container_id="ci-action")
 		cls.create_lab = _ensure_lab("api-timing-create-lab", apps=[_lab_app()])
@@ -113,7 +188,8 @@ class TestApi(IntegrationTestCase):
 	def tearDownClass(cls):
 		frappe.set_user("Administrator")
 		frappe.delete_doc("Deploy Log", cls.deploy_log.name, force=True, ignore_permissions=True)
-		for lab in (cls.lab, cls.action_lab, cls.create_lab):
+		frappe.delete_doc("Build Log", cls.failed_build_log.name, force=True, ignore_permissions=True)
+		for lab in (cls.lab, cls.action_lab, cls.create_lab, cls.failed_lab):
 			bench_name = get_instance_id("Administrator", lab.name)
 			if frappe.db.exists("Bench Instance", bench_name):
 				frappe.delete_doc("Bench Instance", bench_name, force=True, ignore_permissions=True)
@@ -137,16 +213,84 @@ class TestApi(IntegrationTestCase):
 		labs, elapsed_ms = _timed(api.get_labs)
 		self.assertIsInstance(labs, list)
 		for lab in labs:
-			self.assertIn("app_names", lab)
-			self.assertIn("app_count", lab)
-			self.assertIn("bench_count", lab)
+			for key in ("app_names", "app_count", "bench_count", "deployed_as", "last_run"):
+				self.assertIn(key, lab)
 		self.assert_within_budget("get_labs", elapsed_ms)
+
+	def test_get_labs_reports_where_a_lab_is_deployed(self):
+		row = self._lab_row(api.get_labs(), self.lab.name)
+		self.assertEqual(row["deployed_as"]["bench"], self.bench.name)
+		self.assertEqual(row["deployed_as"]["status"], "Running")
+		self.assertEqual(row["bench_count"], 1)
+
+	def test_get_labs_says_never_deployed_rather_than_leaving_a_blank(self):
+		row = self._lab_row(api.get_labs(), self.create_lab.name)
+		self.assertIsNone(row["deployed_as"])
+		self.assertIsNone(row["last_run"])
+		self.assertEqual(row["bench_count"], 0)
+
+	def test_get_labs_last_run_is_the_newest_container_start(self):
+		started = frappe.utils.now_datetime()
+		frappe.db.set_value("Bench Instance", self.bench.name, "started_at", started)
+		row = self._lab_row(api.get_labs(), self.lab.name)
+		self.assertEqual(get_datetime(row["last_run"]), get_datetime(started))
+
+	def test_get_labs_query_count_does_not_scale_with_lab_count(self):
+		"""An N+1 regression fails here: four more labs must cost no more queries."""
+		api.get_labs()  # warm the DocType meta and permission caches
+		baseline = _count_queries(api.get_labs)
+
+		extra = [_ensure_lab(f"api-timing-n1-{index}", apps=[_lab_app()]) for index in range(4)]
+		self.addCleanup(_delete_labs, extra)
+		frappe.db.commit()
+		api.get_labs()
+
+		grown = _count_queries(api.get_labs)
+		self.assertEqual(
+			grown,
+			baseline,
+			f"{len(extra)} more labs cost {grown - baseline} more queries — the N+1 is back",
+		)
+		self.assertGreaterEqual(len(api.get_labs()), len(extra) + 3)
+
+	def _lab_row(self, labs, name):
+		row = next((lab for lab in labs if lab["name"] == name), None)
+		self.assertIsNotNone(row, f"{name} missing from get_labs")
+		return row
 
 	def test_get_lab_shape_and_timing(self):
 		lab, elapsed_ms = _timed(lambda: api.get_lab(self.lab.name))
 		self.assertEqual(lab["name"], self.lab.name)
 		self.assertIsInstance(lab["apps"], list)
+		for key in ("bench", "sites", "failure", "enable_ssh", "enable_code_server"):
+			self.assertIn(key, lab)
 		self.assert_within_budget("get_lab", elapsed_ms)
+
+	def test_get_lab_carries_both_status_axes_of_the_bench(self):
+		"""A Running bench can be Unhealthy — the card cannot draw one from the other."""
+		bench = api.get_lab(self.lab.name)["bench"]
+
+		self.assertEqual(bench["name"], self.bench.name)
+		self.assertEqual(bench["status"], "Running")
+		self.assertEqual(bench["container_health"], "Unhealthy")
+		self.assertIsNotNone(bench["last_health_check"])
+
+	def test_get_lab_reports_no_bench_for_an_undeployed_lab(self):
+		lab = api.get_lab(self.create_lab.name)
+
+		self.assertIsNone(lab["bench"])
+		self.assertEqual(lab["sites"], [])
+
+	def test_get_lab_names_the_failing_step_and_its_reason(self):
+		failure = api.get_lab(self.failed_lab.name)["failure"]
+
+		self.assertEqual(failure["source"], "build")
+		self.assertEqual(failure["step"], "Installing apps")
+		self.assertEqual(failure["reason"], "app install exited 128")
+		self.assertEqual(failure["log"], self.failed_build_log.name)
+
+	def test_get_lab_reports_no_failure_when_nothing_failed(self):
+		self.assertIsNone(api.get_lab(self.lab.name)["failure"])
 
 	def test_get_lab_templates_shape_and_timing(self):
 		templates, elapsed_ms = _timed(api.get_lab_templates)
@@ -185,6 +329,179 @@ class TestApi(IntegrationTestCase):
 		for key in ("name", "message", "log_type", "timestamp"):
 			self.assertIn(key, logs[0])
 		self.assert_within_budget("get_deploy_logs", elapsed_ms)
+
+	def test_get_overview_shape_and_timing(self):
+		with patch("benchpress.diagnostics.run_diagnostics", return_value=DIAGNOSTICS_ROWS):
+			overview, elapsed_ms = _timed(api.get_overview)
+
+		for key in ("is_admin", "first_name", "counts", "deploy_time", "environments", "activity"):
+			self.assertIn(key, overview)
+		for key in ("total", "running", "stopped", "needs_attention"):
+			self.assertIn(key, overview["counts"])
+		self.assertEqual(overview["counts"]["total"], overview["environment_count"])
+		self.assertIn(self.bench.name, [row["name"] for row in overview["environments"]])
+		self.assert_within_budget("get_overview", elapsed_ms)
+
+	def test_get_overview_deploy_time_states_its_window(self):
+		with patch("benchpress.diagnostics.run_diagnostics", return_value=DIAGNOSTICS_ROWS):
+			deploy_time = api.get_overview()["deploy_time"]
+
+		# The caption may never outrun log retention (hooks.py: 7 days).
+		self.assertEqual(deploy_time["window_days"], 7)
+		self.assertIn("sample_size", deploy_time)
+		self.assertIn("average_label", deploy_time)
+
+	def test_get_overview_ignores_logs_older_than_retention(self):
+		# Log clearing only runs when the scheduler does, so rows past the
+		# horizon can still be in the table — the window is enforced in the query.
+		window_start = frappe.utils.add_days(frappe.utils.now_datetime(), -7)
+		stale = frappe.get_doc(
+			{
+				"doctype": "Deploy Log",
+				"bench": self.bench.name,
+				"log_type": "success",
+				"message": "run from a month ago",
+				"timestamp": frappe.utils.add_days(frappe.utils.now_datetime(), -30),
+			}
+		).insert(ignore_permissions=True)
+		self.addCleanup(frappe.delete_doc, "Deploy Log", stale.name, force=True, ignore_permissions=True)
+
+		with patch("benchpress.diagnostics.run_diagnostics", return_value=DIAGNOSTICS_ROWS):
+			overview = api.get_overview()
+
+		for event in overview["activity"]:
+			self.assertGreaterEqual(frappe.utils.get_datetime(event["timestamp"]), window_start)
+		average = overview["deploy_time"]["average_seconds"]
+		self.assertTrue(average is None or average < 86400, f"stale run leaked into the average: {average}")
+
+	def test_get_overview_infrastructure_is_the_real_diagnostics(self):
+		with patch("benchpress.diagnostics.run_diagnostics", return_value=DIAGNOSTICS_ROWS):
+			infrastructure = api.get_overview()["infrastructure"]
+
+		self.assertEqual([row["check"] for row in infrastructure], [r["check"] for r in DIAGNOSTICS_ROWS])
+		self.assertEqual(infrastructure[0]["status"], "Active")
+		self.assertEqual(infrastructure[3]["status"], "Error")
+		self.assertEqual(infrastructure[2]["label"], "MariaDB")
+
+	def test_get_vpn_status_shape_and_timing(self):
+		status, elapsed_ms = _timed(api.get_vpn_status)
+		for key in ("connected", "last_handshake", "peer_count", "stale_after_seconds"):
+			self.assertIn(key, status)
+		self.assertIsInstance(status["connected"], bool)
+		# One status poll interval, never a second threshold of our own.
+		self.assertEqual(status["stale_after_seconds"] % 60, 0)
+		self.assert_within_budget("get_vpn_status", elapsed_ms)
+
+	def test_get_overview_activity_names_a_bench_readably(self):
+		"""`bench_name` is an md5; activity is prose, so it uses the lab-derived label."""
+		with patch("benchpress.diagnostics.run_diagnostics", return_value=DIAGNOSTICS_ROWS):
+			activity = api.get_overview()["activity"]
+
+		event = next(row for row in activity if row.get("bench") == self.bench.name)
+		self.assertIn(f"bench-{self.lab.name}", event["message"])
+		self.assertNotIn(self.bench.name, event["message"])
+
+	def test_get_lab_form_options_comes_from_the_doctype(self):
+		options, elapsed_ms = _timed(api.get_lab_form_options)
+		versions = frappe.get_meta("Lab").get_field("frappe_version").options.split("\n")
+		self.assertEqual(options["frappe_versions"], [v for v in versions if v])
+		self.assertEqual(options["defaults"]["cpu_cores"], "1")
+		self.assert_within_budget("get_lab_form_options", elapsed_ms)
+
+	def test_get_build_history_shape_and_timing(self):
+		history, elapsed_ms = _timed(api.get_build_history)
+		self.assertEqual(history["window_days"], 7)
+		row = next(row for row in history["rows"] if row["name"] == self.failed_build_log.name)
+		for key in ("lab", "lab_title", "image_tag", "result", "last_step", "duration_label", "started"):
+			self.assertIn(key, row)
+		self.assertEqual(row["result"], "Failed")
+		# The fixture log's last marker before its failure line.
+		self.assertEqual(row["last_step"], "Installing apps")
+		self.assert_within_budget("get_build_history", elapsed_ms)
+
+	def test_get_deploy_history_shape_and_timing(self):
+		history, elapsed_ms = _timed(api.get_deploy_history)
+		row = next(row for row in history["rows"] if row["name"] == self.deploy_log.name)
+		self.assertEqual(row["bench"], self.bench.name)
+		self.assertEqual(row["lab"], self.lab.name)
+		self.assertEqual(row["result"], "Deploying")
+		self.assert_within_budget("get_deploy_history", elapsed_ms)
+
+	def test_history_never_returns_the_log_bodies_it_parsed(self):
+		"""A list of runs is not a list of logs — the messages stay on the server."""
+		for history in (api.get_build_history(), api.get_deploy_history()):
+			for row in history["rows"]:
+				self.assertNotIn("message", row)
+
+	def test_get_device_types_is_the_backend_list(self):
+		from benchpress.vpn_adapter import DEVICE_TYPES
+
+		types, elapsed_ms = _timed(api.get_device_types)
+		self.assertEqual(types, DEVICE_TYPES)
+		self.assert_within_budget("get_device_types", elapsed_ms)
+
+	def test_run_connection_test_shape_and_timing(self):
+		checks, elapsed_ms = _timed(api.run_connection_test)
+
+		self.assertEqual(
+			[check["check"] for check in checks],
+			["vpn_server", "device_registered", "peer_active", "handshake"],
+		)
+		for check in checks:
+			for key in ("check", "label", "status", "hint"):
+				self.assertIn(key, check)
+			self.assertIn(check["status"], ("Active", "Error"))
+			# A boolean is not an answer — every row says what to do about it.
+			self.assertTrue(check["hint"])
+		self.assert_within_budget("run_connection_test", elapsed_ms)
+
+	def test_run_connection_test_names_the_failing_step_without_a_device(self):
+		with patch("benchpress.connection_test.list_devices", return_value=[]):
+			checks = api.run_connection_test()
+
+		by_check = {check["check"]: check for check in checks}
+		self.assertEqual(by_check["device_registered"]["status"], "Error")
+		self.assertIn("no device", by_check["device_registered"]["hint"])
+		self.assertEqual(by_check["handshake"]["status"], "Error")
+
+	def test_run_connection_test_passes_on_a_fresh_handshake(self):
+		device = {
+			"name": "PEER-CONN-1",
+			"device_name": "Contract Laptop",
+			"last_handshake": frappe.utils.now_datetime(),
+		}
+		peer_status = {
+			"name": "PEER-CONN-1",
+			"status": "Active",
+			"assigned_ip": "172.27.0.9",
+			"endpoint": "203.0.113.7:51820",
+		}
+		with (
+			patch("benchpress.connection_test.list_devices", return_value=[device]),
+			patch("benchpress.connection_test.get_device_peer_status", return_value=peer_status),
+		):
+			checks = api.run_connection_test()
+
+		by_check = {check["check"]: check for check in checks}
+		self.assertEqual(by_check["peer_active"]["status"], "Active")
+		self.assertIn("172.27.0.9", by_check["peer_active"]["hint"])
+		self.assertEqual(by_check["handshake"]["status"], "Active")
+
+	def test_run_connection_test_explains_a_peer_that_never_connected(self):
+		device = {"name": "PEER-CONN-2", "device_name": "New Phone", "last_handshake": None}
+		with (
+			patch("benchpress.connection_test.list_devices", return_value=[device]),
+			patch(
+				"benchpress.connection_test.get_device_peer_status",
+				return_value={"status": "Pending", "assigned_ip": "172.27.0.10", "endpoint": None},
+			),
+		):
+			checks = api.run_connection_test()
+
+		by_check = {check["check"]: check for check in checks}
+		self.assertEqual(by_check["peer_active"]["status"], "Error")
+		self.assertIn("New Phone has never connected", by_check["peer_active"]["hint"])
+		self.assertIn("never heard from New Phone", by_check["handshake"]["hint"])
 
 	def test_get_code_server_credentials_shape_and_timing(self):
 		creds, elapsed_ms = _timed(lambda: api.get_code_server_credentials(self.bench.name))

@@ -16,15 +16,19 @@ When building an image, switch to the **Build Log** tab on the Lab Detail page. 
 
 ![Build Log tab](images/build-log-tab.png)
 
-**Option 2: Build Logs page (sidebar)**
+**Option 2: Build history**
 
-Click **Build Logs** in the sidebar to browse all build logs across all labs. Each entry shows:
-- Lab name
-- Log type badge (success/error/info)
-- Timestamp
-- Click to expand and see the full log
+Build history is reached from the Labs page — **Build history**, next to "New lab" — not from
+the sidebar. It is admin-only. Each row shows:
+- The lab and the image tag the run built
+- A result badge — Success, Failed or Building
+- The last step the run opened, and how long the run took
+- When it started
 
-![Build Logs page](images/build-logs.png)
+Clicking a row opens the lab. Runs are kept for seven days; the table says so, because nothing
+older survives the log-clearing job.
+
+![Build history](images/build-logs.png)
 
 ### Understanding build steps
 
@@ -68,31 +72,42 @@ When deploying a bench, switch to the **Deploy Log** tab. Logs stream in real-ti
 
 ![Deploy Log tab](images/deploy-log-tab.png)
 
-**Option 2: Deploy Logs page (sidebar)**
+**Option 2: Deploy history**
 
-Click **Deploy Logs** in the sidebar to browse all deployment logs across all benches. Each entry shows:
-- Bench name
-- Log type badge (success/error/info)
-- Timestamp
-- Click to expand and see the full log
+Deploy history is reached from the Instances page — **Deploy history** — not from the sidebar.
+It shows the deploys of the benches you can see: your own, or everyone's if you are an admin.
+Each row shows:
+- The bench, named after its lab
+- A result badge — Success, Failed, Skipped or Deploying
+- The last step the run opened, and how long the run took
+- When it started
 
-![Deploy Logs page](images/deploy-logs.png)
+A run recorded before the pipeline emitted step markers has no last step and no measured
+duration; the table shows an em-dash rather than guessing. Runs are kept for seven days.
+
+![Deploy history](images/deploy-logs.png)
 
 ### Understanding deployment steps
 
 A typical deployment log shows these phases:
 
-| Step | What happens |
-|------|-------------|
-| **Building lab image** | Docker image build (if not already built) |
-| **Creating container** | Container created from the lab image |
-| **Configuring WireGuard VPN (vpn_management)** | Peer registered, IP claimed from the pool, container tunnel up |
-| **Ensuring shared infrastructure** | Shared MariaDB and Redis containers verified |
-| **Writing common_site_config.json** | Database and Redis connection config written to container |
-| **Creating site** | `bench new-site` run inside the container |
-| **Building assets** | `bench build` for frontend assets |
-| **Provisioning SSH user** | User created, password set |
-| **Deploy complete** | Bench marked as Running |
+Every deploy emits eleven numbered steps, in this order. Each marker carries how far into the
+run it opened, so a step's duration is the gap to the next one — readable from a finished log
+months later, not only while it streams.
+
+| # | Step | What happens |
+|---|------|-------------|
+| 1 | **Checking shared infrastructure** | Shared MariaDB and Redis containers verified |
+| 2 | **Preparing the lab image** | The image is built, or a cached one is adopted |
+| 3 | **Creating the container** | Container created from the lab image |
+| 4 | **Waiting for the container IP** | Container reports an address |
+| 5 | **Configuring the WireGuard peer** | Peer registered, IP claimed from the pool, tunnel up |
+| 6 | **Writing common_site_config.json** | Database and Redis connection config written |
+| 7 | **Creating the site** | `bench new-site` run inside the container |
+| 8 | **Building assets** | `bench build` for frontend assets |
+| 9 | **Provisioning the SSH user** | User created, password set |
+| 10 | **Provisioning code-server** | Browser IDE installed, or skipped for a lab without it |
+| 11 | **Deploy complete** | Bench marked as Running |
 
 ### Deployment failures
 

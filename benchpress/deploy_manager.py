@@ -8,6 +8,7 @@ import frappe
 from frappe.utils.file_lock import LockTimeoutError
 from frappe.utils.synchronization import filelock
 
+from benchpress.deploy_pipeline import DeployLogWriter, DeployPipeline
 from benchpress.docker_manager import (
 	build_lab_image,
 	create_bench_container,
@@ -46,14 +47,21 @@ def _remove_stale_container(bench) -> None:
 		pass  # best-effort
 
 
+NOTHING_TO_ROLL_BACK = "Cleanup: nothing to roll back — no container was created"
+
+
 def _cleanup_failed_deploy(bench, container_id, append_log) -> None:
 	"""Best-effort teardown of resources created by this failed run.
 
 	Fires only when this run created a container — earlier failures leave the
 	previous deploy's container and peer untouched. Never touches the data
 	volume and never raises: the except block must still record Error state.
+
+	Either way the outcome is written to the log, so the screen reporting the
+	failure can state what was rolled back instead of inferring it from silence.
 	"""
 	if not container_id:
+		append_log(NOTHING_TO_ROLL_BACK)
 		return
 	try:
 		remove_container(container_id)
@@ -98,20 +106,6 @@ def build_linkuser_args(bench, lab, settings, ssh_password: str) -> list[str]:
 		settings.base_domain or "localhost",
 		lab.shell or "/bin/bash",
 	]
-
-
-def _make_log_appender(doctype: str, log_name: str, event: str, context: dict):
-	def append_log(line: str, log_type: str = "info") -> None:
-		frappe.publish_realtime(  # nosemgrep -- the SPA listens via raw socket.io without doc-room subscription; room-scoping would drop its events
-			event=event,
-			message={**context, "log": line, "type": log_type},
-			after_commit=False,
-		)
-		current = frappe.db.get_value(doctype, log_name, "message") or ""
-		frappe.db.set_value(doctype, log_name, "message", current + line + "\n", update_modified=False)
-		frappe.db.commit()
-
-	return append_log
 
 
 def _notify_owner(user: str, subject: str, document_type: str, document_name: str) -> None:
@@ -208,12 +202,16 @@ def _deploy_bench(bench_name: str) -> None:
 	frappe.db.commit()
 	deploy_log_name = deploy_log.name
 
-	append_log = _make_log_appender(
+	# Scoped to the bench's owner: a deploy log is that user's, and nobody
+	# else's socket has any business receiving it.
+	append_log = DeployLogWriter(
 		"Deploy Log",
 		deploy_log_name,
 		"bench_deploy_log",
 		{"bench": bench_name, "deploy_log": deploy_log_name},
+		bench.owner,
 	)
+	pipeline = DeployPipeline(append_log)
 
 	created_container_id = None
 	try:
@@ -224,24 +222,27 @@ def _deploy_bench(bench_name: str) -> None:
 		admin_password = secrets.token_urlsafe(10)
 		bench.admin_password = admin_password
 
-		append_log("=== Checking shared infrastructure (MariaDB + Redis) ===")
+		pipeline.step("infrastructure")
 		db_server_name = ensure_infrastructure()
 		db_server = frappe.get_doc("Database Server", db_server_name)
 		wait_for_mariadb(db_server_name, timeout=60)
-		append_log(f"MariaDB reachable at {db_server.container_name}:{db_server.port or 3306}")
+		pipeline.log(f"MariaDB reachable at {db_server.container_name}:{db_server.port or 3306}")
 
 		bench.database_server = db_server_name
 		bench.save(ignore_permissions=True)
 		frappe.db.commit()
 
+		# One step whichever way it goes: the run either builds the image or
+		# adopts a cached one, and the detail line says which.
+		pipeline.step("image")
 		if lab.status != "Ready" or not lab.image_tag:
-			append_log(f"=== Building lab image for {lab.title} ===")
-			_build_lab_with_logs(lab, append_log)
+			pipeline.log(f"Building lab image for {lab.title}")
+			_build_lab_with_logs(lab, pipeline.log)
 		else:
-			append_log(f"Using cached lab image: {lab.image_tag}")
+			pipeline.log(f"Using cached lab image: {lab.image_tag}")
 
 		_remove_stale_container(bench)
-		append_log("=== Creating container ===")
+		pipeline.step("container")
 		container_id = create_bench_container(bench, lab)
 		created_container_id = container_id
 		bench.container_id = container_id
@@ -250,15 +251,16 @@ def _deploy_bench(bench_name: str) -> None:
 		frappe.db.commit()
 
 		start_container(container_id)
-		append_log("Waiting for container to report running with an IP...")
+		pipeline.step("container_ip")
 		container_ip = wait_for_container_running(container_id, timeout=60)
 		bench.container_ip = container_ip
+		pipeline.log(f"container_ip {container_ip}")
 		bench.save(ignore_permissions=True)
 		frappe.db.commit()
 
 		settings = frappe.get_cached_doc("BenchPress Settings")
 
-		_setup_container_vpn(bench, container_id, append_log)
+		_setup_container_vpn(bench, container_id, pipeline)
 
 		bench_dir = "/home/frappe/frappe-bench"  # fixed: the data volume binds at /home/frappe
 		site_name = bench.site_name
@@ -271,41 +273,46 @@ def _deploy_bench(bench_name: str) -> None:
 			"webserver_port": 8000,
 			"default_site": site_name,
 		}
+		pipeline.step("site_config")
 		write_file_to_container(
 			container_id, json.dumps(config, indent=2), f"{bench_dir}/sites/common_site_config.json"
 		)
-		append_log("common_site_config.json written")
+		pipeline.log(f"{bench_dir}/sites/common_site_config.json written")
 
-		append_log(f"=== Creating site {site_name} ===")
-
+		pipeline.step("site")
 		apps_csv = ",".join(a.app_name for a in lab.apps if a.app_name.lower() != "frappe")
+		pipeline.log(f"bench new-site {site_name} --install-app {apps_csv or 'frappe'}")
 		exit_code, output = create_site_in_container(
 			container_id, db_server, site_name, admin_password, apps_csv
 		)
 		if exit_code != 0:
 			raise Exception(f"bench new-site failed (exit {exit_code}): {output}")
-		append_log("Site created successfully")
+		pipeline.log("Site created successfully")
 
-		append_log("Building assets...")
+		pipeline.step("assets")
 		exec_in_container(container_id, "bench build", user="frappe", workdir=bench_dir)
+		pipeline.log("bench build finished")
 
 		if not bench.ssh_username:
 			bench.ssh_username = bench._derive_username(bench.owner)
 
 		ssh_password = secrets.token_urlsafe(12)
 		linkuser_args = build_linkuser_args(bench, lab, settings, ssh_password)
-		append_log(f"=== Provisioning SSH user '{bench.ssh_username}' ===")
+		pipeline.step("ssh_user")
+		pipeline.log(f"linkuser.sh {bench.ssh_username}")
 		linkuser_cmd = "bash /opt/benchpress/scripts/linkuser.sh " + " ".join(f"'{a}'" for a in linkuser_args)
 		exit_code, output = exec_in_container(container_id, linkuser_cmd, user="root")
 		if output:
-			append_log(output.strip())
+			pipeline.log(output.strip())
 		if exit_code != 0:
 			raise Exception(f"linkuser.sh failed (exit {exit_code}): {output}")
 
 		bench.ssh_password = ssh_password
 
+		# Emitted even when the lab has code-server off: a step the run decided
+		# to skip is information, and a stepper missing its tenth row is not.
+		pipeline.step("code_server")
 		if getattr(lab, "enable_code_server", 0):
-			append_log("=== Provisioning code-server ===")
 			cs_user = bench.ssh_username
 			cs_home = f"/home/{cs_user}"
 			code_server_password = secrets.token_urlsafe(16)
@@ -325,13 +332,18 @@ def _deploy_bench(bench_name: str) -> None:
 			exec_in_container(container_id, "bash /opt/benchpress/scripts/restart.sh", user="root")
 			bench.code_server_password = code_server_password
 			bench.code_server_url = f"http://{bench.wg_ip or bench.container_ip or '127.0.0.1'}:8080/"
-			append_log(f"code-server ready at {bench.code_server_url}")
+			pipeline.log(f"code-server ready at {bench.code_server_url}")
+		else:
+			pipeline.log("Code server is disabled for this lab — skipped")
 
 		bench.status = "Running"
 		bench.started_at = frappe.utils.now_datetime()
 		bench.save(ignore_permissions=True)
 		frappe.db.commit()
-		append_log("=== Deploy complete ===", "success")
+		# The eleventh step and the run's success line are one line: it carries
+		# the total elapsed time, and "Deploy complete" is still in its text for
+		# everything that reads the marker rather than the metadata.
+		pipeline.step("complete", "success")
 		frappe.db.set_value("Deploy Log", deploy_log_name, "log_type", "success")
 		frappe.db.commit()
 		_notify_owner(
@@ -357,24 +369,26 @@ def _deploy_bench(bench_name: str) -> None:
 		_notify_owner(bench.owner, f"Bench deploy failed: {bench.bench_name}", "Bench Instance", bench.name)
 
 
-def _setup_container_vpn(bench, container_id: str, append_log) -> None:
+def _setup_container_vpn(bench, container_id: str, pipeline) -> None:
 	"""Replace any stale peer, claim a fresh tunnel IP, and configure the container.
 
 	Removing before creating keeps exactly one peer per bench across deploy /
 	redeploy; the link is persisted before the container is configured so a
 	configure failure (which reloads the bench) cannot orphan the peer.
+
+	This is step 5 of eleven — the brief lists it tenth, the code runs it here.
 	"""
 	from benchpress.vpn_adapter import configure_container, create_container_peer, remove_bench_peer
 
-	append_log("=== Configuring WireGuard VPN (vpn_management) ===")
+	pipeline.step("vpn_peer")
 	remove_bench_peer(bench)
 	peer = create_container_peer(bench)
 	bench.wg_ip = peer["assigned_ip"]
 	bench.save(ignore_permissions=True)
 	frappe.db.commit()
-	append_log(f"VPN peer {peer['peer']} registered, claimed IP {peer['assigned_ip']}")
+	pipeline.log(f"VPN peer {peer['peer']} registered, claimed IP {peer['assigned_ip']}")
 	configure_container(container_id, peer["private_key"], peer["assigned_ip"])
-	append_log(f"Container VPN: {peer['assigned_ip']}")
+	pipeline.log(f"Container VPN: {peer['assigned_ip']}")
 
 
 def redeploy_bench(bench_name: str) -> None:
@@ -452,8 +466,14 @@ def build_lab(lab_name: str) -> None:
 	frappe.db.commit()
 	build_log_name = build_log.name
 
-	append_log = _make_log_appender(
-		"Build Log", build_log_name, "lab_build_log", {"lab": lab_name, "build_log": build_log_name}
+	# A standalone image build is the lab owner's run, so it goes to the lab
+	# owner's socket only — same scoping rule as a deploy.
+	append_log = DeployLogWriter(
+		"Build Log",
+		build_log_name,
+		"lab_build_log",
+		{"lab": lab_name, "build_log": build_log_name},
+		lab.owner,
 	)
 
 	try:

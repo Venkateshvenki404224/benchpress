@@ -1,0 +1,1464 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;600;700&display=swap" rel="stylesheet"><style>*{box-sizing:border-box}body{margin:0;background:#F9F9F9;font-family:Inter,-apple-system,system-ui,sans-serif;-webkit-font-smoothing:antialiased;color:#171717}a{color:#2490EF;text-decoration:none}a:hover{color:#1579D0}button{font-family:inherit}::-webkit-scrollbar{width:10px;height:10px}::-webkit-scrollbar-thumb{background:#D3D3D3;border-radius:8px;border:3px solid transparent;background-clip:content-box}@keyframes spin{to{transform:rotate(360deg)}}@keyframes fadein{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}@keyframes pulse{0%,100%{opacity:1}50%{opacity:.45}}</style></helmet>
+
+<div style="display:flex;height:100vh;min-height:660px;overflow:hidden;font-size:13px;line-height:1.45">
+
+  <aside style="width:236px;flex:none;background:#F4F4F4;border-right:1px solid #E2E2E2;display:flex;flex-direction:column;padding:12px 12px 10px">
+    <div style="display:flex;align-items:center;gap:9px;padding:5px 6px 14px">
+      <div style="width:26px;height:26px;border-radius:7px;background:#171717;display:flex;align-items:center;justify-content:center;flex:none">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h3"></path><path d="M17 12h3"></path><rect x="7.5" y="8" width="9" height="8" rx="1.5"></rect></svg>
+      </div>
+      <div style="min-width:0;flex:1">
+        <div style="font-size:13px;font-weight:600;letter-spacing:-0.01em">BenchPress</div>
+        <div style="font-size:11px;color:#808080;margin-top:-1px">bp.internal</div>
+      </div>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:1px">
+      <button onClick="{{ goOverview }}" style="{{ navOverview }}" style-hover="background:#EAEAEA">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1.5"></rect><rect x="14" y="3" width="7" height="5" rx="1.5"></rect><rect x="14" y="12" width="7" height="9" rx="1.5"></rect><rect x="3" y="16" width="7" height="5" rx="1.5"></rect></svg>
+        Overview
+      </button>
+      <button onClick="{{ goLabs }}" style="{{ navLabs }}" style-hover="background:#EAEAEA">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="m12.8 2.6 8 4a1.5 1.5 0 0 1 0 2.7l-8 4a1.8 1.8 0 0 1-1.6 0l-8-4a1.5 1.5 0 0 1 0-2.7l8-4a1.8 1.8 0 0 1 1.6 0Z"></path><path d="m3.2 14.4 8 4a1.8 1.8 0 0 0 1.6 0l8-4"></path></svg>
+        Labs
+      </button>
+      <sc-if value="{{ isAdmin }}" hint-placeholder-val="{{ true }}">
+        <button onClick="{{ goTemplates }}" style="{{ navTemplates }}" style-hover="background:#EAEAEA">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"></rect><rect x="14" y="3" width="7" height="7" rx="1.5"></rect><rect x="3" y="14" width="7" height="7" rx="1.5"></rect><path d="M17.5 14.5v6"></path><path d="M14.5 17.5h6"></path></svg>
+          Templates
+        </button>
+      </sc-if>
+      <button onClick="{{ goBenches }}" style="{{ navBenches }}" style-hover="background:#EAEAEA">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="3" width="19" height="7" rx="2"></rect><rect x="2.5" y="14" width="19" height="7" rx="2"></rect><path d="M6.5 6.5h.01"></path><path d="M6.5 17.5h.01"></path></svg>
+        Instances
+        <span style="{{ benchCountStyle }}">{{ benchCount }}</span>
+      </button>
+      <button onClick="{{ goDevices }}" style="{{ navDevices }}" style-hover="background:#EAEAEA">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.7 8.9a1 1 0 0 1-.6 0C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.2-2.7a1.2 1.2 0 0 1 1.6 0C14.5 3.8 17 5 19 5a1 1 0 0 1 1 1Z"></path></svg>
+        Devices
+        <span style="{{ vpnDotStyle }}"></span>
+      </button>
+    </div>
+
+
+    <div style="margin-top:auto;display:flex;flex-direction:column;gap:1px">
+      <sc-if value="{{ isAdmin }}" hint-placeholder-val="{{ true }}">
+        <button onClick="{{ goSettings }}" style="{{ navSettings }}" style-hover="background:#EAEAEA">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-2.9 1.2v.1a2 2 0 1 1-4 0v-.2a1.7 1.7 0 0 0-3-1.1l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0-1.2-2.9H3a2 2 0 1 1 0-4h.2a1.7 1.7 0 0 0 1.1-3l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 2.9-1.2V3a2 2 0 1 1 4 0v.2a1.7 1.7 0 0 0 3 1.1l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0 1.2 2.9H21a2 2 0 1 1 0 4h-.2a1.7 1.7 0 0 0-1.4 1Z"></path></svg>
+          Settings
+        </button>
+      </sc-if>
+      <div style="display:flex;align-items:center;gap:9px;padding:9px 8px 4px;border-top:1px solid #E2E2E2;margin-top:6px">
+        <div style="width:24px;height:24px;border-radius:50%;background:#E4EFFB;color:#1579D0;font-size:10.5px;font-weight:600;display:flex;align-items:center;justify-content:center;flex:none">{{ userInitials }}</div>
+        <div style="min-width:0;flex:1">
+          <div style="font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ userName }}</div>
+          <div style="font-size:10.5px;color:#808080">{{ roleLabel }}</div>
+        </div>
+        <button onClick="{{ toggleRole }}" title="Demo: switch role" style="border:1px solid #E2E2E2;background:#fff;border-radius:6px;padding:3px 6px;font-size:10.5px;color:#666666;cursor:pointer" style-hover="background:#F4F4F4">Switch</button>
+      </div>
+    </div>
+  </aside>
+
+  <main style="flex:1;min-width:0;display:flex;flex-direction:column;background:#fff;overflow:hidden">
+    <header style="height:50px;flex:none;border-bottom:1px solid #E2E2E2;display:flex;align-items:center;gap:8px;padding:0 20px">
+      <span style="font-size:13.5px;font-weight:600;letter-spacing:-0.01em">{{ crumb1 }}</span>
+      <sc-if value="{{ hasCrumb2 }}" hint-placeholder-val="{{ false }}">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#B3B3B3" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"></path></svg>
+        <span style="font-size:13.5px;font-weight:500;color:#525252">{{ crumb2 }}</span>
+      </sc-if>
+      <div style="margin-left:auto;display:flex;align-items:center;gap:10px">
+        <div style="display:flex;align-items:center;gap:7px;height:28px;padding:0 10px;border:1px solid #E2E2E2;border-radius:7px;background:#FCFCFC;color:#999999;font-size:12px">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg>
+          Search
+          <span style="border:1px solid #E2E2E2;border-radius:4px;padding:0 4px;font-size:10.5px;color:#999999;background:#fff">⌘K</span>
+        </div>
+        <div style="{{ vpnChipStyle }}"><span style="{{ vpnChipDot }}"></span>{{ vpnChipLabel }}</div>
+        <div style="position:relative">
+          <button onClick="{{ toggleMenu }}" style="width:28px;height:28px;border:1px solid #E2E2E2;background:#fff;border-radius:7px;color:#525252;cursor:pointer;display:flex;align-items:center;justify-content:center" style-hover="background:#F4F4F4" title="Account menu">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="5" cy="12" r=".6"></circle><circle cx="12" cy="12" r=".6"></circle><circle cx="19" cy="12" r=".6"></circle></svg>
+          </button>
+          <sc-if value="{{ menuOpen }}" hint-placeholder-val="{{ false }}">
+            <div style="position:absolute;top:34px;right:0;width:196px;background:#fff;border:1px solid #E2E2E2;border-radius:9px;box-shadow:0 8px 24px rgba(0,0,0,.12);padding:4px;z-index:40;animation:fadein .12s ease-out">
+              <sc-for list="{{ menuItems }}" as="m" hint-placeholder-count="3">
+                <button onClick="{{ m.act }}" style="{{ m.style }}" style-hover="background:#F4F4F4">{{ m.label }}<span style="margin-left:auto;font-size:11px;color:#999999">{{ m.note }}</span></button>
+              </sc-for>
+            </div>
+          </sc-if>
+        </div>
+      </div>
+    </header>
+
+    <div style="flex:1;overflow-y:auto;background:#F9F9F9">
+
+      <!-- ================= OVERVIEW ================= -->
+      <sc-if value="{{ isOverview }}" hint-placeholder-val="{{ true }}">
+        <div style="padding:22px 24px 40px;max-width:1180px">
+
+          <sc-if value="{{ firstRun }}" hint-placeholder-val="{{ false }}">
+            <div style="border:1px solid #E2E2E2;border-radius:12px;background:#fff;padding:22px 24px;margin-bottom:18px">
+              <div style="font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:#999999">Getting started</div>
+              <div style="font-size:20px;font-weight:600;letter-spacing:-0.02em;margin-top:8px">Create a Frappe environment, press deploy, get a working site and a VS Code window.</div>
+              <div style="font-size:13px;color:#525252;margin-top:6px;max-width:640px;text-wrap:pretty">A Lab is the recipe — Frappe version, apps, resources. Deploying a Lab builds it into a container with its own database, site and browser IDE, reachable over your VPN.</div>
+              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-top:18px">
+                <sc-for list="{{ firstRunSteps }}" as="s" hint-placeholder-count="3">
+                  <div style="border:1px solid #E2E2E2;border-radius:10px;padding:13px 14px;background:#FCFCFC">
+                    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+                      <span style="{{ s.numStyle }}">{{ s.n }}</span>
+                      <span style="font-size:12.5px;font-weight:600">{{ s.title }}</span>
+                    </div>
+                    <div style="font-size:12px;color:#666666;line-height:1.5;text-wrap:pretty">{{ s.body }}</div>
+                  </div>
+                </sc-for>
+              </div>
+              <div style="display:flex;gap:8px;margin-top:16px">
+                <button onClick="{{ goTemplates }}" style="height:32px;padding:0 14px;border:0;border-radius:7px;background:#171717;color:#fff;font-size:12.5px;font-weight:500;cursor:pointer" style-hover="background:#2F2F2F">Start from a template</button>
+                <button onClick="{{ goDevices }}" style="height:32px;padding:0 14px;border:1px solid #E2E2E2;background:#fff;border-radius:7px;font-size:12.5px;color:#525252;cursor:pointer" style-hover="background:#F4F4F4">Set up VPN first</button>
+              </div>
+            </div>
+          </sc-if>
+
+          <div style="display:flex;align-items:flex-end;gap:12px;margin-bottom:14px;flex-wrap:wrap">
+            <div>
+              <div style="font-size:19px;font-weight:600;letter-spacing:-0.02em">{{ greeting }}</div>
+              <div style="font-size:12.5px;color:#808080;margin-top:2px">{{ overviewSub }}</div>
+            </div>
+            <div style="margin-left:auto;display:flex;gap:8px">
+              <button onClick="{{ goTemplates }}" style="height:32px;padding:0 13px;border:1px solid #E2E2E2;background:#fff;border-radius:7px;font-size:12.5px;color:#525252;cursor:pointer" style-hover="background:#F4F4F4">From template</button>
+              <button onClick="{{ primaryCta }}" style="display:flex;align-items:center;gap:6px;height:32px;padding:0 13px;border:0;border-radius:7px;background:#171717;color:#fff;font-size:12.5px;font-weight:500;cursor:pointer" style-hover="background:#2F2F2F">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 12h14"></path><path d="M12 5v14"></path></svg>
+                {{ primaryCtaLabel }}
+              </button>
+            </div>
+          </div>
+
+          <sc-if value="{{ vpnOff }}" hint-placeholder-val="{{ true }}">
+            <div style="display:flex;align-items:center;gap:13px;border:1px solid #F0E0BC;background:#FEF9EE;border-radius:10px;padding:12px 15px;margin-bottom:16px;flex-wrap:wrap">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#9A6700" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M20 13c0 5-3.5 7.5-7.7 8.9a1 1 0 0 1-.6 0C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.2-2.7a1.2 1.2 0 0 1 1.6 0C14.5 3.8 17 5 19 5a1 1 0 0 1 1 1Z"></path><path d="M12 8v4"></path><path d="M12 16h.01"></path></svg>
+              <div style="flex:1;min-width:240px;font-size:12.5px;color:#7A5200">
+                <strong style="font-weight:600;color:#5F4000">VPN is not connected.</strong> Sites, SSH and VS Code links stay unreachable until this device is on WireGuard.
+              </div>
+              <button onClick="{{ goDevices }}" style="height:30px;padding:0 13px;border:0;border-radius:7px;background:#171717;color:#fff;font-size:12px;font-weight:500;cursor:pointer" style-hover="background:#2F2F2F">Connect device</button>
+            </div>
+          </sc-if>
+
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:18px">
+            <sc-for list="{{ stats }}" as="s" hint-placeholder-count="4">
+              <div style="border:1px solid #E2E2E2;border-radius:10px;background:#fff;padding:13px 15px">
+                <div style="font-size:11.5px;color:#808080">{{ s.k }}</div>
+                <div style="display:flex;align-items:baseline;gap:7px;margin-top:5px">
+                  <span style="{{ s.valStyle }}">{{ s.v }}</span>
+                  <span style="font-size:11.5px;color:#999999">{{ s.note }}</span>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+
+          <div style="display:grid;grid-template-columns:minmax(0,1.55fr) minmax(250px,1fr);gap:16px;align-items:start">
+            <div style="border:1px solid #E2E2E2;border-radius:11px;background:#fff;overflow:hidden">
+              <div style="display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid #EDEDED">
+                <span style="font-size:13px;font-weight:600">{{ envHeading }}</span>
+                <a href="#" onClick="{{ goBenches }}" style="margin-left:auto;font-size:11.5px">All instances</a>
+              </div>
+              <sc-for list="{{ benches }}" as="b" hint-placeholder-count="3">
+                <div onClick="{{ b.open }}" style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid #F4F4F4;cursor:pointer" style-hover="background:#F9F9F9">
+                  <div style="width:30px;height:30px;border-radius:8px;background:#fff;border:1px solid #E8E8E8;display:flex;align-items:center;justify-content:center;flex:none">
+                    <span style="width:18px;height:18px;display:block;flex:none;background:url({{ b.icon }}) center/contain no-repeat"></span>
+                  </div>
+                  <div style="min-width:0;flex:1">
+                    <div style="font-size:12.5px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ b.name }}</div>
+                    <div style="font-size:11px;color:#999999;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ b.site }}</div>
+                  </div>
+                  <span style="{{ b.healthStyle }}">{{ b.health }}</span>
+                  <span style="{{ b.pillStyle }}"><span style="{{ b.dotStyle }}"></span>{{ b.status }}</span>
+                  <button style="border:1px solid #E2E2E2;background:#fff;border-radius:6px;height:26px;padding:0 9px;font-size:11.5px;color:#525252;cursor:pointer;flex:none" style-hover="background:#F4F4F4">{{ b.action }}</button>
+                </div>
+              </sc-for>
+            </div>
+
+            <div style="display:flex;flex-direction:column;gap:16px">
+              <div style="border:1px solid #E2E2E2;border-radius:11px;background:#fff;overflow:hidden">
+                <div style="padding:12px 16px;border-bottom:1px solid #EDEDED;font-size:13px;font-weight:600">Recent activity</div>
+                <sc-for list="{{ activity }}" as="ev" hint-placeholder-count="5">
+                  <div style="display:flex;gap:10px;padding:9px 16px;border-bottom:1px solid #F4F4F4;align-items:baseline">
+                    <span style="{{ ev.dotStyle }}"></span>
+                    <div style="flex:1;min-width:0;font-size:12px;color:#525252;text-wrap:pretty">{{ ev.text }}</div>
+                    <span style="font-size:11px;color:#999999;white-space:nowrap">{{ ev.when }}</span>
+                  </div>
+                </sc-for>
+              </div>
+
+              <sc-if value="{{ isAdmin }}" hint-placeholder-val="{{ false }}">
+                <div style="border:1px solid #E2E2E2;border-radius:11px;background:#fff;padding:14px 16px">
+                  <div style="font-size:13px;font-weight:600;margin-bottom:10px">Shared infrastructure</div>
+                  <sc-for list="{{ infra }}" as="i" hint-placeholder-count="3">
+                    <div style="display:flex;align-items:center;gap:10px;padding:6px 0">
+                      <span style="font-size:12.5px;color:#525252;flex:1">{{ i.k }}</span>
+                      <span style="font-size:11.5px;color:#999999">{{ i.note }}</span>
+                      <span style="{{ i.pillStyle }}"><span style="{{ i.dotStyle }}"></span>{{ i.status }}</span>
+                    </div>
+                  </sc-for>
+                </div>
+              </sc-if>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- ================= LABS ================= -->
+      <sc-if value="{{ isLabs }}" hint-placeholder-val="{{ false }}">
+        <div style="padding:22px 24px 40px;max-width:1180px">
+          <div style="display:flex;align-items:flex-start;gap:12px;margin-bottom:14px;flex-wrap:wrap">
+            <div>
+              <div style="font-size:19px;font-weight:600;letter-spacing:-0.02em">Labs</div>
+              <div style="font-size:12.5px;color:#808080;margin-top:2px;max-width:560px;text-wrap:pretty">A lab is a reusable recipe — Frappe version, apps and resources. Build it into an image, then deploy as many bench instances as you need.</div>
+            </div>
+            <div style="margin-left:auto;display:flex;gap:8px">
+              <sc-if value="{{ isAdmin }}" hint-placeholder-val="{{ true }}">
+                <button onClick="{{ goBuildLogs }}" style="height:32px;padding:0 13px;border:1px solid #E2E2E2;background:#fff;border-radius:7px;font-size:12.5px;color:#525252;cursor:pointer" style-hover="background:#F4F4F4">Build history</button>
+              </sc-if>
+              <button onClick="{{ goTemplates }}" style="height:32px;padding:0 13px;border:1px solid #E2E2E2;background:#fff;border-radius:7px;font-size:12.5px;color:#525252;cursor:pointer" style-hover="background:#F4F4F4">From template</button>
+              <sc-if value="{{ isAdmin }}" hint-placeholder-val="{{ true }}">
+                <button onClick="{{ goNewLab }}" style="display:flex;align-items:center;gap:6px;height:32px;padding:0 13px;border:0;border-radius:7px;background:#171717;color:#fff;font-size:12.5px;font-weight:500;cursor:pointer" style-hover="background:#2F2F2F">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 12h14"></path><path d="M12 5v14"></path></svg>
+                  New lab
+                </button>
+              </sc-if>
+            </div>
+          </div>
+
+          <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center">
+            <div style="display:flex;align-items:center;gap:7px;height:30px;padding:0 10px;border:1px solid #E2E2E2;border-radius:7px;background:#fff;color:#999999;font-size:12px;min-width:220px">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg>
+              Search labs
+            </div>
+            <sc-for list="{{ labFilters }}" as="f" hint-placeholder-count="3">
+              <span style="{{ f.style }}">{{ f.label }}<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"></path></svg></span>
+            </sc-for>
+          </div>
+
+          <div style="border:1px solid #E2E2E2;border-radius:11px;background:#fff;overflow-x:auto">
+            <div style="display:flex;gap:12px;padding:9px 16px;background:#F9F9F9;border-bottom:1px solid #E8E8E8;font-size:11px;font-weight:600;color:#808080;min-width:880px">
+              <span style="flex:2;min-width:230px">Lab</span>
+              <span style="width:96px">Version</span>
+              <span style="flex:1.2;min-width:140px">Apps</span>
+              <span style="width:112px">Status</span>
+              <span style="flex:1.3;min-width:160px">Deployed as</span>
+              <span style="width:96px">Last run</span>
+            </div>
+            <sc-for list="{{ labs }}" as="l" hint-placeholder-count="4">
+              <div onClick="{{ l.open }}" style="display:flex;gap:12px;align-items:center;padding:12px 16px;border-bottom:1px solid #F4F4F4;cursor:pointer;min-width:880px" style-hover="background:#F9F9F9">
+                <div style="flex:2;min-width:230px;display:flex;align-items:center;gap:10px">
+                  <div style="width:28px;height:28px;border-radius:8px;background:#fff;border:1px solid #E8E8E8;display:flex;align-items:center;justify-content:center;flex:none">
+                    <span style="width:17px;height:17px;display:block;flex:none;background:url({{ l.icon }}) center/contain no-repeat"></span>
+                  </div>
+                  <div style="min-width:0">
+                    <div style="font-size:12.5px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ l.title }}</div>
+                    <div style="font-size:11px;color:#999999;font-family:ui-monospace,SFMono-Regular,Menlo,monospace">{{ l.labId }}</div>
+                  </div>
+                </div>
+                <span style="width:96px;font-size:12px;color:#525252">{{ l.version }}</span>
+                <div style="flex:1.2;min-width:140px;display:flex;gap:4px;flex-wrap:wrap">
+                  <sc-for list="{{ l.apps }}" as="app" hint-placeholder-count="2">
+                    <span style="font-size:11px;color:#525252;background:#F4F4F4;border-radius:5px;padding:1px 6px">{{ app }}</span>
+                  </sc-for>
+                </div>
+                <div style="width:112px"><span style="{{ l.pillStyle }}"><span style="{{ l.dotStyle }}"></span>{{ l.status }}</span></div>
+                <div style="flex:1.3;min-width:160px;min-width:0">
+                  <div style="font-size:12px;color:#2490EF;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ l.site }}</div>
+                  <div style="font-size:11px;color:#999999">{{ l.benchNote }}</div>
+                </div>
+                <span style="width:96px;font-size:11.5px;color:#808080">{{ l.lastRun }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- ================= LAB DETAIL ================= -->
+      <sc-if value="{{ isLabDetail }}" hint-placeholder-val="{{ false }}">
+        <div style="padding:20px 24px 40px;max-width:1180px">
+          <button onClick="{{ goLabs }}" style="display:flex;align-items:center;gap:5px;border:0;background:transparent;padding:0;margin-bottom:14px;font-size:12px;color:#808080;cursor:pointer" style-hover="color:#171717">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"></path></svg>
+            Labs
+          </button>
+
+          <div style="display:flex;align-items:flex-start;gap:14px;flex-wrap:wrap;margin-bottom:16px">
+            <div style="width:40px;height:40px;border-radius:10px;background:#fff;border:1px solid #E8E8E8;display:flex;align-items:center;justify-content:center;flex:none">
+              <span style="width:24px;height:24px;display:block;flex:none;background:url({{ lab.icon }}) center/contain no-repeat"></span>
+            </div>
+            <div style="min-width:0;flex:1">
+              <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
+                <span style="font-size:19px;font-weight:600;letter-spacing:-0.02em">{{ lab.title }}</span>
+                <span style="{{ lab.pillStyle }}"><span style="{{ lab.dotStyle }}"></span>{{ lab.status }}</span>
+                <span style="font-size:11.5px;color:#999999;font-family:ui-monospace,SFMono-Regular,Menlo,monospace">{{ lab.labId }}</span>
+              </div>
+              <div style="font-size:12.5px;color:#666666;margin-top:3px;max-width:620px;text-wrap:pretty">{{ lab.description }}</div>
+              <div style="display:flex;gap:6px;margin-top:9px;flex-wrap:wrap">
+                <sc-for list="{{ lab.specs }}" as="s" hint-placeholder-count="4">
+                  <span style="font-size:11px;color:#525252;background:#F4F4F4;border:1px solid #E8E8E8;border-radius:5px;padding:2px 7px">{{ s }}</span>
+                </sc-for>
+              </div>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center">
+              <sc-if value="{{ lab.showSecondary }}" hint-placeholder-val="{{ false }}">
+                <button style="display:flex;align-items:center;gap:6px;height:32px;padding:0 12px;border:1px solid #E2E2E2;background:#fff;border-radius:7px;font-size:12.5px;color:#525252;cursor:pointer" style-hover="background:#F4F4F4">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="m4 17 6-6-6-6"></path><path d="M12 19h8"></path></svg>
+                  Open VS Code
+                </button>
+              </sc-if>
+              <button onClick="{{ lab.primaryAction }}" style="{{ lab.primaryStyle }}">{{ lab.primaryLabel }}</button>
+              <button style="width:32px;height:32px;border:1px solid #E2E2E2;background:#fff;border-radius:7px;color:#525252;cursor:pointer;display:flex;align-items:center;justify-content:center" style-hover="background:#F4F4F4" title="More actions">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="5" cy="12" r=".6"></circle><circle cx="12" cy="12" r=".6"></circle><circle cx="19" cy="12" r=".6"></circle></svg>
+              </button>
+            </div>
+          </div>
+
+          <div style="display:flex;gap:2px;border-bottom:1px solid #E8E8E8;margin-bottom:18px">
+            <sc-for list="{{ tabs }}" as="t" hint-placeholder-count="3">
+              <button onClick="{{ t.select }}" style="{{ t.style }}">{{ t.label }}</button>
+            </sc-for>
+          </div>
+
+          <!-- Dashboard tab -->
+          <sc-if value="{{ tabDashboard }}" hint-placeholder-val="{{ true }}">
+            <div style="display:grid;grid-template-columns:minmax(0,1.5fr) minmax(270px,1fr);gap:16px;align-items:start">
+              <div style="display:flex;flex-direction:column;gap:16px">
+
+                <sc-if value="{{ lab.isError }}" hint-placeholder-val="{{ false }}">
+                  <div style="border:1px solid #F3D2CF;background:#FDF3F2;border-radius:11px;padding:15px 17px">
+                    <div style="display:flex;align-items:center;gap:9px">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#C7291F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 8v5"></path><path d="M12 16h.01"></path></svg>
+                      <span style="font-size:13.5px;font-weight:600;color:#A82118">Image build failed at step 2 — Build the lab image</span>
+                    </div>
+                    <div style="font-size:12.5px;color:#8C2A22;margin-top:6px;text-wrap:pretty">Repository <span style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace">github.com/frappe/hrms</span> has no branch <span style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace">version-16</span>. Nothing was created, so there is nothing to clean up.</div>
+                    <div style="display:flex;gap:8px;margin-top:13px">
+                      <button style="height:30px;padding:0 13px;border:0;border-radius:7px;background:#171717;color:#fff;font-size:12px;font-weight:500;cursor:pointer" style-hover="background:#2F2F2F">Edit apps and rebuild</button>
+                      <button onClick="{{ showDeployLog }}" style="height:30px;padding:0 13px;border:1px solid #E9C9C6;background:#fff;border-radius:7px;font-size:12px;color:#8C2A22;cursor:pointer" style-hover="background:#FCECEA">View failing log lines</button>
+                    </div>
+                  </div>
+                </sc-if>
+
+                <div style="border:1px solid #E2E2E2;border-radius:11px;background:#fff;padding:15px 17px">
+                  <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+                    <span style="font-size:13px;font-weight:600">Container status</span>
+                    <span style="font-size:11.5px;color:#999999">{{ lab.healthChecked }}</span>
+                    <span style="{{ lab.healthStyle }}" title="container_health">{{ lab.healthLabel }}</span>
+                  </div>
+                  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px">
+                    <sc-for list="{{ lab.meters }}" as="m" hint-placeholder-count="2">
+                      <div>
+                        <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:6px">
+                          <span style="font-size:12px;color:#666666;flex:1">{{ m.k }}</span>
+                          <span style="font-size:12.5px;font-weight:600;font-variant-numeric:tabular-nums">{{ m.v }}</span>
+                        </div>
+                        <div style="height:6px;border-radius:999px;background:#EDEDED;overflow:hidden">
+                          <div style="{{ m.barStyle }}"></div>
+                        </div>
+                        <div style="font-size:11px;color:#999999;margin-top:5px">{{ m.note }}</div>
+                      </div>
+                    </sc-for>
+                  </div>
+                </div>
+
+                <div style="border:1px solid #E2E2E2;border-radius:11px;background:#fff;overflow:hidden">
+                  <div style="display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid #EDEDED">
+                    <span style="font-size:13px;font-weight:600">Sites</span>
+                    <span style="font-size:11.5px;color:#999999">{{ lab.siteCount }}</span>
+                    <button style="margin-left:auto;height:27px;padding:0 10px;border:1px solid #E2E2E2;background:#fff;border-radius:6px;font-size:11.5px;color:#525252;cursor:pointer" style-hover="background:#F4F4F4">New site</button>
+                  </div>
+                  <sc-for list="{{ lab.sites }}" as="s" hint-placeholder-count="1">
+                    <div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid #F4F4F4">
+                      <div style="min-width:0;flex:1">
+                        <div style="font-size:12.5px;font-weight:500">{{ s.domain }}</div>
+                        <div style="font-size:11px;color:#999999">{{ s.apps }}</div>
+                      </div>
+                      <span style="{{ s.pillStyle }}"><span style="{{ s.dotStyle }}"></span>{{ s.status }}</span>
+                      <button style="{{ s.openStyle }}">{{ s.openLabel }}</button>
+                    </div>
+                  </sc-for>
+                  <sc-if value="{{ lab.noSites }}" hint-placeholder-val="{{ false }}">
+                    <div style="padding:26px 16px;text-align:center">
+                      <div style="font-size:12.5px;color:#666666">No site yet — one is created automatically when this lab is deployed.</div>
+                      <button onClick="{{ lab.primaryAction }}" style="margin-top:11px;height:30px;padding:0 13px;border:1px solid #E2E2E2;background:#fff;border-radius:7px;font-size:12px;color:#525252;cursor:pointer" style-hover="background:#F4F4F4">{{ lab.primaryLabel }}</button>
+                    </div>
+                  </sc-if>
+                </div>
+              </div>
+
+              <div style="display:flex;flex-direction:column;gap:16px">
+                <div style="{{ connCardStyle }}">
+                  <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.7 8.9a1 1 0 0 1-.6 0C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.2-2.7a1.2 1.2 0 0 1 1.6 0C14.5 3.8 17 5 19 5a1 1 0 0 1 1 1Z"></path></svg>
+                    <span style="font-size:12.5px;font-weight:600">{{ connTitle }}</span>
+                  </div>
+                  <div style="font-size:12.5px;line-height:1.5;text-wrap:pretty">{{ connBody }}</div>
+                  <sc-if value="{{ vpnOff }}" hint-placeholder-val="{{ true }}">
+                    <button onClick="{{ goDevices }}" style="margin-top:11px;height:30px;padding:0 12px;border:0;border-radius:7px;background:#171717;color:#fff;font-size:12px;font-weight:500;cursor:pointer" style-hover="background:#2F2F2F">Register this device</button>
+                  </sc-if>
+                </div>
+
+                <div style="border:1px solid #E2E2E2;border-radius:11px;background:#fff;overflow:hidden">
+                  <div style="display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid #EDEDED">
+                    <span style="font-size:13px;font-weight:600">Connection</span>
+                    <button onClick="{{ toggleReveal }}" style="margin-left:auto;height:26px;padding:0 9px;border:1px solid #E2E2E2;background:#fff;border-radius:6px;font-size:11.5px;color:#525252;cursor:pointer" style-hover="background:#F4F4F4">{{ revealLabel }}</button>
+                  </div>
+                  <sc-for list="{{ connRows }}" as="r" hint-placeholder-count="6">
+                    <div style="display:flex;align-items:center;gap:10px;padding:9px 16px;border-bottom:1px solid #F4F4F4">
+                      <span style="font-size:12px;color:#808080;width:104px;flex:none">{{ r.k }}</span>
+                      <span style="{{ r.valStyle }}">{{ r.v }}</span>
+                      <button title="Copy" style="width:24px;height:24px;flex:none;border:1px solid #E2E2E2;background:#fff;border-radius:6px;color:#808080;cursor:pointer;display:flex;align-items:center;justify-content:center" style-hover="background:#F4F4F4;color:#171717">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"></rect><path d="M5 15V5a2 2 0 0 1 2-2h10"></path></svg>
+                      </button>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+            </div>
+          </sc-if>
+
+          <!-- Deploy log tab: the 11-step pipeline -->
+          <sc-if value="{{ tabLog }}" hint-placeholder-val="{{ false }}">
+            <div style="border:1px solid #E2E2E2;border-radius:11px;background:#fff;overflow:hidden;max-width:820px">
+              <div style="display:flex;align-items:center;gap:10px;padding:13px 17px;border-bottom:1px solid #EDEDED">
+                <span style="font-size:13px;font-weight:600">{{ pipelineTitle }}</span>
+                <span style="{{ pipelinePillStyle }}"><span style="{{ pipelineDotStyle }}"></span>{{ pipelineStatus }}</span>
+                <span style="margin-left:auto;font-size:11.5px;color:#999999">{{ pipelineElapsed }}</span>
+              </div>
+              <div style="padding:8px 17px 14px">
+                <sc-for list="{{ pipeline }}" as="p" hint-placeholder-count="11">
+                  <div style="display:flex;align-items:flex-start;gap:11px;padding:7px 0">
+                    <span style="{{ p.iconStyle }}">{{ p.mark }}</span>
+                    <div style="min-width:0;flex:1">
+                      <div style="{{ p.textStyle }}">{{ p.label }}</div>
+                      <div style="{{ p.subStyle }}">{{ p.sub }}</div>
+                    </div>
+                    <span style="font-size:11.5px;color:#999999;font-variant-numeric:tabular-nums;white-space:nowrap">{{ p.time }}</span>
+                  </div>
+                </sc-for>
+              </div>
+              <div style="border-top:1px solid #EDEDED;background:#FAFAFA">
+                <div style="display:flex;align-items:center;gap:8px;padding:10px 17px;font-size:12px;color:#525252">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"></path></svg>
+                  Raw log
+                  <span style="color:#999999">{{ logCount }}</span>
+                  <button style="margin-left:auto;height:26px;padding:0 9px;border:1px solid #E2E2E2;background:#fff;border-radius:6px;font-size:11.5px;color:#525252;cursor:pointer" style-hover="background:#F4F4F4">Download</button>
+                </div>
+                <div style="padding:0 17px 14px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;line-height:1.75">
+                  <sc-for list="{{ logLines }}" as="ln" hint-placeholder-count="6">
+                    <div style="display:flex;gap:10px">
+                      <span style="color:#B3B3B3;flex:none">{{ ln.t }}</span>
+                      <span style="{{ ln.style }}">{{ ln.text }}</span>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+            </div>
+          </sc-if>
+        </div>
+      </sc-if>
+
+      <!-- ================= TEMPLATES ================= -->
+      <sc-if value="{{ isTemplates }}" hint-placeholder-val="{{ false }}">
+        <div style="padding:22px 24px 40px;max-width:1180px">
+          <div style="margin-bottom:16px">
+            <div style="font-size:19px;font-weight:600;letter-spacing:-0.02em">Templates</div>
+            <div style="font-size:12.5px;color:#808080;margin-top:2px;max-width:600px;text-wrap:pretty">Seven ready-made recipes. Pick one, name it, and BenchPress builds the image and deploys a working site — no form to fill in.</div>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px">
+            <sc-for list="{{ templates }}" as="t" hint-placeholder-count="7">
+              <div style="border:1px solid #E2E2E2;border-radius:11px;background:#fff;padding:15px 16px 13px;display:flex;flex-direction:column;transition:box-shadow .15s ease-out" style-hover="box-shadow:0 2px 8px rgba(0,0,0,.06)">
+                <div style="display:flex;align-items:center;gap:10px">
+                  <div style="width:32px;height:32px;border-radius:8px;background:#fff;border:1px solid #E8E8E8;display:flex;align-items:center;justify-content:center;flex:none;overflow:hidden">
+                    <span style="width:20px;height:20px;display:block;flex:none;background:url({{ t.icon }}) center/contain no-repeat"></span>
+                  </div>
+                  <div style="min-width:0;flex:1">
+                    <div style="font-size:13px;font-weight:600;letter-spacing:-0.01em">{{ t.name }}</div>
+                    <div style="font-size:11.5px;color:#999999">{{ t.version }}</div>
+                  </div>
+                  <sc-if value="{{ t.popular }}" hint-placeholder-val="{{ false }}">
+                    <span style="font-size:10.5px;font-weight:500;color:#167C4A;background:#E7F5EE;border-radius:999px;padding:2px 8px">Most used</span>
+                  </sc-if>
+                </div>
+                <div style="font-size:12px;color:#666666;margin:10px 0 11px;text-wrap:pretty;min-height:34px">{{ t.desc }}</div>
+                <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:12px">
+                  <sc-for list="{{ t.appChips }}" as="a" hint-placeholder-count="2">
+                    <span style="display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:#171717;background:#fff;border:1px solid #E2E2E2;border-radius:999px;padding:3px 9px 3px 4px">
+                      <span style="width:15px;height:15px;display:block;flex:none;background:url({{ a.icon }}) center/contain no-repeat"></span>
+                      {{ a.label }}
+                    </span>
+                  </sc-for>
+                  <sc-for list="{{ t.chips }}" as="c" hint-placeholder-count="2">
+                    <span style="font-size:11px;color:#666666;background:#F4F4F4;border-radius:5px;padding:2px 7px">{{ c }}</span>
+                  </sc-for>
+                </div>
+                <div style="display:flex;align-items:center;gap:8px;margin-top:auto;padding-top:11px;border-top:1px solid #F4F4F4">
+                  <span style="font-size:11.5px;color:#999999">{{ t.eta }}</span>
+                  <button onClick="{{ t.deploy }}" style="margin-left:auto;height:29px;padding:0 13px;border:0;border-radius:7px;background:#171717;color:#fff;font-size:12px;font-weight:500;cursor:pointer" style-hover="background:#2F2F2F">Use template</button>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- ================= BENCH INSTANCES ================= -->
+      <sc-if value="{{ isBenches }}" hint-placeholder-val="{{ false }}">
+        <div style="padding:22px 24px 40px;max-width:1180px">
+          <div style="display:flex;align-items:flex-start;gap:12px;margin-bottom:14px;flex-wrap:wrap">
+            <div>
+              <div style="font-size:19px;font-weight:600;letter-spacing:-0.02em">Instances</div>
+              <div style="font-size:12.5px;color:#808080;margin-top:2px">{{ benchScope }}</div>
+            </div>
+            <button onClick="{{ goLogs }}" style="margin-left:auto;display:flex;align-items:center;gap:6px;height:32px;padding:0 13px;border:1px solid #E2E2E2;background:#fff;border-radius:7px;font-size:12.5px;color:#525252;cursor:pointer" style-hover="background:#F4F4F4">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16"></path><path d="M4 12h11"></path><path d="M4 18h7"></path></svg>
+              Deploy history
+            </button>
+          </div>
+          <div style="border:1px solid #E2E2E2;border-radius:11px;background:#fff;overflow-x:auto">
+            <div style="display:flex;gap:12px;padding:9px 16px;background:#F9F9F9;border-bottom:1px solid #E8E8E8;font-size:11px;font-weight:600;color:#808080;min-width:900px">
+              <span style="flex:1.7;min-width:220px">Bench</span>
+              <span style="width:110px">Status</span>
+              <span style="width:96px">Health</span>
+              <span style="width:140px">CPU / memory</span>
+              <span style="flex:1.2;min-width:150px">Site</span>
+              <span style="width:104px">Owner</span>
+            </div>
+            <sc-for list="{{ benchRows }}" as="b" hint-placeholder-count="4">
+              <div onClick="{{ b.open }}" style="display:flex;gap:12px;align-items:center;padding:12px 16px;border-bottom:1px solid #F4F4F4;min-width:900px;cursor:pointer" style-hover="background:#F9F9F9">
+                <div style="flex:1.7;min-width:220px;display:flex;align-items:center;gap:10px">
+                  <div style="width:28px;height:28px;border-radius:8px;background:#fff;border:1px solid #E8E8E8;display:flex;align-items:center;justify-content:center;flex:none">
+                    <span style="width:17px;height:17px;display:block;flex:none;background:url({{ b.icon }}) center/contain no-repeat"></span>
+                  </div>
+                  <div style="min-width:0">
+                    <div style="font-size:12.5px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ b.name }}</div>
+                    <div style="font-size:11px;color:#999999;font-family:ui-monospace,SFMono-Regular,Menlo,monospace">{{ b.wg }}</div>
+                  </div>
+                </div>
+                <div style="width:110px"><span style="{{ b.pillStyle }}"><span style="{{ b.dotStyle }}"></span>{{ b.status }}</span></div>
+                <div style="width:96px"><span style="{{ b.healthStyle }}">{{ b.health }}</span></div>
+                <div style="width:140px">
+                  <div style="font-size:11.5px;color:#525252;font-variant-numeric:tabular-nums">{{ b.usage }}</div>
+                  <div style="height:4px;border-radius:999px;background:#EDEDED;margin-top:4px;overflow:hidden"><div style="{{ b.barStyle }}"></div></div>
+                </div>
+                <div style="flex:1.2;min-width:150px;min-width:0;font-size:12px;color:#2490EF;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ b.site }}</div>
+                <span style="width:104px;font-size:11.5px;color:#808080;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ b.owner }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- ================= VPN DEVICES ================= -->
+      <sc-if value="{{ isDevices }}" hint-placeholder-val="{{ false }}">
+        <div style="padding:22px 24px 40px;max-width:960px">
+          <div style="display:flex;align-items:flex-start;gap:12px;margin-bottom:16px;flex-wrap:wrap">
+            <div>
+              <div style="font-size:19px;font-weight:600;letter-spacing:-0.02em">Devices</div>
+              <div style="font-size:12.5px;color:#808080;margin-top:2px;max-width:580px;text-wrap:pretty">Bench instances live on a private WireGuard network. Register each machine you work from, install its config, and the sites become reachable.</div>
+            </div>
+            <button onClick="{{ openAddDevice }}" style="margin-left:auto;display:flex;align-items:center;gap:6px;height:32px;padding:0 13px;border:0;border-radius:7px;background:#171717;color:#fff;font-size:12.5px;font-weight:500;cursor:pointer" style-hover="background:#2F2F2F">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 12h14"></path><path d="M12 5v14"></path></svg>
+              Add device
+            </button>
+          </div>
+
+          <div style="{{ vpnBannerStyle }}">
+            <span style="{{ vpnBannerDot }}"></span>
+            <div style="flex:1;min-width:220px">
+              <div style="font-size:13px;font-weight:600">{{ vpnBannerTitle }}</div>
+              <div style="font-size:12.5px;opacity:.9;margin-top:2px">{{ vpnBannerBody }}</div>
+            </div>
+            <button onClick="{{ toggleVpn }}" style="{{ vpnBannerBtn }}">{{ vpnBannerCta }}</button>
+          </div>
+
+          <div style="display:grid;grid-template-columns:minmax(0,1.6fr) minmax(240px,1fr);gap:16px;align-items:start;margin-top:16px">
+            <div style="border:1px solid #E2E2E2;border-radius:11px;background:#fff;overflow:hidden">
+              <div style="display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid #EDEDED">
+                <span style="font-size:13px;font-weight:600">Registered devices</span>
+                <span style="font-size:11.5px;color:#999999">{{ deviceCount }}</span>
+              </div>
+              <sc-for list="{{ devices }}" as="d" hint-placeholder-count="2">
+                <div style="display:flex;align-items:center;gap:12px;padding:13px 16px;border-bottom:1px solid #F4F4F4;flex-wrap:wrap">
+                  <div style="width:30px;height:30px;border-radius:8px;background:#F4F4F4;border:1px solid #E8E8E8;display:flex;align-items:center;justify-content:center;flex:none;color:#525252">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="13" rx="2"></rect><path d="M2 21h20"></path></svg>
+                  </div>
+                  <div style="min-width:150px;flex:1">
+                    <div style="font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ d.name }}</div>
+                    <div style="font-size:11px;color:#999999">{{ d.type }}</div>
+                  </div>
+                  <div style="width:104px">
+                    <div style="font-size:10.5px;color:#999999">IP</div>
+                    <div style="font-size:11.5px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace">{{ d.wg }}</div>
+                  </div>
+                  <div style="width:126px">
+                    <div style="font-size:10.5px;color:#999999">Transfer</div>
+                    <div style="font-size:11.5px;font-variant-numeric:tabular-nums">{{ d.transfer }}</div>
+                  </div>
+                  <span style="{{ d.pillStyle }}"><span style="{{ d.dotStyle }}"></span>{{ d.status }}</span>
+                  <div style="display:flex;gap:7px">
+                    <button style="height:28px;padding:0 10px;border:1px solid #E2E2E2;background:#fff;border-radius:7px;font-size:11.5px;color:#525252;cursor:pointer" style-hover="background:#F4F4F4">Config</button>
+                    <button style="height:28px;padding:0 10px;border:1px solid #E2E2E2;background:#fff;border-radius:7px;font-size:11.5px;color:#525252;cursor:pointer" style-hover="background:#F4F4F4">QR</button>
+                    <button style="width:28px;height:28px;border:1px solid #E2E2E2;background:#fff;border-radius:7px;color:#999999;cursor:pointer;display:flex;align-items:center;justify-content:center" style-hover="background:#F4F4F4;color:#171717" title="More">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="5" cy="12" r=".6"></circle><circle cx="12" cy="12" r=".6"></circle><circle cx="19" cy="12" r=".6"></circle></svg>
+                    </button>
+                  </div>
+                </div>
+              </sc-for>
+              <button onClick="{{ openAddDevice }}" style="display:flex;align-items:center;gap:7px;width:100%;padding:12px 16px;border:0;background:transparent;font-size:12.5px;color:#525252;cursor:pointer;text-align:left" style-hover="background:#F9F9F9">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 12h14"></path><path d="M12 5v14"></path></svg>
+                Add another machine
+              </button>
+            </div>
+
+            <div style="display:flex;flex-direction:column;gap:16px">
+              <div style="border:1px solid #E2E2E2;border-radius:11px;background:#fff;padding:15px 16px">
+                <div style="font-size:13px;font-weight:600;margin-bottom:3px">How this works</div>
+                <div style="font-size:12px;color:#666666;line-height:1.5;margin-bottom:12px;text-wrap:pretty">Instances are never published to the internet. WireGuard is the only way in.</div>
+                <sc-for list="{{ vpnSteps }}" as="s" hint-placeholder-count="3">
+                  <div style="display:flex;gap:9px;align-items:baseline;padding:5px 0">
+                    <span style="width:17px;height:17px;border-radius:50%;background:#F4F4F4;color:#525252;font-size:10px;font-weight:600;display:flex;align-items:center;justify-content:center;flex:none">{{ s.n }}</span>
+                    <span style="font-size:12.5px;color:#525252;text-wrap:pretty">{{ s.text }}</span>
+                  </div>
+                </sc-for>
+              </div>
+
+              <div style="border:1px solid #E2E2E2;border-radius:11px;background:#fff;padding:15px 16px">
+                <div style="font-size:13px;font-weight:600;margin-bottom:9px">A site will not open?</div>
+                <sc-for list="{{ vpnChecks }}" as="c" hint-placeholder-count="3">
+                  <div style="display:flex;gap:9px;align-items:baseline;padding:5px 0;font-size:12.5px;color:#525252">
+                    <span style="width:5px;height:5px;border-radius:50%;background:#B3B3B3;flex:none;transform:translateY(-2px)"></span>
+                    <span style="text-wrap:pretty">{{ c }}</span>
+                  </div>
+                </sc-for>
+                <button style="width:100%;height:30px;margin-top:11px;border:1px solid #E2E2E2;background:#fff;border-radius:7px;font-size:12px;color:#525252;cursor:pointer" style-hover="background:#F4F4F4">Run connection test</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- ================= DEPLOY LOGS ================= -->
+      <sc-if value="{{ isLogs }}" hint-placeholder-val="{{ false }}">
+        <div style="padding:22px 24px 40px;max-width:1080px">
+          <button onClick="{{ goBenches }}" style="display:flex;align-items:center;gap:5px;border:0;background:transparent;padding:0;margin-bottom:14px;font-size:12px;color:#808080;cursor:pointer" style-hover="color:#171717">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"></path></svg>
+            Instances
+          </button>
+          <div style="margin-bottom:14px">
+            <div style="font-size:19px;font-weight:600;letter-spacing:-0.02em">Deploy history</div>
+            <div style="font-size:12.5px;color:#808080;margin-top:2px">Every deploy run, newest first. Open one to see the eleven pipeline steps.</div>
+          </div>
+          <div style="border:1px solid #E2E2E2;border-radius:11px;background:#fff;overflow-x:auto">
+            <div style="display:flex;gap:12px;padding:9px 16px;background:#F9F9F9;border-bottom:1px solid #E8E8E8;font-size:11px;font-weight:600;color:#808080;min-width:760px">
+              <span style="flex:1.4;min-width:200px">Bench</span>
+              <span style="width:120px">Result</span>
+              <span style="flex:1.4;min-width:200px">Last step</span>
+              <span style="width:80px">Duration</span>
+              <span style="width:110px">Started</span>
+            </div>
+            <sc-for list="{{ logRuns }}" as="r" hint-placeholder-count="5">
+              <div onClick="{{ r.open }}" style="display:flex;gap:12px;align-items:center;padding:11px 16px;border-bottom:1px solid #F4F4F4;min-width:760px;cursor:pointer" style-hover="background:#F9F9F9">
+                <span style="flex:1.4;min-width:200px;font-size:12.5px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.bench }}</span>
+                <div style="width:120px"><span style="{{ r.pillStyle }}"><span style="{{ r.dotStyle }}"></span>{{ r.result }}</span></div>
+                <span style="flex:1.4;min-width:200px;font-size:12px;color:#666666;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.step }}</span>
+                <span style="width:80px;font-size:11.5px;color:#808080;font-variant-numeric:tabular-nums">{{ r.dur }}</span>
+                <span style="width:110px;font-size:11.5px;color:#808080">{{ r.started }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- ================= NEW LAB ================= -->
+      <sc-if value="{{ isNewLab }}" hint-placeholder-val="{{ false }}">
+        <div style="padding:20px 24px 40px;max-width:1080px">
+          <button onClick="{{ goLabs }}" style="display:flex;align-items:center;gap:5px;border:0;background:transparent;padding:0;margin-bottom:14px;font-size:12px;color:#808080;cursor:pointer" style-hover="color:#171717">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"></path></svg>
+            Labs
+          </button>
+          <div style="margin-bottom:16px">
+            <div style="font-size:19px;font-weight:600;letter-spacing:-0.02em">New lab</div>
+            <div style="font-size:12.5px;color:#808080;margin-top:2px;max-width:560px;text-wrap:pretty">Define the recipe once. Everything below is baked into the image, so every bench deployed from this lab is identical.</div>
+          </div>
+
+          <div style="display:grid;grid-template-columns:minmax(0,1.7fr) minmax(250px,1fr);gap:16px;align-items:start">
+            <div style="display:flex;flex-direction:column;gap:16px">
+
+              <div style="border:1px solid #E2E2E2;border-radius:11px;background:#fff;padding:17px 18px">
+                <div style="font-size:13px;font-weight:600;margin-bottom:14px">Identity</div>
+                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px">
+                  <div>
+                    <div style="font-size:11.5px;font-weight:500;color:#525252;margin-bottom:5px">Title</div>
+                    <div style="height:32px;border:1px solid #E2E2E2;border-radius:7px;background:#fff;display:flex;align-items:center;padding:0 10px;font-size:12.5px">Support Sandbox</div>
+                  </div>
+                  <div>
+                    <div style="font-size:11.5px;font-weight:500;color:#525252;margin-bottom:5px">Lab ID</div>
+                    <div style="height:32px;border:1px solid #E2E2E2;border-radius:7px;background:#F9F9F9;display:flex;align-items:center;padding:0 10px;font-size:12px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;color:#525252">support-sandbox</div>
+                    <div style="font-size:11px;color:#999999;margin-top:5px">Cannot change later — used in the container name and site domain.</div>
+                  </div>
+                </div>
+                <div style="margin-top:14px">
+                  <div style="font-size:11.5px;font-weight:500;color:#525252;margin-bottom:5px">Description</div>
+                  <div style="min-height:56px;border:1px solid #E2E2E2;border-radius:7px;background:#fff;padding:8px 10px;font-size:12.5px;color:#666666">Helpdesk environment for the support team to reproduce customer tickets.</div>
+                </div>
+                <div style="margin-top:14px">
+                  <div style="font-size:11.5px;font-weight:500;color:#525252;margin-bottom:6px">Frappe version</div>
+                  <div style="display:inline-flex;flex-wrap:wrap;gap:2px;background:#F4F4F4;border-radius:8px;padding:2px;max-width:100%">
+                    <sc-for list="{{ versions }}" as="v" hint-placeholder-count="4">
+                      <button onClick="{{ v.pick }}" style="{{ v.style }}">{{ v.label }}</button>
+                    </sc-for>
+                  </div>
+                </div>
+              </div>
+
+              <div style="border:1px solid #E2E2E2;border-radius:11px;background:#fff;overflow:hidden">
+                <div style="display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid #EDEDED">
+                  <span style="font-size:13px;font-weight:600">Apps</span>
+                  <span style="font-size:11.5px;color:#999999">Cloned at build time — frappe is always included</span>
+                </div>
+                <div style="display:flex;gap:10px;padding:8px 18px;font-size:11px;font-weight:600;color:#808080">
+                  <span style="flex:1;min-width:0">App</span>
+                  <span style="flex:2;min-width:0">Git URL</span>
+                  <span style="width:110px">Branch</span>
+                  <span style="width:26px"></span>
+                </div>
+                <sc-for list="{{ newLabApps }}" as="a" hint-placeholder-count="2">
+                  <div style="display:flex;gap:10px;align-items:center;padding:0 18px 10px">
+                    <div style="flex:1;min-width:0;height:30px;border:1px solid #E2E2E2;border-radius:7px;display:flex;align-items:center;gap:7px;padding:0 9px;font-size:12px">
+                      <span style="width:15px;height:15px;display:block;flex:none;background:url({{ a.icon }}) center/contain no-repeat"></span>
+                      {{ a.name }}
+                    </div>
+                    <div style="flex:2;min-width:0;height:30px;border:1px solid #E2E2E2;border-radius:7px;display:flex;align-items:center;padding:0 9px;font-size:11.5px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;color:#525252;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">{{ a.url }}</div>
+                    <div style="width:110px;height:30px;border:1px solid #E2E2E2;border-radius:7px;display:flex;align-items:center;padding:0 9px;font-size:11.5px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;color:#525252">{{ a.branch }}</div>
+                    <button style="width:26px;height:26px;border:1px solid #E2E2E2;background:#fff;border-radius:6px;color:#999999;cursor:pointer;display:flex;align-items:center;justify-content:center;flex:none" style-hover="background:#FDF0EF;color:#C7291F;border-color:#F3D2CF" title="Remove app">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6 18 18"></path><path d="M18 6 6 18"></path></svg>
+                    </button>
+                  </div>
+                </sc-for>
+                <div style="padding:2px 18px 15px">
+                  <button style="display:flex;align-items:center;gap:6px;height:29px;padding:0 11px;border:1px solid #E2E2E2;background:#fff;border-radius:7px;font-size:12px;color:#525252;cursor:pointer" style-hover="background:#F4F4F4">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 12h14"></path><path d="M12 5v14"></path></svg>
+                    Add app
+                  </button>
+                </div>
+              </div>
+
+              <div style="border:1px solid #E2E2E2;border-radius:11px;background:#fff;padding:17px 18px">
+                <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:14px">
+                  <span style="font-size:13px;font-weight:600">Resources and access</span>
+                  <span style="font-size:11.5px;color:#999999">Applied as container limits</span>
+                </div>
+                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px">
+                  <sc-for list="{{ resourceFields }}" as="f" hint-placeholder-count="5">
+                    <div>
+                      <div style="font-size:11.5px;font-weight:500;color:#525252;margin-bottom:5px">{{ f.k }}</div>
+                      <div style="height:32px;border:1px solid #E2E2E2;border-radius:7px;background:#fff;display:flex;align-items:center;padding:0 10px;font-size:12.5px">{{ f.v }}</div>
+                    </div>
+                  </sc-for>
+                </div>
+                <div style="display:flex;gap:22px;flex-wrap:wrap;margin-top:16px;padding-top:15px;border-top:1px solid #F4F4F4">
+                  <sc-for list="{{ toggles }}" as="t" hint-placeholder-count="2">
+                    <div style="display:flex;align-items:center;gap:9px">
+                      <button onClick="{{ t.flip }}" style="{{ t.trackStyle }}"><span style="{{ t.knobStyle }}"></span></button>
+                      <div>
+                        <div style="font-size:12.5px;font-weight:500">{{ t.label }}</div>
+                        <div style="font-size:11px;color:#999999">{{ t.note }}</div>
+                      </div>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+            </div>
+
+            <div style="border:1px solid #E2E2E2;border-radius:11px;background:#fff;padding:16px 17px">
+              <div style="font-size:13px;font-weight:600;margin-bottom:4px">What gets built</div>
+              <div style="font-size:12px;color:#666666;line-height:1.55;margin-bottom:13px;text-wrap:pretty">Saving writes a Draft lab. Building runs the image job — usually two to six minutes — and the lab becomes Ready.</div>
+              <sc-for list="{{ buildSummary }}" as="s" hint-placeholder-count="4">
+                <div style="display:flex;gap:9px;align-items:baseline;padding:5px 0;font-size:12.5px;color:#525252">
+                  <span style="width:5px;height:5px;border-radius:50%;background:#B3B3B3;flex:none;transform:translateY(-2px)"></span>
+                  {{ s }}
+                </div>
+              </sc-for>
+              <div style="display:flex;flex-direction:column;gap:8px;margin-top:16px;padding-top:14px;border-top:1px solid #F4F4F4">
+                <button onClick="{{ buildNewLab }}" style="height:32px;border:0;border-radius:7px;background:#171717;color:#fff;font-size:12.5px;font-weight:500;cursor:pointer" style-hover="background:#2F2F2F">Save and build image</button>
+                <button onClick="{{ goLabs }}" style="height:32px;border:1px solid #E2E2E2;background:#fff;border-radius:7px;font-size:12.5px;color:#525252;cursor:pointer" style-hover="background:#F4F4F4">Save as draft</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- ================= BUILD LOGS ================= -->
+      <sc-if value="{{ isBuildLogs }}" hint-placeholder-val="{{ false }}">
+        <div style="padding:22px 24px 40px;max-width:1080px">
+          <button onClick="{{ goLabs }}" style="display:flex;align-items:center;gap:5px;border:0;background:transparent;padding:0;margin-bottom:14px;font-size:12px;color:#808080;cursor:pointer" style-hover="color:#171717">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"></path></svg>
+            Labs
+          </button>
+          <div style="margin-bottom:14px">
+            <div style="font-size:19px;font-weight:600;letter-spacing:-0.02em">Build history</div>
+            <div style="font-size:12.5px;color:#808080;margin-top:2px">Image builds across every lab. Admin only — users see the deploy history for their own benches.</div>
+          </div>
+          <div style="border:1px solid #E2E2E2;border-radius:11px;background:#fff;overflow-x:auto">
+            <div style="display:flex;gap:12px;padding:9px 16px;background:#F9F9F9;border-bottom:1px solid #E8E8E8;font-size:11px;font-weight:600;color:#808080;min-width:800px">
+              <span style="flex:1.3;min-width:180px">Lab</span>
+              <span style="flex:1.2;min-width:160px">Image tag</span>
+              <span style="width:120px">Result</span>
+              <span style="flex:1.2;min-width:170px">Last step</span>
+              <span style="width:80px">Duration</span>
+              <span style="width:100px">Started</span>
+            </div>
+            <sc-for list="{{ buildRuns }}" as="r" hint-placeholder-count="5">
+              <div onClick="{{ r.open }}" style="display:flex;gap:12px;align-items:center;padding:11px 16px;border-bottom:1px solid #F4F4F4;min-width:800px;cursor:pointer" style-hover="background:#F9F9F9">
+                <span style="flex:1.3;min-width:180px;font-size:12.5px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.lab }}</span>
+                <span style="flex:1.2;min-width:160px;font-size:11.5px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;color:#525252;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.image }}</span>
+                <div style="width:120px"><span style="{{ r.pillStyle }}"><span style="{{ r.dotStyle }}"></span>{{ r.result }}</span></div>
+                <span style="flex:1.2;min-width:170px;font-size:12px;color:#666666;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.step }}</span>
+                <span style="width:80px;font-size:11.5px;color:#808080;font-variant-numeric:tabular-nums">{{ r.dur }}</span>
+                <span style="width:100px;font-size:11.5px;color:#808080">{{ r.started }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- ================= SETTINGS ================= -->
+      <sc-if value="{{ isSettings }}" hint-placeholder-val="{{ false }}">
+        <div style="padding:22px 24px 40px;max-width:760px">
+          <div style="margin-bottom:16px">
+            <div style="font-size:19px;font-weight:600;letter-spacing:-0.02em">Settings</div>
+            <div style="font-size:12.5px;color:#808080;margin-top:2px;max-width:560px;text-wrap:pretty">Server-wide defaults. Changing them affects benches deployed from now on, not ones already running.</div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:16px">
+            <sc-for list="{{ settingsGroups }}" as="g" hint-placeholder-count="3">
+              <div style="border:1px solid #E2E2E2;border-radius:11px;background:#fff;padding:17px 18px">
+                <div style="font-size:13px;font-weight:600">{{ g.title }}</div>
+                <div style="font-size:12px;color:#808080;margin-top:2px;margin-bottom:14px">{{ g.note }}</div>
+                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px">
+                  <sc-for list="{{ g.fields }}" as="f" hint-placeholder-count="2">
+                    <div>
+                      <div style="font-size:11.5px;font-weight:500;color:#525252;margin-bottom:5px">{{ f.k }}</div>
+                      <div style="{{ f.inputStyle }}">{{ f.v }}</div>
+                      <div style="font-size:11px;color:#999999;margin-top:5px">{{ f.help }}</div>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;margin-top:16px;padding:13px 16px;border:1px solid #E2E2E2;border-radius:11px;background:#fff">
+            <span style="font-size:12px;color:#808080">Last saved by priya@xyz, 12 March</span>
+            <button style="margin-left:auto;height:31px;padding:0 12px;border:1px solid #E2E2E2;background:#fff;border-radius:7px;font-size:12.5px;color:#525252;cursor:pointer" style-hover="background:#F4F4F4">Discard</button>
+            <button style="height:31px;padding:0 14px;border:0;border-radius:7px;background:#171717;color:#fff;font-size:12.5px;font-weight:500;cursor:pointer" style-hover="background:#2F2F2F">Save settings</button>
+          </div>
+        </div>
+      </sc-if>
+
+    </div>
+  </main>
+
+  <!-- ================= DEPLOY DIALOG ================= -->
+  <sc-if value="{{ deploying }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed;inset:0;background:rgba(0,0,0,.32);display:flex;align-items:center;justify-content:center;z-index:60;padding:24px">
+      <div style="width:520px;max-width:100%;max-height:88vh;overflow-y:auto;background:#fff;border-radius:12px;box-shadow:0 20px 46px rgba(0,0,0,.2);animation:fadein .16s ease-out">
+        <div style="display:flex;align-items:center;gap:11px;padding:17px 19px 14px;border-bottom:1px solid #EDEDED">
+          <div style="width:32px;height:32px;border-radius:8px;background:#fff;border:1px solid #E8E8E8;display:flex;align-items:center;justify-content:center;flex:none">
+            <span style="width:20px;height:20px;display:block;flex:none;background:url({{ deployIcon }}) center/contain no-repeat"></span>
+          </div>
+          <div style="min-width:0;flex:1">
+            <div style="font-size:14px;font-weight:600;letter-spacing:-0.01em">{{ deployTitle }}</div>
+            <div style="font-size:12px;color:#808080">{{ deploySub }}</div>
+          </div>
+          <span style="{{ deployHeadPill }}">{{ deployHeadLabel }}</span>
+        </div>
+        <div style="padding:6px 19px 12px;max-height:44vh;overflow-y:auto">
+          <sc-for list="{{ deploySteps }}" as="s" hint-placeholder-count="11">
+            <div style="display:flex;align-items:center;gap:11px;padding:6px 0">
+              <span style="{{ s.iconStyle }}">{{ s.mark }}</span>
+              <span style="{{ s.textStyle }}">{{ s.label }}</span>
+              <span style="margin-left:auto;font-size:11px;color:#999999;font-variant-numeric:tabular-nums">{{ s.time }}</span>
+            </div>
+          </sc-for>
+        </div>
+        <div style="border-top:1px solid #EDEDED;background:#FAFAFA;padding:10px 19px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;line-height:1.7;color:#666666">
+          <sc-for list="{{ deployTail }}" as="l" hint-placeholder-count="3">
+            <div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ l }}</div>
+          </sc-for>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;padding:13px 19px;border-top:1px solid #EDEDED">
+          <span style="font-size:11.5px;color:#999999">{{ deployHint }}</span>
+          <button onClick="{{ closeDeploy }}" style="margin-left:auto;height:31px;padding:0 12px;border:1px solid #E2E2E2;background:#fff;border-radius:7px;font-size:12.5px;color:#525252;cursor:pointer" style-hover="background:#F4F4F4">Run in background</button>
+          <button onClick="{{ openDeployed }}" style="{{ deployCtaStyle }}">{{ deployCta }}</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- ================= ADD DEVICE DIALOG ================= -->
+  <sc-if value="{{ addingDevice }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed;inset:0;background:rgba(0,0,0,.32);display:flex;align-items:center;justify-content:center;z-index:60;padding:24px">
+      <div style="width:460px;max-width:100%;background:#fff;border-radius:12px;box-shadow:0 20px 46px rgba(0,0,0,.2);animation:fadein .16s ease-out">
+        <div style="padding:17px 19px 13px;border-bottom:1px solid #EDEDED">
+          <div style="font-size:14px;font-weight:600;letter-spacing:-0.01em">Add this device</div>
+          <div style="font-size:12px;color:#808080;margin-top:2px">Two minutes, once per machine.</div>
+        </div>
+        <div style="padding:16px 19px">
+          <div style="font-size:11.5px;font-weight:500;color:#525252;margin-bottom:5px">Device name</div>
+          <div style="height:32px;border:1px solid #E2E2E2;border-radius:7px;background:#fff;display:flex;align-items:center;padding:0 10px;font-size:12.5px;color:#171717;box-shadow:0 0 0 3px rgba(36,144,239,.14)">Priya — MacBook Pro</div>
+          <div style="display:flex;gap:16px;margin-top:16px;align-items:flex-start">
+            <div style="width:112px;height:112px;flex:none;border:1px dashed #D3D3D3;border-radius:9px;background:#FAFAFA;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;color:#999999;font-size:10.5px;text-align:center;padding:8px">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect><path d="M14 14h3v3h-3z"></path><path d="M18 18h3v3h-3z"></path></svg>
+              QR placeholder
+            </div>
+            <div style="flex:1;min-width:0;font-size:12.5px;color:#525252;line-height:1.55;text-wrap:pretty">
+              Scan with the WireGuard app on a phone, or download the <span style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px">.conf</span> file and import it on a laptop. Your device gets a fixed IP on <span style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px">10.13.13.0/24</span>.
+              <div style="display:flex;gap:8px;margin-top:12px">
+                <button style="height:29px;padding:0 12px;border:1px solid #E2E2E2;background:#fff;border-radius:7px;font-size:12px;color:#525252;cursor:pointer" style-hover="background:#F4F4F4">Download .conf</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;padding:13px 19px;border-top:1px solid #EDEDED">
+          <button onClick="{{ closeAddDevice }}" style="height:31px;padding:0 12px;border:1px solid #E2E2E2;background:#fff;border-radius:7px;font-size:12.5px;color:#525252;cursor:pointer" style-hover="background:#F4F4F4">Cancel</button>
+          <button onClick="{{ confirmAddDevice }}" style="margin-left:auto;height:31px;padding:0 14px;border:0;border-radius:7px;background:#171717;color:#fff;font-size:12.5px;font-weight:500;cursor:pointer" style-hover="background:#2F2F2F">Register and connect</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;role&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;user&quot;,&quot;admin&quot;],&quot;default&quot;:&quot;user&quot;,&quot;tsType&quot;:&quot;'user' | 'admin'&quot;,&quot;section&quot;:&quot;Roles &amp; state&quot;},&quot;vpnConnected&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Roles &amp; state&quot;},&quot;firstRun&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Roles &amp; state&quot;}}">
+const PILL = 'display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:500;border-radius:999px;padding:2px 8px;white-space:nowrap;flex:none';
+const TONE = {
+  ok:   { bg:'#E7F5EE', fg:'#167C4A', dot:'#30A66D' },
+  info: { bg:'#EFF6FE', fg:'#1579D0', dot:'#2490EF' },
+  warn: { bg:'#FEF6E7', fg:'#9A6700', dot:'#E5A544' },
+  err:  { bg:'#FDF0EF', fg:'#C7291F', dot:'#E03636' },
+  mute: { bg:'#F4F4F4', fg:'#666666', dot:'#B3B3B3' }
+};
+const pill = t => PILL + ';background:' + TONE[t].bg + ';color:' + TONE[t].fg;
+const dot = t => 'width:5px;height:5px;border-radius:50%;flex:none;background:' + TONE[t].dot;
+const ghostPill = t => 'font-size:11px;font-weight:500;color:' + TONE[t].fg + ';white-space:nowrap;flex:none';
+const mono = 'font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px';
+
+// Official app marks, copied from the Frappe repos into app-icons/
+const ICON = {
+  frappe:'app-icons/frappe.svg', erpnext:'app-icons/erpnext.svg', crm:'app-icons/crm.svg',
+  hrms:'app-icons/hrms.svg', helpdesk:'app-icons/helpdesk.svg', lms:'app-icons/lms.svg'
+};
+const APP_LABEL = { frappe:'Frappe', erpnext:'ERPNext', crm:'CRM', hrms:'HR', helpdesk:'Helpdesk', lms:'Learning', india_compliance:'India Compliance' };
+const appChip = a => ({ icon: ICON[a] || ICON.frappe, label: APP_LABEL[a] || a });
+
+const STEPS = [
+  'Check shared infrastructure',
+  'Build the lab image',
+  'Create the container',
+  'Wait for container IP',
+  'Write common_site_config.json',
+  'Create the site',
+  'Build assets',
+  'Provision the SSH user',
+  'Provision code-server',
+  'Configure the WireGuard peer',
+  'Deploy complete'
+];
+const STEP_TIMES = ['0:02','1:41','0:06','0:09','0:01','1:58','1:12','0:04','0:07','0:03','—'];
+const STEP_SUBS = [
+  'MariaDB and Redis reachable',
+  'Cached image reused — bp/erpnext:v15',
+  'container_id 9f2ab1c4',
+  'container_ip 172.19.0.7',
+  'db host, redis, developer mode',
+  'bench new-site erpnext-demo.bp.local',
+  'yarn build — production',
+  'ssh user frappe, port 22',
+  'code-server 4.92 on :8443',
+  'wg_ip 10.13.13.24',
+  ''
+];
+
+class Component extends DCLogic {
+  state = {
+    view: 'overview', role: null, vpn: null, labId: 'erpnext-demo',
+    tab: 'Dashboard', reveal: false, deploying: null, step: 0,
+    addingDevice: false, menuOpen: false, newVersion: 'version-15', ssh: false, codeServer: true,
+    devices: [
+      { name:'Priya — MacBook Pro', type:'macOS · registered 12 Mar', wg:'10.13.13.24', transfer:'1.4 GB ↓ / 212 MB ↑', tone:'mute', status:'Idle' }
+    ]
+  };
+
+  get role() { return this.state.role ?? (this.props.role || 'user'); }
+  get vpn() { return this.state.vpn ?? !!this.props.vpnConnected; }
+  nav(v) { return () => this.setState({ view: v }); }
+
+  runDeploy(name, badge) {
+    const slug = String(name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    const apps = {
+      'frappe-framework': [], 'erpnext': ['erpnext'], 'frappe-crm': ['crm'], 'frappe-hr': ['hrms'],
+      'frappe-learning': ['lms'], 'frappe-helpdesk': ['helpdesk'],
+      'erpnext-india-compliance': ['erpnext', 'india_compliance'],
+      'erpnext-demo': ['erpnext'], 'crm-sandbox': ['crm'], 'hr-on-v16': ['hrms'], 'learning-lab': ['lms']
+    }[slug] || [];
+    return () => this.setState({ deploying: { name, badge, slug, apps }, deployStartedAt: Date.now() });
+  }
+
+  // step is derived from elapsed time, so it survives any remount of this instance
+  deployStep() {
+    if (!this.state.deploying || !this.state.deployStartedAt) return 0;
+    return Math.min(11, Math.floor((Date.now() - this.state.deployStartedAt) / 520));
+  }
+
+  // any live instance re-arms its own ticker; the ticker only forces a repaint
+  syncClock() {
+    const runs = !!this.state.deploying && this.deployStep() < 11;
+    if (runs && !this._clock) this._clock = setInterval(() => this.forceUpdate(), 160);
+    if (!runs) this.stopClock();
+  }
+
+  stopClock() { if (this._clock) clearInterval(this._clock); this._clock = null; }
+  componentDidMount() { this.syncClock(); }
+  componentDidUpdate() { this.syncClock(); }
+  componentWillUnmount() { this.stopClock(); }
+
+  renderVals() {
+    const v = this.state.view, admin = this.role === 'admin', vpn = this.vpn;
+    const labId = this.state.labId, firstRun = !!this.props.firstRun;
+
+    const navBase = 'display:flex;align-items:center;gap:9px;padding:6px 8px;border:0;border-radius:7px;font-size:13px;cursor:pointer;text-align:left;width:100%;';
+    const navStyle = on => navBase + (on
+      ? 'background:#fff;color:#171717;font-weight:500;box-shadow:0 1px 2px rgba(0,0,0,.06),0 0 0 1px #E2E2E2'
+      : 'background:transparent;color:#525252;font-weight:450');
+
+    // ---------- labs ----------
+    const LABS = {
+      'erpnext-demo': {
+        badge:'ER', icon:ICON.erpnext, labId:'erpnext-demo', title:'ERPNext Demo', version:'version-15',
+        apps:['erpnext'], status:'Ready', tone:'ok',
+        description:'Shared demo environment for customer walkthroughs. Rebuilt weekly from the ERPNext template.',
+        specs:['version-15','2 GB RAM','2 vCPU','code-server on','ssh on'],
+        site:'erpnext-demo.bp.local', benchNote:'bench-erpnext-demo · Running', lastRun:'2 min ago',
+        bench:'Running', benchTone:'ok', health:'Healthy', healthTone:'ok',
+        siteCount:'1 site', noSites:false
+      },
+      'crm-sandbox': {
+        badge:'CR', icon:ICON.crm, labId:'crm-sandbox', title:'CRM Sandbox', version:'version-15',
+        apps:['crm'], status:'Ready', tone:'ok',
+        description:'Scratch environment for the CRM integration spike.',
+        specs:['version-15','1 GB RAM','1 vCPU','code-server on'],
+        site:'crm-sandbox.bp.local', benchNote:'bench-crm-sandbox · Stopped', lastRun:'Yesterday',
+        bench:'Stopped', benchTone:'mute', health:'Unknown', healthTone:'mute',
+        siteCount:'1 site', noSites:false
+      },
+      'hr-v16': {
+        badge:'HR', icon:ICON.hrms, labId:'hr-v16', title:'HR on v16', version:'version-16',
+        apps:['hrms'], status:'Error', tone:'err',
+        description:'Trying HRMS against the version-16 branch ahead of the upgrade.',
+        specs:['version-16','2 GB RAM','2 vCPU'],
+        site:'—', benchNote:'Never deployed', lastRun:'1 h ago',
+        bench:'Error', benchTone:'err', health:'Unknown', healthTone:'mute',
+        siteCount:'No sites', noSites:true
+      },
+      'learning-lab': {
+        badge:'LM', icon:ICON.lms, labId:'learning-lab', title:'Learning Lab', version:'version-15',
+        apps:['lms'], status:'Building', tone:'info',
+        description:'Course authoring environment for the enablement team.',
+        specs:['version-15','1 GB RAM','1 vCPU'],
+        site:'learning.bp.local', benchNote:'Image building — step 2 of 11', lastRun:'Now',
+        bench:'Deploying', benchTone:'info', health:'Unknown', healthTone:'mute',
+        siteCount:'No sites', noSites:true
+      }
+    };
+    const openLab = id => () => this.setState({ view:'labDetail', labId:id, tab:'Dashboard' });
+    const labs = Object.keys(LABS).map(k => Object.assign({}, LABS[k], {
+      pillStyle: pill(LABS[k].tone), dotStyle: dot(LABS[k].tone), open: openLab(k)
+    }));
+
+    const L = LABS[labId];
+    const running = L.bench === 'Running';
+    const primaryLabel = L.status === 'Error' ? 'Rebuild image'
+      : L.bench === 'Running' ? (vpn ? 'Open site' : 'Open site — VPN off')
+      : L.bench === 'Deploying' ? 'Deploying…' : 'Deploy';
+    const primaryEnabled = !(L.bench === 'Deploying') && !(running && !vpn);
+    const lab = Object.assign({}, L, {
+      pillStyle: pill(L.tone), dotStyle: dot(L.tone),
+      isError: L.status === 'Error',
+      showSecondary: running,
+      primaryLabel,
+      primaryStyle: 'display:flex;align-items:center;gap:6px;height:32px;padding:0 14px;border:0;border-radius:7px;font-size:12.5px;font-weight:500;' +
+        (primaryEnabled ? 'background:#171717;color:#fff;cursor:pointer' : 'background:#EDEDED;color:#999999;cursor:not-allowed'),
+      primaryAction: L.bench === 'Running' ? () => {} : this.runDeploy(L.title, L.badge),
+      healthLabel: L.health,
+      healthStyle: pill(L.healthTone),
+      healthChecked: running ? 'checked 30s ago' : 'no recent check',
+      meters: [
+        { k:'CPU', v: running ? '18%' : '—', pct: running ? 18 : 0, tone:'ok', note: running ? 'quota 2 vCPU' : 'container not running' },
+        { k:'Memory', v: running ? '1.36 / 2 GB' : '—', pct: running ? 68 : 0, tone:'warn', note: running ? '68% of limit' : 'container not running' }
+      ].map(m => Object.assign({}, m, {
+        barStyle: 'height:100%;border-radius:999px;width:' + m.pct + '%;background:' + TONE[m.tone].dot
+      })),
+      sites: L.noSites ? [] : [{
+        domain: L.site, apps: 'frappe, ' + L.apps.join(', '),
+        status: running ? 'Active' : 'Inactive', tone: running ? 'ok' : 'mute',
+        openLabel: vpn && running ? 'Open' : 'Unreachable',
+        openStyle: 'height:27px;padding:0 11px;border-radius:6px;font-size:11.5px;flex:none;' +
+          (vpn && running ? 'border:1px solid #E2E2E2;background:#fff;color:#525252;cursor:pointer'
+                          : 'border:1px solid #EDEDED;background:#FAFAFA;color:#B3B3B3;cursor:not-allowed')
+      }].map(s => Object.assign({}, s, { pillStyle: pill(s.tone), dotStyle: dot(s.tone) }))
+    });
+
+    const mask = val => this.state.reveal ? val : '••••••••••';
+    const connRows = [
+      { k:'Site URL', v:L.site, secret:false },
+      { k:'WireGuard IP', v: running ? '10.13.13.24' : '—', secret:false },
+      { k:'Code server', v: running ? 'https://code.erpnext-demo.bp.local' : '—', secret:false },
+      { k:'SSH', v: running ? 'ssh frappe@10.13.13.24' : '—', secret:false },
+      { k:'SSH password', v: running ? mask('r7Kq2wLmT4') : '—', secret:true },
+      { k:'Admin password', v: running ? mask('Xz9pQv1sBd') : '—', secret:true }
+    ].map(r => Object.assign({}, r, {
+      valStyle: mono + ';flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:' + (r.secret && !this.state.reveal ? '#999999' : '#171717')
+    }));
+
+    // ---------- pipeline (lab detail, Deploy log tab) ----------
+    const failedAt = 1;
+    const isErr = L.status === 'Error', isBuilding = L.bench === 'Deploying';
+    const cursor = isErr ? failedAt : (isBuilding ? 1 : STEPS.length);
+    const pipeline = STEPS.map((label, i) => {
+      const done = i < cursor, failed = isErr && i === cursor, active = isBuilding && i === cursor;
+      const tone = failed ? 'err' : done ? 'ok' : 'mute';
+      return {
+        label,
+        sub: (done || failed || active) ? (failed ? 'no branch version-16 on frappe/hrms' : STEP_SUBS[i]) : '',
+        time: failed ? 'failed' : active ? 'running' : done ? STEP_TIMES[i] : '',
+        mark: done ? '✓' : failed ? '!' : '',
+        iconStyle: 'width:18px;height:18px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;font-size:10.5px;font-weight:600;color:#fff;margin-top:1px;' +
+          (done ? 'background:#30A66D' : failed ? 'background:#E03636'
+            : active ? 'background:transparent;border:2px solid #2490EF;border-top-color:transparent;animation:spin .8s linear infinite'
+            : 'background:#EDEDED'),
+        textStyle: 'font-size:12.5px;font-weight:' + (active || failed ? '600' : '450') + ';color:' + (done || active ? '#171717' : failed ? TONE.err.fg : '#B3B3B3'),
+        subStyle: 'font-size:11px;margin-top:1px;' + mono + ';color:' + (failed ? '#C7291F' : '#999999')
+      };
+    });
+
+    const okLog = [
+      { t:'12:04:02', text:'[step] Creating site erpnext-demo.bp.local', tone:'info' },
+      { t:'12:05:11', text:'[info] Installing app erpnext', tone:'mute' },
+      { t:'12:06:00', text:'[success] Site created', tone:'ok' },
+      { t:'12:06:01', text:'[step] Building assets', tone:'info' },
+      { t:'12:07:13', text:'[success] Assets built', tone:'ok' },
+      { t:'12:07:24', text:'[success] Deploy complete', tone:'ok' }
+    ];
+    const errLog = [
+      { t:'09:41:10', text:'[step] Building image bp/hr-v16', tone:'info' },
+      { t:'09:41:12', text:'[info] git clone https://github.com/frappe/hrms --branch version-16', tone:'mute' },
+      { t:'09:41:19', text:'[error] warning: Could not find remote branch version-16', tone:'err' },
+      { t:'09:41:19', text:'[error] fatal: Remote branch version-16 not found in upstream origin', tone:'err' },
+      { t:'09:41:20', text:'[error] Build failed at step 2 of 11', tone:'err' },
+      { t:'09:41:20', text:'[info] Nothing to roll back — no container was created', tone:'mute' }
+    ];
+    const logLines = (isErr ? errLog : okLog).map(l => Object.assign({}, l, {
+      style: 'color:' + (l.tone === 'err' ? '#C7291F' : l.tone === 'ok' ? '#167C4A' : l.tone === 'info' ? '#1579D0' : '#666666')
+    }));
+
+    // ---------- deploy dialog ----------
+    const dstep = this.deployStep(), dfin = dstep >= 11;
+    const deploySteps = STEPS.map((label, i) => {
+      const done = dstep > i, active = dstep === i;
+      return {
+        label,
+        time: done ? STEP_TIMES[i] : active ? 'running' : '',
+        mark: done ? '✓' : '',
+        iconStyle: 'width:17px;height:17px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;font-size:10px;color:#fff;' +
+          (done ? 'background:#30A66D' : active
+            ? 'background:transparent;border:2px solid #2490EF;border-top-color:transparent;animation:spin .8s linear infinite'
+            : 'background:#EDEDED'),
+        textStyle: 'font-size:12.5px;color:' + (done || active ? '#171717' : '#B3B3B3') + ';font-weight:' + (active ? '600' : '450')
+      };
+    });
+    const dep = this.state.deploying || { slug: 'new-bench', apps: [] };
+    const doneLines = [
+      '[success] MariaDB and Redis reachable',
+      '[success] Image built — bp/' + dep.slug + ':v15',
+      '[info] Container created — 9f2ab1c4',
+      '[info] Container IP 172.19.0.7',
+      '[success] Wrote common_site_config.json',
+      '[success] Site ' + dep.slug + '.bp.local created with ' + (dep.apps.length ? 'frappe, ' + dep.apps.join(', ') : 'frappe only'),
+      '[success] Assets built',
+      '[success] SSH user frappe provisioned',
+      '[success] code-server listening on :8443',
+      '[success] WireGuard peer 10.13.13.31 configured',
+      '[success] Deploy complete — site is live'
+    ];
+    let emitted = doneLines.slice(0, dstep);
+    if (dstep < 11) emitted = emitted.concat(['[step] ' + STEPS[dstep]]);
+    const deployTail = emitted.slice(-3);
+
+    const bTone = { Running:'ok', Deploying:'info', Stopped:'mute', Error:'err' };
+    const benchList = ['erpnext-demo','crm-sandbox','learning-lab','hr-v16'].map(k => {
+      const b = LABS[k], t = bTone[b.bench];
+      return {
+        badge:b.badge, icon:b.icon, name:'bench-' + b.labId, site:b.site,
+        wg: b.bench === 'Running' ? '10.13.13.24' : '—',
+        status:b.bench, pillStyle:pill(t), dotStyle:dot(t),
+        health:b.health, healthStyle:ghostPill(b.healthTone),
+        usage: b.bench === 'Running' ? '18% · 1.36 GB' : '—',
+        barStyle: 'height:100%;border-radius:999px;background:' + (b.bench === 'Running' ? '#30A66D' : '#D3D3D3') + ';width:' + (b.bench === 'Running' ? '18%' : '0%'),
+        owner: k === 'learning-lab' ? 'ravi@xyz' : 'priya@xyz',
+        action: b.bench === 'Running' ? 'Open' : b.bench === 'Stopped' ? 'Start' : 'View',
+        open: openLab(k)
+      };
+    });
+
+    const titles = {
+      overview:['Overview',''], labs:['Labs',''], labDetail:['Labs', L.title],
+      templates:['Templates',''], benches:['Instances',''], devices:['Devices',''], logs:['Instances','Deploy history'],
+      newLab:['Labs','New lab'], buildLogs:['Labs','Build history'], settings:['Settings','']
+    };
+    const tt = titles[v] || ['BenchPress',''];
+
+    return {
+      isAdmin: admin,
+      isOverview: v === 'overview', isLabs: v === 'labs', isLabDetail: v === 'labDetail',
+      isTemplates: v === 'templates', isBenches: v === 'benches', isDevices: v === 'devices', isLogs: v === 'logs',
+      goOverview: this.nav('overview'), goLabs: this.nav('labs'), goTemplates: this.nav('templates'),
+      goBenches: this.nav('benches'), goDevices: this.nav('devices'), goLogs: this.nav('logs'),
+      navOverview: navStyle(v === 'overview'), navLabs: navStyle(v === 'labs' || v === 'labDetail' || v === 'newLab' || v === 'buildLogs'),
+      navTemplates: navStyle(v === 'templates'), navBenches: navStyle(v === 'benches' || v === 'logs'),
+      navDevices: navStyle(v === 'devices'), navLogs: navStyle(v === 'logs'),
+      navBuildLogs: navStyle(v === 'buildLogs'), navSettings: navStyle(v === 'settings'),
+      navPlain: navStyle(false),
+
+      isNewLab: v === 'newLab' && admin, isBuildLogs: v === 'buildLogs' && admin, isSettings: v === 'settings' && admin,
+      goNewLab: this.nav('newLab'), goBuildLogs: this.nav('buildLogs'), goSettings: this.nav('settings'),
+      primaryCta: admin ? this.nav('newLab') : this.nav('templates'),
+      primaryCtaLabel: admin ? 'New lab' : 'New environment',
+
+      menuOpen: this.state.menuOpen,
+      toggleMenu: () => this.setState(s => ({ menuOpen: !s.menuOpen })),
+      menuItems: (admin ? [{ label:'Switch to Desk', note:'' }] : []).concat([
+        { label:'Toggle theme', note:'Light' }, { label:'Keyboard shortcuts', note:'⌘/' }, { label:'Log out', note:'' }
+      ]).map(m => Object.assign({}, m, {
+        act: () => this.setState({ menuOpen:false }),
+        style:'display:flex;align-items:center;width:100%;padding:7px 9px;border:0;background:transparent;border-radius:6px;font-size:12.5px;color:#525252;cursor:pointer;text-align:left'
+      })),
+
+      versions: ['version-14','version-15','version-16','develop'].map(label => ({
+        label,
+        pick: () => this.setState({ newVersion: label }),
+        style:'border:0;border-radius:6px;padding:5px 11px;font-size:12px;cursor:pointer;white-space:nowrap;flex:none;' +
+          (this.state.newVersion === label ? 'background:#fff;color:#171717;font-weight:500;box-shadow:0 1px 2px rgba(0,0,0,.08)' : 'background:transparent;color:#666666')
+      })),
+      newLabApps: [
+        { name:'helpdesk', icon:ICON.helpdesk, url:'https://github.com/frappe/helpdesk', branch:'main' },
+        { name:'erpnext', icon:ICON.erpnext, url:'https://github.com/frappe/erpnext', branch:'version-15' }
+      ],
+      resourceFields: [
+        { k:'Memory limit', v:'1g' }, { k:'CPU cores', v:'1' }, { k:'IOPS limit', v:'2000' },
+        { k:'BPS limit', v:'50m' }, { k:'PIDs limit', v:'512' }
+      ],
+      toggles: [
+        { label:'Code server', note:'Browser VS Code on :8443', on:this.state.codeServer, flip:() => this.setState(s => ({ codeServer: !s.codeServer })) },
+        { label:'SSH access', note:'Adds an ssh user to the container', on:this.state.ssh, flip:() => this.setState(s => ({ ssh: !s.ssh })) }
+      ].map(t => Object.assign({}, t, {
+        trackStyle:'width:34px;height:20px;border-radius:999px;border:0;padding:2px;cursor:pointer;display:flex;justify-content:' +
+          (t.on ? 'flex-end' : 'flex-start') + ';background:' + (t.on ? '#171717' : '#D3D3D3'),
+        knobStyle:'width:16px;height:16px;border-radius:50%;background:#fff;display:block'
+      })),
+      buildSummary: [
+        'Docker image bp/support-sandbox:v1',
+        'Frappe ' + this.state.newVersion + ' with helpdesk and erpnext',
+        (this.state.codeServer ? 'Code server enabled' : 'No code server') + (this.state.ssh ? ', SSH enabled' : ', SSH off'),
+        'A site is created on first deploy, not at build time'
+      ],
+      buildNewLab: this.runDeploy('Support Sandbox', 'SS'),
+
+      buildRuns: [
+        { lab:'HR on v16', image:'bp/hr-v16:v1', result:'Failed', tone:'err', step:'git clone hrms', dur:'0:19', started:'1 h ago', open: openLab('hr-v16') },
+        { lab:'Learning Lab', image:'bp/learning-lab:v2', result:'Building', tone:'info', step:'bench get-app lms', dur:'1:12', started:'2 h ago', open: openLab('learning-lab') },
+        { lab:'ERPNext Demo', image:'bp/erpnext-demo:v4', result:'Success', tone:'ok', step:'Image tagged', dur:'4:31', started:'Yesterday', open: openLab('erpnext-demo') },
+        { lab:'CRM Sandbox', image:'bp/crm-sandbox:v1', result:'Success', tone:'ok', step:'Image tagged', dur:'3:02', started:'12 Mar', open: openLab('crm-sandbox') },
+        { lab:'ERPNext Demo', image:'bp/erpnext-demo:v3', result:'Success', tone:'ok', step:'Image tagged', dur:'6:44', started:'5 Mar', open: openLab('erpnext-demo') }
+      ].map(r => Object.assign({}, r, { pillStyle:pill(r.tone), dotStyle:dot(r.tone) })),
+
+      settingsGroups: [
+        { title:'Domains', note:'How sites are addressed on the private network.', fields:[
+          { k:'Base domain', v:'bp.local', help:'Sites resolve as <site>.bp.local', code:true },
+          { k:'Default image', v:'bp/frappe:v15', help:'Used when a lab has no image of its own', code:true }
+        ]},
+        { title:'Docker', note:'Where BenchPress talks to the daemon.', fields:[
+          { k:'Docker socket', v:'/var/run/docker.sock', help:'', code:true },
+          { k:'Traefik network', v:'bp-net', help:'Containers join this network', code:true }
+        ]},
+        { title:'Container defaults', note:'Applied to new labs unless overridden.', fields:[
+          { k:'Memory limit', v:'2g', help:'', code:false },
+          { k:'CPU quota', v:'2', help:'', code:false },
+          { k:'Code server version', v:'4.92.2', help:'', code:true }
+        ]}
+      ].map(g => Object.assign({}, g, {
+        fields: g.fields.map(f => Object.assign({}, f, {
+          inputStyle:'height:32px;border:1px solid #E2E2E2;border-radius:7px;background:#fff;display:flex;align-items:center;padding:0 10px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;' +
+            (f.code ? mono + ';color:#525252' : 'font-size:12.5px;color:#171717')
+        }))
+      })),
+
+      benchCount: admin ? '4' : '3',
+      benchCountStyle: 'margin-left:auto;font-size:10.5px;color:#808080;background:#E8E8E8;border-radius:5px;padding:0 5px',
+      vpnDotStyle: 'margin-left:auto;width:6px;height:6px;border-radius:50%;background:' + (vpn ? '#30A66D' : '#E5A544'),
+
+      userName:'Priya Nair', userInitials:'PN',
+      roleLabel: admin ? 'BenchPress Admin' : 'BenchPress User',
+      toggleRole: () => this.setState({ role: admin ? 'user' : 'admin', view:'overview' }),
+
+      crumb1: tt[0], crumb2: tt[1], hasCrumb2: !!tt[1],
+      vpnChipStyle: pill(vpn ? 'ok' : 'warn') + ';height:26px;padding:0 10px;font-size:11.5px',
+      vpnChipDot: dot(vpn ? 'ok' : 'warn'),
+      vpnChipLabel: vpn ? 'VPN connected' : 'VPN off',
+      vpnOff: !vpn,
+
+      firstRun,
+      firstRunSteps: [
+        { n:'1', title:'Pick a lab recipe', body:'A template, or your own list of apps, versions and resource limits.' },
+        { n:'2', title:'Deploy it', body:'BenchPress builds the image, creates the container and the site, then wires up SSH and VS Code.' },
+        { n:'3', title:'Connect over VPN', body:'Register your machine on WireGuard — that is what makes the site reachable.' }
+      ].map(s => Object.assign({}, s, { numStyle:'width:18px;height:18px;border-radius:50%;background:#171717;color:#fff;font-size:10.5px;font-weight:600;display:flex;align-items:center;justify-content:center;flex:none' })),
+
+      greeting:'Good morning, Priya',
+      overviewSub: admin ? '4 bench instances across 4 labs · 1 build failing' : '3 environments · 1 running, 1 stopped',
+      stats: [
+        { k:'Running', v:'1', note:'of 3', tone:'ok' },
+        { k:'Stopped', v:'1', note:'frees 1 GB', tone:'mute' },
+        { k:'Needs attention', v:'1', note:'build failed', tone:'err' },
+        { k:'Deploy time (avg)', v:'5m 24s', note:'last 10 runs', tone:'mute' }
+      ].map(s => Object.assign({}, s, {
+        valStyle: 'font-size:22px;font-weight:600;letter-spacing:-0.02em;font-variant-numeric:tabular-nums;color:' + (s.tone === 'err' ? TONE.err.fg : s.tone === 'ok' ? TONE.ok.fg : '#171717')
+      })),
+      envHeading: admin ? 'All instances' : 'My environments',
+      benches: benchList.slice(0, 3),
+      benchRows: benchList,
+      benchScope: admin ? 'Every container on this server, across all owners.' : 'Containers you own. Ask an admin if you need access to another.',
+      activity: [
+        { text:'hr-v16 image build failed — branch version-16 not found', tone:'err', when:'1 h' },
+        { text:'learning-lab started building', tone:'info', when:'2 h' },
+        { text:'bench-crm-sandbox stopped by priya@xyz', tone:'mute', when:'Yest.' },
+        { text:'erpnext-demo deployed in 5m 12s', tone:'ok', when:'Yest.' },
+        { text:'Device “Priya — MacBook Pro” registered', tone:'mute', when:'12 Mar' }
+      ].map(a => Object.assign({}, a, { dotStyle:'width:6px;height:6px;border-radius:50%;flex:none;background:' + TONE[a.tone].dot })),
+      infra: [
+        { k:'MariaDB', note:'10.6 · port 3306', status:'Active', tone:'ok' },
+        { k:'Redis', note:'cache + queue', status:'Active', tone:'ok' },
+        { k:'Traefik', note:'bp-net', status:'Active', tone:'ok' }
+      ].map(i => Object.assign({}, i, { pillStyle:pill(i.tone), dotStyle:dot(i.tone) })),
+
+      labs,
+      labFilters: ['Status: all','Version: all','Owner: me'].map((label, i) => ({
+        label,
+        style:'display:inline-flex;align-items:center;gap:5px;height:30px;padding:0 10px;border:1px solid #E2E2E2;background:#fff;border-radius:7px;font-size:12px;color:#525252;cursor:pointer'
+      })),
+
+      lab, connRows,
+      connCardStyle:'border-radius:11px;padding:14px 16px;border:1px solid ' + (vpn ? '#CDE9DA' : '#F0E0BC') +
+        ';background:' + (vpn ? '#F1FAF5' : '#FEF9EE') + ';color:' + (vpn ? '#146845' : '#7A5200'),
+      connTitle: vpn ? 'Reachable on your VPN' : 'Not reachable — VPN off',
+      connBody: vpn
+        ? 'This bench answers on 10.13.13.24 while WireGuard is up. Nothing is published to the public internet.'
+        : 'The site, SSH and VS Code links below only resolve once this machine is on the WireGuard network.',
+      toggleReveal: () => this.setState(s => ({ reveal: !s.reveal })),
+      revealLabel: this.state.reveal ? 'Hide secrets' : 'Reveal secrets',
+
+      tabs: ['Dashboard','Sites','Deploy log'].concat(admin ? ['Build log'] : []).map(label => ({
+        label,
+        select: () => this.setState({ tab: label }),
+        style:'border:0;background:transparent;padding:8px 12px;font-size:12.5px;cursor:pointer;margin-bottom:-1px;' +
+          (this.state.tab === label ? 'color:#171717;font-weight:500;border-bottom:2px solid #171717'
+                                    : 'color:#808080;font-weight:450;border-bottom:2px solid transparent')
+      })),
+      tabDashboard: this.state.tab === 'Dashboard' || this.state.tab === 'Sites',
+      tabLog: this.state.tab === 'Deploy log' || this.state.tab === 'Build log',
+      showDeployLog: () => this.setState({ tab:'Deploy log' }),
+
+      pipelineTitle: isErr ? 'Build run — failed' : isBuilding ? 'Deploy run — in progress' : 'Deploy run — 11 of 11 steps',
+      pipelineStatus: isErr ? 'Error' : isBuilding ? 'Running' : 'Success',
+      pipelinePillStyle: pill(isErr ? 'err' : isBuilding ? 'info' : 'ok'),
+      pipelineDotStyle: dot(isErr ? 'err' : isBuilding ? 'info' : 'ok'),
+      pipelineElapsed: isErr ? 'stopped after 0:19' : isBuilding ? 'elapsed 1:12' : 'total 5m 12s',
+      pipeline, logLines, logCount: isErr ? '42 lines' : '318 lines',
+
+      templates: [
+        { badge:'FR', icon:ICON.frappe, apps:['frappe'], name:'Frappe Framework', version:'version-15', desc:'A bare bench with the framework only. Add your own apps later.', chips:['512 MB','1 vCPU'], eta:'~3 min' },
+        { badge:'ER', icon:ICON.erpnext, apps:['erpnext'], name:'ERPNext', version:'version-15', desc:'Full ERP — accounts, stock, selling, buying. The usual starting point.', chips:['2 GB','2 vCPU'], eta:'~6 min', popular:true },
+        { badge:'CR', icon:ICON.crm, apps:['crm'], name:'Frappe CRM', version:'version-15', desc:'Leads, deals and pipelines on a clean bench.', chips:['1 GB','1 vCPU'], eta:'~4 min' },
+        { badge:'HR', icon:ICON.hrms, apps:['hrms'], name:'Frappe HR', version:'version-15', desc:'Payroll, attendance and leave management.', chips:['2 GB','2 vCPU'], eta:'~5 min' },
+        { badge:'LM', icon:ICON.lms, apps:['lms'], name:'Frappe Learning', version:'version-15', desc:'Courses, batches and assessments for enablement work.', chips:['1 GB','1 vCPU'], eta:'~4 min' },
+        { badge:'HD', icon:ICON.helpdesk, apps:['helpdesk'], name:'Frappe Helpdesk', version:'version-15', desc:'Ticketing and the agent inbox.', chips:['1 GB','1 vCPU'], eta:'~4 min' },
+        { badge:'IC', icon:ICON.erpnext, apps:['erpnext','india_compliance'], name:'ERPNext + India Compliance', version:'version-15', desc:'ERPNext with GST returns and e-invoicing bundled in.', chips:['2 GB','2 vCPU'], eta:'~7 min' }
+      ].map(t => Object.assign({}, t, { appChips: t.apps.map(appChip), deploy: this.runDeploy(t.name, t.badge) })),
+
+      devices: this.state.devices.map(d => Object.assign({}, d, { pillStyle:pill(d.tone), dotStyle:dot(d.tone) })),
+      deviceCount: this.state.devices.length + (this.state.devices.length === 1 ? ' machine' : ' machines'),
+      vpnSteps: [
+        { n:'1', text:'Register the machine here — it gets a fixed IP on 10.13.13.0/24.' },
+        { n:'2', text:'Import the config into the WireGuard app, or scan the QR on a phone.' },
+        { n:'3', text:'Turn the tunnel on. Sites, SSH and VS Code resolve immediately.' }
+      ],
+      vpnChecks: [
+        'Check the tunnel is on — the chip in the header turns green.',
+        'The instance must be Running, not Stopped.',
+        'One config per machine; sharing a config disconnects the other device.'
+      ],
+      vpnBannerStyle:'display:flex;align-items:center;gap:13px;flex-wrap:wrap;border-radius:11px;padding:15px 17px;border:1px solid ' +
+        (vpn ? '#CDE9DA' : '#F0E0BC') + ';background:' + (vpn ? '#F1FAF5' : '#FEF9EE') + ';color:' + (vpn ? '#146845' : '#7A5200'),
+      vpnBannerDot: 'width:9px;height:9px;border-radius:50%;flex:none;background:' + (vpn ? '#30A66D' : '#E5A544') + (vpn ? '' : ';animation:pulse 1.8s ease-in-out infinite'),
+      vpnBannerTitle: vpn ? 'WireGuard is up on this device' : 'This device is not on the VPN',
+      vpnBannerBody: vpn ? 'Handshake 14 seconds ago. Sites, SSH and VS Code all resolve.' : 'Register the machine, import the config, then everything below becomes reachable.',
+      vpnBannerCta: vpn ? 'Disconnect' : 'Connect',
+      vpnBannerBtn:'height:31px;padding:0 14px;border-radius:7px;font-size:12.5px;font-weight:500;cursor:pointer;border:0;' +
+        (vpn ? 'background:rgba(20,104,69,.10);color:#146845' : 'background:#171717;color:#fff'),
+      toggleVpn: () => this.setState(s => {
+        const on = !(s.vpn ?? !!this.props.vpnConnected);
+        return { vpn:on, devices: s.devices.map((d, i) => i === 0 ? Object.assign({}, d, on ? { tone:'ok', status:'Connected' } : { tone:'mute', status:'Idle' }) : d) };
+      }),
+      openAddDevice: () => this.setState({ addingDevice:true }),
+      closeAddDevice: () => this.setState({ addingDevice:false }),
+      addingDevice: this.state.addingDevice,
+      confirmAddDevice: () => this.setState(s => ({
+        addingDevice:false, vpn:true,
+        devices: s.devices.map((d, i) => i === 0 ? Object.assign({}, d, { tone:'ok', status:'Connected' }) : d)
+      })),
+
+      logRuns: [
+        { bench:'bench-hr-v16', result:'Failed', tone:'err', step:'2 — Build the lab image', dur:'0:19', started:'1 h ago', open: openLab('hr-v16') },
+        { bench:'bench-learning-lab', result:'Running', tone:'info', step:'2 — Build the lab image', dur:'1:12', started:'2 h ago', open: openLab('learning-lab') },
+        { bench:'bench-erpnext-demo', result:'Success', tone:'ok', step:'11 — Deploy complete', dur:'5:12', started:'Yesterday', open: openLab('erpnext-demo') },
+        { bench:'bench-crm-sandbox', result:'Success', tone:'ok', step:'11 — Deploy complete', dur:'3:48', started:'12 Mar', open: openLab('crm-sandbox') },
+        { bench:'bench-erpnext-demo', result:'Failed', tone:'err', step:'6 — Create the site', dur:'2:03', started:'10 Mar', open: openLab('erpnext-demo') }
+      ].map(r => Object.assign({}, r, { pillStyle:pill(r.tone), dotStyle:dot(r.tone) })),
+
+      deploying: !!this.state.deploying,
+      deployBadge: this.state.deploying ? this.state.deploying.badge : '',
+      deployIcon: (this.state.deploying && this.state.deploying.apps && this.state.deploying.apps.length ? ICON[this.state.deploying.apps[0]] : ICON.frappe) || ICON.frappe,
+      deployTitle: dfin ? 'Deployed' : (this.state.deploying ? 'Deploying ' + this.state.deploying.name : ''),
+      deploySub: dfin ? dep.slug + '.bp.local · site is live' : 'Step ' + Math.min(dstep + 1, 11) + ' of 11',
+      deployHeadPill: pill(dfin ? 'ok' : 'info') + ';height:22px',
+      deployHeadLabel: dfin ? 'Success' : 'Running',
+      deploySteps, deployTail,
+      deployHint: dfin ? '' : 'Safe to close — this keeps running.',
+      deployCta: dfin ? (vpn ? 'Open site' : 'Connect VPN to open') : 'Deploying…',
+      deployCtaStyle:'height:31px;padding:0 14px;border:0;border-radius:7px;font-size:12.5px;font-weight:500;' +
+        (dfin ? 'background:#171717;color:#fff;cursor:pointer' : 'background:#EDEDED;color:#999999;cursor:default'),
+      openDeployed: () => { if (dfin) { this.stopClock(); this.setState({ deploying:null, deployStartedAt:null, view: vpn ? 'labDetail' : 'devices', labId:'erpnext-demo', tab:'Dashboard' }); } },
+      closeDeploy: () => { this.stopClock(); this.setState({ deploying:null, deployStartedAt:null }); }
+    };
+  }
+}
+</script>
+</body>
+</html>

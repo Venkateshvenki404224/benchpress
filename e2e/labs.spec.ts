@@ -1,6 +1,6 @@
-import { test, expect } from "@playwright/test";
-import { LabsPage } from "./pages/LabsPage";
+import { expect, test } from "@playwright/test";
 import { createTestLab, deleteTestDoc } from "./fixtures/test-data";
+import { LabsPage } from "./pages/LabsPage";
 
 let labName: string;
 
@@ -21,89 +21,91 @@ test.describe("Labs Page", () => {
     }
   });
 
-  test("loads and displays labs list heading", async ({ page }) => {
+  test("loads the table and its filters", async ({ page }) => {
     const labsPage = new LabsPage(page);
     await labsPage.goto();
 
-    await expect(labsPage.heading).toBeVisible();
+    await expect(labsPage.table).toBeVisible();
     await expect(labsPage.searchInput).toBeVisible();
+    await expect(labsPage.statusFilter).toBeVisible();
+    await expect(labsPage.versionFilter).toBeVisible();
+    await expect(labsPage.ownerFilter).toBeVisible();
   });
 
-  test("displays search and filter controls", async ({ page }) => {
+  test("shows the columns the old table omitted", async ({ page }) => {
     const labsPage = new LabsPage(page);
     await labsPage.goto();
 
-    await expect(labsPage.searchInput).toBeVisible();
-    await expect(labsPage.statusCombobox).toBeVisible();
-    await expect(labsPage.versionCombobox).toBeVisible();
+    for (const column of ["Lab", "Version", "Apps", "Status", "Deployed as", "Last run"]) {
+      await expect(labsPage.table).toContainText(column);
+    }
+    // Memory and CPU moved to the lab detail header.
+    await expect(labsPage.table).not.toContainText("Memory");
   });
 
-  test("search filters labs by title", async ({ page }) => {
+  test("renders every status as a badge, never grey text", async ({ page }) => {
     const labsPage = new LabsPage(page);
     await labsPage.goto();
-    await labsPage.waitForPageLoad();
+
+    await expect(labsPage.statusBadge(labName, "Draft").first()).toBeVisible();
+  });
+
+  test("an undeployed lab says so rather than leaving a blank cell", async ({ page }) => {
+    const labsPage = new LabsPage(page);
+    await labsPage.goto();
+
+    await expect(labsPage.table).toContainText("Never deployed");
+  });
+
+  test("search narrows the list without a page reload", async ({ page }) => {
+    const labsPage = new LabsPage(page);
+    await labsPage.goto();
 
     await labsPage.search("E2E Test Lab");
-    await expect(page.locator("text=E2E Test Lab")).toBeVisible();
+    await labsPage.expectRowVisible(labName);
 
     await labsPage.search("nonexistent-lab-xyz-12345");
-    await expect(page.locator("text=No labs match")).toBeVisible();
+    await labsPage.expectRowHidden(labName);
+    await expect(labsPage.clearFilters).toBeVisible();
   });
 
-  test("search clears and shows all labs again", async ({ page }) => {
+  test("clearing the filters brings every lab back", async ({ page }) => {
     const labsPage = new LabsPage(page);
     await labsPage.goto();
-    await labsPage.waitForPageLoad();
 
-    await labsPage.search("E2E Test Lab");
-    await labsPage.clearSearch();
+    await labsPage.search("nonexistent-lab-xyz-12345");
+    await labsPage.clearFilters.click();
 
-    await expect(page.locator("text=E2E Test Lab")).toBeVisible();
+    await labsPage.expectRowVisible(labName);
   });
 
-  test("status filter shows matching labs", async ({ page }) => {
+  test("the filters keep matching labs and drop the rest", async ({ page }) => {
     const labsPage = new LabsPage(page);
     await labsPage.goto();
-    await labsPage.waitForPageLoad();
 
+    // The fixture lab is Draft on version-16. Each dropdown only offers values
+    // that some lab actually has, so filtering to another one must empty it out.
     await labsPage.filterByStatus("Draft");
-    await expect(page.locator("text=E2E Test Lab")).toBeVisible();
+    await labsPage.expectRowVisible(labName);
+
+    await labsPage.filterByStatus("Status: all");
+    await labsPage.filterByVersion("version-15");
+    await labsPage.expectRowHidden(labName);
   });
 
-  test("status filter hides non-matching labs", async ({ page }) => {
+  test("admin header actions are present for an admin", async ({ page }) => {
     const labsPage = new LabsPage(page);
     await labsPage.goto();
-    await labsPage.waitForPageLoad();
 
-    await labsPage.filterByStatus("Ready");
-    await expect(page.locator("text=E2E Test Lab")).not.toBeVisible();
+    await labsPage.expectAdminActionsVisible();
+    await expect(labsPage.fromTemplateButton).toBeVisible();
   });
 
-  test("version filter shows matching labs", async ({ page }) => {
+  test("clicking a lab opens its detail page", async ({ page }) => {
     const labsPage = new LabsPage(page);
     await labsPage.goto();
-    await labsPage.waitForPageLoad();
 
-    await labsPage.filterByVersion("Version 16");
-    await expect(page.locator("text=E2E Test Lab")).toBeVisible();
-  });
-
-  test("version filter hides non-matching labs", async ({ page }) => {
-    const labsPage = new LabsPage(page);
-    await labsPage.goto();
-    await labsPage.waitForPageLoad();
-
-    await labsPage.filterByVersion("Version 14");
-    await expect(page.locator("text=E2E Test Lab")).not.toBeVisible();
-  });
-
-  test("clicking a lab navigates to lab detail", async ({ page }) => {
-    const labsPage = new LabsPage(page);
-    await labsPage.goto();
-    await labsPage.waitForPageLoad();
-
-    await page.locator("text=E2E Test Lab").first().click();
+    await labsPage.row(labName).click();
     await page.waitForURL(`**/labs/${labName}`);
-    await expect(page.locator("h1")).toContainText("E2E Test Lab");
   });
 });

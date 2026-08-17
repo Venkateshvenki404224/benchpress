@@ -24,54 +24,52 @@ Instead of getting a new WireGuard config every time you deploy a bench, you reg
 
 ### Navigate to the Devices page
 
-From the sidebar, click **Devices**.
+From the sidebar, click **Devices**. The top of the screen states whether your tunnel is up,
+and what to do when it is not.
 
 ![Devices page](images/devices.png)
 
-### Click "Add Device"
+### Click "Add this device"
 
-A dialog appears with the following fields:
+A dialog appears with two fields:
 
 | Field | Required | Description |
 |-------|----------|-------------|
-| **Device Name** | Yes | A friendly name for your device (e.g., "My MacBook") |
-| **Device Type** | Yes | The type of device: Mobile, Laptop, Desktop, Tablet, Server, IoT, Embedded |
-| **Auto Generate Keypair** | Default: checked | Let BenchPress generate the WireGuard keys |
-| **WireGuard Public Key** | Only if auto-generate is unchecked | Provide your own public key |
+| **Device name** | Yes | A friendly name for your device (e.g., "My MacBook") |
+| **Type** | Yes | Mobile, Laptop, Desktop, Tablet, Server, IoT or Embedded |
 
-Click **Add Device** to register.
+Keys are generated for you — the private key never leaves the config you download. Click
+**Register and connect**; the configuration and its QR code appear in the same dialog, because
+a peer's config does not exist until the peer does.
 
 ---
 
-## Device Card
+## The device list
 
-After registering, each device appears as a card showing:
-
+After registering, each device is a row in **Registered devices**:
 
 | Element | Description |
 |---------|-------------|
 | **Device name** | The friendly name you chose |
-| **Type badge** | Device type (Laptop, Mobile, etc.) |
-| **Status** | Active (green) or inactive (gray) |
+| **Type** | Device type (Laptop, Mobile, etc.) |
+| **Status** | A themed badge — Active while the handshake is fresh, Stale once it is not |
 | **WireGuard IP** | Allocated VPN IP (e.g., `172.27.0.3`) |
-| **Received / Sent** | Data transfer stats from WireGuard |
+| **Transfer** | Received / sent counters from WireGuard |
+| **Registered** | When the device was added |
 
 ---
 
 ## Getting Your WireGuard Config
 
-### Option 1: Show Configuration
+### Option 1: Config
 
-Click the menu icon (three dots) on a device card and select **Show Configuration**.
+Click **Config** on the device's row. A dialog opens with the full WireGuard config text and a
+**Download .conf** button.
 
-A dialog opens with:
-- The full WireGuard config text (left side)
-- A QR code for mobile import (right side)
+### Option 2: QR
 
-
-### Option 2: Download Tunnel File
-
-Click the menu icon and select **Download Tunnel File**. This downloads a `.conf` file that you can import directly into the WireGuard app on any platform.
+Click **QR** on the device's row for a scannable code — the panel forces a white background so
+a phone camera can read it in dark mode too.
 
 ### Importing the config
 
@@ -87,7 +85,7 @@ Click the menu icon and select **Download Tunnel File**. This downloads a `.conf
 
 ## Removing a Device
 
-Click the menu icon on a device card and select **Delete**.
+Open the `⋯` menu on the device's row and select **Remove**.
 
 A confirmation dialog appears:
 
@@ -99,6 +97,15 @@ Click **Remove Device** to confirm. This will:
 3. Sync the change to the WireGuard interface
 
 > After removal, the device can no longer connect to any bench containers via VPN.
+
+---
+
+## When a site will not open
+
+The **A site will not open?** card runs a connection test against your own tunnel: the VPN
+server, whether this account has a device registered, whether its peer is active, and whether
+there has been a recent handshake. It names the first failing check and what to do about it,
+rather than leaving you to guess which half of the path is down.
 
 ---
 

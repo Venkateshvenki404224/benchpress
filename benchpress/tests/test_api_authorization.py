@@ -10,7 +10,7 @@ Each denial test has a positive control so a guard that vacuously throws for
 everyone — or silently returns an empty result — is caught as a failure.
 """
 
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import frappe
 from frappe.tests import IntegrationTestCase
@@ -80,6 +80,15 @@ class TestApiAuthorization(IntegrationTestCase):
 		cls.norole_user = _ensure_user("authz-norole@example.com", "Authz NoRole")
 		cls.lab = _ensure_lab("authz-lab")
 		cls.bench = _ensure_owned_bench(cls.user_a, cls.lab)
+		cls.build_log = frappe.get_doc(
+			{
+				"doctype": "Build Log",
+				"lab": cls.lab.name,
+				"log_type": "error",
+				"message": "authz fixture build line",
+				"timestamp": frappe.utils.now_datetime(),
+			}
+		).insert(ignore_permissions=True)
 		cls.deploy_log = frappe.get_doc(
 			{
 				"doctype": "Deploy Log",
@@ -95,6 +104,7 @@ class TestApiAuthorization(IntegrationTestCase):
 	def tearDownClass(cls):
 		frappe.set_user("Administrator")
 		frappe.delete_doc("Deploy Log", cls.deploy_log.name, force=True, ignore_permissions=True)
+		frappe.delete_doc("Build Log", cls.build_log.name, force=True, ignore_permissions=True)
 		frappe.delete_doc("Bench Instance", cls.bench.name, force=True, ignore_permissions=True)
 		frappe.delete_doc("Lab", cls.lab.name, force=True, ignore_permissions=True)
 		for email in (cls.user_a, cls.user_b, cls.admin_user, cls.norole_user):
@@ -120,6 +130,11 @@ class TestApiAuthorization(IntegrationTestCase):
 		self.assert_denied(lambda: api.create_lab_from_template("frappe", "authz-guest"))
 		self.assert_denied(lambda: api.build_lab_image(self.lab.name))
 		self.assert_denied(lambda: api.run_diagnostics())
+
+	def test_guest_denied_from_overview_endpoints(self):
+		frappe.set_user("Guest")
+		self.assert_denied(api.get_overview)
+		self.assert_denied(api.get_vpn_status)
 
 	def test_guest_denied_from_bench_scoped_endpoints(self):
 		frappe.set_user("Guest")
@@ -176,6 +191,93 @@ class TestApiAuthorization(IntegrationTestCase):
 		names = [bench["name"] for bench in api.get_benches()]
 		self.assertNotIn(self.bench.name, names)
 
+	def test_get_lab_hides_another_users_bench_health(self):
+		"""Lab detail must not report user_a's container, address or sites to user_b."""
+		frappe.set_user(self.user_b)
+		self.assertIsNone(api.get_lab(self.lab.name)["bench"])
+		self.assertEqual(api.get_lab(self.lab.name)["sites"], [])
+
+		frappe.set_user(self.user_a)
+		self.assertEqual(api.get_lab(self.lab.name)["bench"]["name"], self.bench.name)
+
+	def test_get_lab_denied_to_a_user_without_an_app_role(self):
+		frappe.set_user(self.norole_user)
+		self.assert_denied(lambda: api.get_lab(self.lab.name))
+
+	def test_get_labs_hides_another_users_deployment(self):
+		"""The Labs table must not tell user_b where user_a's bench lives."""
+		frappe.set_user(self.user_b)
+		row = self._lab_row(api.get_labs())
+		self.assertIsNone(row["deployed_as"])
+		self.assertEqual(row["bench_count"], 0)
+
+	def test_get_labs_shows_the_owner_their_own_deployment(self):
+		"""Positive control: the same row is populated for the bench's owner."""
+		frappe.set_user(self.user_a)
+		row = self._lab_row(api.get_labs())
+		self.assertEqual(row["deployed_as"]["bench"], self.bench.name)
+		self.assertEqual(row["bench_count"], 1)
+
+	def _lab_row(self, labs):
+		row = next((lab for lab in labs if lab["name"] == self.lab.name), None)
+		self.assertIsNotNone(row, "the fixture lab is readable by every app user")
+		return row
+
+	# --- History is scoped, and Build Log has no query condition to do it -----
+
+	def test_build_history_shows_a_user_their_own_builds_and_nobody_elses(self):
+		"""`cls.build_log` is the Administrator's; the one inserted here is user_a's."""
+		own_build = self._insert_build_log_as(self.user_a)
+
+		frappe.set_user(self.user_a)
+		names = [row["name"] for row in api.get_build_history()["rows"]]
+		self.assertIn(own_build, names, "the owner cannot see their own build")
+		self.assertNotIn(self.build_log.name, names, "Build Log is leaking across users")
+
+	def test_build_history_shows_an_admin_every_build(self):
+		"""Positive control: the row hidden above is present for an admin."""
+		frappe.set_user(self.admin_user)
+		names = [row["name"] for row in api.get_build_history()["rows"]]
+		self.assertIn(self.build_log.name, names)
+
+	def test_deploy_history_hides_another_users_runs(self):
+		frappe.set_user(self.user_b)
+		names = [row["name"] for row in api.get_deploy_history()["rows"]]
+		self.assertNotIn(self.deploy_log.name, names)
+
+		frappe.set_user(self.user_a)
+		names = [row["name"] for row in api.get_deploy_history()["rows"]]
+		self.assertIn(self.deploy_log.name, names)
+
+	def test_roleless_denied_from_history(self):
+		frappe.set_user(self.norole_user)
+		self.assert_denied(api.get_build_history)
+		self.assert_denied(api.get_deploy_history)
+
+	def test_non_admin_denied_from_get_lab_form_options(self):
+		frappe.set_user(self.user_a)
+		self.assert_denied(api.get_lab_form_options)
+
+		frappe.set_user(self.admin_user)
+		self.assertIn("frappe_versions", api.get_lab_form_options())
+
+	def _insert_build_log_as(self, owner):
+		frappe.set_user(owner)
+		try:
+			log = frappe.get_doc(
+				{
+					"doctype": "Build Log",
+					"lab": self.lab.name,
+					"log_type": "success",
+					"message": "=== Build complete: benchpress/authz-lab:latest ===",
+					"timestamp": frappe.utils.now_datetime(),
+				}
+			).insert(ignore_permissions=True)
+		finally:
+			frappe.set_user("Administrator")
+		self.addCleanup(frappe.delete_doc, "Build Log", log.name, force=True, ignore_permissions=True)
+		return log.name
+
 	# --- Role-less user blocked by require_app_user (issue #88) ---------------
 	# No mocks: the guard raises before any side effect can happen.
 
@@ -222,6 +324,112 @@ class TestApiAuthorization(IntegrationTestCase):
 	def test_roleless_denied_from_get_bench_credentials(self):
 		frappe.set_user(self.norole_user)
 		self.assert_denied(lambda: api.get_bench_credentials(self.bench.name))
+
+	def test_roleless_denied_from_get_overview(self):
+		frappe.set_user(self.norole_user)
+		self.assert_denied(api.get_overview)
+
+	def test_roleless_denied_from_get_vpn_status(self):
+		frappe.set_user(self.norole_user)
+		self.assert_denied(api.get_vpn_status)
+
+	def test_roleless_denied_from_run_connection_test(self):
+		frappe.set_user(self.norole_user)
+		self.assert_denied(api.run_connection_test)
+
+	def test_roleless_denied_from_get_device_types(self):
+		frappe.set_user(self.norole_user)
+		self.assert_denied(api.get_device_types)
+
+	# --- Overview is scoped to the caller ------------------------------------
+
+	def test_overview_shows_a_user_only_their_own_environments(self):
+		frappe.set_user(self.user_b)
+		names = [row["name"] for row in api.get_overview()["environments"]]
+		self.assertNotIn(self.bench.name, names)
+
+		frappe.set_user(self.user_a)
+		names = [row["name"] for row in api.get_overview()["environments"]]
+		self.assertIn(self.bench.name, names)
+
+	def test_overview_withholds_infrastructure_from_a_user(self):
+		frappe.set_user(self.user_a)
+		self.assertIsNone(api.get_overview()["infrastructure"])
+
+		frappe.set_user(self.admin_user)
+		with patch("benchpress.diagnostics.run_diagnostics", return_value=[]):
+			self.assertEqual(api.get_overview()["infrastructure"], [])
+
+	def test_overview_activity_never_leaks_build_logs_to_a_user(self):
+		# Build Log carries no permission query condition, so the feed must
+		# exclude it for non-admins rather than rely on one.
+		frappe.set_user(self.user_a)
+		activity = api.get_overview()["activity"]
+		self.assertTrue(activity, "user_a's own deploy log should still appear")
+		for event in activity:
+			self.assertNotIn("lab", event)
+
+		frappe.set_user(self.admin_user)
+		with patch("benchpress.diagnostics.run_diagnostics", return_value=[]):
+			admin_activity = api.get_overview()["activity"]
+		self.assertTrue(any("lab" in event for event in admin_activity))
+
+	def test_overview_activity_hides_another_users_deploys(self):
+		frappe.set_user(self.user_b)
+		activity = api.get_overview()["activity"]
+		self.assertFalse([event for event in activity if event.get("bench") == self.bench.name])
+
+	def test_app_user_allowed_to_read_vpn_status(self):
+		frappe.set_user(self.user_a)
+		status = api.get_vpn_status()
+		self.assertFalse(status["connected"])
+		self.assertEqual(status["peer_count"], 0)
+
+	# --- The connection test is the user's, and only theirs ------------------
+
+	def test_app_user_may_run_the_connection_test_for_their_own_peer(self):
+		frappe.set_user(self.user_a)
+		checks = api.run_connection_test()
+
+		self.assertEqual(
+			[check["check"] for check in checks],
+			["vpn_server", "device_registered", "peer_active", "handshake"],
+		)
+		# No device of their own, so the test says so instead of throwing.
+		self.assertEqual(checks[1]["status"], "Error")
+
+	def test_connection_test_never_leaks_the_admin_only_checks(self):
+		frappe.set_user(self.user_a)
+		with patch("benchpress.diagnostics.run_diagnostics") as run_diagnostics:
+			checks = api.run_connection_test()
+
+		# The infrastructure probes are admin-only; the user path must not run them.
+		run_diagnostics.assert_not_called()
+		leaked = {"docker_socket", "docker_network", "mariadb", "redis"}
+		self.assertFalse(leaked & {check["check"] for check in checks})
+
+	def test_connection_test_reports_only_the_callers_own_devices(self):
+		other_device = {
+			"name": "PEER-OTHER",
+			"device_name": "Someone else's laptop",
+			"last_handshake": None,
+		}
+		frappe.set_user(self.user_b)
+		with patch("benchpress.connection_test.list_devices", return_value=[other_device]) as list_devices:
+			checks = api.run_connection_test()
+
+		# The device list is the owner-scoped wrapper, never a raw peer query.
+		list_devices.assert_called_once_with()
+		self.assertIn("Someone else's laptop", checks[3]["hint"])
+
+	def test_app_user_denied_another_users_peer_status(self):
+		from benchpress.vpn_adapter import get_device_peer_status
+
+		peer = MagicMock()
+		peer.owner_user = self.user_a
+		frappe.set_user(self.user_b)
+		with patch("benchpress.vpn_adapter.frappe.get_doc", return_value=peer):
+			self.assert_denied(lambda: get_device_peer_status("PEER-OTHER"))
 
 	# --- Positive controls: require_app_user permits a BenchPress User --------
 

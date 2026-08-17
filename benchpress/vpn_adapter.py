@@ -19,11 +19,25 @@ import re
 
 import frappe
 from frappe import _
+from frappe.utils.data import cint, now_datetime, time_diff_in_seconds
 
 DEFAULT_INTERFACE = "wg0"
 CONTAINER_KEEPALIVE_SECONDS = 25
+# Fallback when VPN Settings has never been saved; matches its own default.
+DEFAULT_STATUS_POLL_MINUTES = 5
 DEVICE_TYPES = ["Mobile", "Laptop", "Desktop", "Tablet", "Server", "IoT", "Embedded"]
 DEVICE_PEER_PATTERN = re.compile(r"^\[(?P<device_type>[A-Za-z]+)\] (?P<device_name>.+)$")
+# Mirrors vpn_management.api.peers.get_peer_status, which builds the same set
+# inline. test_device_wrappers asserts the two still agree.
+PEER_STATUS_FIELDS = (
+	"name",
+	"status",
+	"assigned_ip",
+	"endpoint",
+	"last_handshake",
+	"rx_bytes",
+	"tx_bytes",
+)
 
 
 def create_container_peer(bench) -> dict:
@@ -142,11 +156,70 @@ def list_devices() -> list[dict]:
 	peers = frappe.get_all(
 		"VPN Peer",
 		filters=_device_peer_filters(),
-		fields=["name", "peer_name", "status", "assigned_ip", "public_key", "rx_bytes", "tx_bytes"],
+		fields=[
+			"name",
+			"peer_name",
+			"status",
+			"assigned_ip",
+			"public_key",
+			"rx_bytes",
+			"tx_bytes",
+			"last_handshake",
+			"creation",
+		],
 		order_by="creation desc",
 		limit=100,
 	)
 	return [_as_device_row(peer) for peer in peers]
+
+
+def get_device_peer_status(device_docname: str) -> dict:
+	"""Live tunnel status for an owned device peer.
+
+	The reply is `vpn_management.api.peers.get_peer_status`' own shape, but not
+	its guard: that endpoint gates on the VPN DocPerms, which only
+	`System Manager`, `VPN Admin` and `BenchPress Admin` hold, so a
+	`BenchPress User` cannot call it for their own peer. Devices are authorized
+	by `owner_user` here, the same rule every other device wrapper uses.
+	"""
+	peer = _owned_device_peer(device_docname)
+	return {field: peer.get(field) for field in PEER_STATUS_FIELDS}
+
+
+def get_device_vpn_status() -> dict:
+	"""Whether the session user has a device peer with a fresh handshake.
+
+	"Fresh" is one status poll old: `VPN Settings.status_poll_interval_min`,
+	the same interval vpn_management writes handshakes on. Inventing a second
+	threshold here would make the UI disagree with the poller.
+	"""
+	peers = frappe.get_all(
+		"VPN Peer",
+		filters=_device_peer_filters(),
+		fields=["name", "status", "last_handshake"],
+		order_by="last_handshake desc",
+		limit=100,
+	)
+	last_handshake = peers[0].last_handshake if peers else None
+	stale_after_seconds = handshake_stale_seconds()
+	return {
+		"connected": is_handshake_fresh(last_handshake, stale_after_seconds),
+		"last_handshake": last_handshake,
+		"peer_count": len(peers),
+		"stale_after_seconds": stale_after_seconds,
+	}
+
+
+def is_handshake_fresh(last_handshake, stale_after_seconds: int) -> bool:
+	"""The one definition of a live tunnel — never re-decided anywhere else."""
+	if not last_handshake:
+		return False
+	return time_diff_in_seconds(now_datetime(), last_handshake) <= stale_after_seconds
+
+
+def handshake_stale_seconds() -> int:
+	minutes = cint(frappe.db.get_single_value("VPN Settings", "status_poll_interval_min"))
+	return (minutes or DEFAULT_STATUS_POLL_MINUTES) * 60
 
 
 def get_device_config(device_docname: str) -> str:
@@ -155,7 +228,12 @@ def get_device_config(device_docname: str) -> str:
 
 
 def _device_peer_filters() -> dict:
-	"""Everything the user owns except the peers that belong to bench containers."""
+	"""Everything the user owns except the peers that belong to bench containers.
+
+	The bench sweep is one unbounded `get_all` per call. Left as it is: the
+	whole fleet is 4 Bench Instances, so it reads one short indexed column.
+	Batch or cache it when the fleet reaches the hundreds.
+	"""
 	filters = {"owner_user": frappe.session.user}
 	bench_peers = frappe.get_all("Bench Instance", filters={"vpn_peer": ("is", "set")}, pluck="vpn_peer")
 	if bench_peers:
@@ -174,6 +252,8 @@ def _as_device_row(peer) -> dict:
 		"wg_public_key": peer.public_key,
 		"wg_rx_bytes": peer.rx_bytes,
 		"wg_tx_bytes": peer.tx_bytes,
+		"last_handshake": peer.last_handshake,
+		"registered_on": peer.creation,
 	}
 
 

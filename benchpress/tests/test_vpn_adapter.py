@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 
 from frappe.tests import IntegrationTestCase
 
+from benchpress.deploy_pipeline import DeployPipeline
 from benchpress.vpn_adapter import (
 	configure_container,
 	create_container_peer,
@@ -156,7 +157,10 @@ class TestSetupContainerVpn(IntegrationTestCase):
 		flow.attach_mock(bench.save, "save")
 		flow.attach_mock(mock_configure, "configure")
 
-		_setup_container_vpn(bench, "cid123", lambda line, log_type="info": None)
+		# The peer step reports itself through the pipeline now; a writer that
+		# swallows every line keeps this test about ordering.
+		pipeline = DeployPipeline(lambda line, log_type="info", step=None: None)
+		_setup_container_vpn(bench, "cid123", pipeline)
 
 		# Old peer out first, then the fresh claim; the link is persisted
 		# before the container is configured so a failure cannot orphan it.

@@ -1,58 +1,59 @@
 import { test, expect } from "@playwright/test";
 import { DevicesPage } from "./pages/DevicesPage";
-import {
-  createTestDevice,
-  removeTestDevice,
-} from "./fixtures/test-data";
+import { createTestDevice, removeTestDevice } from "./fixtures/test-data";
 
 test.describe("Devices Page", () => {
-  test("loads and displays page heading", async ({ page }) => {
+  test("loads with the journey copy and the status banner", async ({ page }) => {
     const devicesPage = new DevicesPage(page);
     await devicesPage.goto();
     await devicesPage.expectPageLoaded();
 
     await expect(
-      page.locator(
-        "text=Register your devices once to access all lab containers"
-      )
+      page.locator("text=Bench instances live on a private WireGuard network")
     ).toBeVisible();
+    await expect(devicesPage.bannerTitle).toBeVisible();
+    await expect(devicesPage.bannerAction).toBeVisible();
   });
 
-  test("shows Add Device button", async ({ page }) => {
+  test("offers the add action in the header and at the end of the list", async ({
+    page,
+  }) => {
     const devicesPage = new DevicesPage(page);
     await devicesPage.goto();
     await devicesPage.expectPageLoaded();
 
     await expect(devicesPage.addDeviceButton).toBeVisible();
+    await expect(devicesPage.addAnotherMachine).toBeVisible();
   });
 
-  test("shows empty state when no devices exist", async ({ page }) => {
+  test("explains the journey and offers the connection test", async ({
+    page,
+  }) => {
+    const devicesPage = new DevicesPage(page);
+    await devicesPage.goto();
+    await devicesPage.expectPageLoaded();
+
+    await expect(devicesPage.howThisWorks).toBeVisible();
+    await expect(
+      devicesPage.howThisWorks.locator("text=Register the machine here")
+    ).toBeVisible();
+    await expect(devicesPage.connectionTest).toBeVisible();
+    await expect(devicesPage.runConnectionTest).toBeVisible();
+  });
+
+  test("empty state states the fix when no device is registered", async ({
+    page,
+  }) => {
     const devicesPage = new DevicesPage(page);
     await devicesPage.goto();
     await devicesPage.waitForPageLoad();
 
-    const deviceCount = await devicesPage.getDeviceCount();
-    if (deviceCount === 0) {
+    if ((await devicesPage.getDeviceCount()) === 0) {
       await expect(devicesPage.emptyState).toBeVisible();
     }
   });
 
-  test("opens Add Device dialog with form fields", async ({ page }) => {
-    const devicesPage = new DevicesPage(page);
-    await devicesPage.goto();
-    await devicesPage.expectPageLoaded();
-
-    await devicesPage.openAddDeviceDialog();
-
-    await expect(
-      page.locator('input[placeholder*="My Laptop"]')
-    ).toBeVisible();
-    await expect(
-      page.locator("text=Auto Generate Keypair")
-    ).toBeVisible();
-  });
-
-  test("auto-generate keypair checkbox toggles public key field", async ({
+  test("add dialog focuses the name field and offers both handoffs", async ({
     page,
   }) => {
     const devicesPage = new DevicesPage(page);
@@ -61,23 +62,16 @@ test.describe("Devices Page", () => {
 
     await devicesPage.openAddDeviceDialog();
 
-    await expect(
-      page.locator("text=A keypair will be generated automatically")
-    ).toBeVisible();
-    await expect(
-      page.locator('input[placeholder*="public key"]')
-    ).not.toBeVisible();
-
-    await page.locator('input[type="checkbox"]').uncheck();
-    await expect(
-      page.locator('input[placeholder*="public key"]')
-    ).toBeVisible();
+    await expect(page.locator('[data-test="device-name"]')).toBeFocused();
+    await expect(page.locator('[data-test="device-type"]')).toBeVisible();
+    // The QR only exists once the peer does; until then the panel says so.
+    await expect(page.locator('[data-test="device-qr-placeholder"]')).toBeVisible();
+    await expect(page.locator('[data-test="download-conf"]')).toBeDisabled();
+    await expect(page.locator('[data-test="register-and-connect"]')).toBeVisible();
   });
 
-  test("device card shows name and type after API creation", async ({
-    page,
-  }) => {
-    const deviceName = `e2e-card-${Date.now().toString(36)}`;
+  test("device row shows name, type, IP and transfer", async ({ page }) => {
+    const deviceName = `e2e-row-${Date.now().toString(36)}`;
     const device = await createTestDevice(page, {
       device_name: deviceName,
       device_type: "Desktop",
@@ -85,74 +79,79 @@ test.describe("Devices Page", () => {
 
     const devicesPage = new DevicesPage(page);
     await devicesPage.goto();
-    await devicesPage.waitForPageLoad();
+    await devicesPage.expectPageLoaded();
 
-    await expect(
-      page.locator(`.font-medium:has-text("${deviceName}")`)
-    ).toBeVisible({ timeout: 10_000 });
-    await expect(page.locator("text=Desktop").first()).toBeVisible();
-    await expect(page.locator("text=Active").first()).toBeVisible();
+    const row = devicesPage.deviceRow(deviceName);
+    await expect(row).toBeVisible({ timeout: 10_000 });
+    await expect(row).toContainText("Desktop");
+    await expect(row).toContainText("↓");
+    await expect(devicesPage.deviceCount).toContainText("machine");
 
     await removeTestDevice(page, device.name);
   });
 
-  test("device dropdown menu has expected options", async ({ page }) => {
-    const deviceName = `e2e-menu-${Date.now().toString(36)}`;
-    const device = await createTestDevice(page, {
-      device_name: deviceName,
-    });
+  test("the config dialog renders the tunnel file and a QR", async ({ page }) => {
+    const deviceName = `e2e-config-${Date.now().toString(36)}`;
+    const device = await createTestDevice(page, { device_name: deviceName });
 
     const devicesPage = new DevicesPage(page);
     await devicesPage.goto();
-    await devicesPage.waitForPageLoad();
+    await devicesPage.expectPageLoaded();
+    await devicesPage.openDeviceConfig(deviceName);
 
-    const card = page
-      .locator(".grid > div")
-      .filter({ hasText: deviceName });
-    await card.locator('button[aria-haspopup="menu"]').click();
-    await page.waitForTimeout(300);
-
-    await expect(
-      page.locator('[role="menuitem"]:has-text("Show Configuration")')
-    ).toBeVisible();
-    await expect(
-      page.locator('[role="menuitem"]:has-text("Download Tunnel File")')
-    ).toBeVisible();
-    await expect(
-      page.locator('[role="menuitem"]:has-text("Delete")')
-    ).toBeVisible();
+    await expect(page.locator('[data-test="config-text"]')).toContainText(
+      "[Interface]"
+    );
+    await expect(page.locator('[data-test="device-qr-canvas"]')).toBeVisible();
 
     await removeTestDevice(page, device.name);
+  });
+
+  test("the connection test names a specific failing check", async ({ page }) => {
+    const devicesPage = new DevicesPage(page);
+    await devicesPage.goto();
+    await devicesPage.expectPageLoaded();
+    await devicesPage.runTest();
+
+    // Every check is reported, pass or fail, each with its own hint.
+    for (const check of [
+      "vpn_server",
+      "device_registered",
+      "peer_active",
+      "handshake",
+    ]) {
+      await expect(devicesPage.checkRow(check)).toBeVisible();
+    }
+    await expect(devicesPage.testVerdict).toContainText(/check|passed/i);
+  });
+
+  test("the banner never hides the action, it labels it", async ({ page }) => {
+    const devicesPage = new DevicesPage(page);
+    await devicesPage.goto();
+    await devicesPage.expectPageLoaded();
+
+    await expect(devicesPage.bannerAction).toBeEnabled();
+    await expect(devicesPage.bannerAction).toHaveText(
+      /Add this device|Check again/
+    );
   });
 
   test.fixme("delete shows confirmation dialog", async ({ page }) => {
     // frappe-ui Dropdown uses Reka UI which handles onSelect via internal
     // event dispatch — Playwright's click doesn't trigger the Vue onClick
     // handler. This test works in headed mode but fails in headless.
-    const suffix = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-    const deviceName = `e2e-remove-${suffix}`;
-    const device = await createTestDevice(page, {
-      device_name: deviceName,
-    });
+    const deviceName = `e2e-remove-${Date.now().toString(36)}`;
+    const device = await createTestDevice(page, { device_name: deviceName });
 
     const devicesPage = new DevicesPage(page);
     await devicesPage.goto();
-    await devicesPage.waitForPageLoad();
+    await devicesPage.expectPageLoaded();
+    await devicesPage.openDeviceMenu(deviceName);
+    await devicesPage.clickMenuItem("Remove device");
 
-    const card = page
-      .locator(".grid > div")
-      .filter({ hasText: deviceName });
-    await expect(card).toBeVisible({ timeout: 10_000 });
-
-    const menuBtn = card.locator('button[aria-haspopup="menu"]');
-    await menuBtn.click();
-    const deleteItem = page.locator('[role="menuitem"]:has-text("Delete")');
-    await expect(deleteItem).toBeVisible({ timeout: 3_000 });
-    await deleteItem.click({ force: true });
-
-    await expect(
-      page.locator("text=revoke its VPN access immediately")
-    ).toBeVisible({ timeout: 8_000 });
+    await expect(page.locator("text=loses VPN access immediately")).toBeVisible({
+      timeout: 8_000,
+    });
 
     await removeTestDevice(page, device.name);
   });

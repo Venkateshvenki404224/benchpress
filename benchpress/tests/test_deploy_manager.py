@@ -265,6 +265,16 @@ class TestDeployManager(IntegrationTestCase):
 		mock_volume.assert_not_called()
 		mock_deploy.assert_not_called()
 
+	def _deploy_log(self, bench_name):
+		logs = frappe.get_all(
+			"Deploy Log",
+			filters={"bench": bench_name},
+			fields=["message"],
+			order_by="creation desc",
+			limit_page_length=1,
+		)
+		return logs[0].message if logs else ""
+
 	def test_deploy_failure_after_container_creation_cleans_up(self):
 		from benchpress import deploy_manager
 
@@ -304,6 +314,8 @@ class TestDeployManager(IntegrationTestCase):
 		self.assertIsNone(bench.container_id)
 		self.assertIsNone(bench.container_ip)
 		self.assertIsNone(bench.wg_ip)
+		# The screen reporting the failure reads the outcome, never infers it.
+		self.assertIn("Cleanup: removed container created by this run", self._deploy_log(bench.name))
 
 	def test_deploy_failure_before_container_skips_cleanup(self):
 		from benchpress import deploy_manager
@@ -334,6 +346,7 @@ class TestDeployManager(IntegrationTestCase):
 
 		mock_remove_container.assert_not_called()
 		mock_remove_peer.assert_not_called()
+		self.assertIn(deploy_manager.NOTHING_TO_ROLL_BACK, self._deploy_log(bench.name))
 		bench.reload()
 		self.assertEqual(bench.status, "Error")
 		self.assertEqual(bench.container_id, "old-container")
@@ -446,6 +459,184 @@ class TestDeployManager(IntegrationTestCase):
 		args = build_linkuser_args(bench, self.lab, settings, "pw")
 
 		self.assertEqual(args[-1], "/bin/bash")
+
+
+class TestDeployStepMarkers(IntegrationTestCase):
+	"""Phase 4: the run reports its eleven steps, in the order the code runs them."""
+
+	@classmethod
+	def setUpClass(cls):
+		super().setUpClass()
+		frappe.set_user("Administrator")
+		cls.lab = _make_lab("test-lab-steps")
+		if not frappe.db.exists("Database Server", "test-db-steps"):
+			frappe.get_doc(
+				{
+					"doctype": "Database Server",
+					"container_name": "test-db-steps",
+					"mariadb_version": "10.6",
+				}
+			).insert(ignore_permissions=True)
+		cls.db_server_name = frappe.db.get_value(
+			"Database Server", {"container_name": "test-db-steps"}, "name"
+		)
+		frappe.db.set_value("Lab", cls.lab.name, {"status": "Ready", "image_tag": "benchpress/test:latest"})
+		frappe.db.commit()
+
+	@classmethod
+	def tearDownClass(cls):
+		frappe.set_user("Administrator")
+		for name in frappe.get_all("Bench Instance", filters={"lab": cls.lab.name}, pluck="name"):
+			frappe.db.delete("Deploy Log", {"bench": name})
+			frappe.delete_doc("Bench Instance", name, force=True, ignore_permissions=True)
+		if cls.db_server_name and frappe.db.exists("Database Server", cls.db_server_name):
+			frappe.delete_doc("Database Server", cls.db_server_name, force=True, ignore_permissions=True)
+		cls.lab.delete(ignore_permissions=True)
+		frappe.db.commit()
+		super().tearDownClass()
+
+	def _bench(self):
+		bench = _fresh_bench(self, self.lab.name)
+		self.addCleanup(frappe.db.commit)
+		self.addCleanup(lambda name=bench.name: frappe.db.delete("Deploy Log", {"bench": name}))
+		return bench
+
+	def _run_deploy(self, bench, site_result=(0, "site created")):
+		"""A whole deploy with every side effect mocked but the log itself."""
+		from benchpress import deploy_manager
+
+		with (
+			patch.object(deploy_manager, "ensure_infrastructure", autospec=True) as mock_infra,
+			patch.object(deploy_manager, "wait_for_mariadb", autospec=True),
+			patch.object(deploy_manager, "_remove_stale_container", autospec=True),
+			patch.object(deploy_manager, "create_bench_container", autospec=True) as mock_create,
+			patch.object(deploy_manager, "start_container", autospec=True),
+			patch.object(deploy_manager, "wait_for_container_running", autospec=True) as mock_wait,
+			patch.object(deploy_manager, "write_file_to_container", autospec=True),
+			patch.object(deploy_manager, "exec_in_container", autospec=True) as mock_exec,
+			patch.object(deploy_manager, "create_site_in_container", autospec=True) as mock_site,
+			patch.object(deploy_manager, "remove_container", autospec=True),
+			patch.object(deploy_manager, "_notify_owner", autospec=True),
+			patch("benchpress.vpn_adapter.remove_bench_peer", autospec=True),
+			patch("benchpress.vpn_adapter.configure_container", autospec=True),
+			patch("benchpress.vpn_adapter.create_container_peer", autospec=True) as mock_peer,
+		):
+			mock_infra.return_value = self.db_server_name
+			mock_create.return_value = "cid-steps"
+			mock_wait.return_value = "172.30.0.11"
+			mock_exec.return_value = (0, "")
+			mock_peer.return_value = {
+				"peer": "peer-steps",
+				"assigned_ip": "172.27.0.11",
+				"private_key": "private",
+			}
+			if isinstance(site_result, Exception):
+				mock_site.side_effect = site_result
+			else:
+				mock_site.return_value = site_result
+
+			deploy_manager.deploy_bench(bench.name)
+
+	def _log(self, bench_name):
+		logs = frappe.get_all(
+			"Deploy Log",
+			filters={"bench": bench_name},
+			fields=["message"],
+			order_by="creation desc",
+			limit_page_length=1,
+		)
+		return logs[0].message if logs else ""
+
+	def _emitted_steps(self, bench_name):
+		from benchpress.deploy_pipeline import parse_step_line
+
+		parsed = [parse_step_line(line) for line in self._log(bench_name).splitlines()]
+		return [step for step in parsed if step]
+
+	def test_all_eleven_steps_are_emitted_in_the_code_s_order(self):
+		from benchpress.deploy_pipeline import DEPLOY_STEPS
+
+		bench = self._bench()
+		self._run_deploy(bench)
+
+		emitted = self._emitted_steps(bench.name)
+		self.assertEqual([step["step_key"] for step in emitted], [step.key for step in DEPLOY_STEPS])
+		self.assertEqual([step["step_index"] for step in emitted], list(range(1, 12)))
+
+	def test_the_three_steps_that_had_no_marker_now_emit_one(self):
+		bench = self._bench()
+		self._run_deploy(bench)
+
+		keys = {step["step_key"] for step in self._emitted_steps(bench.name)}
+		self.assertTrue({"container_ip", "site_config", "assets"} <= keys)
+
+	def test_every_step_line_keeps_the_legacy_marker_prefix(self):
+		bench = self._bench()
+		self._run_deploy(bench)
+
+		for line in self._log(bench.name).splitlines():
+			if "Step " in line and "===" in line:
+				self.assertTrue(line.startswith("=== ") and line.endswith(" ==="), line)
+
+	def test_elapsed_times_never_go_backwards(self):
+		bench = self._bench()
+		self._run_deploy(bench)
+
+		elapsed = [step["step_elapsed"] for step in self._emitted_steps(bench.name)]
+		self.assertEqual(elapsed, sorted(elapsed))
+
+	def test_a_failure_marks_the_failing_step_and_no_later_one(self):
+		bench = self._bench()
+		self._run_deploy(bench, site_result=Exception("bench new-site exploded"))
+
+		keys = [step["step_key"] for step in self._emitted_steps(bench.name)]
+		self.assertEqual(keys[-1], "site")
+		self.assertFalse({"assets", "ssh_user", "code_server", "complete"} & set(keys))
+		self.assertIn("=== Deploy failed:", self._log(bench.name))
+
+	def test_a_disabled_code_server_still_reports_its_step(self):
+		bench = self._bench()
+		frappe.db.set_value("Lab", self.lab.name, "enable_code_server", 0)
+		self.addCleanup(frappe.db.set_value, "Lab", self.lab.name, "enable_code_server", 1)
+		frappe.db.commit()
+
+		self._run_deploy(bench)
+
+		log = self._log(bench.name)
+		self.assertIn("Step 10/11", log)
+		self.assertIn("Code server is disabled for this lab", log)
+
+	def _deploy_messages(self, publish):
+		"""Only our own events: a deploy also saves docs, and every save publishes."""
+		return [
+			call.kwargs for call in publish.call_args_list if call.kwargs.get("event") == "bench_deploy_log"
+		]
+
+	def test_a_second_user_never_receives_another_user_s_deploy(self):
+		bench = self._bench()
+		frappe.db.set_value("Bench Instance", bench.name, "owner", "Administrator")
+		frappe.db.commit()
+
+		with patch("frappe.publish_realtime") as publish:
+			self._run_deploy(bench)
+
+		published = self._deploy_messages(publish)
+		self.assertTrue(published)
+		self.assertEqual({call["user"] for call in published}, {"Administrator"})
+		# A room would broadcast past the user scoping the leak fix relies on.
+		self.assertFalse(any(call.get("room") for call in published))
+
+	def test_step_lines_are_published_as_the_step_type(self):
+		bench = self._bench()
+
+		with patch("frappe.publish_realtime") as publish:
+			self._run_deploy(bench)
+
+		messages = [call["message"] for call in self._deploy_messages(publish)]
+		types = {message["step_key"]: message["type"] for message in messages if message.get("step_key")}
+		self.assertEqual(types["infrastructure"], "step")
+		# The eleventh step is also the run's success line.
+		self.assertEqual(types["complete"], "success")
 
 
 class TestTerminalStateNotifications(IntegrationTestCase):

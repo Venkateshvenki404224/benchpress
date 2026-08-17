@@ -1,141 +1,255 @@
 <template>
-	<div class="p-4">
-		<div class="mb-4 flex items-center justify-between">
-			<h1 class="text-xl font-semibold text-ink-gray-9">Labs</h1>
-			<div v-if="userContext.isAdmin" class="flex gap-2">
+	<div class="mx-auto max-w-[1180px] px-6 pb-10 pt-[22px]" data-test="labs">
+		<div class="mb-3.5 flex flex-wrap items-start gap-3">
+			<div>
+				<h1 class="text-title font-semibold text-ink-gray-9">Labs</h1>
+				<p class="mt-0.5 max-w-[560px] text-body text-ink-gray-5">
+					A lab is a reusable recipe — Frappe version, apps and resources. Build it into
+					an image, then deploy as many bench instances as you need.
+				</p>
+			</div>
+			<div class="ml-auto flex flex-wrap gap-2">
 				<Button
-					appearance="minimal"
-					icon-left="grid"
-					@click="$router.push('/labs/templates')"
+					v-if="userContext.isAdmin"
+					variant="subtle"
+					data-test="build-history"
+					@click="router.push('/build-logs')"
 				>
-					From Template
+					Build history
 				</Button>
-				<Button appearance="primary" icon-left="plus" @click="$router.push('/labs/new')">
-					New Lab
+				<Button
+					variant="subtle"
+					data-test="from-template"
+					@click="router.push('/labs/templates')"
+				>
+					From template
+				</Button>
+				<Button
+					v-if="userContext.isAdmin"
+					variant="solid"
+					data-test="new-lab"
+					@click="router.push('/labs/new')"
+				>
+					<template #prefix><PlusIcon class="size-3.5" /></template>
+					New lab
 				</Button>
 			</div>
 		</div>
 
-		<!-- Search & Filters -->
-		<div class="mb-4 flex items-center gap-3">
+		<div v-if="labs.length" class="mb-3 flex flex-wrap items-center gap-2">
 			<FormControl
-				class="flex-1"
+				class="w-[240px]"
 				type="text"
-				placeholder="Search by Lab ID, title, or app name..."
-				v-model="searchQuery"
-				icon-left="search"
-			/>
-			<FormControl
-				type="select"
-				:options="statusOptions"
-				v-model="statusFilter"
-				class="w-40"
-			/>
-			<FormControl
-				type="select"
-				:options="versionOptions"
-				v-model="versionFilter"
-				class="w-44"
-			/>
+				placeholder="Search labs"
+				v-model="search"
+				data-test="labs-search"
+			>
+				<template #prefix><SearchIcon class="size-3.5 text-ink-gray-4" /></template>
+			</FormControl>
+			<Select v-model="statusFilter" :options="statusOptions" data-test="filter-status" />
+			<Select v-model="versionFilter" :options="versionOptions" data-test="filter-version" />
+			<Select v-model="ownerFilter" :options="ownerOptions" data-test="filter-owner" />
 		</div>
 
-		<ListView
-			v-if="filteredRows.length"
-			:columns="columns"
-			:rows="filteredRows"
-			:options="{
-				getRowRoute: (row) => ({ name: 'LabDetail', params: { labId: row.name } }),
-				showTooltip: true,
-				resizeColumn: true,
-				selectable: false,
-			}"
-			row-key="name"
-		/>
-		<div v-else-if="labs.loading" class="text-base text-ink-gray-5">Loading...</div>
-		<div v-else class="py-12 text-center text-base text-ink-gray-5">
-			{{
-				searchQuery || statusFilter !== "All" || versionFilter !== "All"
-					? "No labs match your filters."
-					: "No labs found. Create your first lab to get started."
-			}}
-		</div>
+		<p v-if="labsResource.loading && !labs.length" class="text-body text-ink-gray-5">
+			Loading labs…
+		</p>
+
+		<OnboardingPanel v-else-if="!labs.length" />
+
+		<DataTable
+			v-else-if="rows.length"
+			:columns="COLUMNS"
+			:rows="rows"
+			:row-route="labRoute"
+			data-test="labs-table"
+		>
+			<template #cell="{ column, row }">
+				<div v-if="column.key === 'lab'" class="flex min-w-0 items-center gap-2.5">
+					<span
+						class="grid size-7 flex-none place-items-center rounded-md border border-outline-gray-1 bg-surface-white"
+					>
+						<AppIcon :app="primaryApp(row)" :size="17" />
+					</span>
+					<span class="min-w-0" :data-test="`lab-${row.name}`">
+						<span class="block truncate text-body font-medium text-ink-gray-9">
+							{{ row.title || row.lab_id }}
+						</span>
+						<span class="block truncate font-mono text-2xs text-ink-gray-4">
+							{{ row.lab_id }}
+						</span>
+					</span>
+				</div>
+
+				<span
+					v-else-if="column.key === 'frappe_version'"
+					class="truncate text-xs text-ink-gray-7"
+				>
+					{{ row.frappe_version }}
+				</span>
+
+				<div v-else-if="column.key === 'apps'" class="flex min-w-0 flex-wrap gap-1">
+					<span
+						v-for="app in row.app_names"
+						:key="app"
+						class="rounded bg-surface-gray-2 px-1.5 py-px text-2xs text-ink-gray-7"
+					>
+						{{ appLabel(app) }}
+					</span>
+					<span v-if="!row.app_names.length" class="text-2xs text-ink-gray-4">
+						Bare bench
+					</span>
+				</div>
+
+				<StatusBadge v-else-if="column.key === 'status'" :status="row.status" />
+
+				<div v-else-if="column.key === 'deployed_as'" class="min-w-0">
+					<template v-if="row.deployed_as">
+						<span class="block truncate text-xs text-ink-blue-3">
+							{{ row.deployed_as.site || "No site yet" }}
+						</span>
+						<span class="block truncate text-2xs text-ink-gray-4">
+							{{ benchLabel(row.lab_id) }} · {{ row.deployed_as.status }}
+						</span>
+					</template>
+					<span v-else class="text-xs text-ink-gray-4">Never deployed</span>
+				</div>
+
+				<span
+					v-else-if="column.key === 'last_run'"
+					class="truncate text-meta text-ink-gray-5"
+				>
+					{{ lastRun(row) }}
+				</span>
+			</template>
+		</DataTable>
+
+		<SectionCard v-else :padded="false">
+			<EmptyState message="No labs match these filters.">
+				<template #action>
+					<Button variant="subtle" data-test="clear-filters" @click="clearFilters">
+						Clear filters
+					</Button>
+				</template>
+			</EmptyState>
+		</SectionCard>
 	</div>
 </template>
 
 <script setup>
-import { ref, computed } from "vue";
-import { ListView, Button, FormControl, createListResource } from "frappe-ui";
+import AppIcon from "@/components/AppIcon.vue";
+import DataTable from "@/components/DataTable.vue";
+import EmptyState from "@/components/EmptyState.vue";
+import SectionCard from "@/components/SectionCard.vue";
+import StatusBadge from "@/components/StatusBadge.vue";
+import OnboardingPanel from "@/components/overview/OnboardingPanel.vue";
+import { labsResource } from "@/data/labs";
 import { userContext } from "@/data/userContext";
+import { labelFor as appLabel } from "@/utils/appIcons";
+import { benchLabel } from "@/utils/labSpecs";
+import { Button, FormControl, Select, dayjsLocal } from "frappe-ui";
+import { computed, onMounted, ref } from "vue";
+import { useRouter } from "vue-router";
 
-const searchQuery = ref("");
-const statusFilter = ref("All");
-const versionFilter = ref("All");
+import PlusIcon from "~icons/lucide/plus";
+import SearchIcon from "~icons/lucide/search";
 
-const statusOptions = [
-	{ label: "All Status", value: "All" },
-	{ label: "Draft", value: "Draft" },
-	{ label: "Building", value: "Building" },
-	{ label: "Ready", value: "Ready" },
-	{ label: "Error", value: "Error" },
+// Memory and CPU are deliberately absent — they belong on the detail header.
+// These six columns answer what the old table omitted: is this lab deployed,
+// where is its site, and when did it last run.
+//
+// Every width is fixed rather than fractional: ListView lays its grid out
+// inside a `w-max` container, where an `fr` track resolves to max-content and
+// one long site name pushes the last column off the card at any viewport.
+const COLUMNS = [
+	{ label: "Lab", key: "lab", width: "240px" },
+	{ label: "Version", key: "frappe_version", width: "96px" },
+	{ label: "Apps", key: "apps", width: "140px" },
+	{ label: "Status", key: "status", width: "112px" },
+	{ label: "Deployed as", key: "deployed_as", width: "190px" },
+	{ label: "Last run", key: "last_run", width: "96px" },
 ];
 
-const versionOptions = [
-	{ label: "All Versions", value: "All" },
-	{ label: "Version 14", value: "version-14" },
-	{ label: "Version 15", value: "version-15" },
-	{ label: "Version 16", value: "version-16" },
-	{ label: "Develop", value: "develop" },
-];
+const ALL = "__all__";
 
-const columns = [
-	{ label: "Lab ID", key: "lab_id", width: "180px" },
-	{ label: "Title", key: "title", width: "200px" },
-	{ label: "Frappe Version", key: "frappe_version", width: "150px" },
-	{ label: "Status", key: "status", width: "120px" },
-	{ label: "Memory", key: "memory_limit", width: "100px" },
-	{ label: "CPU", key: "cpu_cores", width: "80px" },
-];
+const router = useRouter();
+const search = ref("");
+const statusFilter = ref(ALL);
+const versionFilter = ref(ALL);
+const ownerFilter = ref(ALL);
 
-const labs = createListResource({
-	doctype: "Lab",
-	fields: [
-		"name",
-		"lab_id",
-		"title",
-		"description",
-		"frappe_version",
-		"status",
-		"memory_limit",
-		"cpu_cores",
-	],
-	orderBy: "creation desc",
-	pageLength: 100,
-	auto: true,
-});
+// `get_labs` returns every lab the caller may see in one bounded response, so
+// filtering here has no hidden page ceiling behind it.
+onMounted(() => labsResource.reload());
 
-const filteredRows = computed(() => {
-	if (!labs.data) return [];
+const labs = computed(() => labsResource.data ?? []);
 
-	let rows = labs.data;
+const statusOptions = computed(() =>
+	optionsFrom(
+		"Status",
+		labs.value.map((lab) => lab.status)
+	)
+);
+const versionOptions = computed(() =>
+	optionsFrom(
+		"Version",
+		labs.value.map((lab) => lab.frappe_version)
+	)
+);
+const ownerOptions = computed(() =>
+	optionsFrom(
+		"Owner",
+		labs.value.map((lab) => lab.owner)
+	)
+);
 
-	if (statusFilter.value !== "All") {
-		rows = rows.filter((r) => r.status === statusFilter.value);
-	}
+/** "All" plus each value actually present, so no filter offers an empty result. */
+function optionsFrom(label, values) {
+	const present = [...new Set(values.filter(Boolean))].sort();
+	return [
+		{ label: `${label}: all`, value: ALL },
+		...present.map((value) => ({ label: value, value })),
+	];
+}
 
-	if (versionFilter.value !== "All") {
-		rows = rows.filter((r) => r.frappe_version === versionFilter.value);
-	}
+const rows = computed(() =>
+	labs.value.filter(
+		(lab) =>
+			matches(lab.status, statusFilter.value) &&
+			matches(lab.frappe_version, versionFilter.value) &&
+			matches(lab.owner, ownerFilter.value) &&
+			matchesSearch(lab)
+	)
+);
 
-	if (searchQuery.value) {
-		const q = searchQuery.value.toLowerCase();
-		rows = rows.filter(
-			(r) =>
-				(r.lab_id || "").toLowerCase().includes(q) ||
-				(r.title || "").toLowerCase().includes(q) ||
-				(r.description || "").toLowerCase().includes(q)
-		);
-	}
+function matches(value, filter) {
+	return filter === ALL || value === filter;
+}
 
-	return rows;
-});
+function matchesSearch(lab) {
+	const query = search.value.trim().toLowerCase();
+	if (!query) return true;
+	const haystack = [lab.lab_id, lab.title, lab.description, ...(lab.app_names ?? [])];
+	return haystack.some((value) => (value || "").toLowerCase().includes(query));
+}
+
+function clearFilters() {
+	search.value = "";
+	statusFilter.value = ALL;
+	versionFilter.value = ALL;
+	ownerFilter.value = ALL;
+}
+
+/** The mark a lab wears — its first non-Frappe app, else the Frappe mark. */
+function primaryApp(lab) {
+	return (lab.app_names ?? []).find((app) => app.toLowerCase() !== "frappe") || "frappe";
+}
+
+function lastRun(lab) {
+	return lab.last_run ? dayjsLocal(lab.last_run).fromNow() : "—";
+}
+
+function labRoute(lab) {
+	return { name: "LabDetail", params: { labId: lab.name } };
+}
 </script>

@@ -3,6 +3,7 @@
 
 import frappe
 from frappe.tests import IntegrationTestCase
+from frappe.utils.data import time_diff_in_seconds
 
 from benchpress.benchpress import demo_data
 
@@ -71,3 +72,12 @@ class TestDemoData(IntegrationTestCase):
 		demo_data.create_demo_data()
 		days = frappe.get_all("Deploy Log", fields=["timestamp"], pluck="timestamp")
 		self.assertGreater(len({day.date() for day in days}), 1)
+
+	def test_a_seeded_run_lasts_minutes_not_weeks(self):
+		"""Duration is `modified - timestamp`, so a backdated log must settle its own `modified`."""
+		demo_data.create_demo_data()
+		for doctype in ("Deploy Log", "Build Log"):
+			for log in frappe.get_all(doctype, fields=["name", "timestamp", "modified"]):
+				seconds = time_diff_in_seconds(log.modified, log.timestamp)
+				self.assertGreater(seconds, 0, f"{doctype} {log.name} settled before it started")
+				self.assertLess(seconds, 3600, f"{doctype} {log.name} claims a {seconds / 3600:.0f}h run")

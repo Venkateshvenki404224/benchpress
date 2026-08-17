@@ -20,7 +20,6 @@ import {
 } from "frappe-ui";
 
 import "./index.css";
-import "./theme.css";
 
 const globalComponents = {
 	Button,
@@ -36,6 +35,9 @@ const globalComponents = {
 const app = createApp(App);
 
 setConfig("resourceFetcher", frappeRequest);
+// Datetimes are stored in the site's timezone; dayjsLocal needs it to render
+// relative times against the viewer's clock.
+setConfig("systemTimezone", window.system_timezone);
 
 app.use(router);
 app.use(resourcesPlugin);
