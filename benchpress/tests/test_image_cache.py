@@ -101,7 +101,10 @@ class TestResolve(unittest.TestCase):
 
 	def test_resolve_reports_a_hit_when_the_image_exists(self):
 		spec = _spec(apps=[_app()])
-		with patch("benchpress.docker_manager.get_client", return_value=_client_with_tags(image_cache.cache_tag(spec))):
+		with patch(
+			"benchpress.docker_manager.get_client",
+			return_value=_client_with_tags(image_cache.cache_tag(spec)),
+		):
 			tag, hit = image_cache.resolve(spec)
 		self.assertTrue(hit)
 		self.assertEqual(tag, image_cache.cache_tag(spec))
@@ -344,7 +347,9 @@ class TestSweepCachedImages(IntegrationTestCase):
 	def setUpClass(cls):
 		super().setUpClass()
 		frappe.set_user("Administrator")
-		cls.lab = _lab("image-cache-sweep", apps=[_app("hrms", "https://github.com/frappe/hrms", "version-15")])
+		cls.lab = _lab(
+			"image-cache-sweep", apps=[_app("hrms", "https://github.com/frappe/hrms", "version-15")]
+		)
 		cls.referenced = image_cache.cache_tag(cls.lab)
 		frappe.db.set_value("Lab", cls.lab.name, {"status": "Ready", "image_tag": cls.referenced})
 		frappe.db.commit()
