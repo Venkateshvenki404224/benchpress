@@ -249,9 +249,11 @@ def get_device_config(device_docname: str) -> str:
 def _device_peer_filters() -> dict:
 	"""Everything the user owns except the peers that belong to bench containers.
 
-	The bench sweep is one unbounded `get_all` per call. Left as it is: the
-	whole fleet is 4 Bench Instances, so it reads one short indexed column.
-	Batch or cache it when the fleet reaches the hundreds.
+	The bench sweep is one unbounded `get_all` per call, and it is a full scan: `vpn_peer`
+	carries no index, and `("is", "set")` renders as `!= ''`, which no B-tree would seek on
+	anyway. The names it returns then become a `not in` list on the peer query, so the
+	statement itself grows with the fleet. Left as it is at 4 Bench Instances; replace it with
+	one anti-join, or an `is_device` flag on `VPN Peer`, before the fleet reaches ~500.
 	"""
 	filters = {"owner_user": frappe.session.user}
 	bench_peers = frappe.get_all("Bench Instance", filters={"vpn_peer": ("is", "set")}, pluck="vpn_peer")

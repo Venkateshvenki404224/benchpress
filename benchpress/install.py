@@ -7,6 +7,7 @@ import subprocess
 import frappe
 
 from benchpress.credits.seed import seed_defaults
+from benchpress.indexes import ensure_indexes
 from benchpress.vpn_access import grant_vpn_access
 
 
@@ -25,6 +26,7 @@ def after_install():
 
 	# Same reason: seed_credit_config would never fire on a fresh install.
 	seed_defaults()
+	ensure_indexes()
 
 	# setup.sh requires host-level access (docker group, sysctl, sudoers).
 	# Skip it when running inside a container.
