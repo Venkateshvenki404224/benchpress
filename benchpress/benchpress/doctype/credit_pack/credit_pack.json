@@ -1,0 +1,115 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "field:pack_label",
+ "creation": "2026-08-17 08:11:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "pack_label",
+  "inr_price",
+  "credits",
+  "column_break_pricing",
+  "is_active",
+  "highlight",
+  "sort_order"
+ ],
+ "fields": [
+  {
+   "description": "Shown on the pricing card, e.g. Starter",
+   "fieldname": "pack_label",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Pack Label",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "description": "What the buyer pays, in INR.",
+   "fieldname": "inr_price",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Price (INR)",
+   "options": "INR"
+  },
+  {
+   "description": "Credits granted on purchase.",
+   "fieldname": "credits",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Credits",
+   "precision": "2"
+  },
+  {
+   "fieldname": "column_break_pricing",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "1",
+   "description": "Inactive packs disappear from the landing page and the buy dialog without being deleted.",
+   "fieldname": "is_active",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Is Active"
+  },
+  {
+   "default": "0",
+   "description": "Renders as the \"most popular\" card.",
+   "fieldname": "highlight",
+   "fieldtype": "Check",
+   "label": "Highlight"
+  },
+  {
+   "default": "0",
+   "description": "Ascending display order on the pricing section.",
+   "fieldname": "sort_order",
+   "fieldtype": "Int",
+   "label": "Sort Order"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-08-17 08:11:00.000000",
+ "modified_by": "Administrator",
+ "module": "Benchpress",
+ "name": "Credit Pack",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "BenchPress Admin",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "read": 1,
+   "role": "BenchPress User"
+  }
+ ],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "sort_order",
+ "sort_order": "ASC",
+ "states": [],
+ "track_changes": 1
+}

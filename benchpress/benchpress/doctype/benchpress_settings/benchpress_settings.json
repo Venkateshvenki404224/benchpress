@@ -16,7 +16,9 @@
   "container_memory_limit",
   "column_break_resource",
   "container_cpu_quota",
-  "code_server_version"
+  "code_server_version",
+  "credits_section",
+  "enable_credits"
  ],
  "fields": [
   {
@@ -81,13 +83,25 @@
    "fieldname": "code_server_version",
    "fieldtype": "Data",
    "label": "Code Server Version"
+  },
+  {
+   "fieldname": "credits_section",
+   "fieldtype": "Section Break",
+   "label": "Credits"
+  },
+  {
+   "default": "0",
+   "description": "Master switch for credit metering and enforcement. Off means the feature does not exist: nothing is charged, capped or auto-stopped. Rates live in Credit Settings, Instance Size and Credit Pack.",
+   "fieldname": "enable_credits",
+   "fieldtype": "Check",
+   "label": "Enable Credits"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2026-07-02 16:00:00.000000",
+ "modified": "2026-08-17 08:13:00.000000",
  "modified_by": "Administrator",
  "module": "Benchpress",
  "name": "BenchPress Settings",
