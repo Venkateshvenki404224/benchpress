@@ -365,6 +365,17 @@ class TestApiAuthorization(IntegrationTestCase):
 		frappe.set_user(self.norole_user)
 		self.assert_denied(lambda: api.get_device_wg_config("authz-dev"))
 
+	def test_roleless_denied_from_the_credit_endpoints(self):
+		frappe.set_user(self.norole_user)
+		self.assert_denied(api.get_credit_summary)
+		self.assert_denied(api.get_credit_statement)
+
+	def test_a_credit_statement_is_only_ever_the_callers_own(self):
+		"""Positive control, and the scoping rule: the filter is the session, not an argument."""
+		frappe.set_user(self.user_a)
+		self.assertEqual(api.get_credit_statement()["rows"], [])
+		self.assertIn("enabled", api.get_credit_summary())
+
 	def test_roleless_denied_from_get_labs(self):
 		frappe.set_user(self.norole_user)
 		self.assert_denied(api.get_labs)

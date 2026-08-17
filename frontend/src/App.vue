@@ -17,6 +17,8 @@
 								:label="item.label"
 								:icon="item.icon"
 								:suffix="item.suffix"
+								:to="item.to"
+								:isActive="item.isActive"
 								:onClick="item.onClick"
 								:data-test="item.dataTest"
 							/>
@@ -85,11 +87,18 @@ import NotificationsPanel from "@/components/NotificationsPanel.vue";
 import DeployDialog from "@/components/deploy/DeployDialog.vue";
 import SettingsDialog from "@/components/settings/SettingsDialog.vue";
 import { openSettings } from "@/data/benchpressSettings";
+import {
+	creditSummary,
+	creditsEnabled,
+	primeCreditSummary,
+	refreshCreditSummary,
+} from "@/data/credits";
 import { attentionCount, toggleNotifications } from "@/data/notifications";
 import { openSearch, searchShortcut } from "@/data/searchPalette";
 import { session } from "@/data/session";
 import { userContext } from "@/data/userContext";
 import { vpnStatus } from "@/data/vpnStatus";
+import { creditLabel } from "@/utils/credits";
 import {
 	Breadcrumbs,
 	FrappeUIProvider,
@@ -99,10 +108,11 @@ import {
 	SidebarSection,
 	useTheme,
 } from "frappe-ui";
-import { computed } from "vue";
+import { computed, watch } from "vue";
 import { useRoute } from "vue-router";
 
 import BellIcon from "~icons/lucide/bell";
+import CoinsIcon from "~icons/lucide/coins";
 import FlaskConicalIcon from "~icons/lucide/flask-conical";
 import LayoutDashboardIcon from "~icons/lucide/layout-dashboard";
 import LayoutTemplateIcon from "~icons/lucide/layout-template";
@@ -117,6 +127,12 @@ import ShieldIcon from "~icons/lucide/shield";
 // the hand-rolled toggle it replaces always resolved to dark on first click.
 const { toggleTheme } = useTheme();
 const route = useRoute();
+
+// The balance falls while nobody clicks anything — a running instance burns by the
+// hour — so the chip starts from the context call the SPA already made and is
+// re-read on every navigation. Each read is one indexed lookup, never a ledger sum.
+watch(() => userContext.ready, primeCreditSummary, { immediate: true });
+watch(() => route.fullPath, refreshCreditSummary);
 
 function switchToDesk() {
 	window.location.href = "/app";
@@ -155,23 +171,39 @@ const accountMenu = computed(() => {
 	];
 });
 
-// The two items above the nav. Both open a dialog, so neither carries a route.
-const utilityItems = computed(() => [
-	{
-		label: "Search",
-		icon: SearchIcon,
-		suffix: searchShortcut.value,
-		dataTest: "nav-search",
-		onClick: openSearch,
-	},
-	{
-		label: "Notifications",
-		icon: BellIcon,
-		suffix: attentionCount.value ? String(attentionCount.value) : undefined,
-		dataTest: "nav-notifications",
-		onClick: toggleNotifications,
-	},
-]);
+// The items above the nav proper: two dialogs, and — only on a hosted site — the
+// balance. The balance belongs to the account rather than to any screen, and it
+// is the one number a user wants in view while they work, so it sits here as a
+// chip with the figure in the suffix slot rather than on a screen of its own.
+const utilityItems = computed(() => {
+	const items = [
+		{
+			label: "Search",
+			icon: SearchIcon,
+			suffix: searchShortcut.value,
+			dataTest: "nav-search",
+			onClick: openSearch,
+		},
+		{
+			label: "Notifications",
+			icon: BellIcon,
+			suffix: attentionCount.value ? String(attentionCount.value) : undefined,
+			dataTest: "nav-notifications",
+			onClick: toggleNotifications,
+		},
+	];
+	if (creditsEnabled.value) {
+		items.push({
+			label: "Credits",
+			icon: CoinsIcon,
+			suffix: creditLabel(creditSummary.balance),
+			to: "/credits",
+			isActive: route.name === "Credits",
+			dataTest: "nav-credits",
+		});
+	}
+	return items;
+});
 
 // Five flat items. Deploy and build history are reached from the objects they
 // belong to, so the old Logs section is gone; Settings is in the header menu.

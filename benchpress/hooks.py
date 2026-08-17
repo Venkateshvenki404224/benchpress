@@ -130,6 +130,8 @@ after_install = "benchpress.install.after_install"
 permission_query_conditions = {
 	"Bench Instance": "benchpress.permissions.bench_instance_query_conditions",
 	"Deploy Log": "benchpress.permissions.deploy_log_query_conditions",
+	"Credit Account": "benchpress.permissions.credit_account_query_conditions",
+	"Credit Ledger Entry": "benchpress.permissions.credit_ledger_query_conditions",
 }
 
 # has_permission = {
@@ -168,9 +170,11 @@ scheduler_events = {
 	# "all": [
 	# 	"benchpress.tasks.all"
 	# ],
-	# "daily": [
-	# 	"benchpress.tasks.daily"
-	# ],
+	# Its own job, never folded into the `*/1` stats cron: that one already spends ~2s per
+	# container and blows its window past ~25 benches. This one makes no Docker calls at all.
+	"daily": [
+		"benchpress.credits.reconcile.reconcile_burn_rates",
+	],
 	# "hourly": [
 	# 	"benchpress.tasks.hourly"
 	# ],

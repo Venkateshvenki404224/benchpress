@@ -77,12 +77,15 @@ class BenchInstance(Document):
 
 	@frappe.whitelist()
 	def enqueue_start(self):
+		from benchpress.credits import metering
 		from benchpress.docker_manager import start_container
 
 		if not self.container_id:
 			frappe.throw(_("No container to start."))
 		start_container(self.container_id)
 		self.status = "Running"
+		self.started_at = frappe.utils.now_datetime()
+		metering.on_bench_running(self)
 		self.save()
 		frappe.db.commit()  # nosemgrep: intentional commit to persist status before response
 		frappe.msgprint(_("Bench started."))

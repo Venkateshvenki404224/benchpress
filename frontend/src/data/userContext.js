@@ -5,6 +5,10 @@ export const userContext = reactive({
 	isAdmin: false,
 	user: "",
 	roles: [],
+	// `{enabled}` at minimum, plus the balance when credits are switched on. Every credit
+	// surface hides behind this flag — the same gate the API enforces — so the SPA never
+	// asks a second endpoint whether the feature exists.
+	credits: { enabled: false },
 	loading: true,
 	ready: false,
 });
@@ -18,6 +22,7 @@ const userContextResource = createResource({
 		userContext.isAdmin = ctx?.is_admin ?? false;
 		userContext.user = ctx?.user ?? "";
 		userContext.roles = ctx?.roles ?? [];
+		userContext.credits = ctx?.credits ?? { enabled: false };
 		userContext.loading = false;
 		userContext.ready = true;
 	},

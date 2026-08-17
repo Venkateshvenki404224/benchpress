@@ -9,6 +9,7 @@ from frappe.utils.file_lock import LockTimeoutError
 from frappe.utils.synchronization import filelock
 
 from benchpress import image_cache
+from benchpress.credits import metering
 from benchpress.deploy_pipeline import DeployLogWriter, DeployPipeline
 from benchpress.docker_manager import (
 	build_lab_image,
@@ -336,6 +337,9 @@ def _deploy_bench(bench_name: str) -> None:
 		bench.status = "Running"
 		bench.started_at = frappe.utils.now_datetime()
 		bench.save(ignore_permissions=True)
+		# Metering starts where the clock does: an instance is billable once it is actually
+		# up, so everything above this line is free however long it took to get there.
+		metering.on_bench_running(bench)
 		frappe.db.commit()
 		# The eleventh step and the run's success line are one line: it carries
 		# the total elapsed time, and "Deploy complete" is still in its text for
@@ -355,6 +359,9 @@ def _deploy_bench(bench_name: str) -> None:
 		_cleanup_failed_deploy(bench, created_container_id, append_log)
 		bench.status = "Error"
 		bench.save(ignore_permissions=True)
+		# Settle whatever did run and charge nothing further: a failed deploy is free, and a
+		# failed *re*deploy of an instance that was already burning must not keep burning.
+		metering.on_bench_stopped(bench)
 		frappe.db.commit()
 		append_log(f"=== Deploy failed: {e!s} ===", "error")
 		frappe.db.set_value("Deploy Log", deploy_log_name, "log_type", "error")
@@ -419,6 +426,11 @@ def _redeploy_bench(bench_name: str) -> None:
 		except Exception:
 			pass  # best-effort
 
+	# The container this bench was burning for is gone, so the session ends here. Without
+	# this the burning flag would survive the redeploy and the fresh container — which
+	# `_deploy_bench` bills through the same idempotence guard — would run unmetered.
+	metering.on_bench_stopped(bench)
+
 	bench.container_id = None
 	bench.container_image = None
 	bench.status = "Draft"
@@ -468,6 +480,9 @@ def _build_lab_with_logs(lab, log_fn) -> None:
 	lab.image_tag = image_tag
 	lab.status = "Ready"
 	lab.save(ignore_permissions=True)
+	# Charged after the build returns, so a failed build stays free — and reached only when
+	# `_prepare_lab_image` found no cached image, so a cache hit is free too.
+	metering.on_image_built(lab)
 	frappe.db.commit()
 	if log_fn:
 		log_fn(f"Lab image ready: {image_tag}")
@@ -536,5 +551,6 @@ def stop_bench(bench_name: str) -> None:
 		stop_container(bench.container_id)
 
 	bench.status = "Stopped"
+	metering.on_bench_stopped(bench)
 	bench.save(ignore_permissions=True)
 	frappe.db.commit()  # nosemgrep -- intentional commit to persist status before response

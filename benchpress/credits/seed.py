@@ -81,6 +81,7 @@ def seed_defaults() -> None:
 	seed_rows("Instance Size", "size_label", INSTANCE_SIZES)
 	seed_rows("Credit Pack", "pack_label", CREDIT_PACKS)
 	seed_credit_settings()
+	ensure_ledger_index()
 
 
 def seed_rows(doctype: str, key: str, rows: list[dict]) -> None:
@@ -89,6 +90,16 @@ def seed_rows(doctype: str, key: str, rows: list[dict]) -> None:
 		if row[key] in existing:
 			continue
 		frappe.get_doc({"doctype": doctype, **row}).insert(ignore_permissions=True)
+
+
+def ensure_ledger_index() -> None:
+	"""The statement page's only query shape: one account's rows, newest first.
+
+	A composite `(account, creation)` index serves both the filter and the sort, so pagination
+	stays an index range scan however long the ledger grows. DocType JSON can only declare
+	single-column `search_index` entries, so this one is added by hand; `add_index` is idempotent.
+	"""
+	frappe.db.add_index("Credit Ledger Entry", ["account", "creation"])
 
 
 def seed_credit_settings() -> None:

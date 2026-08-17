@@ -5,6 +5,7 @@ import frappe
 from frappe import _
 
 from benchpress import image_cache, lab_detail, lab_templates, labs
+from benchpress.credits import account, metering
 from benchpress.permissions import (
 	get_bench_owner_filter,
 	is_admin,
@@ -178,13 +179,19 @@ def bench_action(bench_name: str, action: str) -> dict:
 		start_container(bench.container_id)
 		bench.status = "Running"
 		bench.started_at = frappe.utils.now_datetime()
+		metering.on_bench_running(bench)
 	elif action == "stop":
 		stop_container(bench.container_id)
 		bench.status = "Stopped"
+		metering.on_bench_stopped(bench)
 	elif action == "restart":
 		restart_container(bench.container_id)
 		bench.status = "Running"
+		# A restart does not interrupt the session — the instance was billable before and is
+		# billable after — so this only starts a meter that was not already running.
+		metering.on_bench_running(bench)
 	elif action == "delete":
+		metering.on_bench_stopped(bench)
 		if bench.database_server:
 			from benchpress.mariadb_manager import drop_site_database
 
@@ -372,11 +379,32 @@ def _create_site_on_bench(site_doc_name: str) -> None:
 
 @frappe.whitelist()
 def get_user_context() -> dict:
+	"""Who the caller is, and whether credits exist at all.
+
+	The switch is exposed here rather than through an endpoint of its own so the SPA learns it in
+	the call it already makes on boot, and every credit surface hides behind the same gate the API
+	enforces.
+	"""
 	return {
 		"is_admin": is_admin(),
 		"user": frappe.session.user,
 		"roles": frappe.get_roles(frappe.session.user),
+		"credits": account.summary(frappe.session.user),
 	}
+
+
+@frappe.whitelist()
+def get_credit_summary() -> dict:
+	"""The balance chip's refresh: one indexed read, no ledger scan."""
+	require_app_user()
+	return account.summary(frappe.session.user)
+
+
+@frappe.whitelist()
+def get_credit_statement(limit_start: int = 0, limit_page_length: int = 20) -> dict:
+	"""One page of the caller's own ledger. Never another user's — the filter is the session."""
+	require_app_user()
+	return account.statement(frappe.session.user, limit_start, limit_page_length)
 
 
 @frappe.whitelist()

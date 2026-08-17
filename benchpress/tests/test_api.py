@@ -18,6 +18,8 @@ BUDGETS_MS = {
 	"get_lab": 300,
 	"get_lab_templates": 200,
 	"get_user_context": 250,
+	"get_credit_summary": 250,
+	"get_credit_statement": 400,
 	"get_benches": 600,
 	"list_devices": 500,
 	"create_lab_from_template": 300,
@@ -303,9 +305,24 @@ class TestApi(IntegrationTestCase):
 
 	def test_get_user_context_shape_and_timing(self):
 		context, elapsed_ms = _timed(api.get_user_context)
-		for key in ("is_admin", "user", "roles"):
+		for key in ("is_admin", "user", "roles", "credits"):
 			self.assertIn(key, context)
 		self.assert_within_budget("get_user_context", elapsed_ms)
+
+	def test_get_user_context_carries_the_credit_gate(self):
+		"""Every credit surface hides behind this flag, so it is part of the contract."""
+		self.assertIn("enabled", api.get_user_context()["credits"])
+
+	def test_get_credit_summary_shape_and_timing(self):
+		summary, elapsed_ms = _timed(api.get_credit_summary)
+		self.assertIn("enabled", summary)
+		self.assert_within_budget("get_credit_summary", elapsed_ms)
+
+	def test_get_credit_statement_shape_and_timing(self):
+		statement, elapsed_ms = _timed(api.get_credit_statement)
+		for key in ("enabled", "rows", "total", "summary"):
+			self.assertIn(key, statement)
+		self.assert_within_budget("get_credit_statement", elapsed_ms)
 
 	def test_get_benches_shape_and_timing(self):
 		benches, elapsed_ms = _timed(api.get_benches)

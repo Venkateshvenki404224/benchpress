@@ -63,6 +63,14 @@ const routes = [
 		component: () => import("@/pages/Devices.vue"),
 	},
 	{
+		// Reachable only while credits are switched on; the guard below sends a
+		// self-hoster who bookmarked it back to Labs rather than 404ing.
+		path: "/credits",
+		name: "Credits",
+		meta: { title: "Credits" },
+		component: () => import("@/pages/Credits.vue"),
+	},
+	{
 		// Settings is a dialog, not a screen. The route survives so old links
 		// and bookmarks still work: it opens the dialog over Overview, and the
 		// dialog puts the URL back on Overview when it closes.
@@ -104,6 +112,9 @@ router.beforeEach(async (to, from, next) => {
 		} else {
 			next();
 		}
+	} else if (to.name === "Credits") {
+		await waitForUserContext().catch(() => {});
+		next(userContext.credits?.enabled ? undefined : { name: "Labs" });
 	} else {
 		next();
 	}

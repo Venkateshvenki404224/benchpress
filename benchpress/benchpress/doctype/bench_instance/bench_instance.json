@@ -36,6 +36,10 @@
   "vpn_section",
   "wg_ip",
   "vpn_peer",
+  "credits_section",
+  "credit_burn_rate",
+  "column_break_credits",
+  "credit_burn_started",
   "apps_section",
   "apps"
  ],
@@ -67,7 +71,8 @@
    "in_list_view": 1,
    "label": "Status",
    "options": "Draft\nDeploying\nRunning\nStopped\nError",
-   "read_only": 1
+   "read_only": 1,
+   "search_index": 1
   },
   {
    "fieldname": "frappe_version",
@@ -144,7 +149,8 @@
    "fieldname": "started_at",
    "fieldtype": "Datetime",
    "label": "Started At",
-   "read_only": 1
+   "read_only": 1,
+   "search_index": 1
   },
   {
    "fieldname": "database_server",
@@ -216,6 +222,31 @@
    "fieldtype": "Table",
    "label": "Apps",
    "options": "Bench App"
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "credits_section",
+   "fieldtype": "Section Break",
+   "label": "Credits"
+  },
+  {
+   "description": "Credits per hour this instance is currently contributing to its owner's burn rate.",
+   "fieldname": "credit_burn_rate",
+   "fieldtype": "Float",
+   "label": "Credit Burn Rate",
+   "precision": "6",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_credits",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Set means this instance is being metered. The idempotence guard for start/stop, so a redeploy or a restart cannot add the rate twice.",
+   "fieldname": "credit_burn_started",
+   "fieldtype": "Datetime",
+   "label": "Credit Burn Started",
+   "read_only": 1
   },
   {
    "fieldname": "code_server_password",
