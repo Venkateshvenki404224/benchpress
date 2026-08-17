@@ -23,7 +23,7 @@ from benchpress.www.home_content import ACTIVE_PHASE, PHASES
 
 REPO_URL = "https://github.com/Venkateshvenki404224/benchpress"
 LICENSE_LABEL = "AGPL-3.0"
-VIDEO_DIRECTORY = "public/videos"
+VIDEO_DIRECTORY = ("public", "videos")
 HERO_VIDEO = "hero.mp4"
 HERO_POSTER = "hero-poster.jpg"
 
@@ -111,5 +111,8 @@ def hero_media() -> dict:
 
 
 def asset_url(filename: str) -> str | None:
-	path = frappe.get_app_path("benchpress", VIDEO_DIRECTORY, filename)
+	# The directory is passed as separate parts on purpose: get_app_path scrubs hyphens into
+	# underscores in every part unless one of them is exactly "public", so a single
+	# "public/videos" would look for `hero_poster.jpg` and never find the poster.
+	path = frappe.get_app_path("benchpress", *VIDEO_DIRECTORY, filename)
 	return f"/assets/benchpress/videos/{filename}" if os.path.exists(path) else None
