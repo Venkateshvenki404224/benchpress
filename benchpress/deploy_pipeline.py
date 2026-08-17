@@ -175,7 +175,11 @@ class DeployLogWriter:
 		frappe.db.set_value(
 			self.doctype, self.log_name, "message", current + line + "\n", update_modified=False
 		)
-		frappe.db.commit()
+		# A deploy runs for minutes inside one background job, so its transaction
+		# would hold every line until the run ended. Someone opening the log
+		# mid-run — or reloading the page after the socket dropped — must see what
+		# has happened so far, which is only true if each line is committed.
+		frappe.db.commit()  # nosemgrep
 
 
 class DeployPipeline:

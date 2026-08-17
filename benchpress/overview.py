@@ -164,7 +164,7 @@ def _average_deploy_time() -> dict:
 		order_by="timestamp desc",
 		limit=DEPLOY_SAMPLE_LIMIT,
 	)
-	durations = [seconds for seconds in map(log_duration, logs) if seconds]
+	durations = [duration for log in logs if (duration := log_duration(log))]
 	average = sum(durations) / len(durations) if durations else None
 	return {
 		"average_seconds": average,

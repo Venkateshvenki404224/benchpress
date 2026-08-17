@@ -43,7 +43,9 @@ class IntegrationTestBenchPressSettings(IntegrationTestCase):
 		}
 		if not cls.original["base_domain"]:
 			frappe.db.set_single_value(SETTINGS, "base_domain", "settings-test.local")
-		frappe.db.commit()
+		# Class fixtures must outlive the per-test transaction; the tests below run
+		# as another user and would not see an uncommitted write.
+		frappe.db.commit()  # nosemgrep
 
 	@classmethod
 	def tearDownClass(cls):
@@ -51,7 +53,8 @@ class IntegrationTestBenchPressSettings(IntegrationTestCase):
 		for field, value in cls.original.items():
 			frappe.db.set_single_value(SETTINGS, field, value)
 		frappe.delete_doc("User", ADMIN_EMAIL, force=True, ignore_permissions=True)
-		frappe.db.commit()
+		# The teardown undoes committed fixture state, so it has to commit too.
+		frappe.db.commit()  # nosemgrep
 		super().tearDownClass()
 
 	def tearDown(self):
@@ -88,4 +91,5 @@ class IntegrationTestBenchPressSettings(IntegrationTestCase):
 		settings = frappe.get_doc(SETTINGS)
 		settings.traefik_network = value
 		settings.save(ignore_permissions=True)
-		frappe.db.commit()
+		# Restores a singleton the test committed through the real save path.
+		frappe.db.commit()  # nosemgrep
