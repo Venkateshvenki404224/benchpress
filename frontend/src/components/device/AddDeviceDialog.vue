@@ -1,5 +1,9 @@
 <template>
-	<Dialog v-model="isOpen" :options="{ title: 'Add this device', size: 'lg' }" data-test="add-device-dialog">
+	<Dialog
+		v-model="isOpen"
+		:options="{ title: 'Add this device', size: 'lg' }"
+		data-test="add-device-dialog"
+	>
 		<template #body-content>
 			<p class="text-2xs text-ink-gray-5">Two minutes, once per machine.</p>
 
@@ -130,7 +134,7 @@ function reset() {
 
 /** The machine a developer registers first, when the backend offers it. */
 function defaultType() {
-	return props.deviceTypes.includes("Laptop") ? "Laptop" : (props.deviceTypes[0] ?? "Laptop");
+	return props.deviceTypes.includes("Laptop") ? "Laptop" : props.deviceTypes[0] ?? "Laptop";
 }
 
 async function register() {

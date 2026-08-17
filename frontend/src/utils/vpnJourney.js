@@ -69,7 +69,9 @@ export function bannerState({ connected, handshakeAgeSeconds, deviceCount } = {}
 	return {
 		tone: "amber",
 		title: "This device is not on the VPN",
-		body: `${machines(deviceCount)} registered, none with a recent handshake. Turn the tunnel on in your WireGuard client, then check again.`,
+		body: `${machines(
+			deviceCount
+		)} registered, none with a recent handshake. Turn the tunnel on in your WireGuard client, then check again.`,
 		action: RECHECK,
 		actionLabel: "Check again",
 	};

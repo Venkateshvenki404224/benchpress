@@ -39,6 +39,9 @@ BUDGETS_MS = {
 	"get_vpn_status": 400,
 	"get_device_types": 200,
 	"run_connection_test": 800,
+	"get_lab_form_options": 200,
+	"get_build_history": 600,
+	"get_deploy_history": 600,
 }
 
 # The five rows benchpress.diagnostics always returns; the real checks talk to
@@ -388,6 +391,47 @@ class TestApi(IntegrationTestCase):
 		# One status poll interval, never a second threshold of our own.
 		self.assertEqual(status["stale_after_seconds"] % 60, 0)
 		self.assert_within_budget("get_vpn_status", elapsed_ms)
+
+	def test_get_overview_activity_names_a_bench_readably(self):
+		"""`bench_name` is an md5; activity is prose, so it uses the lab-derived label."""
+		with patch("benchpress.diagnostics.run_diagnostics", return_value=DIAGNOSTICS_ROWS):
+			activity = api.get_overview()["activity"]
+
+		event = next(row for row in activity if row.get("bench") == self.bench.name)
+		self.assertIn(f"bench-{self.lab.name}", event["message"])
+		self.assertNotIn(self.bench.name, event["message"])
+
+	def test_get_lab_form_options_comes_from_the_doctype(self):
+		options, elapsed_ms = _timed(api.get_lab_form_options)
+		versions = frappe.get_meta("Lab").get_field("frappe_version").options.split("\n")
+		self.assertEqual(options["frappe_versions"], [v for v in versions if v])
+		self.assertEqual(options["defaults"]["cpu_cores"], "1")
+		self.assert_within_budget("get_lab_form_options", elapsed_ms)
+
+	def test_get_build_history_shape_and_timing(self):
+		history, elapsed_ms = _timed(api.get_build_history)
+		self.assertEqual(history["window_days"], 7)
+		row = next(row for row in history["rows"] if row["name"] == self.failed_build_log.name)
+		for key in ("lab", "lab_title", "image_tag", "result", "last_step", "duration_label", "started"):
+			self.assertIn(key, row)
+		self.assertEqual(row["result"], "Failed")
+		# The fixture log's last marker before its failure line.
+		self.assertEqual(row["last_step"], "Installing apps")
+		self.assert_within_budget("get_build_history", elapsed_ms)
+
+	def test_get_deploy_history_shape_and_timing(self):
+		history, elapsed_ms = _timed(api.get_deploy_history)
+		row = next(row for row in history["rows"] if row["name"] == self.deploy_log.name)
+		self.assertEqual(row["bench"], self.bench.name)
+		self.assertEqual(row["lab"], self.lab.name)
+		self.assertEqual(row["result"], "Deploying")
+		self.assert_within_budget("get_deploy_history", elapsed_ms)
+
+	def test_history_never_returns_the_log_bodies_it_parsed(self):
+		"""A list of runs is not a list of logs — the messages stay on the server."""
+		for history in (api.get_build_history(), api.get_deploy_history()):
+			for row in history["rows"]:
+				self.assertNotIn("message", row)
 
 	def test_get_device_types_is_the_backend_list(self):
 		from benchpress.vpn_adapter import DEVICE_TYPES

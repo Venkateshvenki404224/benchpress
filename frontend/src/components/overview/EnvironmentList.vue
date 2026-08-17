@@ -32,9 +32,11 @@
 			>
 				<AppIcon :app="environment.app" :size="18" />
 			</span>
+			<!-- `bench_name` is `md5(user + lab)`; every surface names a bench
+			     after the lab it runs instead — `utils/labSpecs.benchLabel`. -->
 			<div class="min-w-0 flex-1">
 				<p class="truncate text-body font-medium text-ink-gray-9">
-					{{ environment.bench_name || environment.name }}
+					{{ benchLabel(environment.lab) || environment.name }}
 				</p>
 				<p class="truncate text-2xs text-ink-gray-4">
 					{{ environment.site || environment.lab_title }}
@@ -62,6 +64,7 @@ import AppIcon from "@/components/AppIcon.vue";
 import EmptyState from "@/components/EmptyState.vue";
 import SectionCard from "@/components/SectionCard.vue";
 import StatusBadge from "@/components/StatusBadge.vue";
+import { benchLabel } from "@/utils/labSpecs";
 import { labelFor, themeFor } from "@/utils/statusThemes";
 import { Button } from "frappe-ui";
 import { computed } from "vue";

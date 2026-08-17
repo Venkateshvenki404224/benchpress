@@ -16,11 +16,9 @@ metadata; runs recorded before it, and image builds — which stream Docker's ow
 output — still only have `=== … ===` markers, so both are read.
 """
 
-import re
-
 import frappe
 
-from benchpress.deploy_pipeline import parse_step_line
+from benchpress.deploy_pipeline import scan_log
 
 BENCH_FIELDS = [
 	"name",
@@ -42,11 +40,6 @@ BENCH_FIELDS = [
 ]
 
 SITE_FIELDS = ["name", "site_name", "full_domain", "status"]
-
-# `=== Deploy failed: <reason> ===` / `=== Build failed: <reason> ===` end a
-# failed run; every other `=== … ===` line opens a step.
-FAILED_MARKER = re.compile(r"^===\s*(?:Deploy|Build) failed:\s*(.*?)\s*===$")
-STEP_MARKER = re.compile(r"^===\s*(.*?)\s*===$")
 
 
 def get_lab(name: str) -> dict:
@@ -163,31 +156,8 @@ def _read_failure(doctype: str, filters: dict, source: str) -> dict | None:
 def _parse_failure(message: str) -> tuple[str, str]:
 	"""The last step to open, and the reason the run ended with.
 
-	Cleanup lines carry no `=== … ===` marker, so the last marker that is not
-	itself the failure line is the step that was running when the run died. A
-	structured step line is checked first: it is also a `=== … ===` marker, so
-	the plain read would report "Step 7/11: Creating the site [site @61.4s]"
-	where the step's own label is what the banner wants.
+	`scan_log` reads the markers; a run that died without writing a failure
+	marker is described by whatever it left behind on its last line.
 	"""
-	step = ""
-	reason = ""
-	for line in message.splitlines():
-		stripped = line.strip()
-		failed = FAILED_MARKER.match(stripped)
-		if failed:
-			reason = failed.group(1)
-			continue
-		structured = parse_step_line(stripped)
-		if structured:
-			step = structured["step_label"]
-			continue
-		marker = STEP_MARKER.match(stripped)
-		if marker:
-			step = marker.group(1)
-	return step, reason or _last_line(message)
-
-
-def _last_line(message: str) -> str:
-	"""What a run that died without a failure marker left behind."""
-	lines = [line.strip() for line in message.splitlines() if line.strip()]
-	return lines[-1] if lines else ""
+	scan = scan_log(message)
+	return scan.step, scan.failure or scan.last_line

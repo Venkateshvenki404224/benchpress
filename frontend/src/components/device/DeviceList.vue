@@ -120,7 +120,9 @@ function iconFor(deviceType) {
 }
 
 function subtitle(device) {
-	const registered = device.registered_on ? dayjsLocal(device.registered_on).format("D MMM") : "";
+	const registered = device.registered_on
+		? dayjsLocal(device.registered_on).format("D MMM")
+		: "";
 	return deviceSubtitle(device.device_type, registered);
 }
 

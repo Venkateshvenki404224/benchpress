@@ -27,6 +27,13 @@ def get_lab(name: str) -> dict:
 
 
 @frappe.whitelist()
+def get_lab_form_options() -> dict:
+	"""The Lab enum and defaults the New lab form builds itself from."""
+	require_admin()
+	return labs.get_lab_form_options()
+
+
+@frappe.whitelist()
 def get_lab_templates() -> list[dict]:
 	require_app_user()
 	return lab_templates.get_templates()
@@ -215,6 +222,21 @@ def get_deploy_logs(bench_name: str) -> list[dict]:
 		order_by="timestamp desc",
 		limit_page_length=20,
 	)
+
+
+@frappe.whitelist()
+def get_build_history() -> dict:
+	"""Image-build runs. Scoped in `run_history`: Build Log has no query condition."""
+	from benchpress.run_history import get_build_history as _get_build_history
+
+	return _get_build_history()
+
+
+@frappe.whitelist()
+def get_deploy_history() -> dict:
+	from benchpress.run_history import get_deploy_history as _get_deploy_history
+
+	return _get_deploy_history()
 
 
 @frappe.whitelist()

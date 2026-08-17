@@ -54,12 +54,15 @@ DEPLOY_STEPS = (
 
 STEP_TOTAL = len(DEPLOY_STEPS)
 STEP_INDEX = {step.key: index for index, step in enumerate(DEPLOY_STEPS, start=1)}
+COMPLETE_KEY = "complete"
 
 # `=== Step 4/11: Waiting for the container IP [container_ip @14.2s] ===`
 STEP_LINE = re.compile(
 	r"^===\s*Step\s+(?P<index>\d+)/(?P<total>\d+):\s*(?P<label>.*?)\s*"
 	r"\[(?P<key>[a-z_]+)\s*@(?P<elapsed>\d+(?:\.\d+)?)s\]\s*===$"
 )
+FAILED_MARKER = re.compile(r"^===\s*(?:Deploy|Build) failed:\s*(.*?)\s*===$")
+PLAIN_MARKER = re.compile(r"^===\s*(.*?)\s*===$")
 
 
 def format_step_line(key: str, elapsed_seconds: float) -> str:
@@ -81,6 +84,54 @@ def parse_step_line(line: str) -> dict | None:
 		"step_label": match["label"],
 		"step_elapsed": float(match["elapsed"]),
 	}
+
+
+@dataclass(frozen=True)
+class LogScan:
+	"""What one stored run reports about itself.
+
+	`step` is the last marker the run opened — a structured step's own label
+	where the pipeline wrote one, the marker's text otherwise, because an image
+	build and every run recorded before this module existed only have those.
+	`elapsed` and `completed` come from structured markers alone: they are the
+	run's own measurements, and there is nothing to read them from otherwise.
+	"""
+
+	step: str = ""
+	failure: str = ""
+	elapsed: float | None = None
+	completed: bool = False
+	last_line: str = ""
+
+
+def scan_log(message: str) -> LogScan:
+	"""Read a stored log once: its furthest step, its outcome and its clock."""
+	step = ""
+	failure = ""
+	elapsed = None
+	completed = False
+	last_line = ""
+
+	for raw in (message or "").splitlines():
+		line = raw.strip()
+		if not line:
+			continue
+		last_line = line
+		failed = FAILED_MARKER.match(line)
+		if failed:
+			failure = failed.group(1)
+			continue
+		structured = parse_step_line(line)
+		if structured:
+			step = structured["step_label"]
+			elapsed = structured["step_elapsed"]
+			completed = structured["step_key"] == COMPLETE_KEY
+			continue
+		marker = PLAIN_MARKER.match(line)
+		if marker:
+			step = marker.group(1)
+
+	return LogScan(step=step, failure=failure, elapsed=elapsed, completed=completed, last_line=last_line)
 
 
 class DeployLogWriter:

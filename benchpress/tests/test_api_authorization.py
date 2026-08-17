@@ -223,6 +223,61 @@ class TestApiAuthorization(IntegrationTestCase):
 		self.assertIsNotNone(row, "the fixture lab is readable by every app user")
 		return row
 
+	# --- History is scoped, and Build Log has no query condition to do it -----
+
+	def test_build_history_shows_a_user_their_own_builds_and_nobody_elses(self):
+		"""`cls.build_log` is the Administrator's; the one inserted here is user_a's."""
+		own_build = self._insert_build_log_as(self.user_a)
+
+		frappe.set_user(self.user_a)
+		names = [row["name"] for row in api.get_build_history()["rows"]]
+		self.assertIn(own_build, names, "the owner cannot see their own build")
+		self.assertNotIn(self.build_log.name, names, "Build Log is leaking across users")
+
+	def test_build_history_shows_an_admin_every_build(self):
+		"""Positive control: the row hidden above is present for an admin."""
+		frappe.set_user(self.admin_user)
+		names = [row["name"] for row in api.get_build_history()["rows"]]
+		self.assertIn(self.build_log.name, names)
+
+	def test_deploy_history_hides_another_users_runs(self):
+		frappe.set_user(self.user_b)
+		names = [row["name"] for row in api.get_deploy_history()["rows"]]
+		self.assertNotIn(self.deploy_log.name, names)
+
+		frappe.set_user(self.user_a)
+		names = [row["name"] for row in api.get_deploy_history()["rows"]]
+		self.assertIn(self.deploy_log.name, names)
+
+	def test_roleless_denied_from_history(self):
+		frappe.set_user(self.norole_user)
+		self.assert_denied(api.get_build_history)
+		self.assert_denied(api.get_deploy_history)
+
+	def test_non_admin_denied_from_get_lab_form_options(self):
+		frappe.set_user(self.user_a)
+		self.assert_denied(api.get_lab_form_options)
+
+		frappe.set_user(self.admin_user)
+		self.assertIn("frappe_versions", api.get_lab_form_options())
+
+	def _insert_build_log_as(self, owner):
+		frappe.set_user(owner)
+		try:
+			log = frappe.get_doc(
+				{
+					"doctype": "Build Log",
+					"lab": self.lab.name,
+					"log_type": "success",
+					"message": "=== Build complete: benchpress/authz-lab:latest ===",
+					"timestamp": frappe.utils.now_datetime(),
+				}
+			).insert(ignore_permissions=True)
+		finally:
+			frappe.set_user("Administrator")
+		self.addCleanup(frappe.delete_doc, "Build Log", log.name, force=True, ignore_permissions=True)
+		return log.name
+
 	# --- Role-less user blocked by require_app_user (issue #88) ---------------
 	# No mocks: the guard raises before any side effect can happen.
 

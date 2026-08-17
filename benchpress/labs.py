@@ -38,6 +38,19 @@ BENCH_FIELDS = [
 	"started_at",
 ]
 
+# The fields the New lab form starts from, so their defaults are declared once —
+# on the DocType — rather than again in the SPA.
+FORM_DEFAULTS = (
+	"frappe_version",
+	"memory_limit",
+	"cpu_cores",
+	"iops_limit",
+	"bps_limit",
+	"pids_limit",
+	"enable_code_server",
+	"enable_ssh",
+)
+
 
 def get_labs() -> list[dict]:
 	"""Every lab the caller may see, each with its apps and its deployment."""
@@ -59,6 +72,31 @@ def _attach_row_facts(lab: dict, app_names: list[str], benches: list[dict]) -> N
 	lab.bench_count = len(benches)
 	lab.deployed_as = _deployed_as(benches)
 	lab.last_run = _last_run(benches)
+
+
+def bench_label(lab_id: str) -> str:
+	"""What a bench is called on screen.
+
+	`Bench Instance.bench_name` is `md5(user + lab)` — a stable key, but nothing
+	a person can read, so every surface names a bench after its lab instead.
+	Mirrored by `benchLabel` in `frontend/src/utils/labSpecs.js`; the two must
+	agree, or the same bench reads as two different things on two screens.
+	"""
+	return f"bench-{lab_id}" if lab_id else ""
+
+
+def get_lab_form_options() -> dict:
+	"""What the New lab form must not hand-type: the version enum and the defaults.
+
+	Both are declared on the Lab DocType. Restating them in the SPA would make a
+	new Frappe version a two-file change and let the two copies disagree.
+	"""
+	meta = frappe.get_meta("Lab")
+	versions = meta.get_field("frappe_version").options or ""
+	return {
+		"frappe_versions": [version for version in versions.split("\n") if version],
+		"defaults": {fieldname: meta.get_field(fieldname).default for fieldname in FORM_DEFAULTS},
+	}
 
 
 def _app_names_by_lab(lab_names: list[str]) -> dict:

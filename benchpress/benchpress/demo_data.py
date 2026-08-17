@@ -47,6 +47,11 @@ BUILD_LOG_COUNT = 6
 LOG_WINDOW_DAYS = 30
 LOG_TYPES = ("info", "success", "error")
 
+# How long a seeded run took, in seconds. A deploy is minutes and an image build
+# is longer; the spread keeps the durations from reading as one repeated value.
+DEPLOY_SECONDS = (96, 142, 78, 210, 118)
+BUILD_SECONDS = (359, 244, 512, 187, 421)
+
 
 class DemoDataSeeder:
 	"""Builds one self-consistent slice of BenchPress records with `frappe.new_doc`.
@@ -112,6 +117,7 @@ class DemoDataSeeder:
 		log.message = f"Demo deploy step {index + 1}."
 		log.timestamp = self._days_ago(days_ago)
 		log.insert()
+		self._settle(log, DEPLOY_SECONDS[index % len(DEPLOY_SECONDS)])
 
 	def seed_build_logs(self):
 		for index in range(BUILD_LOG_COUNT):
@@ -121,6 +127,24 @@ class DemoDataSeeder:
 			log.message = f"Demo build step {index + 1}."
 			log.timestamp = self._days_ago(index * LOG_WINDOW_DAYS // BUILD_LOG_COUNT)
 			log.insert()
+			self._settle(log, BUILD_SECONDS[index % len(BUILD_SECONDS)])
+
+	def _settle(self, log, seconds):
+		"""Give the run a believable length.
+
+		A run's duration is read as `modified - timestamp` — the timestamp is
+		when it started, `modified` the write that settled its outcome. Seeding
+		only the backdated timestamp leaves `modified` at seeding time, so every
+		demo run claimed to have taken as long as it was old: a three-week-old
+		build reported "504h" wherever a duration is shown.
+		"""
+		frappe.db.set_value(
+			log.doctype,
+			log.name,
+			"modified",
+			add_to_date(log.timestamp, seconds=seconds),
+			update_modified=False,
+		)
 
 	def _days_ago(self, days):
 		return add_to_date(now_datetime(), days=-days)

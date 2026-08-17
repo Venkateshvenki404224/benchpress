@@ -16,6 +16,7 @@ from frappe import _
 from frappe.utils.data import add_days, cint, now_datetime, time_diff_in_seconds
 
 from benchpress.hooks import default_log_clearing_doctypes
+from benchpress.labs import bench_label
 from benchpress.permissions import get_bench_owner_filter, is_admin
 
 ENVIRONMENT_LIMIT = 6
@@ -141,7 +142,7 @@ def _primary_apps(bench_names: list[str]) -> dict:
 	return primary
 
 
-def _window_start():
+def window_start():
 	"""The oldest timestamp the screen may speak for.
 
 	Log clearing only runs when the scheduler does, so rows older than the
@@ -157,13 +158,13 @@ def _average_deploy_time() -> dict:
 		"Deploy Log",
 		filters={
 			"log_type": ("in", FINISHED_LOG_TYPES),
-			"timestamp": (">=", _window_start()),
+			"timestamp": (">=", window_start()),
 		},
 		fields=["timestamp", "modified"],
 		order_by="timestamp desc",
 		limit=DEPLOY_SAMPLE_LIMIT,
 	)
-	durations = [seconds for seconds in map(_log_duration, logs) if seconds]
+	durations = [seconds for seconds in map(log_duration, logs) if seconds]
 	average = sum(durations) / len(durations) if durations else None
 	return {
 		"average_seconds": average,
@@ -173,7 +174,7 @@ def _average_deploy_time() -> dict:
 	}
 
 
-def _log_duration(log: dict) -> float | None:
+def log_duration(log: dict) -> float | None:
 	"""A run lasts from its timestamp to the write that settled its log_type."""
 	if not (log.timestamp and log.modified):
 		return None
@@ -210,7 +211,7 @@ def _activity(admin: bool) -> list[dict]:
 def _deploy_events() -> list[dict]:
 	logs = frappe.get_list(
 		"Deploy Log",
-		filters={"timestamp": (">=", _window_start())},
+		filters={"timestamp": (">=", window_start())},
 		fields=["name", "bench", "log_type", "timestamp", "modified"],
 		order_by="timestamp desc",
 		limit=ACTIVITY_LIMIT,
@@ -221,7 +222,7 @@ def _deploy_events() -> list[dict]:
 
 def _deploy_event(log: dict, subject: str) -> dict:
 	messages = {
-		"success": _("{0} deployed in {1}").format(subject, format_duration(_log_duration(log))),
+		"success": _("{0} deployed in {1}").format(subject, format_duration(log_duration(log))),
 		"error": _("{0} deploy failed").format(subject),
 		"warning": _("{0} deploy skipped — another deploy was already running").format(subject),
 	}
@@ -236,7 +237,7 @@ def _deploy_event(log: dict, subject: str) -> dict:
 def _build_events() -> list[dict]:
 	logs = frappe.get_list(
 		"Build Log",
-		filters={"timestamp": (">=", _window_start())},
+		filters={"timestamp": (">=", window_start())},
 		fields=["name", "lab", "log_type", "timestamp", "modified"],
 		order_by="timestamp desc",
 		limit=ACTIVITY_LIMIT,
@@ -246,7 +247,7 @@ def _build_events() -> list[dict]:
 
 def _build_event(log: dict) -> dict:
 	messages = {
-		"success": _("{0} image built in {1}").format(log.lab, format_duration(_log_duration(log))),
+		"success": _("{0} image built in {1}").format(log.lab, format_duration(log_duration(log))),
 		"error": _("{0} image build failed").format(log.lab),
 	}
 	return {
@@ -258,10 +259,9 @@ def _build_event(log: dict) -> dict:
 
 
 def _bench_labels(bench_names: list[str]) -> dict:
-	benches = frappe.get_all(
-		"Bench Instance", filters={"name": ("in", bench_names)}, fields=["name", "bench_name"]
-	)
-	return {bench.name: bench.bench_name for bench in benches}
+	"""Activity reads as sentences, so a bench is named after its lab, not its md5."""
+	benches = frappe.get_all("Bench Instance", filters={"name": ("in", bench_names)}, fields=["name", "lab"])
+	return {bench.name: bench_label(bench.lab) for bench in benches}
 
 
 def _infrastructure(admin: bool) -> list[dict] | None:

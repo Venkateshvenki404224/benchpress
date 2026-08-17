@@ -1,50 +1,58 @@
 # Screenshot Update Checklist
 
-The existing screenshots in `docs/images/` are from the old UI and need to be replaced. Take each screenshot from the Vue 3 SPA at `/frontend`.
+Every screenshot in `docs/images/` was recaptured against the redesigned SPA in phase 6 of the UI
+redesign. Recapture them again whenever a screen changes shape — a guide illustrated with the
+previous design is worse than one with no picture at all.
 
 ## How to capture
 
-1. Start bench: `bench start`
-2. Open `http://your-site.localhost:8000/frontend`
-3. Log in as Administrator
-4. Use browser DevTools or a screenshot tool (1280x800 recommended)
-5. Save as PNG to `docs/images/`
+1. Bring the app up and log in as an admin with realistic data on the site.
+2. Open `http://<host>/frontend`.
+3. Light theme, viewport **1280×800**, no browser chrome in the frame.
+4. Save as PNG into `docs/images/` under the name the guide already references.
+
+The suite in this repo was captured with the `agent-browser` CLI, which frames the viewport
+without chrome:
+
+```bash
+npx agent-browser@0.21.4 --session docs open http://localhost:8080/frontend/labs
+npx agent-browser@0.21.4 --session docs set viewport 1280 800
+npx agent-browser@0.21.4 --session docs screenshot docs/images/labs-list.png
+```
 
 ---
 
-## README screenshots (replace existing)
+## Current screenshots
 
-| File | Page | What to show |
-|------|------|-------------|
-| `labs-list.png` | `/frontend/labs` | Labs list with 2-3 labs in different statuses (Draft, Ready, Error), search bar visible, filters visible |
-| `new-lab.png` | `/frontend/labs/new` | New Lab form filled out with Lab ID, Title, Frappe Version selected, 2 apps added |
-| `lab-detail.png` | `/frontend/labs/:id` | Lab Detail Dashboard tab with Connection Info panel, Container Status card showing CPU/Memory bars |
-| `bench-instances.png` | `/frontend/bench-instances` | Bench Instances table with 2-3 benches in different statuses, IP addresses, CPU/Memory columns |
-| `deploy-logs.png` | `/frontend/deploy-logs` | Deploy Logs page with 2-3 entries, one expanded showing deployment steps |
-| `build-logs.png` | `/frontend/build-logs` | Build Logs page with 2-3 entries, one expanded showing Docker build output |
-| `devices.png` | `/frontend/devices` | Devices page with 2-3 device cards showing types, IPs, and status badges |
-| `settings.png` | `/frontend/settings` | Settings dialog showing Docker, WireGuard, and Resource Limits sections |
+| File | Page | What it shows |
+|------|------|--------------|
+| `labs-list.png` | `/frontend/labs` | The Labs table — status badges, apps, "Deployed as", last run |
+| `new-lab.png` | `/frontend/labs/new` | The empty New lab form and its summary rail |
+| `new-lab-filled.png` | `/frontend/labs/new` | The same form filled in, with two apps and a live summary |
+| `lab-detail.png` | `/frontend/labs/:id` | Lab detail — both status axes, connection details, sites |
+| `connection-info.png` | Lab detail > Dashboard | The connection card with its masked secrets |
+| `deploy-log-tab.png` | Lab detail > Deploy log | The eleven-step stepper on a failed run, with the error banner |
+| `build-log-tab.png` | Lab detail > Build log | A stored image build |
+| `bench-instances.png` | `/frontend/bench-instances` | The instances table |
+| `deploy-logs.png` | `/frontend/deploy-logs` | Deploy history — result, last step, duration, retention note |
+| `build-logs.png` | `/frontend/build-logs` | Build history, reached from Labs (admin only) |
+| `devices.png` | `/frontend/devices` | Devices — tunnel state, registered devices, connection test |
+| `settings.png` | `/frontend/settings` | Settings as a page: three grouped cards and the save bar |
 
-## New screenshots for docs/ guides
+## Not captured
 
-| File | Page/State | What to show | Used in |
-|------|-----------|-------------|---------|
-| `labs-list-empty.png` | `/frontend/labs` (no labs) | Empty state with "No labs found" message | creating-labs.md |
-| `new-lab-filled.png` | `/frontend/labs/new` (filled) | Completed form before clicking Create | creating-labs.md |
-| `build-log-tab.png` | Lab Detail > Build Log tab | Build in progress with collapsible steps | creating-labs.md, logs-and-monitoring.md |
-| `deploy-log-tab.png` | Lab Detail > Deploy Log tab | Deploy in progress with step indicators | creating-labs.md, logs-and-monitoring.md |
-| `deploy-confirm.png` | Lab Detail > Deploy dialog | Confirmation dialog before deploying | creating-labs.md |
-| `connection-info.png` | Lab Detail > Dashboard | Connection Info panel with all fields and copy buttons | connecting-to-benches.md |
-| `container-status.png` | Lab Detail > Dashboard | Container Status card with CPU/Memory progress bars | logs-and-monitoring.md |
-| `new-site-dialog.png` | Lab Detail > Sites tab > New Site | New Site dialog with app checkboxes | creating-labs.md |
-| `devices-empty.png` | `/frontend/devices` (no devices) | Empty state with "No devices registered" | device-management.md |
-| `add-device-dialog.png` | Devices > Add Device | Add Device dialog with fields filled | device-management.md |
-| `device-config-dialog.png` | Devices > Show Configuration | WireGuard config text + QR code side by side | device-management.md |
-| `device-cards.png` | `/frontend/devices` (with devices) | 2-3 device cards with status and stats | device-management.md |
+| File | Why |
+|------|-----|
+| `labs-list-empty.png` | No guide references it, and the empty state needs a site with zero labs |
+| `deploy-confirm.png` | The deploy dialog follows a live run; a real deploy is needed to frame it |
+| `new-site-dialog.png` | Not referenced by a guide |
+| `device-config-dialog.png`, `add-device-dialog.png` | Not referenced by a guide; both contain a real key |
+
+A screenshot of a dialog carrying a WireGuard config or a password must never be committed —
+regenerate the device against a throwaway peer, or crop the secret out.
 
 ## Tips
 
-- Use dark mode OFF for screenshots (better readability in docs)
-- Ensure sample data looks realistic (not "test123" etc.)
-- Crop browser chrome — show only the app content
-- Consistent viewport width (1280px)
+- Light theme; the docs are read on white.
+- Realistic sample data — never `test123`.
+- Consistent 1280px viewport so the pictures line up with each other.

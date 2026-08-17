@@ -1,7 +1,11 @@
 <template>
 	<div
 		class="flex flex-wrap items-center gap-3 rounded-card border px-4 py-3.5"
-		:class="connected ? 'border-outline-green-1 bg-surface-green-1' : 'border-outline-amber-1 bg-surface-amber-1'"
+		:class="
+			connected
+				? 'border-outline-green-1 bg-surface-green-1'
+				: 'border-outline-amber-1 bg-surface-amber-1'
+		"
 		data-test="vpn-status-banner"
 	>
 		<span
@@ -16,7 +20,9 @@
 			>
 				{{ banner.title }}
 			</p>
-			<p class="mt-0.5 text-2xs text-ink-gray-7" data-test="banner-body">{{ banner.body }}</p>
+			<p class="mt-0.5 text-2xs text-ink-gray-7" data-test="banner-body">
+				{{ banner.body }}
+			</p>
 		</div>
 		<Button
 			:variant="connected ? 'subtle' : 'solid'"

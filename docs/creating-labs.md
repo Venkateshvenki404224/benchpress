@@ -58,26 +58,32 @@ From the sidebar, click **Labs**. You'll see the list of all existing labs.
 
 ![Labs list](images/labs-list.png)
 
-### Click "New Lab"
+### Click "New lab"
 
-Click the **New Lab** button in the top-right corner (visible to admin users only).
+Click **New lab** in the top-right corner (admin users only). There is also **From template**,
+which skips this form entirely — pick a recipe and BenchPress creates the lab for you.
 
-![New Lab form](images/new-lab.png)
+![New lab form](images/new-lab.png)
 
 ### Fill in the lab details
 
 | Field | Required | Description | Example |
 |-------|----------|-------------|---------|
-| **Lab ID** | Yes | Unique slug identifier | `crm-lab` |
 | **Title** | Yes | Human-readable name | `CRM Development Lab` |
-| **Frappe Version** | Yes | Base framework version | Version 14, 15, 16, or Develop |
+| **Lab ID** | Derived | Slugified from the title, read-only | `crm-development-lab` |
+| **Frappe version** | Yes | Base framework version | version-14, 15, 16, or develop |
 | **Description** | No | Notes about this lab | `Lab for Frappe CRM development` |
-| **Memory Limit** | No | RAM allocation for containers | `512m`, `1g`, `2g` |
-| **CPU Cores** | No | CPU cores allocated | `1`, `2` |
+| **Memory limit** | No | RAM allocation for containers | `512m`, `1g`, `2g` |
+| **CPU cores** | No | CPU cores allocated, minimum 1 | `1`, `2` |
+
+The **Lab ID** is not typed — it is derived from the title as you type it, and it cannot be
+changed later because it becomes the Docker image tag and the site domain. A title that cannot
+produce a valid ID (lowercase letters, numbers and single `.`, `_` or `-` separators) is caught
+in the form, and so is a CPU count below 1.
 
 ### Add apps
 
-In the **Apps** section, click **Add App** for each Frappe app you want to install:
+In the **Apps** section, click **Add app** for each Frappe app you want to install:
 
 | Field | Required | Description | Example |
 |-------|----------|-------------|---------|
@@ -97,11 +103,22 @@ You can add multiple apps. Common combinations:
 
 > Frappe itself is always included — you don't need to add it as an app.
 
-### Click "Create Lab"
+### Resources and access
 
-The lab is created in **Draft** status. You can now build its Docker image and deploy bench instances.
+Set the container limits, then the two switches: **Code server** (a browser VS Code on the
+bench, on by default) and **SSH access** (adds an ssh user to the container, off by default).
 
-![New Lab form filled](images/new-lab-filled.png)
+The **What gets built** rail on the right recomputes as you type — the image tag, the version
+and its apps, the access you chose, and the reminder that a site is created on first deploy
+rather than at build time.
+
+### Save
+
+**Save as draft** writes the lab in **Draft** status and opens it. **Save and build image**
+saves it and starts the deploy pipeline, whose second step is the image build — the deploy
+dialog follows the run step by step.
+
+![New lab form filled](images/new-lab-filled.png)
 
 ---
 
@@ -203,13 +220,17 @@ The **Dashboard** tab shows the container status card with:
 
 | Button | When visible | What it does |
 |--------|-------------|--------------|
+| **Open site** | Bench is Running and the VPN is up | Opens the site in a new tab |
 | **Deploy** | Lab is Ready, no running bench | Creates and starts a new container |
-| **Stop** | Bench is Running | Stops the container (with confirmation) |
-| **Build Image** | Lab not Ready, admin only | Triggers Docker image build |
+| **Rebuild image** | Lab is in Error | Builds the image again |
+| **Stop** / **Delete** | Bench is Running | In the `⋯` menu, behind a confirmation |
 
-### Bench Instances page
+Anything unreachable is disabled with the reason on it — "Open site — VPN off" — never hidden.
 
-From the sidebar, click **Bench Instances** to see all deployed benches across all labs:
+### Instances page
+
+From the sidebar, click **Instances** to see all deployed benches across all labs. **Deploy
+history** on that page lists past runs with their result, last step and duration:
 
 ![Bench Instances](images/bench-instances.png)
 
