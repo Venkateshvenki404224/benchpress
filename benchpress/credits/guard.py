@@ -42,7 +42,7 @@ LEDGER = "Credit Ledger Entry"
 SITE = "Bench Site"
 
 MINIMUM_RUNWAY_HOURS = 1
-TOP_UP_ROUTE = "/frontend/credits"
+TOP_UP_ROUTE = config.TOP_UP_ROUTE
 
 
 def requires_credits(cost=None, caps=()):
@@ -207,10 +207,15 @@ def _subject_instance(**call) -> str | None:
 
 
 def _concurrency_limit() -> int:
-	"""The paid ceiling once anything has been bought, the free one until then."""
+	"""The paid ceiling once anything has been bought, the free one until then.
+
+	"Has paid" is the existence of a Purchase row, not a `lifetime_purchased` balance: an Always On
+	Pass is money spent on hours rather than credits, so it posts a zero-credit row. Somebody who
+	has bought a pass has plainly paid, and a float that stayed at zero would call them free.
+	"""
 	settings = config.settings()
-	purchased = flt(frappe.db.get_value(ACCOUNT, frappe.session.user, "lifetime_purchased"))
-	return cint(settings.max_concurrent_paid if purchased else settings.max_concurrent_free)
+	paid = frappe.db.exists(LEDGER, {"account": frappe.session.user, "entry_type": account.PURCHASE})
+	return cint(settings.max_concurrent_paid if paid else settings.max_concurrent_free)
 
 
 def _site_limit(bench_name) -> int:

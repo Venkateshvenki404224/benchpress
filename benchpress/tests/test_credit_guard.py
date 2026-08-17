@@ -273,12 +273,17 @@ class TestCreditGuard(IntegrationTestCase):
 		guard.cap_concurrent_instances(self=self.bench_document())
 
 	def test_a_purchase_raises_the_concurrency_cap(self):
+		"""Having paid is a Purchase row, not a balance.
+
+		An Always On Pass buys hours rather than credits, so it posts a zero-credit Purchase row —
+		somebody who has bought one has plainly paid, and a `lifetime_purchased` float that stayed
+		at zero would still call them a free user.
+		"""
 		self.enable_credits()
 		self.set_setting("max_concurrent_free", 1)
 		self.set_setting("max_concurrent_paid", 3)
 		self.set_running(self.other_bench.name)
-		account.ensure_account(self.user)
-		frappe.db.set_value(ACCOUNT, self.user, "lifetime_purchased", 500, update_modified=False)
+		account.purchase(self.user, 0.0, "an always-on pass", ("Lab", self.lab.name))
 		frappe.set_user(self.user)
 		guard.cap_concurrent_instances(self=self.bench_document())
 

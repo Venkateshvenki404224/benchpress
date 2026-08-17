@@ -41,7 +41,8 @@
    "fieldname": "razorpay_order",
    "fieldtype": "Data",
    "label": "Razorpay Order",
-   "read_only": 1
+   "read_only": 1,
+   "search_index": 1
   }
  ],
  "grid_page_length": 50,

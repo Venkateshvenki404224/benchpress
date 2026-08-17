@@ -14,12 +14,18 @@ nobody is watching a sidebar then, so that one is an email.
 
 import frappe
 from frappe import _
-from frappe.utils import flt, get_datetime, now_datetime
+from frappe.utils import cint, flt, get_datetime, now_datetime
 
 from benchpress import notifications
+from benchpress.credits import config
 from benchpress.labs import bench_label
 
 BENCH = "Bench Instance"
+
+# Why an instance was stopped, as codes rather than sentences: the sweep decides and this speaks,
+# and a decision that arrives here already worded cannot be given the advice that goes with it.
+TTL_REACHED = "ttl"
+OUT_OF_CREDITS = "credits"
 
 
 def warn_ttl(bench, minutes_left: int) -> None:
@@ -45,11 +51,23 @@ def warn_low_balance(user: str, available, threshold) -> None:
 
 
 def announce_stop(bench, reason: str) -> None:
-	notifications.notify_owner(
-		bench.owner,
-		_("{0} was stopped: {1}. Start it again whenever you need it.").format(_label(bench), reason),
-		BENCH,
-		bench.name,
+	"""What stopped it, and the one thing that would have prevented it.
+
+	The second half is the point. Being told an instance stopped tells a user nothing they cannot
+	already see; being told it hit the run limit *and* that a pass exempts it from that limit
+	arrives at the only moment the pass is worth anything to them. That is the whole reason the
+	always-on upsell lives on this notice rather than on a pricing page nobody visits.
+	"""
+	notifications.notify_owner(bench.owner, _stop_message(bench, reason), BENCH, bench.name)
+
+
+def _stop_message(bench, reason: str) -> str:
+	if reason == TTL_REACHED:
+		return _(
+			"{0} was stopped: it reached the {1}-hour run limit. An Always On Pass keeps one instance up for {2} days, no matter the limit."
+		).format(_label(bench), cint(config.settings().max_run_hours), config.PASS_DAYS)
+	return _("{0} was stopped: your credits ran out. Top up at {1} and start it again.").format(
+		_label(bench), config.TOP_UP_ROUTE
 	)
 
 

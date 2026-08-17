@@ -29,6 +29,8 @@
 		<p v-if="startedLabel" class="mt-3 text-2xs text-ink-gray-5" data-test="container-started">
 			Started {{ startedLabel }}
 		</p>
+
+		<AlwaysOnUpsell :bench="bench" :label="lab.title || lab.lab_id" @bought="emit('bought')" />
 	</SectionCard>
 </template>
 
@@ -36,6 +38,7 @@
 import SectionCard from "@/components/SectionCard.vue";
 import StatusBadge from "@/components/StatusBadge.vue";
 import UsageBar from "@/components/UsageBar.vue";
+import AlwaysOnUpsell from "@/components/credit/AlwaysOnUpsell.vue";
 import { cpuMeter, healthCaption, memoryMeter } from "@/utils/containerStats";
 import { dayjsLocal } from "frappe-ui";
 import { computed } from "vue";
@@ -46,6 +49,8 @@ const props = defineProps({
 	// Age of `last_health_check` in seconds; null when the bench was never polled.
 	healthAgeSeconds: { type: Number, default: null },
 });
+
+const emit = defineEmits(["bought"]);
 
 const cpu = computed(() => cpuMeter(props.bench, props.lab));
 const memory = computed(() => memoryMeter(props.bench, props.lab));

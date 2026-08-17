@@ -93,13 +93,20 @@ def seed_rows(doctype: str, key: str, rows: list[dict]) -> None:
 
 
 def ensure_ledger_index() -> None:
-	"""The statement page's only query shape: one account's rows, newest first.
+	"""The two query shapes the ledger is read by, neither of which DocType JSON can declare.
 
-	A composite `(account, creation)` index serves both the filter and the sort, so pagination
-	stays an index range scan however long the ledger grows. DocType JSON can only declare
-	single-column `search_index` entries, so this one is added by hand; `add_index` is idempotent.
+	`(account, creation)` is the statement page: one account's rows, newest first, so pagination
+	stays an index range scan however long the ledger grows.
+
+	`(reference_doctype, reference_name)` is the replay guard. Every webhook delivery asks whether
+	this order has already been credited, and that question is asked against the one table that
+	grows forever — without the index it is a full scan, and it is on the path money takes.
+
+	DocType JSON declares only single-column `search_index` entries, so both are added by hand.
+	`add_index` is idempotent.
 	"""
 	frappe.db.add_index("Credit Ledger Entry", ["account", "creation"])
+	frappe.db.add_index("Credit Ledger Entry", ["reference_doctype", "reference_name"])
 
 
 def seed_credit_settings() -> None:

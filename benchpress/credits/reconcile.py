@@ -18,7 +18,7 @@ Two rules shape it, both learned the hard way:
 """
 
 import frappe
-from frappe.utils import flt
+from frappe.utils import flt, now_datetime
 
 from benchpress.credits import account, config, passes
 
@@ -38,6 +38,7 @@ def reconcile_burn_rates() -> dict:
 	accounts = frappe.get_all(ACCOUNT, fields=["name", "burn_rate"])
 	corrected = [row.name for row in accounts if _correct_if_drifted(row, expected)]
 	clear_stale_flags()
+	resume_unmetered_instances()
 	return {"checked": len(accounts), "corrected": corrected}
 
 
@@ -84,6 +85,38 @@ def lab_rates(lab_names: set) -> dict:
 def _rate_for(lab) -> float:
 	size = config.size_for_lab(lab)
 	return flt(size.credits_per_hour) if size else 0.0
+
+
+def resume_unmetered_instances() -> None:
+	"""Arm the burn flag on running instances that carry none — the pass-expiry repair.
+
+	`metering` never starts a meter for a prepaid instance, so when its `Always On Pass` lapses
+	nothing on the bench says it should be billed again. The *account* rate is already right by
+	this point: `expected_burn_rates` counts a lapsed pass at the full lab rate and
+	`correct_burn_rate` has just adopted it. Only the flags disagree, and a stop that finds no flag
+	withdraws nothing — so the account would keep burning for a container that is gone.
+
+	The same repair covers an instance that was already running when credits were switched on.
+	"""
+	unmetered = frappe.get_all(
+		BENCH,
+		filters={"status": "Running", "credit_burn_started": ("is", "not set")},
+		fields=["name", "lab"],
+	)
+	if not unmetered:
+		return
+	exempt = passes.active_pass_benches([bench.name for bench in unmetered])
+	billable = [bench for bench in unmetered if bench.name not in exempt]
+	if not billable:
+		return
+	rates = lab_rates({bench.lab for bench in billable})
+	for bench in billable:
+		frappe.db.set_value(
+			BENCH,
+			bench.name,
+			{"credit_burn_rate": flt(rates.get(bench.lab, 0.0)), "credit_burn_started": now_datetime()},
+			update_modified=False,
+		)
 
 
 def clear_stale_flags() -> None:

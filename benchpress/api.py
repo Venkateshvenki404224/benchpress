@@ -5,7 +5,7 @@ import frappe
 from frappe import _
 
 from benchpress import image_cache, lab_detail, lab_templates, labs
-from benchpress.credits import account, metering
+from benchpress.credits import account, metering, payments
 from benchpress.credits.guard import (
 	build_charge,
 	cap_builds_per_day,
@@ -418,6 +418,27 @@ def get_credit_statement(limit_start: int = 0, limit_page_length: int = 20) -> d
 	"""One page of the caller's own ledger. Never another user's — the filter is the session."""
 	require_app_user()
 	return account.statement(frappe.session.user, limit_start, limit_page_length)
+
+
+@frappe.whitelist()
+def get_purchase_options() -> dict:
+	"""What is for sale, and whether a gateway exists to sell it."""
+	require_app_user()
+	return payments.purchase_options()
+
+
+@frappe.whitelist()
+def buy_credits(pack: str) -> dict:
+	"""Open a Razorpay order for a credit pack. The price is the pack's, never the caller's."""
+	require_app_user()
+	return payments.buy_credits(pack)
+
+
+@frappe.whitelist()
+def buy_always_on_pass(bench_name: str) -> dict:
+	"""Open a Razorpay order for a pass on one instance the caller is allowed to see."""
+	require_bench_access(bench_name)
+	return payments.buy_always_on_pass(bench_name)
 
 
 @frappe.whitelist()

@@ -38,6 +38,20 @@ def has_active_pass(bench_name: str) -> bool:
 	return bool(active_pass_name(bench_name))
 
 
+def active_pass_until(bench_name: str) -> str | None:
+	"""When this instance stops being prepaid, or `None` if it is not.
+
+	A date rather than a flag, because the date is what answers the question an exempt instance
+	raises on screen: a badge reading "always on until the 14th" tells a user when to buy again,
+	and a boolean tells them nothing they can act on.
+	"""
+	if not bench_name:
+		return None
+	return frappe.db.get_value(
+		PASS, {"bench_instance": bench_name, "valid_until": (">=", today())}, "valid_until"
+	)
+
+
 def active_pass_name(bench_name: str, exclude: str | None = None) -> str | None:
 	"""The unexpired pass on this instance, or `None`. `exclude` skips the pass being saved."""
 	if not bench_name:

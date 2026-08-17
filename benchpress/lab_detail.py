@@ -18,7 +18,7 @@ output — still only have `=== … ===` markers, so both are read.
 
 import frappe
 
-from benchpress.credits import config
+from benchpress.credits import config, passes
 from benchpress.deploy_pipeline import scan_log
 
 BENCH_FIELDS = [
@@ -98,7 +98,13 @@ def _caller_bench(lab_name: str) -> dict | None:
 		order_by="modified desc",
 		limit_page_length=1,
 	)
-	return benches[0] if benches else None
+	if not benches:
+		return None
+	bench = benches[0]
+	# Whether this instance is prepaid, and until when. One indexed read, and only when credits
+	# exist at all — the card that offers the pass is the same card that must not offer a second.
+	bench["always_on_until"] = passes.active_pass_until(bench["name"]) if config.credits_enabled() else None
+	return bench
 
 
 def _sites(bench: dict | None) -> list[dict]:

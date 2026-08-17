@@ -22,7 +22,6 @@ out. A limit that arrives without warning reads as a fault.
 """
 
 import frappe
-from frappe import _
 from frappe.utils import cint, flt, get_datetime, now_datetime, time_diff_in_seconds
 
 from benchpress.credits import account, config, notify, passes
@@ -100,10 +99,11 @@ class LimitSweep:
 		return max_hours * 60 - ran_minutes
 
 	def _stop_reason(self, minutes_left: float | None, out_of_credits: bool) -> str | None:
+		"""A code, not a sentence — `notify` owns every word a user reads."""
 		if minutes_left is not None and minutes_left <= 0:
-			return _("it reached the {0}-hour run limit").format(cint(self.settings.max_run_hours))
+			return notify.TTL_REACHED
 		if out_of_credits:
-			return _("its owner's credits ran out")
+			return notify.OUT_OF_CREDITS
 		return None
 
 	def _out_of_credits(self, row) -> bool:

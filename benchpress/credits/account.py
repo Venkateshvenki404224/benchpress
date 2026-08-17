@@ -22,7 +22,8 @@ Nothing here calls Docker, and nothing sums the ledger to derive a balance.
 """
 
 import frappe
-from frappe.utils import cint, flt, now_datetime, time_diff_in_hours
+from frappe import _
+from frappe.utils import cint, cstr, flt, now_datetime, time_diff_in_hours
 
 from benchpress.credits import config
 
@@ -40,6 +41,9 @@ MAX_PAGE_LENGTH = 100
 
 USAGE = "Usage"
 GRANT = "Grant"
+PURCHASE = "Purchase"
+REFUND = "Refund"
+ADJUSTMENT = "Adjustment"
 
 
 # --- Reads: O(1), and never a write ------------------------------------------
@@ -127,11 +131,20 @@ def start_burn(user: str, bench_name: str, rate_per_hour, label: str | None = No
 	)
 
 
-def stop_burn(user: str, bench_name: str, rate_per_hour, label: str | None = None) -> None:
+def stop_burn(
+	user: str,
+	bench_name: str,
+	rate_per_hour,
+	label: str | None = None,
+	description: str | None = None,
+) -> None:
 	"""Row-lock, settle (this is where the session is charged), lower `burn_rate`.
 
 	The rate to withdraw is passed in rather than re-derived: the size the instance started on is
 	what it must be billed at, even if an operator retuned that size while it ran.
+
+	`description` overrides the statement line for the times the meter stops without the container
+	doing so — an always-on pass makes an instance prepaid, and "Stopped" would be a lie.
 	"""
 	if not config.credits_enabled():
 		return
@@ -143,7 +156,7 @@ def stop_burn(user: str, bench_name: str, rate_per_hour, label: str | None = Non
 		account,
 		USAGE,
 		-charged,
-		f"Stopped {label or bench_name}",
+		description or f"Stopped {label or bench_name}",
 		("Bench Instance", bench_name),
 	)
 
@@ -218,6 +231,78 @@ def grant(user: str, credits, description: str) -> None:
 	_write_entry(account, GRANT, flt(credits), description)
 
 
+def purchase(user: str, credits, description: str, reference) -> bool:
+	"""Credit a paid top-up **exactly once**, and say whether this call was the one that did it.
+
+	Webhooks retry, `on_update` fires on every save of an order, and an operator pressing *Sync
+	Status* is a third delivery of the same payment — so the reference, not the caller, decides
+	whether money has already been applied. The check runs *after* `_locked`, under the same row
+	lock that applies it: two deliveries racing each other serialise there instead of both reading
+	an empty ledger and both crediting.
+
+	Returning the decision rather than swallowing it lets the caller hang its own side effects — a
+	pass row, a realtime nudge — off the same once-ever answer.
+	"""
+	if not config.credits_enabled():
+		return False
+	account = _locked(user)
+	if reference_posted(reference):
+		return False
+	amount = flt(credits)
+	account.balance = flt(flt(account.balance) + amount, PRECISION)
+	account.lifetime_purchased = flt(flt(account.lifetime_purchased) + amount, PRECISION)
+	account.low_balance_warned = 0
+	_save(account)
+	_write_entry(account, PURCHASE, amount, description, reference)
+	return True
+
+
+def refund(user: str, credits, description: str, reference=None) -> None:
+	"""Give credits back as a negative row of its own.
+
+	Never by rewriting the purchase: the ledger is append-only, so a refund is an event that
+	happened later and reads as one. Refunding also un-counts the purchase, because
+	`lifetime_purchased` is what the low-balance threshold measures against and what tells a paid
+	account from a free one.
+	"""
+	if not config.credits_enabled():
+		return
+	amount = abs(flt(credits))
+	account = _locked(user)
+	account.balance = flt(flt(account.balance) - amount, PRECISION)
+	account.lifetime_purchased = max(flt(flt(account.lifetime_purchased) - amount, PRECISION), 0.0)
+	_save(account)
+	_write_entry(account, REFUND, -amount, description, reference)
+
+
+def adjust(user: str, credits, reason: str) -> None:
+	"""An operator's correction, in either direction, and never without a reason.
+
+	The reason is the entire value of the row: an adjustment is the one entry type no rule
+	produced, so a year later it is the only record of why a balance is what it is.
+	"""
+	if not config.credits_enabled():
+		frappe.throw(_("Credits are switched off on this site."))
+	if not cstr(reason).strip():
+		frappe.throw(_("An adjustment needs a reason."))
+	account = _locked(user)
+	account.balance = flt(flt(account.balance) + flt(credits), PRECISION)
+	account.low_balance_warned = 0
+	_save(account)
+	_write_entry(account, ADJUSTMENT, flt(credits), reason)
+
+
+def reference_posted(reference) -> bool:
+	"""Whether this reference has already been written to the ledger. One indexed lookup.
+
+	The index behind it is `(reference_doctype, reference_name)`, added by
+	`benchpress.credits.seed.ensure_ledger_index` — without it this is a table scan on the one
+	table that grows forever.
+	"""
+	doctype, name = reference
+	return bool(frappe.db.exists(LEDGER, {"reference_doctype": doctype, "reference_name": name}))
+
+
 # --- The account row --------------------------------------------------------
 
 
@@ -263,6 +348,9 @@ def _save(account) -> None:
 def _write_entry(account, entry_type: str, credits, description: str, reference=None) -> None:
 	"""Append one audit row. `balance_after` is stored so no screen ever sums this table."""
 	entry = frappe.new_doc(LEDGER)
+	# The document refuses rows nobody's accounting produced; this is what marks ours. See
+	# `CreditLedgerEntry.before_insert` for why a hand-written row is worse than no row.
+	entry.flags.from_engine = True
 	entry.account = account.name
 	entry.entry_type = entry_type
 	entry.credits = flt(credits, PRECISION)

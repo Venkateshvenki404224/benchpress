@@ -150,13 +150,18 @@ permission_query_conditions = {
 # ---------------
 # Hook on document methods and events
 
-# doc_events = {
-# 	"*": {
-# 		"on_update": "method",
-# 		"on_cancel": "method",
-# 		"on_trash": "method"
-# 	}
-# }
+# The payment seam. `razorpay_frappe` is optional and deliberately not in `required_apps`, so this
+# entry simply never fires on a site without it — a hook on an absent DocType is inert, which is
+# exactly the coupling we want with a gateway a self-hoster must never be forced to install.
+#
+# `on_update` rather than a webhook route on purpose: it catches the checkout callback, the
+# `payment.captured` webhook, its retries and an operator's manual "Sync Status" through one path.
+# That makes redelivery the normal case, which is why the handler is idempotent by construction.
+doc_events = {
+	"Razorpay Order": {
+		"on_update": "benchpress.credits.payments.on_razorpay_update",
+	},
+}
 
 # Website route rules
 website_route_rules = [

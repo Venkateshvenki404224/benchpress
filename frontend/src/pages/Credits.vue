@@ -18,6 +18,10 @@
 			{{ burning }} — the balance above already counts the time since the last entry.
 		</p>
 
+		<div class="mb-3">
+			<CreditPacks @bought="reload" />
+		</div>
+
 		<p v-if="loading && !rows.length" class="text-body text-ink-gray-5">Loading statement…</p>
 
 		<DataTable
@@ -79,11 +83,13 @@ import DataTable from "@/components/DataTable.vue";
 import EmptyState from "@/components/EmptyState.vue";
 import SectionCard from "@/components/SectionCard.vue";
 import StatTile from "@/components/StatTile.vue";
+import CreditPacks from "@/components/credit/CreditPacks.vue";
 import {
 	creditStatementResource,
 	creditSummary,
 	loadStatement,
 	primeCreditSummary,
+	refreshCreditSummary,
 } from "@/data/credits";
 import { burnLabel, creditLabel, rateLabel, signedCreditLabel } from "@/utils/credits";
 import { Button, dayjsLocal } from "frappe-ui";
@@ -116,6 +122,12 @@ const burning = computed(() => burnLabel(creditSummary.burnRate));
 
 function turn(direction) {
 	page.value = Math.min(Math.max(page.value + direction, 0), pages.value - 1);
+	loadStatement(page.value * PAGE_LENGTH, PAGE_LENGTH);
+}
+
+/** After a purchase the balance and the statement have both changed; re-read both from the server. */
+function reload() {
+	refreshCreditSummary();
 	loadStatement(page.value * PAGE_LENGTH, PAGE_LENGTH);
 }
 

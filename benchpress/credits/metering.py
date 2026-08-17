@@ -57,6 +57,27 @@ def on_bench_stopped(bench) -> None:
 	_mark_stopped(bench)
 
 
+def on_pass_purchased(bench) -> None:
+	"""Stop the hourly meter for an instance that just went prepaid. Idempotent.
+
+	Only the meter stops — the container keeps running, which is the whole point of the pass. The
+	hours already run are settled on the way out, so the buyer pays by the hour up to the purchase
+	and by the month after it, and never for both at once.
+	"""
+	if not config.credits_enabled() or not bench.credit_burn_started:
+		return
+	lab_id = frappe.db.get_value("Lab", bench.lab, "lab_id")
+	label = bench_label(lab_id) or bench.name
+	account.stop_burn(
+		bench.owner,
+		bench.name,
+		flt(bench.credit_burn_rate),
+		label=label,
+		description=f"{label} is prepaid — hourly billing stopped",
+	)
+	_mark_stopped(bench)
+
+
 def on_image_built(lab) -> None:
 	"""Charge the flat custom-build fee, once, for a build that succeeded.
 
