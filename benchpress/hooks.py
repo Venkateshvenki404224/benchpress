@@ -3,7 +3,7 @@ app_title = "BenchPress"
 app_publisher = "Venkatesh"
 app_description = "Press a button. Get a Frappe bench. Self-hosted, Docker-powered, VPN-secured."
 app_email = "venkateshvenki404224@gmail.com"
-app_license = "mit"
+app_license = "AGPL-3.0-only"
 app_logo_url = "/assets/benchpress/images/logo/favicon.svg"
 app_home = "/desk/benchpress"
 

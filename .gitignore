@@ -54,7 +54,6 @@ jspm_packages/
 # Aider AI Chat
 .aider*
 CLAUDE.md
-.claudebenchpress/public/node_modules/
 .mcp.json
 everything-claude-code/
 .claude
@@ -62,6 +61,12 @@ everything-claude-code/
 # Frontend build output
 benchpress/public/frontend/
 benchpress/www/frontend.html
+# bench build symlinks this into the app; it is not source
+benchpress/public/node_modules
+
+# Design handoffs and other binary drops land here while a phase is in flight;
+# they are not part of the published repository.
+*.zip
 
 # Local tooling artifacts (knowledge graph + scratch specs)
 graphify-out/

@@ -2,6 +2,21 @@
 
 Thanks for your interest in contributing to BenchPress! This guide will help you get started.
 
+## Licence and the CLA
+
+BenchPress is licensed under the **GNU Affero General Public License v3.0 only**
+([license.txt](license.txt)). Contributions are accepted under the same licence.
+
+Before your first pull request can be merged you must sign the
+[Contributor License Agreement](.github/CLA.md). It is a one-time, in-thread
+signature: open a PR, and a bot comments with the document and a line to reply
+with. **You keep the copyright in your work** — the CLA is a broad, sublicensable
+licence grant, not an assignment. [.github/CLA.md](.github/CLA.md) explains why a
+CLA rather than a DCO.
+
+The BenchPress name and logo are *not* covered by the AGPL grant — see
+[TRADEMARKS.md](TRADEMARKS.md).
+
 ## Development Setup
 
 ```bash
@@ -18,6 +33,10 @@ cd apps/benchpress/frontend
 yarn install
 yarn dev
 ```
+
+BenchPress declares `required_apps = ["vpn_management"]` and will not install
+without it; `bench get-app` resolves it automatically from
+[Venkateshvenki404224/vpn_management](https://github.com/Venkateshvenki404224/vpn_management).
 
 ## Branch Strategy
 
@@ -46,19 +65,40 @@ perf(stats): cache container stats in Redis
 
 Types: `feat`, `fix`, `refactor`, `test`, `docs`, `chore`, `perf`
 
-## Code Style
+## Verification before you push
 
-**Python:**
+Run these three, in this order. Together they are what CI checks.
+
+**1. Formatting and linting — everything, Python and frontend:**
+
 ```bash
-cd apps/benchpress
-python -m ruff check .
-python -m ruff format .
+uvx pre-commit@4.3.0 run --all-files
 ```
 
-**JavaScript/Vue:**
+This is the formatter of record: ruff for Python, prettier and eslint for
+JavaScript and Vue. **Do not run `yarn lint`** — it runs biome with a different
+style than the repo has ever used and will rewrite every frontend file.
+
+**2. Backend tests:**
+
 ```bash
-cd apps/benchpress/frontend
-npx prettier --write src/
+bench --site <your-site> run-tests --app benchpress
+```
+
+**3. Frontend unit tests:**
+
+```bash
+cd frontend && yarn test:run
+```
+
+End-to-end tests are optional locally, and must be run from `e2e/` — invoking
+Playwright from the app root resolves no config and every test fails
+unauthenticated:
+
+```bash
+cd e2e && FRAPPE_BASE_URL=http://localhost:8080 \
+  FRAPPE_ADMIN_USER=administrator FRAPPE_ADMIN_PASSWORD=<password> \
+  npx playwright test
 ```
 
 ## Key Rules
@@ -69,14 +109,31 @@ npx prettier --write src/
 - No `console.log` in production JS code
 - No hardcoded credentials or API keys
 
+## Dependencies
+
+Adding, removing, or upgrading a dependency means the notices file is stale.
+Regenerate it in the same PR:
+
+```bash
+docker compose exec backend bash -lc \
+  'cd apps/benchpress && ./scripts/generate-third-party-notices.sh'
+```
+
+Do not hand-edit [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
+
+Prefer dependencies under permissive or GPL-compatible licences. A dependency
+under a licence incompatible with AGPL-3.0 (SSPL, BUSL, or anything
+source-available with a commercial-use restriction) cannot be merged.
+
 ## Pull Requests
 
 1. Create a branch from `develop`
 2. Make your changes with conventional commit messages
-3. Run linters before pushing
+3. Run the three verification commands above before pushing
 4. Open a PR targeting `develop`
 5. Describe **what** changed and **why** in the PR description
 6. Link any related issues
+7. Sign the CLA when the bot asks
 
 ## Reporting Bugs
 
@@ -85,3 +142,5 @@ Open an issue with:
 - Expected vs actual behavior
 - Frappe version and environment details
 - Screenshots if applicable
+
+**Security bugs do not go in issues** — see [SECURITY.md](SECURITY.md).

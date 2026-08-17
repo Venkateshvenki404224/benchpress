@@ -11,9 +11,13 @@
 
 **Do not open a public GitHub issue for security vulnerabilities.**
 
-Instead, please report them via email:
+Report privately through GitHub Security Advisories:
 
-**Email:** venkateshvenki404224@gmail.com
+**[Report a vulnerability](https://github.com/Venkateshvenki404224/benchpress/security/advisories/new)**
+— or open the repository's **Security** tab and choose *Report a vulnerability*.
+
+The report stays private between you and the maintainers until a fix ships, and
+you are credited on the published advisory unless you ask otherwise.
 
 Include:
 - Description of the vulnerability
@@ -32,5 +36,18 @@ Include:
 This policy covers the BenchPress Frappe app, including:
 - API endpoints (`benchpress/api.py`)
 - Docker container management
-- WireGuard VPN configuration
+- WireGuard VPN configuration (see also the
+  [vpn_management](https://github.com/Venkateshvenki404224/vpn_management) repository)
 - Frontend authentication and authorization
+
+Out of scope: vulnerabilities in the Frappe Framework itself (report those to
+[frappe/frappe](https://github.com/frappe/frappe/security)), and findings that
+require an attacker to already hold administrator credentials on the host.
+
+## A note on what BenchPress is
+
+BenchPress provisions **disposable development sandboxes**. Each Lab is a
+throwaway Frappe bench, reachable over WireGuard, with credentials shown in the
+UI. It is not hardened for production workloads or untrusted tenants, and a
+finding that amounts to "a Lab owner can reach their own Lab's data" is expected
+behaviour rather than a vulnerability.

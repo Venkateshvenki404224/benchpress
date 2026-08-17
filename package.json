@@ -1,7 +1,7 @@
 {
   "name": "benchpress",
   "version": "1.0.0",
-  "description": "<div align=\"center\">",
+  "description": "Press a button. Get a Frappe bench. Self-hosted, Docker-powered, VPN-secured.",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
@@ -14,8 +14,8 @@
     "url": "git+https://github.com/Venkateshvenki404224/benchpress.git"
   },
   "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "author": "Venkatesh",
+  "license": "AGPL-3.0-only",
   "type": "commonjs",
   "bugs": {
     "url": "https://github.com/Venkateshvenki404224/benchpress/issues"

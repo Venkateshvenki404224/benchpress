@@ -8,7 +8,7 @@
 
 [![CI](https://github.com/Venkateshvenki404224/benchpress/actions/workflows/ci.yml/badge.svg?branch=develop)](https://github.com/Venkateshvenki404224/benchpress/actions/workflows/ci.yml)
 [![Linters](https://github.com/Venkateshvenki404224/benchpress/actions/workflows/linter.yml/badge.svg)](https://github.com/Venkateshvenki404224/benchpress/actions/workflows/linter.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-green.svg)](license.txt)
 [![Frappe Framework](https://img.shields.io/badge/Built%20on-Frappe%20v16-blue)](https://frappeframework.com)
 [![FOSS Hack 2026](https://img.shields.io/badge/FOSS%20Hack-2026-orange)](https://fossunited.org)
 [![Python 3.14+](https://img.shields.io/badge/Python-3.14+-3776AB.svg)](https://python.org)
@@ -24,13 +24,69 @@
 
 ## What is BenchPress?
 
+Spinning up a Frappe bench to try an app, reproduce a bug, or hand a client a demo
+usually means an afternoon of Docker, nginx, and database setup — repeated for every
+new environment, on a machine you then have to keep tidy.
+
+BenchPress turns that into a form. Describe a **Lab** — a Frappe version and the list
+of apps you want — and it builds a Docker image, deploys a container, gives it a
+private WireGuard IP, and hands you an SSH command and a working site URL. When you
+are done with the environment, you delete it.
+
+It is a self-hosted alternative to Frappe Cloud, and it is itself a Frappe app: the
+whole thing installs onto a bench you already run, with a Vue 3 SPA on the front and
+`frappe.qb` and background jobs on the back.
+
+**What you get per Lab:** a reproducible image, a running bench container, a private
+VPN address reachable from your laptop, SSH access, code-server, and per-site
+management — with build and deploy output streamed live into the browser.
+
+![Labs List](docs/images/labs-list.png)
+
 [![Watch the video](https://img.youtube.com/vi/DzTNwA39PqA/maxresdefault.jpg)](https://www.youtube.com/watch?v=DzTNwA39PqA)
+
+> **Disposable sandboxes, not production hosting.** A Lab is a throwaway development
+> environment with credentials shown in the UI. See
+> [Production Safety & Compatibility](docs/production-safety.md) before pointing
+> anything important at it.
+
+---
+
+## Quickstart
+
+You need a Linux host with Docker, a Frappe v16 bench, and IP forwarding enabled —
+the full list is under [Prerequisites](#prerequisites).
+
+```bash
+cd /path/to/your/frappe-bench
+
+bench get-app https://github.com/Venkateshvenki404224/benchpress --branch develop
+bench pip install docker
+bench --site your-site.localhost install-app benchpress
+bench --site your-site.localhost migrate
+bash apps/benchpress/setup.sh your-site.localhost
+bench build --app benchpress
+```
+
+Then open `http://your-site.localhost:8000/frontend` and create your first Lab.
+[Installation](#installation) covers each step, and
+[docs/getting-started.md](docs/getting-started.md) walks through it slowly.
+
+---
+
+## Licence
+
+BenchPress is free software under the **GNU Affero General Public License v3.0 only**.
+If you run a modified version as a network service, the AGPL requires you to offer its
+users the corresponding source. See [License](#license) for the notice, and
+[TRADEMARKS.md](TRADEMARKS.md) for what the licence does *not* cover.
 
 ---
 
 ## Table of Contents
 
 - [What is BenchPress?](#what-is-benchpress)
+- [Quickstart](#quickstart)
 - [The Problem](#the-problem)
 - [The Solution](#the-solution)
 - [Architecture](#architecture)
@@ -51,6 +107,10 @@
 - [Configuration Reference](#configuration-reference)
 - [Contributing](#contributing)
 - [License](#license)
+- [Trademarks](TRADEMARKS.md)
+- [Third-party notices](THIRD-PARTY-NOTICES.md)
+- [Integration notices](docs/integration-notices.md)
+- [Security policy](SECURITY.md)
 
 ### Detailed Guides
 
@@ -829,13 +889,20 @@ Device management is backed by the **VPN Peer** DocType in the vpn_management ap
 
 ## Contributing
 
+Contributions are welcome. [CONTRIBUTING.md](CONTRIBUTING.md) is the full guide —
+setup, the verification commands CI actually runs, and the dependency policy.
+
 1. Fork the repository
 2. Create a feature branch from `develop`: `git checkout -b feature/my-feature`
 3. Make your changes following Frappe coding conventions
 4. Run tests: `bench --site your-site.localhost run-tests --app benchpress`
-5. Run linters: `cd apps/benchpress && python -m ruff check . && python -m ruff format .`
+5. Run every linter and formatter: `uvx pre-commit@4.3.0 run --all-files`
 6. Commit using Conventional Commits: `feat(lab): add batch deploy support`
 7. Push and open a Pull Request against `develop`
+8. Sign the [Contributor License Agreement](.github/CLA.md) when the bot asks —
+   once, and it covers everything you contribute afterwards
+
+Security issues go through [SECURITY.md](SECURITY.md), never a public issue.
 
 ### Commit Format
 
@@ -854,7 +921,43 @@ chore(deps):   bump frappe-ui to 0.1.192
 
 ## License
 
-MIT License. See [LICENSE](license.txt) for details.
+```
+Copyright (C) 2026 Venkatesh
+
+This program is free software: you can redistribute it and/or modify it under
+the terms of the GNU Affero General Public License as published by the Free
+Software Foundation, version 3.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
+PARTICULAR PURPOSE. See the GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License along
+with this program. If not, see <https://www.gnu.org/licenses/>.
+```
+
+The full text is in [license.txt](license.txt). The SPDX identifier is
+`AGPL-3.0-only`.
+
+**What the AGPL means here in practice.** You may run, study, modify, and
+redistribute BenchPress freely. Section 13 adds one obligation beyond the GPL: if
+you modify BenchPress and let other people use it over a network, you must offer
+those users the corresponding source of your modified version. Running an
+unmodified copy, or a modified copy only you use, triggers nothing.
+
+Benches that BenchPress provisions are **not** derivative works of BenchPress.
+Whatever you build inside a Lab is yours, under whatever licence you choose.
+
+The VPN plane lives in
+[vpn_management](https://github.com/Venkateshvenki404224/vpn_management), a required
+dependency, under the same licence.
+
+Third-party components are listed in
+[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md), each under its own licence, and the
+Frappe apps BenchPress integrates with in
+[docs/integration-notices.md](docs/integration-notices.md). The
+BenchPress name and logo are trademarks and are **not** covered by the AGPL grant —
+see [TRADEMARKS.md](TRADEMARKS.md).
 
 ---
 
