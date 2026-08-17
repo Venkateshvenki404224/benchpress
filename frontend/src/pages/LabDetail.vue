@@ -125,7 +125,7 @@ const TERMINAL_LOG_TYPES = ["success", "error"];
 
 const LOG_EMPTY = {
 	deploy: "No deploy has run yet — deploying this lab streams its log here.",
-	build: "No image build has run yet — rebuilding this lab streams its log here.",
+	build: "No image build has run yet — a rebuild, or a deploy with no cached image, streams its log here.",
 };
 
 const route = useRoute();
@@ -135,6 +135,9 @@ const labId = route.params.labId;
 const activeTab = ref(0);
 const liveDeployLog = ref("");
 const liveBuildLog = ref("");
+// The stored document each live buffer belongs to.
+const liveDeployRun = ref("");
+const liveBuildRun = ref("");
 // True from the click, before the enqueued worker has flipped the lab to
 // Building in the database — without it the button races the background job.
 const building = ref(false);
@@ -197,16 +200,23 @@ const tabs = computed(() => {
 		{ key: "sites", label: "Sites" },
 		{ key: "deploy", label: "Deploy log" },
 	];
-	if (userContext.isAdmin) list.push({ key: "build", label: "Build log" });
+	// A deploy that misses the image cache builds too, so the tab follows the log, not the role.
+	if (userContext.isAdmin || buildText.value) list.push({ key: "build", label: "Build log" });
 	return list;
 });
 
 // The stored log and the live stream are one run: a page opened mid-deploy
 // reads the lines it missed from the document and appends the rest as they
 // arrive. Reading only the live stream would restart the stepper at step one
-// on every reload.
-const deployText = computed(() => (deployLogs.data?.[0]?.message ?? "") + liveDeployLog.value);
-const buildText = computed(() => (buildLogs.data?.[0]?.message ?? "") + liveBuildLog.value);
+// on every reload, and reading another run's document would show its outcome above step one.
+const deployText = computed(() => runText(deployLogs.data?.[0], liveDeployRun, liveDeployLog));
+const buildText = computed(() => runText(buildLogs.data?.[0], liveBuildRun, liveBuildLog));
+
+function runText(stored, liveRun, liveLog) {
+	if (!liveRun.value) return stored?.message ?? "";
+	const base = stored?.name === liveRun.value ? stored.message : "";
+	return base + liveLog.value;
+}
 
 // Credentials and deploy history belong to a bench, so both follow its identity.
 watch(
@@ -228,14 +238,14 @@ watch(
 );
 
 async function deployLab() {
-	liveDeployLog.value = "";
+	endRun(liveDeployRun, liveDeployLog);
 	const bench = await deployAction.submit({ data: JSON.stringify({ lab: labId }) });
 	if (deployAction.error || !bench?.name) return;
 	openDeployRun({ labId, benchName: bench.name });
 }
 
 function buildImage() {
-	liveBuildLog.value = "";
+	endRun(liveBuildRun, liveBuildLog);
 	building.value = true;
 	buildAction.submit({ lab_name: labId });
 }
@@ -290,20 +300,33 @@ const socket = useSocket();
 // any earlier would flash the previous run.
 async function onDeployLog(data) {
 	if (!bench.value || data.bench !== bench.value.name) return;
+	startRun(liveDeployRun, liveDeployLog, data.deploy_log);
 	liveDeployLog.value += `${data.log}\n`;
 	if (!TERMINAL_LOG_TYPES.includes(data.type)) return;
 	refresh();
 	await deployLogs.reload();
-	liveDeployLog.value = "";
+	endRun(liveDeployRun, liveDeployLog);
 }
 
 async function onBuildLog(data) {
 	if (data.lab !== labId) return;
+	startRun(liveBuildRun, liveBuildLog, data.build_log);
 	liveBuildLog.value += `${data.log}\n`;
 	if (!TERMINAL_LOG_TYPES.includes(data.type)) return;
 	refresh();
 	await buildLogs.reload();
-	liveBuildLog.value = "";
+	endRun(liveBuildRun, liveBuildLog);
+}
+
+function startRun(liveRun, liveLog, logName) {
+	if (!logName || liveRun.value === logName) return;
+	liveRun.value = logName;
+	liveLog.value = "";
+}
+
+function endRun(liveRun, liveLog) {
+	liveRun.value = "";
+	liveLog.value = "";
 }
 
 onMounted(() => {

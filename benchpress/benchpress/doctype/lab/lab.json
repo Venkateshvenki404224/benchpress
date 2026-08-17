@@ -12,6 +12,7 @@
   "column_break_basic",
   "frappe_version",
   "status",
+  "template",
   "description",
   "apps_section",
   "apps",
@@ -65,6 +66,13 @@
    "in_list_view": 1,
    "label": "Status",
    "options": "Draft\nBuilding\nReady\nError"
+  },
+  {
+   "description": "Set when the lab was created from a catalog template; blank for hand-written labs.",
+   "fieldname": "template",
+   "fieldtype": "Data",
+   "label": "Template",
+   "read_only": 1
   },
   {
    "fieldname": "description",

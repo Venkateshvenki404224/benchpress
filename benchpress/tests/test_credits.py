@@ -124,6 +124,12 @@ class TestCredits(IntegrationTestCase):
 		self.wipe_credits()
 		self.reset_bench()
 
+	@staticmethod
+	def purge_build_logs(lab_name: str) -> None:
+		"""A build commits every line it writes, so no rollback removes its log."""
+		frappe.db.delete("Build Log", {"lab": lab_name})
+		frappe.db.commit()  # nosemgrep -- undoing a committed row takes a commit
+
 	# --- The switch off means the feature does not exist ----------------------
 
 	def test_this_module_leaves_the_switch_where_it_found_it(self):
@@ -319,7 +325,7 @@ class TestCredits(IntegrationTestCase):
 		self.enable_credits()
 		lab = frappe.get_doc("Lab", self.lab.name)
 		with patch.object(deploy_manager.image_cache, "resolve", return_value=("cached:tag", True)):
-			deploy_manager._prepare_lab_image(lab, MagicMock())
+			deploy_manager._prepare_lab_image(lab, MagicMock(), frappe.session.user)
 		self.assertEqual(self.entry_count(), 0)
 
 	def test_a_cache_miss_build_writes_exactly_one_usage_row(self):
@@ -329,7 +335,8 @@ class TestCredits(IntegrationTestCase):
 			patch.object(deploy_manager.image_cache, "resolve", return_value=("fresh:tag", False)),
 			patch.object(deploy_manager, "build_lab_image", return_value="fresh:tag"),
 		):
-			deploy_manager._prepare_lab_image(lab, MagicMock())
+			deploy_manager._prepare_lab_image(lab, MagicMock(), frappe.session.user)
+		self.addCleanup(self.purge_build_logs, lab.name)
 
 		entries = [entry for entry in self.entries() if entry.entry_type == "Usage"]
 		self.assertEqual(len(entries), 1)

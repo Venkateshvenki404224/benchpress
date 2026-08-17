@@ -46,7 +46,7 @@ def get_lab_form_options() -> dict:
 @frappe.whitelist()
 def get_lab_templates() -> list[dict]:
 	require_app_user()
-	return lab_templates.get_templates()
+	return lab_templates.get_catalog()
 
 
 @frappe.whitelist()

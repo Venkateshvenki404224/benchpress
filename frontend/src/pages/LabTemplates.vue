@@ -63,11 +63,25 @@
 				</div>
 
 				<div class="mt-auto flex items-center gap-2 border-t border-outline-gray-1 pt-2.5">
-					<span class="text-meta text-ink-gray-4">{{
-						etaLabel(template.eta_minutes)
-					}}</span>
+					<span
+						class="min-w-0 truncate text-meta"
+						:class="template.lab ? 'text-ink-gray-6' : 'text-ink-gray-4'"
+						:data-test="`template-footnote-${template.key}`"
+					>
+						{{ footnote(template) }}
+					</span>
 					<Button
-						class="ml-auto"
+						v-if="template.lab"
+						class="ml-auto flex-none"
+						variant="solid"
+						:data-test="`open-lab-${template.key}`"
+						@click="router.push(`/labs/${template.lab.name}`)"
+					>
+						Go to lab
+					</Button>
+					<Button
+						v-else
+						class="ml-auto flex-none"
 						variant="solid"
 						:loading="pendingKey === template.key"
 						:disabled="Boolean(pendingKey)"
@@ -112,6 +126,13 @@ import { useRouter } from "vue-router";
 const router = useRouter();
 const pendingKey = ref("");
 
+const LAB_STATES = {
+	Draft: "not built yet",
+	Building: "building now",
+	Ready: "ready",
+	Error: "build failed",
+};
+
 const templates = createResource({ url: "benchpress.api.get_lab_templates", auto: true });
 
 const rows = computed(() => templates.data ?? []);
@@ -132,6 +153,12 @@ function markFor(template) {
 
 function resourceChips(template) {
 	return [memoryLabel(template.memory_limit), cpuLabel(template.cpu_cores)];
+}
+
+function footnote(template) {
+	if (!template.lab) return etaLabel(template.eta_minutes);
+	const status = template.lab.status || "";
+	return `Already used — ${LAB_STATES[status] || status.toLowerCase() || "created"}`;
 }
 
 /**

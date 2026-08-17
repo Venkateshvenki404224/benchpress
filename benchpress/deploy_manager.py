@@ -215,7 +215,7 @@ def _deploy_bench(bench_name: str) -> None:
 		# One step whichever way it goes: the run either builds the image or
 		# adopts a cached one, and the detail line says which.
 		pipeline.step("image")
-		_prepare_lab_image(lab, pipeline)
+		_prepare_lab_image(lab, pipeline, bench.owner)
 
 		_remove_stale_container(bench)
 		pipeline.step("container")
@@ -433,18 +433,22 @@ def _drop_site_database(bench) -> None:
 		pass  # best-effort
 
 
-def _prepare_lab_image(lab, pipeline) -> None:
+def _prepare_lab_image(lab, pipeline, user: str) -> None:
 	"""Adopt the shared image for this lab's spec, or build it if nobody has yet.
 
 	The cache is keyed by the build spec rather than by the lab, so the second user to deploy a
 	given template performs no build at all. It also closes a staleness hole in the old
 	`status == "Ready"` check: editing a Ready lab's apps changed what should be built but kept
 	pointing at the image built from the previous recipe.
+
+	A build started here writes a `Build Log`, as an explicit rebuild does; the deploy log
+	keeps the step and a pointer to it.
 	"""
 	tag, hit = image_cache.resolve(lab)
 	if not hit:
-		pipeline.log(f"Building lab image for {lab.title}")
-		_build_lab_with_logs(lab, pipeline.log)
+		pipeline.log(f"Building lab image for {lab.title} — output goes to the build log")
+		image_tag = _run_build(lab, user)
+		pipeline.log(f"Lab image ready: {image_tag}")
 		return
 	pipeline.log(f"Cache hit: reusing shared image {tag} — no build needed")
 	_adopt_cached_image(lab, tag)
@@ -480,6 +484,55 @@ def _build_lab_with_logs(lab, log_fn) -> None:
 		log_fn(f"Lab image ready: {image_tag}")
 
 
+def _open_build_log(lab, user: str) -> tuple[DeployLogWriter, str]:
+	"""A fresh `Build Log` for this lab, and the writer that streams it to `user` alone."""
+	build_log = frappe.get_doc(
+		{
+			"doctype": "Build Log",
+			"lab": lab.name,
+			"message": "=== Build started ===\n",
+			"log_type": "info",
+			"timestamp": frappe.utils.now_datetime(),
+		}
+	)
+	build_log.insert(ignore_permissions=True)
+	frappe.db.commit()
+
+	writer = DeployLogWriter(
+		"Build Log",
+		build_log.name,
+		"lab_build_log",
+		{"lab": lab.name, "build_log": build_log.name},
+		user,
+	)
+	return writer, build_log.name
+
+
+def _run_build(lab, user: str) -> str:
+	"""Build the image into its own log, mark that log's outcome, return the tag.
+
+	Re-raises, so a deploy that needed the image fails with it.
+	"""
+	append_log, build_log_name = _open_build_log(lab, user)
+	try:
+		_build_lab_with_logs(lab, append_log)
+	except Exception as e:
+		frappe.db.set_value("Lab", lab.name, "status", "Error")
+		append_log(f"=== Build failed: {e!s} ===", "error")
+		frappe.db.set_value("Build Log", build_log_name, "log_type", "error")
+		frappe.db.commit()  # nosemgrep -- the run's outcome must survive its failure
+		frappe.log_error(
+			title=f"Lab image build failed: {lab.name}",
+			message=frappe.get_traceback(),
+		)
+		raise
+
+	append_log(f"=== Build complete: {lab.image_tag} ===", "success")
+	frappe.db.set_value("Build Log", build_log_name, "log_type", "success")
+	frappe.db.commit()  # nosemgrep -- the log records a finished run
+	return lab.image_tag
+
+
 def build_lab(lab_name: str) -> None:
 	"""Build a lab image as a background job with realtime log streaming.
 
@@ -489,50 +542,12 @@ def build_lab(lab_name: str) -> None:
 	`no_cache=True` for a true from-scratch rebuild.
 	"""
 	lab = frappe.get_doc("Lab", lab_name)
-
-	build_log = frappe.get_doc(
-		{
-			"doctype": "Build Log",
-			"lab": lab_name,
-			"message": "=== Build started ===\n",
-			"log_type": "info",
-			"timestamp": frappe.utils.now_datetime(),
-		}
-	)
-	build_log.insert(ignore_permissions=True)
-	frappe.db.commit()
-	build_log_name = build_log.name
-
-	# A standalone image build is the lab owner's run, so it goes to the lab
-	# owner's socket only — same scoping rule as a deploy.
-	append_log = DeployLogWriter(
-		"Build Log",
-		build_log_name,
-		"lab_build_log",
-		{"lab": lab_name, "build_log": build_log_name},
-		lab.owner,
-	)
-
 	try:
-		_build_lab_with_logs(lab, append_log)
-
-		append_log(f"=== Build complete: {lab.image_tag} ===", "success")
-		frappe.db.set_value("Build Log", build_log_name, "log_type", "success")
-		frappe.db.commit()
-		_notify_owner(lab.owner, f"Lab build complete: {lab.title} ({lab.image_tag})", "Lab", lab_name)
-
-	except Exception as e:
-		frappe.db.set_value("Lab", lab_name, "status", "Error")
-		frappe.db.commit()
-
-		append_log(f"=== Build failed: {e!s} ===", "error")
-		frappe.db.set_value("Build Log", build_log_name, "log_type", "error")
-		frappe.db.commit()
-		frappe.log_error(
-			title=f"Lab image build failed: {lab_name}",
-			message=frappe.get_traceback(),
-		)
+		image_tag = _run_build(lab, lab.owner)
+	except Exception:
 		_notify_owner(lab.owner, f"Lab build failed: {lab.title}", "Lab", lab_name)
+		return
+	_notify_owner(lab.owner, f"Lab build complete: {lab.title} ({image_tag})", "Lab", lab_name)
 
 
 def stop_bench(bench_name: str) -> None:
