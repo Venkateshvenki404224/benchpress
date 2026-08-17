@@ -1,7 +1,28 @@
 <template>
 	<FrappeUIProvider>
 		<div class="flex h-screen">
-			<Sidebar :header="headerConfig" :sections="sections">
+			<Sidebar :sections="sections">
+				<!-- Search and notifications belong to the account, not to a screen,
+				     so they sit under the header rather than in the nav proper. -->
+				<template #header>
+					<SidebarHeader
+						title="BenchPress"
+						:subtitle="session.user || ''"
+						logo="/assets/benchpress/images/logo/favicon.svg"
+						:menu-items="accountMenu"
+					/>
+					<SidebarSection :items="utilityItems">
+						<template #sidebar-item="{ item }">
+							<SidebarItem
+								:label="item.label"
+								:icon="item.icon"
+								:suffix="item.suffix"
+								:onClick="item.onClick"
+								:data-test="item.dataTest"
+							/>
+						</template>
+					</SidebarSection>
+				</template>
 				<template #sidebar-item="{ item, isCollapsed }">
 					<SidebarItem
 						:label="item.label"
@@ -11,26 +32,19 @@
 						:data-test="item.dataTest"
 					/>
 				</template>
-				<template #footer-items>
-					<SidebarItem
-						v-if="userContext.isAdmin"
-						label="Settings"
-						:icon="SettingsIcon"
-						to="/settings"
-						:isActive="route.name === 'Settings'"
-						data-test="nav-settings"
-					/>
-				</template>
 			</Sidebar>
 
-			<div class="flex min-w-0 flex-1 flex-col">
+			<div class="relative flex min-w-0 flex-1 flex-col">
+				<!-- Slides out against the sidebar, over the screen the user is
+				     on, so nothing they were reading moves. -->
+				<NotificationsPanel />
+
 				<header
-					class="flex h-[50px] flex-none items-center gap-3 border-b border-outline-gray-1 px-5"
+					class="flex h-[50px] flex-none items-center gap-3 border-b border-outline-gray-1 bg-surface-white px-5"
 					data-test="app-header"
 				>
 					<Breadcrumbs :items="breadcrumbs" />
 					<div class="ml-auto flex items-center gap-2.5">
-						<AppSearch />
 						<router-link
 							to="/devices"
 							class="flex h-7 items-center gap-1.5 rounded-control border border-outline-gray-1 px-2.5 text-2xs"
@@ -47,11 +61,6 @@
 							/>
 							{{ vpnStatus.connected ? "VPN connected" : "VPN off" }}
 						</router-link>
-						<Dropdown :options="accountMenu" placement="right">
-							<Button variant="subtle" data-test="account-menu">
-								<template #icon><EllipsisIcon class="size-4" /></template>
-							</Button>
-						</Dropdown>
 					</div>
 				</header>
 
@@ -62,35 +71,44 @@
 		</div>
 
 		<!-- A deploy can be started from three screens and outlives all of
-		     them, so the dialog that follows it is mounted once, here. -->
+		     them, so the dialog that follows it is mounted once, here. The
+		     sidebar's own dialogs are mounted here for the same reason. -->
 		<DeployDialog />
+		<AppSearch />
+		<SettingsDialog v-if="userContext.isAdmin" />
 	</FrappeUIProvider>
 </template>
 
 <script setup>
 import AppSearch from "@/components/AppSearch.vue";
+import NotificationsPanel from "@/components/NotificationsPanel.vue";
 import DeployDialog from "@/components/deploy/DeployDialog.vue";
+import SettingsDialog from "@/components/settings/SettingsDialog.vue";
+import { openSettings } from "@/data/benchpressSettings";
+import { attentionCount, toggleNotifications } from "@/data/notifications";
+import { openSearch, searchShortcut } from "@/data/searchPalette";
 import { session } from "@/data/session";
 import { userContext } from "@/data/userContext";
 import { vpnStatus } from "@/data/vpnStatus";
 import {
 	Breadcrumbs,
-	Button,
-	Dropdown,
 	FrappeUIProvider,
 	Sidebar,
+	SidebarHeader,
 	SidebarItem,
+	SidebarSection,
 	useTheme,
 } from "frappe-ui";
 import { computed } from "vue";
 import { useRoute } from "vue-router";
 
-import EllipsisIcon from "~icons/lucide/ellipsis";
+import BellIcon from "~icons/lucide/bell";
 import FlaskConicalIcon from "~icons/lucide/flask-conical";
 import LayoutDashboardIcon from "~icons/lucide/layout-dashboard";
 import LayoutTemplateIcon from "~icons/lucide/layout-template";
 import LogOutIcon from "~icons/lucide/log-out";
 import MoonIcon from "~icons/lucide/moon";
+import SearchIcon from "~icons/lucide/search";
 import ServerIcon from "~icons/lucide/server";
 import SettingsIcon from "~icons/lucide/settings";
 import ShieldIcon from "~icons/lucide/shield";
@@ -108,31 +126,55 @@ function logout() {
 	session.logout.submit();
 }
 
-const headerConfig = computed(() => ({
-	title: "BenchPress",
-	subtitle: session.user || "",
-	logo: "/assets/benchpress/images/logo/favicon.svg",
-	menuItems: [],
-}));
-
+// Everything that acts on the account rather than on a lab lives behind the
+// sidebar header chevron — Settings included, so the nav stays object-shaped.
 const accountMenu = computed(() => {
-	const items = [];
+	const account = [];
 	if (userContext.isAdmin) {
-		items.push({
-			label: "Switch to Desk",
-			icon: LayoutDashboardIcon,
-			onClick: switchToDesk,
-		});
+		account.push(
+			{
+				label: "Settings",
+				icon: SettingsIcon,
+				onClick: openSettings,
+			},
+			{
+				label: "Switch to Desk",
+				icon: LayoutDashboardIcon,
+				onClick: switchToDesk,
+			}
+		);
 	}
-	items.push(
-		{ label: "Toggle theme", icon: MoonIcon, onClick: toggleTheme },
-		{ label: "Log out", icon: LogOutIcon, onClick: logout }
-	);
-	return items;
+	account.push({ label: "Toggle theme", icon: MoonIcon, onClick: toggleTheme });
+	return [
+		{ group: "account", hideLabel: true, items: account },
+		{
+			group: "session",
+			hideLabel: true,
+			items: [{ label: "Log out", icon: LogOutIcon, onClick: logout }],
+		},
+	];
 });
 
+// The two items above the nav. Both open a dialog, so neither carries a route.
+const utilityItems = computed(() => [
+	{
+		label: "Search",
+		icon: SearchIcon,
+		suffix: searchShortcut.value,
+		dataTest: "nav-search",
+		onClick: openSearch,
+	},
+	{
+		label: "Notifications",
+		icon: BellIcon,
+		suffix: attentionCount.value ? String(attentionCount.value) : undefined,
+		dataTest: "nav-notifications",
+		onClick: toggleNotifications,
+	},
+]);
+
 // Five flat items. Deploy and build history are reached from the objects they
-// belong to, so the old Logs section is gone; Settings sits in the footer.
+// belong to, so the old Logs section is gone; Settings is in the header menu.
 const NAV_ITEMS = [
 	{
 		label: "Overview",

@@ -1,5 +1,5 @@
 <template>
-	<div class="mx-auto max-w-[1180px] px-6 pb-10 pt-[22px]" data-test="lab-detail">
+	<div class="page-shell" data-test="lab-detail">
 		<p v-if="!lab.data" class="text-body text-ink-gray-5">Loading lab…</p>
 
 		<template v-else>

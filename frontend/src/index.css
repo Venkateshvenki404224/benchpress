@@ -1,2 +1,27 @@
 @import "./assets/Inter/inter.css";
 @import "frappe-ui/style.css";
+
+/*
+ * frappe-ui paints no page background, so the browser canvas stays white and
+ * shows through anything transparent — in dark mode that read as a white top
+ * bar. color-scheme carries the theme to scrollbars and native controls too.
+ */
+html {
+	background-color: var(--surface-white);
+	color-scheme: light;
+}
+
+html[data-theme="dark"] {
+	color-scheme: dark;
+}
+
+/*
+ * Every screen is a page-shell, so the content width and the gutters are one
+ * decision instead of nine. The gutter matches the header's px-5 so breadcrumbs
+ * sit in the same lane as the page title below them.
+ */
+@layer components {
+	.page-shell {
+		@apply mx-auto w-full max-w-[1680px] px-5 pb-10 pt-[22px];
+	}
+}

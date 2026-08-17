@@ -54,6 +54,51 @@ test.describe("Navigation & Routing", () => {
     await expect(page.locator('[data-test="nav-build-logs"]')).toHaveCount(0);
   });
 
+  test("search and notifications sit above the nav, not in the header", async ({
+    page,
+  }) => {
+    const basePage = new BasePage(page);
+    await basePage.gotoFrontend("/");
+    await basePage.waitForUserContext();
+
+    await expect(basePage.testId("nav-search")).toBeVisible();
+    await expect(basePage.testId("nav-notifications")).toBeVisible();
+    await expect(basePage.testId("app-header")).not.toContainText("Search");
+
+    await basePage.testId("nav-search").click();
+    await expect(basePage.testId("search-palette")).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(basePage.testId("search-palette")).toBeHidden();
+  });
+
+  test("the notifications panel opens beside the sidebar and toggles shut", async ({
+    page,
+  }) => {
+    const basePage = new BasePage(page);
+    await basePage.gotoFrontend("/labs");
+    await basePage.waitForUserContext();
+
+    await basePage.testId("nav-notifications").click();
+    const panel = basePage.testId("notifications");
+    await expect(panel).toBeVisible();
+
+    // It sits against the sidebar rather than centred like a modal. The panel
+    // slides in, so its left edge is only final once the transition settles.
+    const sidebarBox = (await basePage.testId("nav-labs").boundingBox())!;
+    await expect
+      .poll(async () => (await panel.boundingBox())!.x, { timeout: 5_000 })
+      .toBeGreaterThan(sidebarBox.x + sidebarBox.width - 1);
+    expect((await panel.boundingBox())!.x).toBeLessThan(
+      sidebarBox.x + sidebarBox.width + 40,
+    );
+
+    // The screen underneath stays where it was.
+    await expect(page.locator("h1", { hasText: "Labs" })).toBeVisible();
+
+    await basePage.testId("nav-notifications").click();
+    await expect(panel).toBeHidden();
+  });
+
   test("header carries the breadcrumb and the VPN chip", async ({ page }) => {
     const basePage = new BasePage(page);
     await basePage.gotoFrontend("/");

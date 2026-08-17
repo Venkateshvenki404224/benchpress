@@ -1,5 +1,5 @@
 <template>
-	<div class="mx-auto max-w-[1180px] px-6 pb-10 pt-[22px]" data-test="templates">
+	<div class="page-shell" data-test="templates">
 		<div class="mb-4">
 			<h1 class="text-title font-semibold text-ink-gray-9">Templates</h1>
 			<p class="mt-0.5 max-w-[600px] text-body text-ink-gray-5">

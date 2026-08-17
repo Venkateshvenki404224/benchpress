@@ -1,3 +1,4 @@
+import { openSettings } from "@/data/benchpressSettings";
 import { userResource } from "@/data/user";
 import { createRouter, createWebHistory } from "vue-router";
 import { session } from "./data/session";
@@ -62,10 +63,16 @@ const routes = [
 		component: () => import("@/pages/Devices.vue"),
 	},
 	{
+		// Settings is a dialog, not a screen. The route survives so old links
+		// and bookmarks still work: it opens the dialog over Overview, and the
+		// dialog puts the URL back on Overview when it closes.
 		path: "/settings",
 		name: "Settings",
 		meta: { title: "Settings" },
-		component: () => import("@/pages/Settings.vue"),
+		component: () => import("@/pages/Overview.vue"),
+		beforeEnter() {
+			openSettings();
+		},
 	},
 	{
 		path: "/:pathMatch(.*)*",

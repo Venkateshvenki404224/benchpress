@@ -1,5 +1,5 @@
 <template>
-	<div class="mx-auto max-w-[1180px] px-6 pb-10 pt-[22px]" data-test="labs">
+	<div class="page-shell" data-test="labs">
 		<div class="mb-3.5 flex flex-wrap items-start gap-3">
 			<div>
 				<h1 class="text-title font-semibold text-ink-gray-9">Labs</h1>
