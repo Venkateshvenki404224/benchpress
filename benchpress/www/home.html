@@ -46,7 +46,7 @@
     </nav>
     <div class="header__actions">
       <a class="button button--ghost-dark" href="{{ repo_url | e }}" aria-label="GitHub"><i class="icon" data-lucide="github"></i><span class="button__label">GitHub</span></a>
-      <a class="button button--primary" href="#waitlist">Start free</a>
+      <a class="button button--primary" href="{{ start_route | e }}">Start free</a>
     </div>
   </div>
 </header>
@@ -59,7 +59,7 @@
       <h1>Pick a template.<br>Press deploy. <span class="accent-green">Done.</span></h1>
       <p class="hero__copy">Benchpress turns a Frappe bench into one button. Pre-configured sites — ERPNext, HR, CRM, Helpdesk — provisioned as containers, reachable only over your private VPN. No bench commands, no SSH, no waiting on an engineer.</p>
       <div class="hero__ctas">
-        <a class="button button--primary button--large" href="#waitlist">Start free — {{ free_credits | e }} credits<i class="icon" data-lucide="arrow-right"></i></a>
+        <a class="button button--primary button--large" href="{{ start_route | e }}">Start free — {{ free_credits | e }} credits<i class="icon" data-lucide="arrow-right"></i></a>
         <a class="button button--ghost-dark button--large" href="{{ repo_url | e }}"><i class="icon" data-lucide="github"></i>Clone the repo</a>
       </div>
       <div class="hero__trust">
@@ -426,7 +426,7 @@
           Credits are spent on running hours and custom image builds. Nothing else is metered.
           {%- endif -%}
         </p>
-        <a class="button {{ 'button--primary' if pack.highlight else 'button--outline' }}" href="#waitlist">Buy credits</a>
+        <a class="button {{ 'button--primary' if pack.highlight else 'button--outline' }}" href="{{ start_route | e }}">Buy credits</a>
       </div>
       {%- endfor %}
     </div>
@@ -467,7 +467,7 @@
   </div>
 </section>
 
-<!-- 11 · Open source CTA + waitlist -->
+<!-- 11 · Open source CTA + the way in (waitlist form, or self-serve signup) -->
 <section class="section section--cta" id="start">
   <div class="shell">
     <div class="grid grid--2">
@@ -481,16 +481,16 @@
         <div class="terminal">git clone {{ repo_url | e }}<br>cd benchpress &amp;&amp; ./setup.sh</div>
         <div class="panel__buttons">
           <a class="button button--primary" href="{{ repo_url | e }}"><i class="icon" data-lucide="github"></i>View on GitHub</a>
-          <a class="button button--outline" href="#waitlist">Use hosted</a>
+          <a class="button button--outline" href="{{ start_route | e }}">Use hosted</a>
         </div>
       </div>
     </div>
 
     <div class="panel waitlist" id="waitlist">
       <div class="eyebrow eyebrow--muted">Hosted Benchpress</div>
+      {%- if waitlist_open %}
       <h2>Join the waitlist.</h2>
       <p class="body">Hosted access is invite-only while we size the first server. Leave an address and we'll email you a login with {{ free_credits | e }} credits when a slot opens. Self-hosting needs no invite — clone the repo above.</p>
-      {%- if waitlist_open %}
       <form class="waitlist__form" data-waitlist novalidate>
         <input type="email" name="email" required autocomplete="email" placeholder="Work email" aria-label="Work email">
         <input type="text" name="full_name" autocomplete="name" placeholder="Name (optional)" aria-label="Name">
@@ -503,7 +503,12 @@
         </div>
       </form>
       {%- else %}
-      <p class="waitlist__note">The waitlist is closed while we work through the current batch.</p>
+      <h2>Start free.</h2>
+      <p class="body">Sign in with GitHub or Google, or use an email address — either way you land on {{ free_credits | e }} credits, no card and no invite. Self-hosting needs no account at all; clone the repo above.</p>
+      <div class="waitlist__actions">
+        <a class="button button--primary button--large" href="{{ start_route | e }}">Start free — {{ free_credits | e }} credits<i class="icon" data-lucide="arrow-right"></i></a>
+        <span class="waitlist__note">GitHub is one click, and needs no email verification.</span>
+      </div>
       {%- endif %}
     </div>
   </div>
@@ -560,7 +565,7 @@
       </div>
       <div class="footer__column">
         <span>Company</span>
-        <a href="#waitlist">Contact</a>
+        <a href="{{ start_route | e }}">Contact</a>
         <a href="#how">How it works</a>
         <a href="{{ repo_url | e }}#licence">Licence</a>
       </div>

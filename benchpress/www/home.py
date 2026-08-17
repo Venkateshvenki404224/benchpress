@@ -18,7 +18,14 @@ import os
 import frappe
 from frappe.utils import cint, flt
 
-from benchpress.credits.config import active_packs, default_size, instance_sizes, settings
+from benchpress.credits.config import (
+	SIGNUP_ROUTE,
+	active_packs,
+	default_size,
+	instance_sizes,
+	settings,
+	waitlist_open,
+)
 from benchpress.www.home_content import ACTIVE_PHASE, PHASES
 
 REPO_URL = "https://github.com/Venkateshvenki404224/benchpress"
@@ -40,12 +47,23 @@ def get_context(context):
 	context.free_credits = cint(settings().signup_grant_credits)
 	context.repo_url = REPO_URL
 	context.license_label = LICENSE_LABEL
-	context.waitlist_open = True
+	context.waitlist_open = waitlist_open()
+	context.start_route = start_route(context.waitlist_open)
 	context.hero_media = hero_media()
 	context.phases = PHASES
 	context.active_phase = ACTIVE_PHASE
 	context.csrf_token = session_csrf_token()
 	return context
+
+
+def start_route(is_waitlist_open: bool) -> str:
+	"""Where every "Start free" on the page points.
+
+	One value, resolved once, because the page carries five of these buttons — header, hero, each
+	pack card, the open-source panel and the footer — and a switch that moved four of them would
+	be worse than one that moved none.
+	"""
+	return "#waitlist" if is_waitlist_open else SIGNUP_ROUTE
 
 
 def session_csrf_token() -> str:

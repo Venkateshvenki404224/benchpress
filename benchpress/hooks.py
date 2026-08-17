@@ -157,10 +157,29 @@ permission_query_conditions = {
 # `on_update` rather than a webhook route on purpose: it catches the checkout callback, the
 # `payment.captured` webhook, its retries and an operator's manual "Sync Status" through one path.
 # That makes redelivery the normal case, which is why the handler is idempotent by construction.
+#
+# `User.after_insert` is the self-serve onboarding seam: it hands a signup the app role, and the
+# signup grant when the signup has already proved the address (an OAuth flow). The email path's
+# grant waits for `on_session_creation` below, because a `User` row proves nothing about who owns
+# the address it holds.
 doc_events = {
 	"Razorpay Order": {
 		"on_update": "benchpress.credits.payments.on_razorpay_update",
 	},
+	"User": {
+		"after_insert": "benchpress.credits.onboarding.after_user_insert",
+	},
+}
+
+# Fires once per new session, which is the first moment an email signup has demonstrably received
+# its verification mail — `sign_up` sets a password the user never sees.
+on_session_creation = ["benchpress.credits.onboarding.after_login"]
+
+# The login page's own signup form keeps posting `frappe.core.doctype.user.user.sign_up`; this
+# routes that `cmd` through the hosted plan's rate limit, waitlist switch and domain blocklist
+# without a second signup endpoint existing anywhere.
+override_whitelisted_methods = {
+	"frappe.core.doctype.user.user.sign_up": "benchpress.signup.sign_up",
 }
 
 # Website route rules
@@ -217,10 +236,8 @@ scheduler_events = {
 
 # Overriding Methods
 # --------------------
-#
-# override_whitelisted_methods = {
-# 	"frappe.desk.doctype.event.event.get_events": "benchpress.event.get_events"
-# }
+# `override_whitelisted_methods` is declared beside the document events above, next to the hook it
+# belongs with.
 #
 # each overriding function accepts a `data` argument;
 # generated from the base implementation of the doctype dashboard,

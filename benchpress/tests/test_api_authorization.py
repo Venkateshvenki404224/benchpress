@@ -181,14 +181,21 @@ class TestApiAuthorization(IntegrationTestCase):
 		self.assert_denied(lambda: api.get_bench_credentials(bench))
 		self.assert_denied(lambda: api.restart_code_server(bench))
 
-	def test_the_waitlist_is_the_only_door_open_to_guests(self):
+	def test_only_the_two_signup_doors_are_open_to_guests(self):
 		"""Whitelisting an endpoint for Guest is a decision, not an accident.
 
-		`waitlist.join` is the one method the landing page needs, so the inventory of
-		`allow_guest` methods in this app must be exactly that one — a second one appearing here
-		means someone opened an endpoint to the internet without saying so.
+		Two methods have been argued for: `waitlist.join`, which the landing page's form posts to,
+		and `signup.sign_up`, which *replaces* a method Frappe already exposes to guests and only
+		narrows it. Anything else appearing in this inventory means somebody opened an endpoint to
+		the internet without saying so.
+
+		The two are never both accepting — `Credit Settings.waitlist_open` decides which — but they
+		are both reachable, which is what this counts.
 		"""
-		self.assertEqual(_guest_endpoints(), {"benchpress.waitlist.join"})
+		self.assertEqual(
+			_guest_endpoints(),
+			{"benchpress.waitlist.join", "benchpress.signup.sign_up"},
+		)
 
 	def test_guest_can_reach_the_waitlist(self):
 		frappe.set_user("Guest")

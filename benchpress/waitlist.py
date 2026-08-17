@@ -12,20 +12,27 @@ product is exactly the list an attacker would enumerate.
 
 Rate limiting is per (IP, email) so one address cannot be sprayed from one host, and the cap is
 deliberately low: a human joins a waitlist once.
+
+Once `Credit Settings.waitlist_open` is turned off, self-serve signup has replaced the list and
+`join` refuses — a queue nobody is going to work through is worse than no queue. The doctype and
+its rows are kept: it is the record of who asked and when, and `notify_of_signup` is the one-shot
+that tells everybody on it that the door is now open.
 """
 
 import frappe
 from frappe import _
 from frappe.database import savepoint
 from frappe.rate_limiter import rate_limit
-from frappe.utils import cstr
+from frappe.utils import cstr, get_url, now_datetime
 
+from benchpress.credits import config
 from benchpress.permissions import require_admin
 
 DOCTYPE = "Waitlist Entry"
 JOINS_PER_HOUR = 3
 DATA_LIMIT = 140
 TEXT_LIMIT = 1000
+APPROVED = "Approved"
 
 
 # Deliberately open to Guest: the landing page's waitlist form is the only door this app opens to
@@ -38,6 +45,7 @@ def join(
 	email: str, full_name: str | None = None, company: str | None = None, use_case: str | None = None
 ) -> dict:
 	"""Record an interest in hosted access. Always answers the same way."""
+	require_waitlist_open()
 	entry = frappe.new_doc(DOCTYPE)
 	entry.update(
 		{
@@ -49,6 +57,56 @@ def join(
 	)
 	insert_once(entry)
 	return {"joined": True, "message": _("You're on the list. We'll email you when a slot opens.")}
+
+
+def require_waitlist_open() -> None:
+	"""Refuse a join once signup has replaced the list, and point at the door that is open.
+
+	Checked before anything is written and before the address is even validated, so a closed list
+	costs one cached read. The switch is only consulted when credits are on: a self-hoster running
+	this app without the hosted plan has no waitlist to close.
+	"""
+	if config.credits_enabled() and not config.waitlist_open():
+		frappe.throw(
+			_("The waitlist is closed — hosted access is open to everyone now. Sign up at {0}.").format(
+				config.SIGNUP_ROUTE
+			)
+		)
+
+
+@frappe.whitelist()
+def notify_of_signup() -> dict:
+	"""Tell everybody still on the list that self-serve signup is live. One email each, ever.
+
+	The one-shot the waitlist gets when it is retired. "Ever" is stored on the row rather than
+	inferred from the status, because the obvious thing for an operator to do when a run stops
+	half-way through a batch is to run it again — and nobody may be mailed twice for that.
+
+	An approved entry already has a login, so it is sent to the login page; anyone else is sent to
+	signup. Same email, one link decided by what the person already has.
+	"""
+	require_admin()
+	entries = frappe.get_all(
+		DOCTYPE,
+		filters={"invite_sent_on": ("is", "not set")},
+		fields=["name", "full_name", "status"],
+	)
+	for entry in entries:
+		announce_signup(entry)
+	return {"notified": len(entries)}
+
+
+def announce_signup(entry) -> None:
+	route = "/login" if entry.status == APPROVED else config.SIGNUP_ROUTE
+	link = get_url(route)
+	frappe.sendmail(
+		recipients=[entry.name],
+		subject=_("Hosted BenchPress is open — your slot is ready"),
+		message=_(
+			"<p>Hi {0},</p><p>You asked for hosted BenchPress access a while back. It no longer needs an invite — anyone can start, and the free credits are waiting on your account.</p><p><a href='{1}'>{1}</a></p><p>Self-hosting is still free and unmetered; the repo is linked from the site.</p>"
+		).format(entry.full_name or entry.name.split("@")[0], link),
+	)
+	frappe.db.set_value(DOCTYPE, entry.name, "invite_sent_on", now_datetime(), update_modified=False)
 
 
 @frappe.whitelist()

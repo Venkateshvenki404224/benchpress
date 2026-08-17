@@ -21,7 +21,11 @@
   "max_devices",
   "max_builds_per_day",
   "always_on_section",
-  "always_on_monthly_inr"
+  "always_on_monthly_inr",
+  "signup_section",
+  "waitlist_open",
+  "column_break_signup",
+  "blocked_email_domains"
  ],
  "fields": [
   {
@@ -124,13 +128,35 @@
    "fieldtype": "Currency",
    "label": "Always On Monthly (INR)",
    "options": "INR"
+  },
+  {
+   "fieldname": "signup_section",
+   "fieldtype": "Section Break",
+   "label": "Self-serve Signup"
+  },
+  {
+   "default": "1",
+   "description": "While this is on, the landing page shows the waitlist form and self-serve signup is refused. Turn it off to open signup to anyone: the CTA becomes Start free and the waitlist refuses instead. Its rows are kept either way.",
+   "fieldname": "waitlist_open",
+   "fieldtype": "Check",
+   "label": "Waitlist Open"
+  },
+  {
+   "fieldname": "column_break_signup",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "One domain per line. An email signup from any of these is refused. OAuth signups are not checked — the provider has already vouched for the account.",
+   "fieldname": "blocked_email_domains",
+   "fieldtype": "Small Text",
+   "label": "Blocked Email Domains"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2026-08-17 08:12:00.000000",
+ "modified": "2026-08-17 12:10:00.000000",
  "modified_by": "Administrator",
  "module": "Benchpress",
  "name": "Credit Settings",

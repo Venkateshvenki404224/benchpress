@@ -14,7 +14,9 @@ from frappe import _
 from frappe.model.document import Document
 from frappe.utils import now_datetime, validate_email_address
 
-ACCESS_ROLE = "BenchPress User"
+# One definition of "has access to BenchPress", shared with the self-serve path. An invite and a
+# signup must land on the same role, or the two doors would grant different products.
+from benchpress.credits.onboarding import ACCESS_ROLE, grant_access_role
 
 
 class WaitlistEntry(Document):
@@ -54,10 +56,3 @@ def normalise_email(email: str) -> str:
 	if not address:
 		frappe.throw(_("Enter a valid email address."), frappe.ValidationError)
 	return address
-
-
-def grant_access_role(user) -> None:
-	if any(row.role == ACCESS_ROLE for row in user.roles):
-		return
-	user.append("roles", {"role": ACCESS_ROLE})
-	user.save(ignore_permissions=True)

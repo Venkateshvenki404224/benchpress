@@ -30,6 +30,11 @@ PASS_DAYS = 30
 # so the sentence and the router entry can never drift apart.
 TOP_UP_ROUTE = "/frontend/credits"
 
+# Where a stranger goes to become a user. Frappe's own login page carries the email form, the
+# OAuth buttons for every enabled `Social Login Key` and the verification mail, so self-serve
+# signup is a route we point at rather than a page we own.
+SIGNUP_ROUTE = "/login#signup"
+
 
 def settings():
 	"""`Credit Settings`, served from cache. Never `get_doc`, never inside a loop."""
@@ -39,6 +44,27 @@ def settings():
 def credits_enabled() -> bool:
 	"""The master switch. Off on a fresh site, and off means the feature does not exist."""
 	return bool(frappe.get_cached_doc(BENCHPRESS_SETTINGS).enable_credits)
+
+
+def waitlist_open() -> bool:
+	"""Whether hosted access is still invite-only.
+
+	One switch drives both doors, because they are the same door: while it is on the landing page
+	shows the waitlist form and `signup.sign_up` refuses; off, the CTA becomes "Start free" and
+	the waitlist refuses instead. Two flags would let a site offer a waitlist that signup had
+	already made pointless, and there is no state in which both should accept a stranger.
+	"""
+	return bool(settings().waitlist_open)
+
+
+def blocked_email_domains() -> set[str]:
+	"""Domains an email signup may not use, lower-cased and without a leading `@`.
+
+	Data rather than a bundled list: the afternoon a throwaway-address farm shows up, the fix has
+	to be one line typed into Desk, not a deploy.
+	"""
+	lines = cstr(settings().blocked_email_domains).splitlines()
+	return {line.strip().lower().lstrip("@") for line in lines if line.strip()}
 
 
 def default_size():
