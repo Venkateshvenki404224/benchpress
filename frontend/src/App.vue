@@ -34,6 +34,11 @@
 						:data-test="item.dataTest"
 					/>
 				</template>
+				<!-- The balance sits at the foot of the rail, above the collapse
+				     control, and only on a hosted site. -->
+				<template #footer-items="{ isCollapsed }">
+					<CreditMeter v-if="creditsEnabled" :is-collapsed="isCollapsed" />
+				</template>
 			</Sidebar>
 
 			<div class="relative flex min-w-0 flex-1 flex-col">
@@ -84,21 +89,16 @@
 <script setup>
 import AppSearch from "@/components/AppSearch.vue";
 import NotificationsPanel from "@/components/NotificationsPanel.vue";
+import CreditMeter from "@/components/credit/CreditMeter.vue";
 import DeployDialog from "@/components/deploy/DeployDialog.vue";
 import SettingsDialog from "@/components/settings/SettingsDialog.vue";
 import { openSettings } from "@/data/benchpressSettings";
-import {
-	creditSummary,
-	creditsEnabled,
-	primeCreditSummary,
-	refreshCreditSummary,
-} from "@/data/credits";
+import { creditsEnabled, primeCreditSummary, refreshCreditSummary } from "@/data/credits";
 import { attentionCount, toggleNotifications } from "@/data/notifications";
 import { openSearch, searchShortcut } from "@/data/searchPalette";
 import { session } from "@/data/session";
 import { userContext } from "@/data/userContext";
 import { vpnStatus } from "@/data/vpnStatus";
-import { creditLabel } from "@/utils/credits";
 import {
 	Breadcrumbs,
 	FrappeUIProvider,
@@ -112,7 +112,6 @@ import { computed, watch } from "vue";
 import { useRoute } from "vue-router";
 
 import BellIcon from "~icons/lucide/bell";
-import CoinsIcon from "~icons/lucide/coins";
 import FlaskConicalIcon from "~icons/lucide/flask-conical";
 import LayoutDashboardIcon from "~icons/lucide/layout-dashboard";
 import LayoutTemplateIcon from "~icons/lucide/layout-template";
@@ -129,7 +128,7 @@ const { toggleTheme } = useTheme();
 const route = useRoute();
 
 // The balance falls while nobody clicks anything — a running instance burns by the
-// hour — so the chip starts from the context call the SPA already made and is
+// hour — so the meter starts from the context call the SPA already made and is
 // re-read on every navigation. Each read is one indexed lookup, never a ledger sum.
 watch(() => userContext.ready, primeCreditSummary, { immediate: true });
 watch(() => route.fullPath, refreshCreditSummary);
@@ -171,39 +170,25 @@ const accountMenu = computed(() => {
 	];
 });
 
-// The items above the nav proper: two dialogs, and — only on a hosted site — the
-// balance. The balance belongs to the account rather than to any screen, and it
-// is the one number a user wants in view while they work, so it sits here as a
-// chip with the figure in the suffix slot rather than on a screen of its own.
-const utilityItems = computed(() => {
-	const items = [
-		{
-			label: "Search",
-			icon: SearchIcon,
-			suffix: searchShortcut.value,
-			dataTest: "nav-search",
-			onClick: openSearch,
-		},
-		{
-			label: "Notifications",
-			icon: BellIcon,
-			suffix: attentionCount.value ? String(attentionCount.value) : undefined,
-			dataTest: "nav-notifications",
-			onClick: toggleNotifications,
-		},
-	];
-	if (creditsEnabled.value) {
-		items.push({
-			label: "Credits",
-			icon: CoinsIcon,
-			suffix: creditLabel(creditSummary.balance),
-			to: "/credits",
-			isActive: route.name === "Credits",
-			dataTest: "nav-credits",
-		});
-	}
-	return items;
-});
+// The items above the nav proper: the two dialogs that belong to the account
+// rather than to any screen. The balance used to sit here as a third chip and
+// now lives in the sidebar footer, where a gauge fits — see CreditMeter.vue.
+const utilityItems = computed(() => [
+	{
+		label: "Search",
+		icon: SearchIcon,
+		suffix: searchShortcut.value,
+		dataTest: "nav-search",
+		onClick: openSearch,
+	},
+	{
+		label: "Notifications",
+		icon: BellIcon,
+		suffix: attentionCount.value ? String(attentionCount.value) : undefined,
+		dataTest: "nav-notifications",
+		onClick: toggleNotifications,
+	},
+]);
 
 // Five flat items. Deploy and build history are reached from the objects they
 // belong to, so the old Logs section is gone; Settings is in the header menu.

@@ -19,6 +19,9 @@ export const creditsEnabled = computed(() => userContext.credits?.enabled === tr
 
 export const creditSummary = reactive({
 	balance: 0,
+	// Everything ever allocated to the account — the meter's denominator. It is the settled
+	// balance plus lifetime spend, so it stays put while the balance above it falls.
+	allocated: 0,
 	burnRate: 0,
 	isSuspended: false,
 });
@@ -30,6 +33,7 @@ export const creditSummaryResource = createResource({
 	},
 	onSuccess(summary) {
 		creditSummary.balance = summary?.balance ?? 0;
+		creditSummary.allocated = summary?.allocated ?? 0;
 		creditSummary.burnRate = summary?.burn_rate ?? 0;
 		creditSummary.isSuspended = summary?.is_suspended ?? false;
 	},
@@ -42,10 +46,11 @@ export const creditStatementResource = createResource({
 	},
 });
 
-/** Seed the chip from the context call the SPA already made, then keep it fresh. */
+/** Seed the meter from the context call the SPA already made, then keep it fresh. */
 export function primeCreditSummary() {
 	if (!creditsEnabled.value) return;
 	creditSummary.balance = userContext.credits?.balance ?? 0;
+	creditSummary.allocated = userContext.credits?.allocated ?? 0;
 	creditSummary.burnRate = userContext.credits?.burn_rate ?? 0;
 	creditSummary.isSuspended = userContext.credits?.is_suspended ?? false;
 }

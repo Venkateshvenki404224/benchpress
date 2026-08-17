@@ -9,7 +9,11 @@
 		</div>
 
 		<div class="mb-3 grid gap-3 sm:grid-cols-3">
-			<StatTile label="Balance" :value="creditLabel(creditSummary.balance)" />
+			<StatTile
+				label="Balance"
+				:value="meter.balanceLabel"
+				:note="`of ${meter.allocatedLabel} allocated`"
+			/>
 			<StatTile label="Burn rate" :value="rateLabel(creditSummary.burnRate)" />
 			<StatTile label="Entries" :value="String(total)" />
 		</div>
@@ -91,7 +95,13 @@ import {
 	primeCreditSummary,
 	refreshCreditSummary,
 } from "@/data/credits";
-import { burnLabel, creditLabel, rateLabel, signedCreditLabel } from "@/utils/credits";
+import {
+	burnLabel,
+	creditLabel,
+	creditMeter,
+	rateLabel,
+	signedCreditLabel,
+} from "@/utils/credits";
 import { Button, dayjsLocal } from "frappe-ui";
 import { computed, onMounted, ref } from "vue";
 
@@ -119,6 +129,8 @@ const total = computed(() => statement.value.total ?? 0);
 const loading = computed(() => creditStatementResource.loading);
 const pages = computed(() => Math.max(Math.ceil(total.value / PAGE_LENGTH), 1));
 const burning = computed(() => burnLabel(creditSummary.burnRate));
+// The same figures the sidebar gauge reads, so the page it opens cannot disagree with it.
+const meter = computed(() => creditMeter(creditSummary.balance, creditSummary.allocated));
 
 function turn(direction) {
 	page.value = Math.min(Math.max(page.value + direction, 0), pages.value - 1);

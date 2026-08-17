@@ -10,11 +10,15 @@
  * grey rather than throwing.
  */
 
+// frappe-ui's Progress paints its fill `bg-surface-gray-7` with no colour prop, so a toned bar
+// re-colours that fill from its wrapper rather than forking the component. If the class ever moves
+// the bar falls back to the stock fill — it never disappears.
 export const TONES = {
 	green: {
 		theme: "green",
 		dot: "bg-surface-green-3",
 		text: "text-ink-green-3",
+		fill: "[&_.bg-surface-gray-7]:bg-surface-green-3",
 		// frappe-ui's green subtle already matches the handoff.
 		badgeClass: "",
 	},
@@ -22,6 +26,7 @@ export const TONES = {
 		theme: "blue",
 		dot: "bg-surface-blue-2",
 		text: "text-ink-blue-3",
+		fill: "[&_.bg-surface-gray-7]:bg-surface-blue-2",
 		// frappe-ui 0.1.278's blue subtle is bg-surface-blue-2 (blue-500) behind
 		// text-ink-blue-2 (blue-400) — a solid fill the handoff never uses and
 		// which fails contrast. The other four themes need no correction.
@@ -31,18 +36,21 @@ export const TONES = {
 		theme: "orange",
 		dot: "bg-surface-amber-2",
 		text: "text-ink-amber-3",
+		fill: "[&_.bg-surface-gray-7]:bg-surface-amber-2",
 		badgeClass: "",
 	},
 	red: {
 		theme: "red",
 		dot: "bg-surface-red-4",
 		text: "text-ink-red-4",
+		fill: "[&_.bg-surface-gray-7]:bg-surface-red-4",
 		badgeClass: "",
 	},
 	gray: {
 		theme: "gray",
 		dot: "bg-surface-gray-4",
 		text: "text-ink-gray-6",
+		fill: "[&_.bg-surface-gray-7]:bg-surface-gray-3",
 		badgeClass: "",
 	},
 };
@@ -90,6 +98,11 @@ export function toneFor(status) {
 /** The colour set for a status value. */
 export function themeFor(status) {
 	return TONES[toneFor(status)];
+}
+
+/** The Progress-fill override for a tone name; an unknown tone stays neutral. */
+export function fillFor(tone) {
+	return (TONES[tone] ?? TONES[NEUTRAL_TONE]).fill;
 }
 
 /** What the badge reads; a never-polled container_health says "Unknown". */

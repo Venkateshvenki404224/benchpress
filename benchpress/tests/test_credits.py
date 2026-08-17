@@ -225,6 +225,37 @@ class TestCredits(IntegrationTestCase):
 		self.assertEqual(account.summary(self.user)["balance"], 0.0)
 		self.assertFalse(frappe.db.exists(ACCOUNT, self.user))
 
+	def test_the_summary_carries_the_allocation_the_meter_gauges_against(self):
+		"""The denominator holds still while the balance under it falls — a gauge, not a graph."""
+		self.enable_credits()
+		account.start_burn(self.user, self.bench.name, RATE)
+		self.backdate_burn(hours=2)
+
+		summary = account.summary(self.user)
+		self.assertAlmostEqual(summary["allocated"], GRANT, places=3)
+		self.assertAlmostEqual(summary["balance"], GRANT - 2 * RATE, places=3)
+
+	def test_the_allocation_survives_the_settle_that_spends_it(self):
+		self.enable_credits()
+		account.start_burn(self.user, self.bench.name, RATE)
+		self.backdate_burn(hours=2)
+		account.stop_burn(self.user, self.bench.name, RATE)
+
+		self.assertAlmostEqual(account.summary(self.user)["allocated"], GRANT, places=3)
+
+	def test_a_top_up_raises_the_allocation_and_a_refund_lowers_it(self):
+		self.enable_credits()
+		reference = ("Bench Instance", self.bench.name)
+		account.purchase(self.user, 200, "Pack", reference)
+		self.assertAlmostEqual(account.summary(self.user)["allocated"], GRANT + 200, places=3)
+
+		account.refund(self.user, 200, "Chargeback", reference)
+		self.assertAlmostEqual(account.summary(self.user)["allocated"], GRANT, places=3)
+
+	def test_an_account_that_does_not_exist_gauges_against_nothing(self):
+		self.enable_credits()
+		self.assertEqual(account.summary(self.user)["allocated"], 0.0)
+
 	def test_the_summary_costs_one_query(self):
 		self.enable_credits()
 		account.ensure_account(self.user)

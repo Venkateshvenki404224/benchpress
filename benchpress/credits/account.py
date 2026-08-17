@@ -35,6 +35,9 @@ LEDGER = "Credit Ledger Entry"
 PRECISION = 6
 
 BALANCE_FIELDS = ["balance", "burn_rate", "burn_since", "is_suspended"]
+# The hot path reads only what it must; the meter also needs the denominator, so it asks for one
+# field more in the same single read rather than making the guard carry it.
+SUMMARY_FIELDS = [*BALANCE_FIELDS, "lifetime_spent"]
 STATEMENT_FIELDS = ["name", "entry_type", "credits", "balance_after", "description", "creation"]
 DEFAULT_PAGE_LENGTH = 20
 MAX_PAGE_LENGTH = 100
@@ -66,20 +69,41 @@ def accrued(account) -> float:
 	return flt(flt(account.burn_rate) * hours, PRECISION)
 
 
+def allocated(account) -> float:
+	"""Every credit ever put into this account: what is left, settled, plus what has gone.
+
+	Still not a ledger sum — the two stored figures carry it between them, so the meter's
+	denominator costs the same single read as its numerator. Because `balance` is the *settled*
+	balance, this figure holds still while an instance burns and `available` falls beneath it,
+	which is exactly what a meter wants: a fixed denominator and a moving fill.
+
+	A refund or a negative adjustment lowers it, because those credits were taken back — allocated
+	is what the account has to spend, not what it was ever handed.
+	"""
+	return flt(flt(account.balance) + flt(account.lifetime_spent), PRECISION)
+
+
 def summary(user: str) -> dict:
-	"""What the balance chip renders: one indexed read plus arithmetic.
+	"""What the balance meter renders: one indexed read plus arithmetic.
 
 	A read never opens an account — a user who has done nothing has no row, and reporting zero is
 	cheaper and more honest than writing one to find out.
 	"""
 	if not config.credits_enabled():
 		return {"enabled": False}
-	row = frappe.db.get_value(ACCOUNT, user, BALANCE_FIELDS, as_dict=True)
+	row = frappe.db.get_value(ACCOUNT, user, SUMMARY_FIELDS, as_dict=True)
 	if not row:
-		return {"enabled": True, "balance": 0.0, "burn_rate": 0.0, "is_suspended": False}
+		return {
+			"enabled": True,
+			"balance": 0.0,
+			"allocated": 0.0,
+			"burn_rate": 0.0,
+			"is_suspended": False,
+		}
 	return {
 		"enabled": True,
 		"balance": available(row),
+		"allocated": allocated(row),
 		"burn_rate": flt(row.burn_rate),
 		"is_suspended": bool(row.is_suspended),
 	}

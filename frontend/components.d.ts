@@ -21,6 +21,7 @@ declare module 'vue' {
     ConnectionDetails: typeof import('./src/components/lab/ConnectionDetails.vue')['default']
     ConnectionTestCard: typeof import('./src/components/device/ConnectionTestCard.vue')['default']
     ContainerStatusCard: typeof import('./src/components/lab/ContainerStatusCard.vue')['default']
+    CreditMeter: typeof import('./src/components/credit/CreditMeter.vue')['default']
     CreditPacks: typeof import('./src/components/credit/CreditPacks.vue')['default']
     DataTable: typeof import('./src/components/DataTable.vue')['default']
     DeployDialog: typeof import('./src/components/deploy/DeployDialog.vue')['default']
