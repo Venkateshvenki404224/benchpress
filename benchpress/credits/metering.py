@@ -46,9 +46,7 @@ def on_bench_stopped(bench) -> None:
 	if not config.credits_enabled() or not bench.credit_burn_started:
 		return
 	lab_id = frappe.db.get_value("Lab", bench.lab, "lab_id")
-	account.stop_burn(
-		bench.owner, bench.name, flt(bench.credit_burn_rate), label=bench_label(lab_id)
-	)
+	account.stop_burn(bench.owner, bench.name, flt(bench.credit_burn_rate), label=bench_label(lab_id))
 	_mark_stopped(bench)
 
 
