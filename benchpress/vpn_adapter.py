@@ -73,21 +73,38 @@ def remove_bench_peer(bench) -> None:
 	socket and the wireguard conf volume — so this is safe to call from web
 	requests too. No-ops cleanly when no peer is linked, and clears a
 	dangling link if the peer is already gone.
+
+	The link is cleared **in the row, not just on the document**, before the peer is
+	deleted. Frappe refuses to delete anything another row still points at, and the
+	Bench Instance is still there at this moment — clearing only `bench.vpn_peer` left
+	the stored link in place, so deleting an instance died with `LinkExistsError` and no
+	instance could ever be deleted from the UI.
 	"""
 	if not bench.vpn_peer:
 		return
-	if frappe.db.exists("VPN Peer", bench.vpn_peer):
-		frappe.delete_doc("VPN Peer", bench.vpn_peer, ignore_permissions=True)
+	peer_name = bench.vpn_peer
 	bench.vpn_peer = None
+	frappe.db.set_value("Bench Instance", bench.name, "vpn_peer", None, update_modified=False)
+	if frappe.db.exists("VPN Peer", peer_name):
+		frappe.delete_doc("VPN Peer", peer_name, ignore_permissions=True)
 
 
 def configure_container(container_id: str, private_key: str, assigned_ip: str) -> None:
-	"""Write the client conf into the container and bring its tunnel up."""
+	"""Write the client conf into the container and bring its tunnel up.
+
+	The interface is taken down first, and failing to take it down is fine. `wg-quick up`
+	refuses to run when the interface already exists, so a container that reached this
+	point once before — a retried deploy, or a container the stale-container sweep failed
+	to remove — turned a recoverable state into `Deploy failed: wg0 already exists`. Down
+	then up is also how the peer's key is rotated: the conf on disk has just changed, and
+	an interface left up would keep serving the old one.
+	"""
 	from benchpress.docker_manager import exec_in_container, write_file_to_container
 
 	config = render_container_config(private_key, assigned_ip)
 	write_file_to_container(container_id, config, "/etc/wireguard/wg0.conf")
 	exec_in_container(container_id, "chmod 600 /etc/wireguard/wg0.conf", user="root")
+	exec_in_container(container_id, "wg-quick down wg0 || true", user="root")
 	exit_code, output = exec_in_container(container_id, "wg-quick up wg0", user="root")
 	if exit_code != 0:
 		raise Exception(f"wg-quick up failed inside container: {output}")
