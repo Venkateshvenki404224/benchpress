@@ -45,9 +45,13 @@
 
 		<div class="flex flex-col items-end gap-1">
 			<div class="flex items-center gap-2">
+				<!-- Disabled off-VPN for the same reason "Open site" is: the IDE answers
+				     only on the bench's tunnel address, so off-tunnel this opened a tab
+				     that loaded forever. The caption below covers both buttons. -->
 				<Button
 					v-if="showCodeServer"
 					variant="subtle"
+					:disabled="!vpnConnected"
 					data-test="open-code-server"
 					@click="emit('code-server')"
 				>
