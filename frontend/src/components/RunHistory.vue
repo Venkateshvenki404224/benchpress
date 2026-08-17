@@ -34,7 +34,10 @@
 
 				<StatusBadge v-else-if="column.key === 'result'" :status="row.result" />
 
-				<span v-else-if="column.key === 'last_step'" class="truncate text-xs text-ink-gray-6">
+				<span
+					v-else-if="column.key === 'last_step'"
+					class="truncate text-xs text-ink-gray-6"
+				>
 					{{ row.last_step || EM_DASH }}
 				</span>
 
@@ -45,7 +48,10 @@
 					{{ row.duration_label || EM_DASH }}
 				</span>
 
-				<span v-else-if="column.key === 'started'" class="truncate text-meta text-ink-gray-5">
+				<span
+					v-else-if="column.key === 'started'"
+					class="truncate text-meta text-ink-gray-5"
+				>
 					{{ startedLabel(row) }}
 				</span>
 			</template>

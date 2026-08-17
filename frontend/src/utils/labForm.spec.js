@@ -102,7 +102,11 @@ describe("buildSummary", () => {
 		enable_code_server: true,
 		enable_ssh: false,
 		apps: [
-			{ app_name: "helpdesk", git_url: "https://github.com/frappe/helpdesk", branch: "main" },
+			{
+				app_name: "helpdesk",
+				git_url: "https://github.com/frappe/helpdesk",
+				branch: "main",
+			},
 		],
 	});
 
@@ -124,7 +128,11 @@ describe("buildSummary", () => {
 			enable_ssh: true,
 			apps: [
 				{ app_name: "hrms", git_url: "https://github.com/frappe/hrms", branch: "main" },
-				{ app_name: "erpnext", git_url: "https://github.com/frappe/erpnext", branch: "main" },
+				{
+					app_name: "erpnext",
+					git_url: "https://github.com/frappe/erpnext",
+					branch: "main",
+				},
 			],
 		};
 		expect(buildSummary(changed)).toEqual([

@@ -101,7 +101,9 @@ class TestRunHistory(IntegrationTestCase):
 		cls.lab = _ensure_lab("history-lab", image_tag="benchpress/history-lab:latest")
 		cls.bench = cls._ensure_bench(cls.owner, cls.lab)
 
-		cls.owner_build = _log("Build Log", cls.owner, lab=cls.lab.name, log_type="success", message=BUILD_LOG)
+		cls.owner_build = _log(
+			"Build Log", cls.owner, lab=cls.lab.name, log_type="success", message=BUILD_LOG
+		)
 		cls.other_build = _log(
 			"Build Log", cls.other, lab=cls.lab.name, log_type="error", message="=== Build failed: boom ==="
 		)

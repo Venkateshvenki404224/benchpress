@@ -161,9 +161,7 @@ def _finished_duration(log: dict) -> float | None:
 def _labs(lab_names: list[str]) -> dict:
 	if not lab_names:
 		return {}
-	labs = frappe.get_all(
-		"Lab", filters={"name": ("in", lab_names)}, fields=["name", "title", "image_tag"]
-	)
+	labs = frappe.get_all("Lab", filters={"name": ("in", lab_names)}, fields=["name", "title", "image_tag"])
 	return {lab.name: lab for lab in labs}
 
 
@@ -171,7 +169,5 @@ def _benches(bench_names: list[str]) -> dict:
 	"""Which lab each run deployed — the rows themselves are already scoped."""
 	if not bench_names:
 		return {}
-	benches = frappe.get_all(
-		"Bench Instance", filters={"name": ("in", bench_names)}, fields=["name", "lab"]
-	)
+	benches = frappe.get_all("Bench Instance", filters={"name": ("in", bench_names)}, fields=["name", "lab"])
 	return {bench.name: bench for bench in benches}

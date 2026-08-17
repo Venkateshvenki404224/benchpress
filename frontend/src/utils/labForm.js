@@ -15,8 +15,7 @@
 // `docker_manager.LAB_ID_RE` / `LAB_ID_MAX_LENGTH`, verbatim.
 const LAB_ID_RE = /^[a-z0-9]+([._-][a-z0-9]+)*$/;
 export const LAB_ID_MAX_LENGTH = 64;
-export const LAB_ID_RULE =
-	"Lowercase letters, numbers and single '.', '_' or '-' separators";
+export const LAB_ID_RULE = "Lowercase letters, numbers and single '.', '_' or '-' separators";
 
 // `Lab.validate_cpu_cores`.
 export const BASELINE_CPU_CORES = 1;
@@ -34,7 +33,9 @@ export function slugify(title) {
 		.replace(/[\u0300-\u036f]/g, "")
 		.toLowerCase();
 	const separated = folded.replace(/[^a-z0-9._-]+/g, "-").replace(/[._-]{2,}/g, "-");
-	return trimSeparators(separated).slice(0, LAB_ID_MAX_LENGTH).replace(/[._-]+$/, "");
+	return trimSeparators(separated)
+		.slice(0, LAB_ID_MAX_LENGTH)
+		.replace(/[._-]+$/, "");
 }
 
 function trimSeparators(value) {
