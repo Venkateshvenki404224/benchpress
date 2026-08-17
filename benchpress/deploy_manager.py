@@ -3,6 +3,7 @@
 
 import json
 import secrets
+import shlex
 
 import frappe
 from frappe.utils.file_lock import LockTimeoutError
@@ -295,9 +296,12 @@ def _deploy_bench(bench_name: str) -> None:
 		pipeline.step("code_server")
 
 		# After linkuser.sh, not after site creation: that renames the bench user, and
-		# `usermod --login` refuses to rename a user owning a running process.
+		# `usermod --login` refuses to rename a user owning a running process. The account is
+		# named here rather than derived inside the container from a path the tenant owns.
 		exit_code, output = exec_in_container(
-			container_id, "bash /opt/benchpress/scripts/serve.sh", user="root"
+			container_id,
+			f"bash /opt/benchpress/scripts/serve.sh {shlex.quote(bench.ssh_username)}",
+			user="root",
 		)
 		if exit_code != 0:
 			raise Exception(f"serve.sh failed (exit {exit_code}): {output}")
@@ -370,6 +374,10 @@ def _record_primary_site(bench, lab, admin_password: str) -> None:
 	"""Record the deploy's site as a `Bench Site`, which is what every site list reads.
 
 	Idempotent: a deploy re-runs, so an existing row is refreshed rather than duplicated.
+
+	The owner is pinned to the bench's owner rather than left to the session: `Bench Site` grants
+	`BenchPress User` read `if_owner`, so an admin redeploying somebody else's instance would
+	take the row over and empty that tenant's Sites tab.
 	"""
 	existing = frappe.db.get_value("Bench Site", {"bench": bench.name, "site_name": bench.site_name})
 	site = frappe.get_doc("Bench Site", existing) if existing else frappe.new_doc("Bench Site")
@@ -378,6 +386,7 @@ def _record_primary_site(bench, lab, admin_password: str) -> None:
 	site.full_domain = bench.site_name
 	site.status = "Active"
 	site.admin_password = admin_password
+	site.owner = bench.owner
 	site.apps_installed = []
 	for app in _site_app_names(lab):
 		site.append("apps_installed", {"app_name": app})
@@ -501,9 +510,11 @@ def teardown_bench(bench) -> None:
 
 
 def _deactivate_bench_sites(bench) -> None:
-	"""Mark every `Bench Site` on this instance Inactive, since its data is gone."""
-	for name in frappe.get_all("Bench Site", filters={"bench": bench.name}, pluck="name"):
-		frappe.db.set_value("Bench Site", name, "status", "Inactive", update_modified=False)
+	"""Mark every `Bench Site` on this instance Inactive, since its data is gone.
+
+	One UPDATE: `set_value` takes the filter itself, so the row names never have to be read.
+	"""
+	frappe.db.set_value("Bench Site", {"bench": bench.name}, "status", "Inactive", update_modified=False)
 
 
 def _drop_site_database(bench) -> None:
@@ -596,12 +607,18 @@ def _run_build(lab, user: str) -> str:
 	"""Build the image into its own log, mark that log's outcome, return the tag.
 
 	Re-raises, so a deploy that needed the image fails with it.
+
+	A failure puts the lab's status back the way it was found. `Lab` is one admin-authored row
+	every tenant reads, and `_build_lab_with_logs` moves it to Building before it starts, so a
+	tenant whose deploy had to build would otherwise leave the whole catalog reading Error.
+	`build_lab`, the admin's own rebuild, is what records Error there.
 	"""
+	status_before = lab.status
 	append_log, build_log_name = _open_build_log(lab, user)
 	try:
 		_build_lab_with_logs(lab, append_log)
 	except Exception as e:
-		frappe.db.set_value("Lab", lab.name, "status", "Error")
+		frappe.db.set_value("Lab", lab.name, "status", status_before)
 		append_log(f"=== Build failed: {e!s} ===", "error")
 		frappe.db.set_value("Build Log", build_log_name, "log_type", "error")
 		frappe.db.commit()  # nosemgrep -- the run's outcome must survive its failure
@@ -629,6 +646,9 @@ def build_lab(lab_name: str) -> None:
 	try:
 		image_tag = _run_build(lab, lab.owner)
 	except Exception:
+		# The admin asked for this build, so the catalog is the right place to record that it broke.
+		frappe.db.set_value("Lab", lab_name, "status", "Error")
+		frappe.db.commit()  # nosemgrep -- the run is over; its verdict must survive the failure
 		_notify_owner(lab.owner, f"Lab build failed: {lab.title}", "Lab", lab_name)
 		return
 	_notify_owner(lab.owner, f"Lab build complete: {lab.title} ({image_tag})", "Lab", lab_name)
