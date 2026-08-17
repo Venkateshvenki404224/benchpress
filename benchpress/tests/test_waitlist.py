@@ -9,7 +9,7 @@ it must not let a single caller enumerate through it, and approving an entry mus
 one role — the least-privileged one — rather than whatever the inviter happens to hold.
 """
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import frappe
 from frappe.tests import IntegrationTestCase
@@ -31,11 +31,27 @@ def _delete_entry(email):
 class TestWaitlist(IntegrationTestCase):
 	def setUp(self):
 		frappe.set_user("Administrator")
-		frappe.flags.mute_emails = True
+		self._silence_outgoing_mail()
 		for email in (EMAIL, OTHER_EMAIL):
 			_delete_entry(email)
 			self.addCleanup(_delete_entry, email)
 		self.addCleanup(frappe.set_user, "Administrator")
+
+	def _silence_outgoing_mail(self) -> None:
+		"""Approval creates a `User` with a welcome email, which must not leave the test.
+
+		Muting alone is not enough: the send runs as an after-commit task, so on a site with no
+		Email Account it raises `OutgoingEmailError` inside whichever *later* test commits first —
+		which is how it failed in CI while passing on a dev site that has an account configured.
+		Patching the send out means no queue row is ever written.
+		"""
+		# `None`, not a mock: `User.send_welcome_mail_to_user` reads `.message` off the returned
+		# Email Queue document when there is one, and a mock's attribute is not a string.
+		mailer = patch("frappe.sendmail", return_value=None)
+		mailer.start()
+		self.addCleanup(mailer.stop)
+		self.addCleanup(setattr, frappe.flags, "mute_emails", frappe.flags.mute_emails)
+		frappe.flags.mute_emails = True
 
 	def test_a_valid_submission_creates_one_pending_row(self):
 		response = waitlist.join(EMAIL, full_name="Test Person", company="Acme")
