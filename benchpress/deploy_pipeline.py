@@ -46,13 +46,8 @@ DEPLOY_STEPS = (
 	DeployStep("vpn_peer", "Configuring the WireGuard peer"),
 	DeployStep("site_config", "Writing common_site_config.json"),
 	DeployStep("site", "Creating the site"),
-	# "Preparing", not "Building": the image now carries the bundles, so this step
-	# normally checks and skips. Mirrored in `frontend/src/utils/deploySteps.js`.
 	DeployStep("assets", "Preparing assets"),
 	DeployStep("ssh_user", "Provisioning the SSH user"),
-	# Serves the site as well as code-server. The key is what `parse_step_line`
-	# matches, so relabelling is safe: a stored run's label is read back from its
-	# own line, never from this tuple.
 	DeployStep("code_server", "Starting the lab's services"),
 	DeployStep("complete", "Deploy complete"),
 )

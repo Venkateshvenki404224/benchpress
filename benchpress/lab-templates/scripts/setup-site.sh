@@ -4,16 +4,11 @@ set -e
 # The caller (deploy_manager) already sets workdir to the bench dir; this cd is a fallback.
 cd /home/frappe/frappe-bench || true
 
-# A deploy preserves the data volume on purpose — only a teardown removes it — so a bench
-# that has been deployed before already has its site on disk. `bench new-site` refuses that
-# outright ("Site ... already exists"), which turned pressing Deploy on an existing instance
-# into a failed deploy. The site is adopted instead: nothing here destroys a site, so a
-# rebuild from scratch stays an explicit Delete bench (or redeploy), which drops the volume.
+# A deploy preserves the data volume, so an instance deployed before already has its
+# site. Adopted rather than recreated; nothing here destroys a site.
 if [ -f "sites/${SITE_NAME}/site_config.json" ]; then
     echo "[*] Site ${SITE_NAME} already exists — adopting it."
-    # Every deploy mints a fresh admin password and the lab page shows it, so the existing
-    # site is moved onto that password rather than leaving the screen describing a
-    # credential that does not work.
+    # The lab page shows the password this run minted, so the site must move onto it.
     bench --site "${SITE_NAME}" set-admin-password "${ADMIN_PASSWORD}"
 else
     echo "[*] Creating site ${SITE_NAME}..."
@@ -27,8 +22,7 @@ else
 fi
 
 if [ -n "${APPS}" ]; then
-    # `install-app` errors on an app that is already installed, which the adopt path above
-    # makes the normal case, so the site is asked what it already has first.
+    # install-app errors on an already-installed app, which the adopt path makes normal.
     INSTALLED=$(bench --site "${SITE_NAME}" list-apps 2>/dev/null | awk '{print $1}')
     IFS=',' read -ra APP_LIST <<< "${APPS}"
     for app in "${APP_LIST[@]}"; do

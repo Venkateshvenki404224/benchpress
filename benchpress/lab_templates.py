@@ -16,14 +16,8 @@ from frappe import _
 # which catalog a lab was created against.
 CATALOG_VERSION = 5
 
-# Every template names the `Instance Size` it runs at, so a lab created from one
-# is priced and sized off the same catalog as a hand-filled lab instead of
-# carrying resources only this file knows about. `memory_limit` / `cpu_cores`
-# below must agree with the named size: they are what the template card renders,
-# and `Lab.apply_instance_size` overwrites them with the size's own values.
-#
-# A self-hoster may have renamed or removed a seeded size, so the size is applied
-# only when its row exists — the declared resources are the fallback.
+# Each template names its `Instance Size`. `memory_limit` / `cpu_cores` below must agree
+# with it: they are what the card renders, and `Lab.apply_instance_size` overwrites them.
 
 # "Use template" names the lab itself, so a taken id is retried with a numeric
 # suffix. The ceiling only exists so a pathological catalog cannot spin.

@@ -115,7 +115,6 @@ class TestRemoveBenchPeer(IntegrationTestCase):
 
 		mock_delete.assert_called_once_with("VPN Peer", "PEER-00001", ignore_permissions=True)
 		self.assertIsNone(bench.vpn_peer)
-		# The stored link has to go before the peer does, or Frappe refuses the delete.
 		mock_set_value.assert_called_once_with(
 			"Bench Instance", "BENCH-1", "vpn_peer", None, update_modified=False
 		)
@@ -205,14 +204,13 @@ class TestConfigureContainer(IntegrationTestCase):
 		commands = [call.args[1] for call in mock_exec.call_args_list]
 		self.assertIn("chmod 600 /etc/wireguard/wg0.conf", commands)
 		self.assertIn("wg-quick up wg0", commands)
-		# Down before up, or a container that already has the interface fails the deploy.
 		self.assertLess(commands.index("wg-quick down wg0 || true"), commands.index("wg-quick up wg0"))
 
 	@patch("benchpress.vpn_adapter.render_container_config", return_value="CONF")
 	@patch("benchpress.docker_manager.exec_in_container")
 	@patch("benchpress.docker_manager.write_file_to_container")
 	def test_raises_when_wg_quick_fails(self, _write, mock_exec, _render):
-		# chmod, then the tolerated `down`, then the `up` that decides the outcome.
+		# chmod, the tolerated down, then the up that decides the outcome.
 		mock_exec.side_effect = [(0, ""), (0, ""), (1, "wg-quick: boom")]
 
 		with self.assertRaises(Exception) as caught:

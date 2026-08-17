@@ -37,9 +37,8 @@ def _make_bench(lab_name):
 def _delete_bench_sites(bench_name):
 	"""Drop the `Bench Site` rows a deploy records, before the instance they point at.
 
-	A deploy under test commits (its log writer commits per line), so these rows outlive the
-	class rollback while the instance they link to does not — that is how orphan sites appeared
-	on the dev site. Cleaned explicitly rather than relied on being rolled back.
+	A deploy under test commits, so these outlive the class rollback that discards the
+	instance. Cleaned explicitly rather than relied on being rolled back.
 	"""
 	for name in frappe.get_all("Bench Site", filters={"bench": bench_name}, pluck="name"):
 		frappe.delete_doc("Bench Site", name, force=True, ignore_permissions=True)

@@ -209,15 +209,9 @@ def bench_action(bench_name: str, action: str) -> dict:
 def _delete_bench(bench) -> dict:
 	"""Remove an instance and everything it owns, then the row itself.
 
-	The container, volume, site database and metering session are torn down by
-	`deploy_manager.teardown_bench` — the app's one teardown path, where every removal
-	is already best-effort. This used to repeat that logic here with `remove_container`
-	left unguarded, so a bench whose container was already gone raised `NotFound` before
-	the row was deleted: the delete could never succeed, and the phantom instance stayed
-	on screen forever.
-
-	Only the parts teardown does not cover are left here — the per-`Bench Site` databases,
-	the VPN peer, and the deletion.
+	Container, volume, site database and metering session go through
+	`deploy_manager.teardown_bench`, the one teardown path, where every removal is
+	best-effort. Only what it does not cover is left here.
 	"""
 	from benchpress.deploy_manager import teardown_bench
 	from benchpress.vpn_adapter import remove_bench_peer
@@ -225,8 +219,7 @@ def _delete_bench(bench) -> dict:
 	teardown_bench(bench)
 	_drop_bench_site_databases(bench)
 	remove_bench_peer(bench)
-	# Before the instance, not after: `force=True` skips Frappe's link check, so these rows
-	# would survive as orphans pointing at an instance that no longer exists.
+	# Before the instance: `force=True` skips the link check, so these would orphan.
 	for site in frappe.get_all("Bench Site", filters={"bench": bench.name}, pluck="name"):
 		frappe.delete_doc("Bench Site", site, force=True, ignore_permissions=True)
 	frappe.delete_doc("Bench Instance", bench.name, force=True)

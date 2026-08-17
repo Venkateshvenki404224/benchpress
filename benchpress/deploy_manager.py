@@ -52,11 +52,9 @@ def _remove_stale_container(bench) -> None:
 
 NOTHING_TO_ROLL_BACK = "Cleanup: nothing to roll back — no container was created"
 
-# Where a lab's site answers. `frontend/src/utils/labActions.js` builds the URL the
-# user clicks from the same number, so the two must not drift.
+# Kept in step with `frontend/src/utils/labActions.js`, which builds the URL from it.
 SITE_HTTP_PORT = 8000
 
-# What `scripts/setup-site.sh` prints when it finds the site already on the data volume.
 ADOPTED_MARKER = "already exists — adopting it"
 
 
@@ -270,9 +268,6 @@ def _deploy_bench(bench_name: str) -> None:
 		)
 		if exit_code != 0:
 			raise Exception(f"Site setup failed (exit {exit_code}): {output}")
-		# Reports which of the two the script did rather than predicting one: a deploy
-		# preserves the data volume, so an instance deployed before already has its site
-		# and setup-site.sh adopts it instead of creating it.
 		pipeline.log("Existing site adopted" if ADOPTED_MARKER in output else "Site created successfully")
 		_record_primary_site(bench, lab, admin_password)
 
@@ -299,17 +294,8 @@ def _deploy_bench(bench_name: str) -> None:
 		# to skip is information, and a stepper missing its tenth row is not.
 		pipeline.step("code_server")
 
-		# The container's entrypoint starts redis, sshd, code-server and the tunnel, but
-		# it runs long before the site exists, so nothing had ever served it: a finished
-		# deploy handed the user a Site URL that refused the connection. It waits until
-		# here rather than following site creation because `linkuser.sh` above renames
-		# the bench user, and `usermod --login` refuses to rename a user that owns a
-		# running process.
-		# The exit code is checked, unlike the code-server start below it: a deploy that
-		# cannot serve the site has not produced a usable lab, and reporting "Site served"
-		# regardless is worse than failing — that is exactly what an image predating
-		# serve.sh did, leaving a Running instance whose own Site URL refused every
-		# connection.
+		# After linkuser.sh, not after site creation: that renames the bench user, and
+		# `usermod --login` refuses to rename a user owning a running process.
 		exit_code, output = exec_in_container(
 			container_id, "bash /opt/benchpress/scripts/serve.sh", user="root"
 		)
@@ -381,16 +367,9 @@ def _deploy_bench(bench_name: str) -> None:
 
 
 def _record_primary_site(bench, lab, admin_password: str) -> None:
-	"""Give the site the deploy just made a `Bench Site` row, so a screen can see it.
+	"""Record the deploy's site as a `Bench Site`, which is what every site list reads.
 
-	The deploy creates a real site inside the container but used to record it nowhere except
-	`Bench Instance.site_name`. Every screen that lists sites reads `Bench Site`, so a lab's
-	own site was invisible — the Sites tab said "No site yet" about a site that was serving
-	requests. Only extra sites added through `api.create_site` ever appeared.
-
-	Idempotent, because a deploy re-runs over an instance that already has its row: the
-	existing row is refreshed rather than duplicated, which also keeps the stored admin
-	password in step with the one this run just set on the site.
+	Idempotent: a deploy re-runs, so an existing row is refreshed rather than duplicated.
 	"""
 	existing = frappe.db.get_value("Bench Site", {"bench": bench.name, "site_name": bench.site_name})
 	site = frappe.get_doc("Bench Site", existing) if existing else frappe.new_doc("Bench Site")
@@ -403,9 +382,8 @@ def _record_primary_site(bench, lab, admin_password: str) -> None:
 	for app in _site_app_names(lab):
 		site.append("apps_installed", {"app_name": app})
 	site.save(ignore_permissions=True)
-	# Deliberately no commit: the next log line commits, so the row lands within a second
-	# anyway, and committing here made this row durable inside tests whose rollback then
-	# discarded the parent Bench Instance — leaving orphan sites on the dev site.
+	# No commit: the next log line commits, and committing here outlives a test rollback
+	# that discards the parent instance.
 
 
 def _site_app_names(lab) -> list[str]:
@@ -417,14 +395,8 @@ def _site_app_names(lab) -> list[str]:
 def _ensure_assets(container_id: str, bench_dir: str, lab, pipeline) -> None:
 	"""Bundle the apps the image did not already bundle — normally none of them.
 
-	The image build runs `bench build`, so a deploy has nothing to do here. Running it
-	again inside the instance rebuilt identical bundles under the instance's memory cap,
-	where esbuild thrashes on page-cache eviction: 623 seconds of one 700-second deploy,
-	and an OOM kill on a 512m lab.
-
-	It is still asked of the container rather than assumed from the Dockerfile. The image
-	cache is keyed by the build spec, which the Dockerfile is not part of, so an image
-	built before assets moved into it keeps its hash and must still build here.
+	Asked of the container, not assumed from the Dockerfile: the cache key does not cover
+	the Dockerfile, so an image built before assets moved into it must still build here.
 	"""
 	missing = sorted(_asset_app_names(lab) - _bundled_apps(container_id, bench_dir))
 	if not missing:
@@ -441,11 +413,10 @@ def _asset_app_names(lab) -> set[str]:
 
 
 def _bundled_apps(container_id: str, bench_dir: str) -> set[str]:
-	"""Apps that already carry a bundle, read in one exec and never interpolating a name.
+	"""Apps that already carry a bundle, in one exec.
 
-	`sites/assets/<app>/dist` is what `bench build` produces per app, so its presence is
-	the question. The glob is expanded by the container's own shell — an app name from a
-	Lab row is caller-supplied and has no business inside a command string.
+	The glob is expanded by the container's shell: app names come from a Lab row and must
+	never be interpolated into a command string.
 	"""
 	exit_code, output = exec_in_container(
 		container_id, "ls -d sites/assets/*/dist 2>/dev/null", user="frappe", workdir=bench_dir
@@ -512,9 +483,8 @@ def teardown_bench(bench) -> None:
 
 	remove_bench_volume(bench.name)
 	_drop_site_database(bench)
-	# The volume and the database are gone, so the rows describing this bench's sites now
-	# describe nothing. Marked, not deleted: a redeploy refreshes them back to Active, and
-	# the reaper leaves the instance one click from running.
+	# Marked, not deleted: a redeploy refreshes them, and the reaper leaves the instance
+	# one click from running.
 	_deactivate_bench_sites(bench)
 
 	# The container this bench was burning for is gone, so the session ends here. Without

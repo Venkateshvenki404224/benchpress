@@ -74,11 +74,8 @@ def remove_bench_peer(bench) -> None:
 	requests too. No-ops cleanly when no peer is linked, and clears a
 	dangling link if the peer is already gone.
 
-	The link is cleared **in the row, not just on the document**, before the peer is
-	deleted. Frappe refuses to delete anything another row still points at, and the
-	Bench Instance is still there at this moment — clearing only `bench.vpn_peer` left
-	the stored link in place, so deleting an instance died with `LinkExistsError` and no
-	instance could ever be deleted from the UI.
+	The link is cleared in the row, not just on the document, before the peer is deleted:
+	Frappe refuses to delete anything another row still points at.
 	"""
 	if not bench.vpn_peer:
 		return
@@ -92,12 +89,8 @@ def remove_bench_peer(bench) -> None:
 def configure_container(container_id: str, private_key: str, assigned_ip: str) -> None:
 	"""Write the client conf into the container and bring its tunnel up.
 
-	The interface is taken down first, and failing to take it down is fine. `wg-quick up`
-	refuses to run when the interface already exists, so a container that reached this
-	point once before — a retried deploy, or a container the stale-container sweep failed
-	to remove — turned a recoverable state into `Deploy failed: wg0 already exists`. Down
-	then up is also how the peer's key is rotated: the conf on disk has just changed, and
-	an interface left up would keep serving the old one.
+	Taken down first, tolerating failure: `wg-quick up` refuses to run when the interface
+	exists, and the conf has just changed, so an interface left up serves the old key.
 	"""
 	from benchpress.docker_manager import exec_in_container, write_file_to_container
 

@@ -21,10 +21,8 @@ if [ -f "/etc/wireguard/wg0.conf" ]; then
     wg-quick up wg0 || true
 fi
 
-# Only on a restart: on first boot there is no site yet, and the deploy starts
-# the server itself once `bench new-site` has run. Without this a stopped-then-
-# started instance came back with SSH and code-server but nothing on port 8000,
-# which is the address its own Lab page hands the user.
+# Restart path only: on first boot the deploy starts the server itself, once the
+# site exists.
 if compgen -G "/home/frappe/frappe-bench/sites/*/site_config.json" > /dev/null; then
     echo "[*] Serving the site..."
     /opt/benchpress/scripts/serve.sh || true

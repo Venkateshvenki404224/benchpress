@@ -57,8 +57,7 @@ function openAction({ vpnConnected, siteUrl }) {
 			action: OPEN,
 			label: "Open site — VPN off",
 			disabled: true,
-			// Covers the IDE button too — both are disabled off-tunnel, and both
-			// answer only on the bench's WireGuard address.
+			// Covers the IDE button too: both answer only on the bench's WireGuard address.
 			hint: "Register this device on the VPN to reach the site or the IDE.",
 		};
 	}

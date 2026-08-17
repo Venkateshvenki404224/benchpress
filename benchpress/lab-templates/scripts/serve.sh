@@ -1,21 +1,9 @@
 #!/bin/bash
-# Serve the lab's site on port 8000, replacing any server already running.
+# Serve the lab's site, replacing any server already running.
 #
-# The container's entrypoint cannot do this on first boot: the site is created by
-# the deploy, minutes after the container starts. So the deploy calls this once
-# the site exists, and entry.sh calls it on every later start — which is what
-# makes a restarted instance answer again without a redeploy.
-#
-# The bench user is read from the bench directory rather than named, because
-# linkuser.sh *renames* `frappe` to the lab owner's username: this script runs
-# both before that rename (never — see below) and long after it, and a hardcoded
-# name is wrong on one side of it. Two consequences worth keeping in mind:
-# `usermod --login` refuses to rename a user that owns a running process, so the
-# deploy must call this only after linkuser.sh has run.
-#
-# `--noreload` on purpose: the reloader forks a watcher over the whole bench,
-# which is wasted work in a lab whose code is edited through code-server and
-# restarted from the UI.
+# Must run after linkuser.sh: that renames the bench user, and `usermod --login`
+# refuses to rename a user that owns a running process. The user is read from the
+# bench directory for the same reason — there is no `frappe` user after the rename.
 set -e
 
 BENCH_DIR=/home/frappe/frappe-bench

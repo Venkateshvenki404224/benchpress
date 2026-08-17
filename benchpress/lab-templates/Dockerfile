@@ -48,13 +48,8 @@ WORKDIR /home/frappe/frappe-bench
 ARG APPS_JSON=[]
 RUN /opt/benchpress/scripts/install-apps.sh "$APPS_JSON"
 
-# --- Layer 5: Bundle every app's assets into the image ---
-# `bench init` builds frappe's bundles, but install-apps.sh passes
-# `--skip-assets`, so each extra app arrived without one. The deploy made that up
-# by running `bench build` inside the freshly started instance — the same build,
-# repeated for every instance of the same recipe, under that instance's memory
-# cap, where esbuild thrashes: 623 of one 700-second deploy. Building here runs
-# it once per image spec, which is what the shared image cache exists for.
+# --- Layer 5: Bundle every app's assets, once per image ---
+# install-apps.sh passes --skip-assets, so only frappe's bundles come from bench init.
 RUN bench build --production
 
 USER root
