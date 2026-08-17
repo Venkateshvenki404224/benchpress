@@ -28,7 +28,11 @@ DATA_LIMIT = 140
 TEXT_LIMIT = 1000
 
 
-@frappe.whitelist(allow_guest=True)
+# Deliberately open to Guest: the landing page's waitlist form is the only door this app opens to
+# the internet. It writes one row of clipped text, answers identically for a known and an unknown
+# address so it cannot enumerate members, and is rate limited per IP and address.
+# `test_api_authorization` asserts this stays the app's *only* `allow_guest` method.
+@frappe.whitelist(allow_guest=True)  # nosemgrep -- reviewed, see the note above
 @rate_limit(key="email", limit=JOINS_PER_HOUR, seconds=60 * 60, ip_based=True)
 def join(
 	email: str, full_name: str | None = None, company: str | None = None, use_case: str | None = None
@@ -48,7 +52,7 @@ def join(
 
 
 @frappe.whitelist()
-def approve(entries) -> dict:
+def approve(entries: str | list) -> dict:
 	"""Approve the selected entries and invite each one. Desk bulk action, admins only."""
 	require_admin()
 	names = frappe.parse_json(entries)

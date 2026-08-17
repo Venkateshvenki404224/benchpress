@@ -453,7 +453,7 @@ def _adopt_cached_image(lab, tag: str) -> None:
 	lab.image_tag = tag
 	lab.status = "Ready"
 	lab.save(ignore_permissions=True)
-	frappe.db.commit()
+	frappe.db.commit()  # nosemgrep -- the container is created from this tag, so persist it first
 
 
 def _build_lab_with_logs(lab, log_fn) -> None:
