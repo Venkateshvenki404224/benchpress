@@ -30,7 +30,9 @@ TEXT_LIMIT = 1000
 
 @frappe.whitelist(allow_guest=True)
 @rate_limit(key="email", limit=JOINS_PER_HOUR, seconds=60 * 60, ip_based=True)
-def join(email: str, full_name: str = None, company: str = None, use_case: str = None) -> dict:
+def join(
+	email: str, full_name: str | None = None, company: str | None = None, use_case: str | None = None
+) -> dict:
 	"""Record an interest in hosted access. Always answers the same way."""
 	entry = frappe.new_doc(DOCTYPE)
 	entry.update(

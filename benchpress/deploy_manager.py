@@ -8,6 +8,7 @@ import frappe
 from frappe.utils.file_lock import LockTimeoutError
 from frappe.utils.synchronization import filelock
 
+from benchpress import image_cache
 from benchpress.deploy_pipeline import DeployLogWriter, DeployPipeline
 from benchpress.docker_manager import (
 	build_lab_image,
@@ -235,11 +236,7 @@ def _deploy_bench(bench_name: str) -> None:
 		# One step whichever way it goes: the run either builds the image or
 		# adopts a cached one, and the detail line says which.
 		pipeline.step("image")
-		if lab.status != "Ready" or not lab.image_tag:
-			pipeline.log(f"Building lab image for {lab.title}")
-			_build_lab_with_logs(lab, pipeline.log)
-		else:
-			pipeline.log(f"Using cached lab image: {lab.image_tag}")
+		_prepare_lab_image(lab, pipeline)
 
 		_remove_stale_container(bench)
 		pipeline.step("container")
@@ -432,6 +429,33 @@ def _redeploy_bench(bench_name: str) -> None:
 	_deploy_bench(bench_name)
 
 
+def _prepare_lab_image(lab, pipeline) -> None:
+	"""Adopt the shared image for this lab's spec, or build it if nobody has yet.
+
+	The cache is keyed by the build spec rather than by the lab, so the second user to deploy a
+	given template performs no build at all. It also closes a staleness hole in the old
+	`status == "Ready"` check: editing a Ready lab's apps changed what should be built but kept
+	pointing at the image built from the previous recipe.
+	"""
+	tag, hit = image_cache.resolve(lab)
+	if not hit:
+		pipeline.log(f"Building lab image for {lab.title}")
+		_build_lab_with_logs(lab, pipeline.log)
+		return
+	pipeline.log(f"Cache hit: reusing shared image {tag} — no build needed")
+	_adopt_cached_image(lab, tag)
+
+
+def _adopt_cached_image(lab, tag: str) -> None:
+	"""Point the lab at an image somebody else's build already produced."""
+	if lab.image_tag == tag and lab.status == "Ready":
+		return
+	lab.image_tag = tag
+	lab.status = "Ready"
+	lab.save(ignore_permissions=True)
+	frappe.db.commit()
+
+
 def _build_lab_with_logs(lab, log_fn) -> None:
 	"""Build image with bench + apps (site created at runtime)."""
 	lab.status = "Building"
@@ -450,7 +474,13 @@ def _build_lab_with_logs(lab, log_fn) -> None:
 
 
 def build_lab(lab_name: str) -> None:
-	"""Build a lab image as a background job with realtime log streaming."""
+	"""Build a lab image as a background job with realtime log streaming.
+
+	Always builds, even when the shared cache already holds this spec's tag: an explicit build is
+	how an admin refreshes a tag whose branch has moved, since the hash covers the branch and not
+	the commit. Docker layer caching can still make that a near no-op — `build_lab_image` takes
+	`no_cache=True` for a true from-scratch rebuild.
+	"""
 	lab = frappe.get_doc("Lab", lab_name)
 
 	build_log = frappe.get_doc(

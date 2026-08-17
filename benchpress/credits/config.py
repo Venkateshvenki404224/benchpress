@@ -16,6 +16,8 @@ forked and a module global would outlive the request that built it.
 import frappe
 from frappe.utils import cint, cstr
 
+from benchpress.request_cache import clear_local_cache, local_cache
+
 SETTINGS = "Credit Settings"
 BENCHPRESS_SETTINGS = "BenchPress Settings"
 SIZE_INDEX_ATTRIBUTE = "benchpress_instance_size_index"
@@ -69,13 +71,12 @@ def size_key(memory_limit, cpu_cores) -> tuple[str, int]:
 
 def size_index() -> dict:
 	"""`{"by_resources": {(memory, cores): row}, "default": row | None}`, once per request."""
-	return _local_cache(SIZE_INDEX_ATTRIBUTE, build_size_index)
+	return local_cache(SIZE_INDEX_ATTRIBUTE, build_size_index)
 
 
 def clear_size_index() -> None:
 	"""Drop the memoised table so a size edited in this request is seen by the next read."""
-	if hasattr(frappe.local, SIZE_INDEX_ATTRIBUTE):
-		delattr(frappe.local, SIZE_INDEX_ATTRIBUTE)
+	clear_local_cache(SIZE_INDEX_ATTRIBUTE)
 
 
 def build_size_index() -> dict:
@@ -98,14 +99,3 @@ def build_size_index() -> dict:
 		"by_resources": {size_key(row.memory_limit, row.cpu_cores): row for row in rows},
 		"default": next((row for row in rows if row.is_default), None),
 	}
-
-
-def _local_cache(attribute: str, build):
-	"""Memoise on `frappe.local`, which is torn down with the request.
-
-	Deliberately not a module global: workers are forked, and a global would leak one
-	request's rate table into every later job in that process.
-	"""
-	if not hasattr(frappe.local, attribute):
-		setattr(frappe.local, attribute, build())
-	return getattr(frappe.local, attribute)

@@ -22,6 +22,7 @@ BUDGETS_MS = {
 	"list_devices": 500,
 	"create_lab_from_template": 300,
 	"build_lab_image": 300,
+	"prewarm_catalog": 300,
 	"create_bench": 1500,
 	"create_site": 1500,
 	"bench_action": 800,
@@ -524,6 +525,15 @@ class TestApi(IntegrationTestCase):
 		enqueue.assert_called_once()
 		self.assertEqual(result, {"name": self.lab.name, "status": "Building"})
 		self.assert_within_budget("build_lab_image", elapsed_ms)
+
+	def test_prewarm_catalog_contract_and_timing(self):
+		with patch("frappe.enqueue") as enqueue:
+			result, elapsed_ms = _timed(api.prewarm_catalog)
+		enqueue.assert_called_once()
+		# `queue-short` has no Docker socket, so the pre-warm must be handed to `queue-long`.
+		self.assertEqual(enqueue.call_args.kwargs["queue"], "long")
+		self.assertEqual(result["status"], "Queued")
+		self.assert_within_budget("prewarm_catalog", elapsed_ms)
 
 	def test_create_bench_contract_and_timing(self):
 		data = frappe.as_json({"lab": self.create_lab.name, "bench_name": "cli-bench"})

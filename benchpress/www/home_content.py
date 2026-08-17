@@ -15,7 +15,7 @@ PHASES = [
 	{
 		"key": "request",
 		"label": "Request",
-		"range": "Steps 1–2",
+		"range": "Steps 1-2",
 		"summary": "Benchpress checks the plan, confirms your balance and reserves room on your host before anything is pulled.",
 		"timing": "Under a second — deploying is free; nothing is metered until the container runs.",
 		"nodes": ["device", "control"],
@@ -38,9 +38,9 @@ PHASES = [
 	{
 		"key": "image",
 		"label": "Image",
-		"range": "Steps 3–4",
+		"range": "Steps 3-4",
 		"summary": "The app list becomes a layer. Templates reuse a cached image; a custom lab builds one once and keeps it.",
-		"timing": "Cached template: ~10s. First custom build: 3–6 minutes.",
+		"timing": "Cached template: ~10s. First custom build: 3-6 minutes.",
 		"nodes": ["control", "host"],
 		"chips": ["queue"],
 		"steps": [
@@ -61,9 +61,9 @@ PHASES = [
 	{
 		"key": "site",
 		"label": "Site",
-		"range": "Steps 5–8",
+		"range": "Steps 5-8",
 		"summary": "The container comes up and Benchpress runs the exact bench commands you would have typed, in order.",
-		"timing": "Roughly 60–120 seconds depending on the app set.",
+		"timing": "Roughly 60-120 seconds depending on the app set.",
 		"nodes": ["host", "container", "services"],
 		"chips": [],
 		"steps": [
@@ -96,9 +96,9 @@ PHASES = [
 	{
 		"key": "network",
 		"label": "Network",
-		"range": "Steps 9–11",
+		"range": "Steps 9-11",
 		"summary": "The site joins your mesh, gets health-checked, and only then are the credentials handed over and the meter started.",
-		"timing": "5–10 seconds, then the site is yours.",
+		"timing": "5-10 seconds, then the site is yours.",
 		"nodes": ["host", "wg", "device"],
 		"chips": ["ledger"],
 		"steps": [

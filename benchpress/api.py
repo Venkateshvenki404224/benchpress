@@ -4,7 +4,7 @@
 import frappe
 from frappe import _
 
-from benchpress import lab_detail, lab_templates, labs
+from benchpress import image_cache, lab_detail, lab_templates, labs
 from benchpress.permissions import (
 	get_bench_owner_filter,
 	is_admin,
@@ -56,6 +56,17 @@ def build_lab_image(lab_name: str) -> dict:
 		timeout=3600,
 	)
 	return {"name": lab_name, "status": "Building"}
+
+
+@frappe.whitelist()
+def prewarm_catalog() -> dict:
+	"""Build the shared image for every catalog template that has none yet.
+
+	Returns as soon as the work is queued: the builds themselves take minutes each and run on
+	`queue-long`, the only worker that can reach the Docker socket.
+	"""
+	require_admin()
+	return image_cache.enqueue_prewarm_catalog()
 
 
 @frappe.whitelist()

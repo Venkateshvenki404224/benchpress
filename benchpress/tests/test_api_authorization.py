@@ -163,6 +163,7 @@ class TestApiAuthorization(IntegrationTestCase):
 		frappe.set_user("Guest")
 		self.assert_denied(lambda: api.create_lab_from_template("frappe", "authz-guest"))
 		self.assert_denied(lambda: api.build_lab_image(self.lab.name))
+		self.assert_denied(lambda: api.prewarm_catalog())
 		self.assert_denied(lambda: api.run_diagnostics())
 
 	def test_guest_denied_from_overview_endpoints(self):
@@ -209,6 +210,10 @@ class TestApiAuthorization(IntegrationTestCase):
 	def test_non_admin_denied_from_build_lab_image(self):
 		frappe.set_user(self.user_a)
 		self.assert_denied(lambda: api.build_lab_image(self.lab.name))
+
+	def test_non_admin_denied_from_prewarm_catalog(self):
+		frappe.set_user(self.user_a)
+		self.assert_denied(lambda: api.prewarm_catalog())
 
 	def test_non_admin_denied_from_run_diagnostics(self):
 		frappe.set_user(self.user_a)
@@ -595,6 +600,12 @@ class TestApiAuthorization(IntegrationTestCase):
 			result = api.create_lab_from_template("frappe", "authz-admin")
 		create.assert_called_once()
 		self.assertEqual(result, {"name": "LAB-authz", "status": "Draft"})
+
+	def test_admin_allowed_to_prewarm_the_catalog(self):
+		frappe.set_user(self.admin_user)
+		with patch("frappe.enqueue") as enqueue:
+			self.assertEqual(api.prewarm_catalog()["status"], "Queued")
+		enqueue.assert_called_once()
 
 	def test_admin_allowed_to_run_diagnostics(self):
 		frappe.set_user(self.admin_user)

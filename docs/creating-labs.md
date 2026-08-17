@@ -108,9 +108,9 @@ You can add multiple apps. Common combinations:
 Set the container limits, then the two switches: **Code server** (a browser VS Code on the
 bench, on by default) and **SSH access** (adds an ssh user to the container, off by default).
 
-The **What gets built** rail on the right recomputes as you type — the image tag, the version
-and its apps, the access you chose, and the reminder that a site is created on first deploy
-rather than at build time.
+The **What gets built** rail on the right recomputes as you type — how the image is shared, the
+version and its apps, the access you chose, and the reminder that a site is created on first
+deploy rather than at build time.
 
 ### Save
 
@@ -137,6 +137,26 @@ Click the **Build Image** button. The build uses a 5-layer cached Dockerfile:
 5. **Site creation** — `bench new-site` + `install-app`
 
 Only changed layers rebuild — if you only change an app's branch, layers 1-3 are cached.
+
+### Images are shared between labs
+
+An image belongs to a *recipe*, not to a lab. Every build is tagged `benchpress/cache:<hash>`,
+where the hash covers the Frappe branch plus each app's name, git URL and branch — so two labs
+with the same apps resolve to the same image. The first deploy builds it; every later one adopts
+it and skips the build step entirely, which turns a 10-20 minute template deploy into a
+~1-2 minute one and keeps one copy on disk instead of one per user.
+
+Two consequences worth knowing:
+
+- **A new commit on an already-built branch does not invalidate the cache.** The hash covers the
+  branch name, not the commit it points at. Use **Build Image** on the lab to rebuild that tag in
+  place once upstream has moved.
+- **Cached images are garbage-collected weekly.** Any `benchpress/cache:*` image that no lab, no
+  container and no catalog template still points at is removed, so the cache cannot grow without
+  bound. Images built before this scheme (`benchpress/<lab_id>:latest`) are never touched.
+
+An admin can pre-build every catalog template up front with `benchpress.api.prewarm_catalog` —
+also scheduled weekly — so everything in **Use template** deploys straight from cache.
 
 ### Watching the build
 

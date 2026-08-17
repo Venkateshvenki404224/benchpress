@@ -3,7 +3,7 @@ import {
 	LAB_ID_MAX_LENGTH,
 	buildSummary,
 	cpuCoresError,
-	imageTag,
+	imagePhrase,
 	joinWords,
 	labIdError,
 	slugify,
@@ -79,10 +79,17 @@ describe("cpuCoresError", () => {
 	});
 });
 
-describe("imageTag", () => {
-	it("is the tag docker_manager gives every build of the lab", () => {
-		expect(imageTag("crm-lab")).toBe("benchpress/crm-lab:latest");
-		expect(imageTag("")).toBe("");
+describe("imagePhrase", () => {
+	it("says the image is shared, because the tag is a content hash of the apps", () => {
+		const apps = [
+			{
+				app_name: "helpdesk",
+				git_url: "https://github.com/frappe/helpdesk",
+				branch: "main",
+			},
+		];
+		expect(imagePhrase(apps)).toContain("shared with every lab that builds these same apps");
+		expect(imagePhrase([])).toContain("bare-bench");
 	});
 });
 
@@ -112,7 +119,7 @@ describe("buildSummary", () => {
 
 	it("names the image, the version, the apps and the access", () => {
 		expect(buildSummary(form())).toEqual([
-			"Docker image benchpress/support-sandbox:latest",
+			"Docker image shared with every lab that builds these same apps",
 			"Frappe version-16 with helpdesk",
 			"Code server enabled, SSH off",
 			"A site is created on first deploy, not at build time",
@@ -136,7 +143,7 @@ describe("buildSummary", () => {
 			],
 		};
 		expect(buildSummary(changed)).toEqual([
-			"Docker image benchpress/hr-lab:latest",
+			"Docker image shared with every lab that builds these same apps",
 			"Frappe version-15 with hrms and erpnext",
 			"No code server, SSH enabled",
 			"A site is created on first deploy, not at build time",
@@ -148,7 +155,8 @@ describe("buildSummary", () => {
 		expect(buildSummary(bare)[1]).toBe("Frappe version-16 with no extra apps — a bare bench");
 	});
 
-	it("says the tag is not settled yet when there is no title", () => {
-		expect(buildSummary({ ...form(), lab_id: "" })[0]).toContain("once the lab has a title");
+	it("still promises a shared image for a bare bench", () => {
+		// The image line follows the apps, not the title: the tag is a hash of the recipe.
+		expect(buildSummary({ ...form(), apps: [] })[0]).toContain("bare-bench");
 	});
 });

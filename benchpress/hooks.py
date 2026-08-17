@@ -174,9 +174,12 @@ scheduler_events = {
 	# "hourly": [
 	# 	"benchpress.tasks.hourly"
 	# ],
-	# "weekly": [
-	# 	"benchpress.tasks.weekly"
-	# ],
+	# Both hand the real work to `queue-long`: the scheduler's own worker is
+	# `queue-short`, which has no Docker socket mounted.
+	"weekly": [
+		"benchpress.image_cache.enqueue_prewarm_catalog",
+		"benchpress.image_cache.enqueue_sweep",
+	],
 	# "monthly": [
 	# 	"benchpress.tasks.monthly"
 	# ],

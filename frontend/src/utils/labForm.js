@@ -69,9 +69,18 @@ export function completeApps(apps) {
 	return (apps ?? []).filter((app) => app.app_name && app.git_url && app.branch);
 }
 
-/** The image this lab builds into — the tag `docker_manager` gives every build. */
-export function imageTag(labId) {
-	return labId ? `benchpress/${labId}:latest` : "";
+/**
+ * The image line — a lab no longer owns its image.
+ *
+ * `docker_manager` tags every build with the build spec's content hash
+ * (`benchpress/cache:<hash>`), so a lab whose recipe someone already built reuses that image and
+ * skips the build entirely. The tag itself is not derivable here, since the hash is computed
+ * server-side, so the line says what the sharing means rather than naming a tag.
+ */
+export function imagePhrase(apps) {
+	return completeApps(apps).length
+		? "Docker image shared with every lab that builds these same apps"
+		: "Docker image shared with every bare-bench lab — likely built already";
 }
 
 /**
@@ -83,9 +92,7 @@ export function imageTag(labId) {
  */
 export function buildSummary(form) {
 	return [
-		imageTag(form.lab_id)
-			? `Docker image ${imageTag(form.lab_id)}`
-			: "Docker image tag — set once the lab has a title",
+		imagePhrase(form.apps),
 		`Frappe ${form.frappe_version} ${appsPhrase(form.apps)}`,
 		accessPhrase(form),
 		"A site is created on first deploy, not at build time",
