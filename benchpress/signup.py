@@ -77,7 +77,7 @@ def reject_blocked_domain(email: str) -> None:
 	"""
 	if domain_of(email) in config.blocked_email_domains():
 		frappe.throw(
-			_("Signups from that email domain aren't accepted. Use an address you own, or sign in with GitHub."),
+			_("That email domain isn't accepted. Use an address you own, or sign in with GitHub."),
 			title=_("Not Allowed"),
 		)
 
