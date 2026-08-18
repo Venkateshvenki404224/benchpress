@@ -24,9 +24,12 @@ RUN mkdir -p /var/run/sshd \
     && sed -ri 's/^#?PasswordAuthentication\s+.*/PasswordAuthentication yes/' /etc/ssh/sshd_config \
     && echo "frappe ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers.d/frappe
 
+# Only install-apps.sh runs during the build (Layer 4). Copying it alone here keeps the runtime
+# scripts out of the early layers, so editing serve.sh/entry.sh/setup-site.sh does not invalidate
+# bench init, the app clone (the codeload throttle lives here) or bench build — see the tail COPY.
 RUN mkdir -p /opt/benchpress/scripts
-COPY scripts/ /opt/benchpress/scripts/
-RUN chmod +x /opt/benchpress/scripts/*
+COPY scripts/install-apps.sh /opt/benchpress/scripts/
+RUN chmod +x /opt/benchpress/scripts/install-apps.sh
 
 ARG CODE_SERVER_VERSION=4.96.4
 RUN curl -fsSL "https://github.com/coder/code-server/releases/download/v${CODE_SERVER_VERSION}/code-server_${CODE_SERVER_VERSION}_amd64.deb" -o /tmp/cs.deb \
@@ -53,6 +56,12 @@ RUN /opt/benchpress/scripts/install-apps.sh "$APPS_JSON"
 RUN bench build --production
 
 USER root
+
+# --- Layer 6: Runtime scripts, last so a script fix rebuilds only this layer ---
+# The whole scripts/ dir (install-apps.sh included again, harmlessly) so entry.sh, serve.sh,
+# setup-site.sh, linkuser.sh and restart.sh are present for the container at runtime.
+COPY scripts/ /opt/benchpress/scripts/
+RUN chmod +x /opt/benchpress/scripts/*
 
 EXPOSE 8000 9000 22 8080
 
