@@ -60,17 +60,12 @@
 								:connected="vpnStatus.connected"
 								@register="router.push('/devices')"
 							/>
-							<SitesCard v-bind="sitesProps" :can-create="false" @open="openSite" />
+							<SitesCard v-bind="sitesProps" @open="openSite" />
 						</div>
 					</div>
 
 					<div v-else-if="tab.key === 'sites'" class="pt-4">
-						<SitesCard
-							v-bind="sitesProps"
-							:can-create="!!bench"
-							@create="createSite"
-							@open="openSite"
-						/>
+						<SitesCard v-bind="sitesProps" @open="openSite" />
 					</div>
 
 					<div v-else class="pt-4">
@@ -115,7 +110,7 @@ import SitesCard from "@/components/lab/SitesCard.vue";
 import { openDeployRun } from "@/data/deployRun";
 import { userContext } from "@/data/userContext";
 import { vpnStatus } from "@/data/vpnStatus";
-import { siteUrl } from "@/utils/labActions";
+import { ideUrl, siteUrl } from "@/utils/labActions";
 import { useSocket } from "@/socket";
 import { ErrorMessage, Tabs, createListResource, createResource, dayjsLocal } from "frappe-ui";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
@@ -163,7 +158,6 @@ const buildAction = createResource({
 });
 const deployAction = createResource({ url: "benchpress.api.create_bench", onSuccess: refresh });
 const benchAction = createResource({ url: "benchpress.api.bench_action", onSuccess: refresh });
-const createSiteAction = createResource({ url: "benchpress.api.create_site", onSuccess: refresh });
 
 const bench = computed(() => lab.data?.bench ?? null);
 const sites = computed(() => lab.data?.sites ?? []);
@@ -178,12 +172,11 @@ const actionError = computed(
 // The lab as the header should read it, including the optimistic build state.
 const labView = computed(() => (building.value ? { ...lab.data, status: "Building" } : lab.data));
 
+// Each row carries the address its own Open button opens, resolved through the
+// one URL helper — the card renders what it is handed and resolves nothing.
 const sitesProps = computed(() => ({
-	sites: sites.value,
-	labApps: lab.data?.apps ?? [],
+	sites: sites.value.map((site) => ({ ...site, url: siteUrl(bench.value, site) })),
 	reachable: vpnStatus.connected,
-	creating: createSiteAction.loading,
-	createError: createSiteAction.error || "",
 }));
 
 /** Age of the health reading in seconds; null when the bench was never polled. */
@@ -261,22 +254,16 @@ async function deleteBench() {
 	router.push("/labs");
 }
 
-function createSite({ siteName, apps }) {
-	createSiteAction.submit({
-		data: JSON.stringify({
-			site_name: siteName,
-			bench: bench.value?.name,
-			apps: apps.map((name) => ({ name })),
-		}),
-	});
-}
-
-function openSite() {
-	if (siteAddress.value) window.open(siteAddress.value, "_blank");
+// The header hands over no site, so it opens the bench's own; a row hands over
+// its site, and opens that one.
+function openSite(site = null) {
+	const address = siteUrl(bench.value, site);
+	if (address) window.open(address, "_blank");
 }
 
 function openCodeServer() {
-	if (bench.value?.code_server_url) window.open(bench.value.code_server_url, "_blank");
+	const address = ideUrl(bench.value);
+	if (address) window.open(address, "_blank");
 }
 
 /** Lab recipes are edited on the desk form; the SPA has no editor yet. */

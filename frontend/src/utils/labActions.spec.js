@@ -7,6 +7,7 @@ import {
 	VIEW_LOG,
 	WAIT,
 	deployDialogAction,
+	ideUrl,
 	primaryAction,
 	siteLabel,
 	siteUrl,
@@ -104,6 +105,21 @@ describe("siteUrl", () => {
 	it("has no address for a bench that never got one", () => {
 		expect(siteUrl({})).toBeNull();
 		expect(siteUrl(null)).toBeNull();
+	});
+
+	it("answers for the row it is handed, not for the bench", () => {
+		const bench = { wg_ip: "172.27.0.2", site_name: "lab-abc" };
+		expect(siteUrl(bench, { site_name: "lab-abc" })).toBe(SITE);
+		// The container serves its own site and nothing else, so any other row is
+		// unreachable — opening the bench's site from it would be the old lie.
+		expect(siteUrl(bench, { site_name: "somebody-elses" })).toBeNull();
+	});
+});
+
+describe("ideUrl", () => {
+	it("is the same host on code-server's port", () => {
+		expect(ideUrl({ wg_ip: "172.27.0.2" })).toBe("http://172.27.0.2:8080/");
+		expect(ideUrl({})).toBeNull();
 	});
 });
 

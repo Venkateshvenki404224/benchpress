@@ -294,15 +294,14 @@ class TestCreditGuard(IntegrationTestCase):
 		self.add_sites(MAX_SITES)
 		frappe.set_user(self.user)
 		with self.assertRaises(frappe.ValidationError) as refusal:
-			api.create_site(json.dumps({"bench": self.bench.name, "site_name": "one-too-many"}))
+			guard.cap_sites_per_instance(data=json.dumps({"bench": self.bench.name}))
 		self.assertIn("sites its size allows", str(refusal.exception))
 
 	def test_the_site_cap_allows_one_under(self):
 		self.enable_credits()
 		self.add_sites(MAX_SITES - 1)
 		frappe.set_user(self.user)
-		with patch("frappe.enqueue"):
-			api.create_site(json.dumps({"bench": self.bench.name, "site_name": "room-for-this"}))
+		guard.cap_sites_per_instance(data=json.dumps({"bench": self.bench.name}))
 
 	def test_zero_max_sites_means_unlimited(self):
 		self.enable_credits()

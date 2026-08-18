@@ -147,7 +147,7 @@ def cap_sites_per_instance(**call) -> None:
 	if frappe.db.count(SITE, {"bench": bench_name}) >= limit:
 		frappe.throw(
 			_(
-				"This instance already has the {0} sites its size allows. Remove a site, or deploy the lab at a larger size."
+				"This instance already has the {0} sites its size allows. Deploy the lab at a larger size, or ask an admin to remove this instance."
 			).format(limit)
 		)
 

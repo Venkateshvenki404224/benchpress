@@ -79,6 +79,7 @@
 // re-masks. Copy feedback is a tooltip on the button that was pressed, which
 // replaces the teleported page-corner alert the old screen used.
 import SectionCard from "@/components/SectionCard.vue";
+import { ideUrl } from "@/utils/labActions";
 import { Button, FormControl, Tooltip } from "frappe-ui";
 import { computed, ref } from "vue";
 
@@ -136,7 +137,8 @@ const rows = computed(() =>
 
 function codeServerRow() {
 	if (!props.lab.enable_code_server) return null;
-	return { key: "code-server", label: "code-server", value: props.bench.code_server_url };
+	// Through the same helper the IDE button uses, so what is shown is what opens.
+	return { key: "code-server", label: "code-server", value: ideUrl(props.bench) };
 }
 
 function codeServerPasswordRow() {

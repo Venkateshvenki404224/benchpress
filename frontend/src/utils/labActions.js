@@ -18,6 +18,7 @@ export const REBUILD = "rebuild";
 export const WAIT = "wait";
 
 export const SITE_PORT = 8000;
+export const IDE_PORT = 8080;
 
 /**
  * The primary button for a lab and the caller's deployment of it.
@@ -113,14 +114,38 @@ export function deployDialogAction({ runState, vpnConnected, siteUrl } = {}) {
 }
 
 /**
- * Where a bench's site actually answers.
+ * The host a bench answers on — the single source of every address on this page.
  *
- * The domain is a label, not a route — nothing resolves it. The site is served
- * by the container itself, reachable over the tunnel on its WireGuard address.
+ * Every open action routes through the two helpers below, so issue #130 (giving
+ * each instance a public `<instance-id>.benchpress.cloud` hostname) repoints one
+ * function rather than hunting call sites. Today a bench answers only on its
+ * WireGuard address, over the tunnel.
  */
-export function siteUrl(bench) {
-	const host = bench?.wg_ip || bench?.container_ip;
-	return host ? `http://${host}:${SITE_PORT}` : null;
+function benchHost(bench) {
+	return bench?.wg_ip || bench?.container_ip || null;
+}
+
+/**
+ * Where a site actually answers, or null when nothing serves it.
+ *
+ * With no site it is the bench's own site. With one, it is that row's address —
+ * and a row naming anything else has none: the container pins `default_site` to
+ * the bench's site and nginx serves only that, so claiming otherwise would open
+ * one site from another site's button.
+ *
+ * The domain is a label, not a route — nothing resolves it.
+ */
+export function siteUrl(bench, site = null) {
+	const host = benchHost(bench);
+	if (!host) return null;
+	if (site && site.site_name !== bench?.site_name) return null;
+	return `http://${host}:${SITE_PORT}`;
+}
+
+/** Where the IDE answers — the same host, code-server's port. */
+export function ideUrl(bench) {
+	const host = benchHost(bench);
+	return host ? `http://${host}:${IDE_PORT}/` : null;
 }
 
 /** What that address is called on screen. */
@@ -135,6 +160,6 @@ export function siteLabel(bench, site) {
 }
 
 function hostLabel(bench) {
-	const host = bench?.wg_ip || bench?.container_ip;
+	const host = benchHost(bench);
 	return host ? `${host}:${SITE_PORT}` : "";
 }

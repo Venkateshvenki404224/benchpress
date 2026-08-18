@@ -383,7 +383,6 @@ def _record_primary_site(bench, lab, admin_password: str) -> None:
 	site = frappe.get_doc("Bench Site", existing) if existing else frappe.new_doc("Bench Site")
 	site.bench = bench.name
 	site.site_name = bench.site_name
-	site.full_domain = bench.site_name
 	site.status = "Active"
 	site.admin_password = admin_password
 	site.owner = bench.owner

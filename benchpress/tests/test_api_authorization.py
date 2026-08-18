@@ -353,10 +353,6 @@ class TestApiAuthorization(IntegrationTestCase):
 		frappe.set_user(self.norole_user)
 		self.assert_denied(lambda: api.create_bench("{}"))
 
-	def test_roleless_denied_from_create_site(self):
-		frappe.set_user(self.norole_user)
-		self.assert_denied(lambda: api.create_site("{}"))
-
 	def test_roleless_denied_from_add_device(self):
 		frappe.set_user(self.norole_user)
 		self.assert_denied(lambda: api.add_device("authz-dev", "laptop"))
@@ -398,7 +394,6 @@ class TestApiAuthorization(IntegrationTestCase):
 		self.with_credits_armed()
 		frappe.set_user(self.norole_user)
 		self.assert_denied(lambda: api.create_bench(json.dumps({"lab": self.lab.name})))
-		self.assert_denied(lambda: api.create_site(json.dumps({"bench": self.bench.name})))
 		self.assert_denied(lambda: api.add_device("authz-dev", "Laptop"))
 		frappe.set_user("Administrator")
 		self.assertFalse(frappe.db.exists("Credit Account", self.norole_user))
@@ -580,21 +575,16 @@ class TestApiAuthorization(IntegrationTestCase):
 			frappe.db.set_value("Bench Instance", self.bench.name, "status", "Running")
 			frappe.db.commit()
 
-	def test_app_user_allowed_to_create_site(self):
+	def test_creating_a_site_is_not_a_capability_this_api_offers(self):
+		"""The Sites tab is read-only, so neither the endpoint nor the perm behind it may return.
+
+		`frappe.client.insert` is whitelisted, so a leftover `create` DocPerm would be a second
+		way to make exactly the site the deploy cannot serve.
+		"""
+		self.assertFalse(hasattr(api, "create_site"))
+		self.assertNotIn("create_site", {method.__name__ for method in frappe.whitelisted})
 		frappe.set_user(self.user_a)
-		result = None
-		try:
-			with patch("frappe.enqueue") as enqueue:
-				result = api.create_site(
-					frappe.as_json({"site_name": "authz-site", "bench": self.bench.name})
-				)
-			enqueue.assert_called_once()
-			self.assertEqual(result["status"], "Creating")
-		finally:
-			frappe.set_user("Administrator")
-			if result and frappe.db.exists("Bench Site", result["name"]):
-				frappe.delete_doc("Bench Site", result["name"], force=True, ignore_permissions=True)
-			frappe.db.commit()
+		self.assertFalse(frappe.has_permission("Bench Site", "create"))
 
 	def test_app_user_allowed_to_add_device(self):
 		frappe.set_user(self.user_a)

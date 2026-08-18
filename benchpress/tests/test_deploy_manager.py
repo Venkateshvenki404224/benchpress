@@ -410,54 +410,6 @@ class TestDeployManager(IntegrationTestCase):
 		for call in mock_msgprint.call_args_list:
 			self.assertIn("already in progress", str(call.args[0]))
 
-	# --- _create_site_on_bench (add-site path) ---
-
-	def _make_bench_site(self, bench):
-		site = frappe.get_doc(
-			{
-				"doctype": "Bench Site",
-				"site_name": "arity-test-site",
-				"bench": bench.name,
-				"status": "Creating",
-				"apps_installed": [{"app_name": "benchpress", "app_label": "BenchPress"}],
-			}
-		).insert(ignore_permissions=True)
-		frappe.db.commit()
-		self.addCleanup(
-			lambda n=site.name: (
-				frappe.delete_doc("Bench Site", n, force=True, ignore_permissions=True)
-				if frappe.db.exists("Bench Site", n)
-				else None
-			)
-		)
-		return site
-
-	@patch("benchpress.deploy_manager.create_site_in_container", autospec=True)
-	def test_create_site_on_bench_matches_signature_and_activates_site(self, mock_create):
-		from benchpress.api import _create_site_on_bench
-
-		bench = self._fresh_bench()
-		bench.database_server = self.db_server_name
-		bench.container_id = "container-arity-test"
-		bench.admin_password = "test-admin-pw"
-		bench.save(ignore_permissions=True)
-		frappe.db.commit()
-
-		site = self._make_bench_site(bench)
-		# autospec enforces the real 5-arg signature: a stale 6-arg call raises
-		# TypeError inside the except block, which would leave status = Error.
-		mock_create.return_value = (0, "site created")
-
-		_create_site_on_bench(site.name)
-
-		site.reload()
-		self.assertEqual(site.status, "Active")
-		mock_create.assert_called_once()
-		args = mock_create.call_args.args
-		self.assertEqual(args[0], "container-arity-test")
-		self.assertEqual(args[2], "arity-test-site")
-		self.assertEqual(args[4], "benchpress")
-
 	# --- build_linkuser_args (Lab.shell wiring) ---
 
 	def test_build_linkuser_args_includes_lab_shell(self):
@@ -897,6 +849,27 @@ class TestRecordPrimarySite(IntegrationTestCase):
 		self.assertEqual(site.full_domain, bench.site_name)
 		self.assertEqual(site.status, "Active")
 		self.assertEqual([row.app_name for row in site.apps_installed], ["frappe"])
+
+	def test_the_controller_alone_owns_full_domain(self):
+		"""Two writers meant the label could name a site that does not exist.
+
+		`_record_primary_site` no longer stamps `full_domain`; the controller derives it from the
+		editable `Bench Instance.domain`. The name the site was created under is `site_name`, and
+		relabelling the instance must never move it.
+		"""
+		from benchpress.deploy_manager import _record_primary_site
+
+		bench = self._bench()
+		_record_primary_site(bench, self.lab, "secret-one")
+		created = frappe.db.get_value("Bench Site", {"bench": bench.name}, "full_domain")
+		self.assertEqual(created, bench.site_name)
+
+		frappe.db.set_value("Bench Instance", bench.name, "domain", "relabelled.example")
+		_record_primary_site(bench, self.lab, "secret-one")
+
+		site = frappe.get_doc("Bench Site", {"bench": bench.name})
+		self.assertEqual(site.site_name, bench.site_name)
+		self.assertEqual(site.full_domain, f"{bench.site_name}.relabelled.example")
 
 	def test_a_second_deploy_refreshes_the_row_instead_of_duplicating_it(self):
 		from benchpress.deploy_manager import _record_primary_site

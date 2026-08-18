@@ -13,7 +13,6 @@ from benchpress.credits.guard import (
 	cap_builds_per_day,
 	cap_concurrent_instances,
 	cap_devices,
-	cap_sites_per_instance,
 	payload_runway,
 	requires_credits,
 )
@@ -344,85 +343,6 @@ def get_device_wg_config(device_name: str) -> str:
 	from benchpress.vpn_adapter import get_device_config
 
 	return get_device_config(device_name)
-
-
-@frappe.whitelist()
-@requires_credits(caps=(cap_sites_per_instance,))
-def create_site(data: str) -> dict:
-	require_app_user()
-	data = frappe.parse_json(data)
-
-	bench_name = data.get("bench")
-	if bench_name:
-		require_bench_access(bench_name)
-
-	doc = frappe.get_doc(
-		{
-			"doctype": "Bench Site",
-			"site_name": data.get("site_name"),
-			"bench": bench_name,
-		}
-	)
-
-	for app in data.get("apps", []):
-		doc.append(
-			"apps_installed",
-			{
-				"app_name": app.get("name"),
-				"app_label": app.get("label", app.get("name")),
-			},
-		)
-
-	doc.insert()
-
-	frappe.enqueue(
-		"benchpress.api._create_site_on_bench",
-		site_doc_name=doc.name,
-		queue="long",
-		timeout=600,
-		enqueue_after_commit=True,
-	)
-
-	return {"name": doc.name, "status": "Creating"}
-
-
-def _create_site_on_bench(site_doc_name: str) -> None:
-	from benchpress.deploy_manager import create_site_in_container
-
-	site = frappe.get_doc("Bench Site", site_doc_name)
-	bench = frappe.get_doc("Bench Instance", site.bench)
-	db_server = frappe.get_doc("Database Server", bench.database_server)
-
-	try:
-		admin_password = bench.get_password("admin_password")
-		site.admin_password = admin_password
-		site_name = site.full_domain or site.site_name
-		apps_csv = ",".join(a.app_name for a in site.apps_installed if a.app_name.lower() != "frappe")
-
-		exit_code, output = create_site_in_container(
-			bench.container_id, db_server, site_name, admin_password, apps_csv
-		)
-
-		if exit_code != 0:
-			site.status = "Error"
-			site.save(ignore_permissions=True)
-			frappe.db.commit()
-			frappe.log_error(title=f"Site creation failed: {site_name}", message=output[:500])
-			return
-
-		site.status = "Active"
-		site.save(ignore_permissions=True)
-		frappe.db.commit()
-
-	except Exception:
-		site.reload()
-		site.status = "Error"
-		site.save(ignore_permissions=True)
-		frappe.db.commit()
-		frappe.log_error(
-			title=f"Site creation failed: {site_doc_name}",
-			message=frappe.get_traceback(),
-		)
 
 
 @frappe.whitelist()

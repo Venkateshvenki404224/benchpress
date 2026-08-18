@@ -26,7 +26,6 @@ BUDGETS_MS = {
 	"build_lab_image": 300,
 	"prewarm_catalog": 300,
 	"create_bench": 1500,
-	"create_site": 1500,
 	"bench_action": 800,
 	"get_deploy_logs": 400,
 	"add_device": 400,
@@ -564,16 +563,6 @@ class TestApi(IntegrationTestCase):
 		self.assertEqual(result["status"], "Deploying")
 		self.assertTrue(frappe.db.exists("Bench Instance", result["name"]))
 		self.assert_within_budget("create_bench", elapsed_ms)
-
-	def test_create_site_contract_and_timing(self):
-		data = frappe.as_json({"bench": self.bench.name, "site_name": "cli-site", "apps": []})
-		with patch("frappe.enqueue") as enqueue:
-			result, elapsed_ms = _timed(lambda: api.create_site(data))
-		self.addCleanup(frappe.delete_doc, "Bench Site", result["name"], force=True, ignore_permissions=True)
-		enqueue.assert_called_once()
-		self.assertTrue(enqueue.call_args.kwargs["enqueue_after_commit"])
-		self.assertEqual(result["status"], "Creating")
-		self.assert_within_budget("create_site", elapsed_ms)
 
 	# --- Docker / manager side effects (patch module functions) --------------
 
