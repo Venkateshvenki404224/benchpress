@@ -1,8 +1,8 @@
 <template>
-	<SectionCard title="Sites" :padded="!sites.length" data-test="sites-card">
-		<ul v-if="sites.length" class="divide-y divide-outline-gray-1">
+	<SectionCard title="Sites" :padded="!rows.length" data-test="sites-card">
+		<ul v-if="rows.length" class="divide-y divide-outline-gray-1">
 			<li
-				v-for="site in sites"
+				v-for="site in rows"
 				:key="site.name"
 				class="flex flex-wrap items-center gap-3 px-4 py-3"
 				:data-test="`site-${site.name}`"
@@ -17,16 +17,25 @@
 							Bare site
 						</span>
 					</div>
+					<!-- A disabled button emits no hover events, so the reason is a
+					     caption under the row and never a tooltip. -->
+					<p
+						v-if="site.open.hint"
+						class="mt-1 text-2xs text-ink-gray-5"
+						:data-test="`site-hint-${site.name}`"
+					>
+						{{ site.open.hint }}
+					</p>
 				</div>
 				<StatusBadge :status="site.status" />
 				<Button
 					variant="subtle"
 					size="sm"
-					:disabled="!openable(site)"
+					:disabled="site.open.disabled"
 					:data-test="`open-site-${site.name}`"
 					@click="emit('open', site)"
 				>
-					{{ openable(site) ? "Open" : "Unreachable" }}
+					{{ site.open.label }}
 				</Button>
 			</li>
 		</ul>
@@ -40,14 +49,17 @@
 
 <script setup>
 // The sites a bench serves, and nothing more: a site is created by the deploy,
-// so there is no create path to offer here. A site that cannot be reached is
-// never hidden — its button stays, disabled, and says "Unreachable" so the
-// tunnel, or a site nothing serves, is the obvious suspect.
+// so there is no create path to offer here. A site that cannot be opened is
+// never hidden — its button stays, disabled, and names which of the two
+// reasons applies, because a stopped container and a down tunnel send the user
+// somewhere different.
 import AppChip from "@/components/AppChip.vue";
 import EmptyState from "@/components/EmptyState.vue";
 import SectionCard from "@/components/SectionCard.vue";
 import StatusBadge from "@/components/StatusBadge.vue";
+import { siteOpenAction } from "@/utils/labActions";
 import { Button } from "frappe-ui";
+import { computed } from "vue";
 
 const props = defineProps({
 	// Each site as `get_lab` returned it, plus the `url` its Open button opens.
@@ -57,7 +69,16 @@ const props = defineProps({
 
 const emit = defineEmits(["open"]);
 
-function openable(site) {
-	return props.reachable && !!site.url;
-}
+// The card renders what it is handed: the address comes from the page, and the
+// button's state from one pure function, so neither is decided in a template.
+const rows = computed(() =>
+	props.sites.map((site) => ({
+		...site,
+		open: siteOpenAction({
+			status: site.status,
+			url: site.url,
+			vpnConnected: props.reachable,
+		}),
+	}))
+);
 </script>

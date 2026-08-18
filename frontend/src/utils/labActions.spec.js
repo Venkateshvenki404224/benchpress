@@ -10,6 +10,7 @@ import {
 	ideUrl,
 	primaryAction,
 	siteLabel,
+	siteOpenAction,
 	siteUrl,
 } from "./labActions";
 
@@ -113,6 +114,42 @@ describe("siteUrl", () => {
 		// The container serves its own site and nothing else, so any other row is
 		// unreachable — opening the bench's site from it would be the old lie.
 		expect(siteUrl(bench, { site_name: "somebody-elses" })).toBeNull();
+	});
+});
+
+describe("siteOpenAction", () => {
+	const active = { status: "Active", url: SITE };
+
+	it("opens only when the site is running and the tunnel is up", () => {
+		expect(siteOpenAction({ ...active, vpnConnected: true })).toMatchObject({
+			label: "Open",
+			disabled: false,
+			hint: "",
+		});
+	});
+
+	it("blames the tunnel when the site is running and the tunnel is not", () => {
+		const state = siteOpenAction({ ...active, vpnConnected: false });
+		expect(state).toMatchObject({ label: "Unreachable", disabled: true });
+		expect(state.hint).toContain("VPN");
+	});
+
+	// The two reasons send the user somewhere different — the VPN page, or Deploy —
+	// so a stopped site says so even with the tunnel up, and never says "Unreachable".
+	it("blames the container when the site is not running, tunnel or no tunnel", () => {
+		for (const status of ["Inactive", "Creating", "Error"]) {
+			for (const vpnConnected of [true, false]) {
+				const state = siteOpenAction({ status, url: SITE, vpnConnected });
+				expect(state).toMatchObject({ label: "Not running", disabled: true });
+				expect(state.hint).toContain("stopped");
+			}
+		}
+	});
+
+	it("stays disabled for a running site nothing serves", () => {
+		const state = siteOpenAction({ status: "Active", url: null, vpnConnected: true });
+		expect(state).toMatchObject({ label: "Unreachable", disabled: true });
+		expect(state.hint).toContain("Nothing serves");
 	});
 });
 

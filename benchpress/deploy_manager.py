@@ -654,7 +654,13 @@ def build_lab(lab_name: str) -> None:
 
 
 def stop_bench(bench_name: str) -> None:
-	"""Stop a bench container. VPN stops automatically with the container."""
+	"""Stop a bench container, and with it every site the container was serving.
+
+	VPN stops automatically with the container. The sites do not: nothing answers on a stopped
+	container, so a row left `Active` is the page telling the user to open an address that has
+	gone quiet. This is the one stop path — `api.bench_action("stop")` routes here too — so the
+	deactivation cannot be missed by a second caller.
+	"""
 	bench = frappe.get_doc("Bench Instance", bench_name)
 
 	if bench.container_id:
@@ -663,4 +669,5 @@ def stop_bench(bench_name: str) -> None:
 	bench.status = "Stopped"
 	metering.on_bench_stopped(bench)
 	bench.save(ignore_permissions=True)
+	_deactivate_bench_sites(bench)
 	frappe.db.commit()  # nosemgrep -- intentional commit to persist status before response

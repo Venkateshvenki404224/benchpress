@@ -44,6 +44,18 @@ def _delete_bench_sites(bench_name):
 		frappe.delete_doc("Bench Site", name, force=True, ignore_permissions=True)
 
 
+def _make_bench_site(bench_name, site_name, status="Active"):
+	"""A `Bench Site` row a deploy would have recorded, for tests about what happens to it."""
+	return frappe.get_doc(
+		{
+			"doctype": "Bench Site",
+			"bench": bench_name,
+			"site_name": site_name,
+			"status": status,
+		}
+	).insert(ignore_permissions=True)
+
+
 def _fresh_bench(case, lab_name):
 	frappe.set_user("Administrator")
 	existing = get_instance_id("Administrator", lab_name)
@@ -164,6 +176,25 @@ class TestDeployManager(IntegrationTestCase):
 		mock_stop.assert_not_called()
 		bench.reload()
 		self.assertEqual(bench.status, "Stopped")
+
+	@patch("benchpress.deploy_manager.stop_container")
+	def test_stop_bench_deactivates_every_site_on_the_bench(self, mock_stop):
+		"""Nothing answers inside a stopped container, so no row may stay Active."""
+		from benchpress.deploy_manager import stop_bench
+
+		bench = self._fresh_bench()
+		bench.container_id = "container-stop-sites"
+		bench.status = "Running"
+		bench.save(ignore_permissions=True)
+		_make_bench_site(bench.name, "one.localhost")
+		_make_bench_site(bench.name, "two.localhost")
+		frappe.db.commit()
+
+		stop_bench(bench.name)
+		stop_bench(bench.name)  # a second stop is a no-op, not an error
+
+		statuses = frappe.get_all("Bench Site", filters={"bench": bench.name}, pluck="status")
+		self.assertEqual(statuses, ["Inactive", "Inactive"])
 
 	@patch("benchpress.deploy_manager._deploy_bench")
 	@patch("benchpress.deploy_manager.remove_container")
@@ -890,6 +921,26 @@ class TestRecordPrimarySite(IntegrationTestCase):
 		_deactivate_bench_sites(bench)
 
 		self.assertEqual(frappe.db.get_value("Bench Site", {"bench": bench.name}, "status"), "Inactive")
+
+	@patch("benchpress.deploy_manager.stop_container")
+	def test_a_deploy_returns_a_stopped_site_to_active(self, mock_stop):
+		"""The round trip, which needs no code of its own: `_record_primary_site` already writes
+		`Active`, so a stop followed by a deploy must land back where it started."""
+		from benchpress.deploy_manager import _record_primary_site, stop_bench
+
+		bench = self._bench()
+		bench.container_id = "container-round-trip"
+		bench.save(ignore_permissions=True)
+		_record_primary_site(bench, self.lab, "secret-one")
+		frappe.db.commit()
+
+		stop_bench(bench.name)
+		self.assertEqual(frappe.db.get_value("Bench Site", {"bench": bench.name}, "status"), "Inactive")
+
+		bench.reload()
+		_record_primary_site(bench, self.lab, "secret-one")
+
+		self.assertEqual(frappe.db.get_value("Bench Site", {"bench": bench.name}, "status"), "Active")
 
 	@patch("benchpress.mariadb_manager.drop_site_database")
 	def test_teardown_drops_the_real_db_when_the_domain_has_drifted(self, mock_drop):

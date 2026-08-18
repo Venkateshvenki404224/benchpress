@@ -142,6 +142,45 @@ export function siteUrl(bench, site = null) {
 	return `http://${host}:${SITE_PORT}`;
 }
 
+/**
+ * The Open button on one site row: what it says, and why it cannot be pressed.
+ *
+ * A stopped container and a down tunnel are different problems with different
+ * remedies, so they never collapse into one word — telling a user on the VPN to
+ * register a device is how this UI lost their trust once already. The button is
+ * never hidden, only disabled with its reason, as everywhere else on this page.
+ *
+ * @param {object} state
+ * @param {string} state.status `Bench Site.status`.
+ * @param {string|null} state.url Where this row's site answers, if anything serves it.
+ * @param {boolean} state.vpnConnected Whether this device's tunnel is up.
+ * @returns {{label: string, disabled: boolean, hint: string}}
+ */
+export function siteOpenAction({ status, url, vpnConnected } = {}) {
+	if (status !== "Active") {
+		return {
+			label: "Not running",
+			disabled: true,
+			hint: "This site's container is stopped. Deploy the lab to bring it back.",
+		};
+	}
+	if (!vpnConnected) {
+		return {
+			label: "Unreachable",
+			disabled: true,
+			hint: "Register this device on the VPN to reach this site.",
+		};
+	}
+	if (!url) {
+		return {
+			label: "Unreachable",
+			disabled: true,
+			hint: "Nothing serves this site — the container answers only on its own site.",
+		};
+	}
+	return { label: "Open", disabled: false, hint: "" };
+}
+
 /** Where the IDE answers — the same host, code-server's port. */
 export function ideUrl(bench) {
 	const host = benchHost(bench);

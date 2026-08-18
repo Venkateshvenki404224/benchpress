@@ -109,7 +109,7 @@ import LabHeader from "@/components/lab/LabHeader.vue";
 import SitesCard from "@/components/lab/SitesCard.vue";
 import { openDeployRun } from "@/data/deployRun";
 import { userContext } from "@/data/userContext";
-import { vpnStatus } from "@/data/vpnStatus";
+import { reloadVpnStatus, vpnStatus } from "@/data/vpnStatus";
 import { ideUrl, siteUrl } from "@/utils/labActions";
 import { useSocket } from "@/socket";
 import { ErrorMessage, Tabs, createListResource, createResource, dayjsLocal } from "frappe-ui";
@@ -319,6 +319,10 @@ function endRun(liveRun, liveLog) {
 onMounted(() => {
 	socket?.on("bench_deploy_log", onDeployLog);
 	socket?.on("lab_build_log", onBuildLog);
+	// Every open button on this page is gated on the tunnel, and the tunnel is
+	// brought up outside the app — so ask again on arrival rather than trusting
+	// whatever the SPA read at boot.
+	reloadVpnStatus();
 });
 
 onUnmounted(() => {

@@ -15,3 +15,4 @@ benchpress.patches.index_ledger_reference
 benchpress.patches.default_waitlist_open
 benchpress.patches.stamp_template_on_labs
 benchpress.patches.index_tenant_reads
+benchpress.patches.retire_orphaned_creating_sites

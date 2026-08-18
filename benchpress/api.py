@@ -196,7 +196,7 @@ def create_bench(data: str) -> dict:
 
 @frappe.whitelist()
 def bench_action(bench_name: str, action: str) -> dict:
-	from benchpress.docker_manager import restart_container, start_container, stop_container
+	from benchpress.docker_manager import restart_container, start_container
 
 	require_bench_access(bench_name)
 	if action == "delete" and not is_admin():
@@ -204,29 +204,49 @@ def bench_action(bench_name: str, action: str) -> dict:
 
 	bench = frappe.get_doc("Bench Instance", bench_name)
 
-	if action == "start":
-		start_container(bench.container_id)
-		bench.status = "Running"
-		bench.started_at = frappe.utils.now_datetime()
-		metering.on_bench_running(bench)
-	elif action == "stop":
-		stop_container(bench.container_id)
-		bench.status = "Stopped"
-		metering.on_bench_stopped(bench)
-	elif action == "restart":
-		restart_container(bench.container_id)
-		bench.status = "Running"
-		# A restart does not interrupt the session — the instance was billable before and is
-		# billable after — so this only starts a meter that was not already running.
-		metering.on_bench_running(bench)
-	elif action == "delete":
+	if action == "delete":
 		return _delete_bench(bench)
-	else:
+	if action == "stop":
+		return _stop_bench(bench)
+
+	if action not in ("start", "restart"):
 		frappe.throw(_("Invalid action: {0}").format(action))
 
+	_require_container(bench)
+	if action == "start":
+		start_container(bench.container_id)
+		bench.started_at = frappe.utils.now_datetime()
+	else:
+		restart_container(bench.container_id)
+
+	bench.status = "Running"
+	# A restart does not interrupt the session — the instance was billable before and is
+	# billable after — so this only starts a meter that was not already running.
+	metering.on_bench_running(bench)
 	bench.save()
 	frappe.db.commit()
 	return {"name": bench.name, "status": bench.status}
+
+
+def _require_container(bench) -> None:
+	"""Refuse a container action on an instance that has no container.
+
+	A `Draft` instance has never been deployed and a reaped one has had its container removed,
+	so handing Docker an empty id raises its own error at the user, naming nothing they can act
+	on. `Bench Instance.enqueue_start` makes the same check; one message covers every action
+	because the remedy is the same one.
+	"""
+	if not bench.container_id:
+		frappe.throw(_("This instance has no container — deploy it first."))
+
+
+def _stop_bench(bench) -> dict:
+	"""Stop through `deploy_manager.stop_bench`, the one path that also deactivates the sites."""
+	from benchpress.deploy_manager import stop_bench
+
+	_require_container(bench)
+	stop_bench(bench.name)
+	return {"name": bench.name, "status": "Stopped"}
 
 
 def _delete_bench(bench) -> dict:
