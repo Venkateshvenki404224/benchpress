@@ -308,26 +308,7 @@ def _deploy_bench(bench_name: str) -> None:
 		pipeline.log(f"Site served on port {SITE_HTTP_PORT}")
 
 		if getattr(lab, "enable_code_server", 0):
-			cs_user = bench.ssh_username
-			cs_home = f"/home/{cs_user}"
-			code_server_password = secrets.token_urlsafe(16)
-			config_yaml = (
-				f"bind-addr: 0.0.0.0:8080\nauth: password\npassword: {code_server_password}\ncert: false\n"
-			)
-			write_file_to_container(
-				container_id,
-				config_yaml,
-				f"{cs_home}/.config/code-server/config.yaml",
-			)
-			exec_in_container(
-				container_id,
-				f"chown -R {cs_user}:{cs_user} {cs_home}/.config && chmod 600 {cs_home}/.config/code-server/config.yaml",
-				user="root",
-			)
-			exec_in_container(container_id, "bash /opt/benchpress/scripts/restart.sh", user="root")
-			bench.code_server_password = code_server_password
-			bench.code_server_url = f"http://{bench.wg_ip or bench.container_ip or '127.0.0.1'}:8080/"
-			pipeline.log(f"code-server ready at {bench.code_server_url}")
+			_start_code_server(bench, container_id, pipeline)
 		else:
 			pipeline.log("Code server is disabled for this lab — skipped")
 
@@ -368,6 +349,55 @@ def _deploy_bench(bench_name: str) -> None:
 			message=frappe.get_traceback(),
 		)
 		_notify_owner(bench.owner, f"Bench deploy failed: {bench.bench_name}", "Bench Instance", bench.name)
+
+
+def _start_code_server(bench, container_id: str, pipeline) -> None:
+	"""Configure code-server, launch it, and only then claim it is up.
+
+	Every exec is checked. The config write decides whether code-server can authenticate at
+	all, the `chown`/`chmod` decides whether it reads that file or leaks the password to every
+	account in the container, and `restart.sh` is what actually launches it — a deploy that
+	reports a `code_server_url` answering nothing is worse than one that fails here.
+
+	The address is cleared before the attempt and stored after it, so a failed launch leaves
+	the field empty and `LabHeader.showCodeServer` hides the button instead of offering a
+	dead link.
+	"""
+	_forget_code_server_url(bench)
+	cs_user = bench.ssh_username
+	cs_home = f"/home/{cs_user}"
+	code_server_password = secrets.token_urlsafe(16)
+	config_yaml = f"bind-addr: 0.0.0.0:8080\nauth: password\npassword: {code_server_password}\ncert: false\n"
+	config_path = f"{cs_home}/.config/code-server/config.yaml"
+
+	write_file_to_container(container_id, config_yaml, config_path)
+	_checked_exec(
+		container_id,
+		f"chown -R {cs_user}:{cs_user} {cs_home}/.config && chmod 600 {config_path}",
+		"Securing the code-server config",
+	)
+	_checked_exec(container_id, "bash /opt/benchpress/scripts/restart.sh", "restart.sh")
+
+	bench.code_server_password = code_server_password
+	bench.code_server_url = f"http://{bench.wg_ip or bench.container_ip or '127.0.0.1'}:8080/"
+	pipeline.log(f"code-server ready at {bench.code_server_url}")
+
+
+def _forget_code_server_url(bench) -> None:
+	"""Drop the address a previous deploy proved, in the row as well as in memory.
+
+	The failure path reloads the instance before saving it, so an in-memory clear alone would
+	be discarded and a redeploy that broke at this step would keep serving the old link.
+	"""
+	bench.code_server_url = None
+	frappe.db.set_value("Bench Instance", bench.name, "code_server_url", None, update_modified=False)
+
+
+def _checked_exec(container_id: str, command: str, what: str) -> None:
+	"""Run a command in the container as root, raising with its output when it fails."""
+	exit_code, output = exec_in_container(container_id, command, user="root")
+	if exit_code != 0:
+		raise Exception(f"{what} failed (exit {exit_code}): {output}")
 
 
 def _record_primary_site(bench, lab, admin_password: str) -> None:
@@ -411,7 +441,16 @@ def _ensure_assets(container_id: str, bench_dir: str, lab, pipeline) -> None:
 		pipeline.log("Assets already bundled in the image — no build needed")
 		return
 	pipeline.log(f"bench build — no bundle in the image for: {', '.join(missing)}")
-	exec_in_container(container_id, "bench build", user="frappe", workdir=bench_dir)
+	exit_code, output = exec_in_container(container_id, "bench build", user="frappe", workdir=bench_dir)
+	if exit_code != 0:
+		# The one step in this pipeline that logs instead of raising, deliberately: a site with
+		# stale or missing bundles still loads and the user can rebuild from the IDE, so losing
+		# an otherwise-good deploy over asset bundling costs more than it saves. The captured
+		# output goes into the line so the warning is actionable. Do not "fix" this into a raise.
+		pipeline.log(
+			f"bench build failed (exit {exit_code}) — assets may be stale: {output.strip()}", "warning"
+		)
+		return
 	pipeline.log("bench build finished")
 
 

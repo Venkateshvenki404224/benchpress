@@ -209,6 +209,32 @@ class TestConfigureContainer(IntegrationTestCase):
 	@patch("benchpress.vpn_adapter.render_container_config", return_value="CONF")
 	@patch("benchpress.docker_manager.exec_in_container")
 	@patch("benchpress.docker_manager.write_file_to_container")
+	def test_a_failing_wg_quick_down_is_still_tolerated(self, _write, mock_exec, _render):
+		"""Hardening the other execs here must not harden the one that is meant to fail.
+
+		The interface is legitimately absent on a first deploy, and `|| true` is what makes
+		that tolerance visible rather than a discarded exit code.
+		"""
+		# chmod, a down that reports the interface was never there, then a good up.
+		mock_exec.side_effect = [(0, ""), (1, "wg-quick: `wg0' is not a WireGuard interface"), (0, "")]
+
+		configure_container("cid123", "PRIV==", "172.27.0.5")
+
+	@patch("benchpress.vpn_adapter.render_container_config", return_value="CONF")
+	@patch("benchpress.docker_manager.exec_in_container")
+	@patch("benchpress.docker_manager.write_file_to_container")
+	def test_raises_when_the_conf_cannot_be_secured(self, _write, mock_exec, _render):
+		"""A world-readable wg0.conf hands the tunnel's private key to every account in the box."""
+		mock_exec.side_effect = [(1, "chmod: Operation not permitted")]
+
+		with self.assertRaises(Exception) as caught:
+			configure_container("cid123", "PRIV==", "172.27.0.5")
+
+		self.assertIn("Securing wg0.conf failed", str(caught.exception))
+
+	@patch("benchpress.vpn_adapter.render_container_config", return_value="CONF")
+	@patch("benchpress.docker_manager.exec_in_container")
+	@patch("benchpress.docker_manager.write_file_to_container")
 	def test_raises_when_wg_quick_fails(self, _write, mock_exec, _render):
 		# chmod, the tolerated down, then the up that decides the outcome.
 		mock_exec.side_effect = [(0, ""), (0, ""), (1, "wg-quick: boom")]

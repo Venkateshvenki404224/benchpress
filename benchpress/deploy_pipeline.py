@@ -65,11 +65,14 @@ FAILED_MARKER = re.compile(r"^===\s*(?:Deploy|Build) failed:\s*(.*?)\s*===$")
 PLAIN_MARKER = re.compile(r"^===\s*(.*?)\s*===$")
 
 
+def step_label(key: str) -> str:
+	"""One step's human label — what `scan_log` reports, so readers can match on it."""
+	return DEPLOY_STEPS[STEP_INDEX[key] - 1].label
+
+
 def format_step_line(key: str, elapsed_seconds: float) -> str:
 	"""The human sentence first, the machine fields second, both in one line."""
-	index = STEP_INDEX[key]
-	step = DEPLOY_STEPS[index - 1]
-	return f"=== Step {index}/{STEP_TOTAL}: {step.label} [{step.key} @{elapsed_seconds:.1f}s] ==="
+	return f"=== Step {STEP_INDEX[key]}/{STEP_TOTAL}: {step_label(key)} [{key} @{elapsed_seconds:.1f}s] ==="
 
 
 def parse_step_line(line: str) -> dict | None:

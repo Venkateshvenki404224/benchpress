@@ -102,6 +102,18 @@ def _ensure_owner(email):
 	return email
 
 
+def _exec_results(failures: dict | None):
+	"""An `exec_in_container` stand-in that fails only the commands a test named."""
+
+	def run(container_id, command, *args, **kwargs):
+		for fragment, result in (failures or {}).items():
+			if fragment in command:
+				return result
+		return (0, "")
+
+	return run
+
+
 class TestDeployManager(IntegrationTestCase):
 	@classmethod
 	def setUpClass(cls):
@@ -513,10 +525,15 @@ class TestDeployStepMarkers(IntegrationTestCase):
 		self.addCleanup(lambda name=bench.name: frappe.db.delete("Deploy Log", {"bench": name}))
 		return bench
 
-	def _run_deploy(self, bench, site_result=(0, "site created"), cache_hit=True):
+	def _run_deploy(
+		self, bench, site_result=(0, "site created"), cache_hit=True, exec_failures=None, write_error=None
+	):
 		"""A whole deploy with every side effect mocked but the log itself.
 
 		`cache_hit=False` leaves the image step to the caller, so it has to build.
+		`exec_failures` maps a fragment of a container command to the result that command
+		returns, so one exec can fail while the rest of the run succeeds. `write_error` makes
+		every `write_file_to_container` raise, the way a read-only target path would.
 		"""
 		from benchpress import deploy_manager
 
@@ -528,7 +545,7 @@ class TestDeployStepMarkers(IntegrationTestCase):
 			patch.object(deploy_manager, "create_bench_container", autospec=True) as mock_create,
 			patch.object(deploy_manager, "start_container", autospec=True),
 			patch.object(deploy_manager, "wait_for_container_running", autospec=True) as mock_wait,
-			patch.object(deploy_manager, "write_file_to_container", autospec=True),
+			patch.object(deploy_manager, "write_file_to_container", autospec=True) as mock_write,
 			patch.object(deploy_manager, "exec_in_container", autospec=True) as mock_exec,
 			patch.object(deploy_manager, "create_site_in_container", autospec=True) as mock_site,
 			patch.object(deploy_manager, "remove_container", autospec=True),
@@ -540,7 +557,9 @@ class TestDeployStepMarkers(IntegrationTestCase):
 			mock_infra.return_value = self.db_server_name
 			mock_create.return_value = "cid-steps"
 			mock_wait.return_value = "172.30.0.11"
-			mock_exec.return_value = (0, "")
+			mock_exec.side_effect = _exec_results(exec_failures)
+			if write_error:
+				mock_write.side_effect = Exception(write_error)
 			mock_peer.return_value = {
 				"peer": "peer-steps",
 				"assigned_ip": "172.27.0.11",
@@ -673,6 +692,134 @@ class TestDeployStepMarkers(IntegrationTestCase):
 		self.assertIn("Compiling translations for hrms", build_log.message)
 		self.assertIn("=== Build complete: benchpress/steps:built ===", build_log.message)
 		self.assertEqual(build_log.log_type, "success")
+
+	# --- Phase 3: a command the run does not check is a claim it cannot make ---
+
+	def _enable_code_server(self):
+		before = frappe.db.get_value("Lab", self.lab.name, "enable_code_server")
+		frappe.db.set_value("Lab", self.lab.name, "enable_code_server", 1)
+		self.addCleanup(frappe.db.set_value, "Lab", self.lab.name, "enable_code_server", before)
+		frappe.db.commit()
+
+	def _bench_field(self, bench, field):
+		return frappe.db.get_value("Bench Instance", bench.name, field)
+
+	def test_a_failed_restart_fails_step_ten_and_stores_no_ide_address(self):
+		"""An address that answers nothing is worse than a deploy that admits it broke."""
+		bench = self._bench()
+		self._enable_code_server()
+		frappe.db.set_value("Bench Instance", bench.name, "code_server_url", "http://stale:8080/")
+		frappe.db.commit()
+
+		self._run_deploy(bench, exec_failures={"restart.sh": (1, "code-server: no such unit")})
+
+		log = self._log(bench.name)
+		self.assertIn("restart.sh failed (exit 1): code-server: no such unit", log)
+		self.assertNotIn("code-server ready at", log)
+		self.assertEqual(self._bench_field(bench, "status"), "Error")
+		# The empty field is the contract: `LabHeader.showCodeServer` reads it to hide the button.
+		self.assertFalse(self._bench_field(bench, "code_server_url"))
+
+	def test_a_failed_config_permission_fix_fails_step_ten(self):
+		"""A config code-server cannot read, or that every account can, is not a working IDE."""
+		bench = self._bench()
+		self._enable_code_server()
+
+		self._run_deploy(bench, exec_failures={"chmod 600": (1, "Operation not permitted")})
+
+		log = self._log(bench.name)
+		self.assertIn("Securing the code-server config failed (exit 1)", log)
+		self.assertNotIn("code-server ready at", log)
+		self.assertFalse(self._bench_field(bench, "code_server_url"))
+
+	def test_a_working_step_ten_stores_the_address_and_says_ready_once(self):
+		bench = self._bench()
+		self._enable_code_server()
+
+		self._run_deploy(bench)
+
+		log = self._log(bench.name)
+		self.assertEqual(log.count("code-server ready at"), 1)
+		self.assertEqual(self._bench_field(bench, "code_server_url"), "http://172.27.0.11:8080/")
+		self.assertEqual(self._bench_field(bench, "status"), "Running")
+
+	def test_a_failed_file_write_fails_the_deploy_at_the_step_that_wrote_it(self):
+		"""Hole 4: a silently unwritten `common_site_config.json` is a site that cannot find redis."""
+		bench = self._bench()
+
+		self._run_deploy(bench, write_error="Writing common_site_config.json failed (exit 1): read-only")
+
+		keys = [step["step_key"] for step in self._emitted_steps(bench.name)]
+		self.assertEqual(keys[-1], "site_config")
+		self.assertIn("common_site_config.json failed", self._log(bench.name))
+		self.assertEqual(self._bench_field(bench, "status"), "Error")
+
+	def test_a_failed_asset_build_warns_and_the_deploy_still_finishes(self):
+		"""The one deliberate asymmetry: stale assets are recoverable, a killed deploy is not."""
+		bench = self._bench()
+
+		self._run_deploy(bench, exec_failures={"bench build": (1, "esbuild: hrms bundle exploded")})
+
+		log = self._log(bench.name)
+		self.assertIn("bench build failed (exit 1)", log)
+		self.assertIn("esbuild: hrms bundle exploded", log)
+		self.assertEqual(self._bench_field(bench, "status"), "Running")
+		self.assertIn("Step 11/11", log)
+
+	def test_a_clean_deploy_writes_no_warning_lines(self):
+		"""The checks above must not turn a healthy run into a noisy one."""
+		bench = self._bench()
+		self._enable_code_server()
+
+		self._run_deploy(bench)
+
+		self.assertNotIn("failed", self._log(bench.name))
+
+	def test_a_build_failure_inside_a_deploy_is_attributed_to_the_build(self):
+		"""Hole 6: the banner must name the build and point at the log holding Docker's error."""
+		from benchpress import deploy_manager, lab_detail
+
+		bench = self._bench()
+		self.addCleanup(frappe.db.delete, "Build Log", {"lab": self.lab.name})
+		status_before = frappe.db.get_value("Lab", self.lab.name, "status")
+
+		def exploding_build(lab, log_fn=None, **kwargs):
+			log_fn("Step 3/8 : RUN bench get-app --branch nope hrms")
+			raise Exception("branch 'nope' not found in upstream origin")
+
+		with (
+			patch.object(deploy_manager.image_cache, "resolve", return_value=("fresh:tag", False)),
+			patch.object(deploy_manager, "build_lab_image", side_effect=exploding_build),
+		):
+			self._run_deploy(bench, cache_hit=False)
+
+		# `_run_build` restores the lab, which is exactly why `Lab.status` cannot carry this.
+		self.assertEqual(frappe.db.get_value("Lab", self.lab.name, "status"), status_before)
+
+		failure = lab_detail.get_lab(self.lab.name)["failure"]
+		self.assertEqual(failure["source"], "build")
+		self.assertIn("branch 'nope' not found", failure["reason"])
+		self.assertEqual(
+			failure["log"],
+			frappe.get_all(
+				"Build Log",
+				filters={"lab": self.lab.name},
+				order_by="timestamp desc",
+				limit_page_length=1,
+				pluck="name",
+			)[0],
+		)
+
+	def test_a_deploy_that_broke_after_the_image_still_blames_the_deploy(self):
+		"""The redirect is bounded to the image step, so an unrelated failure keeps its own log."""
+		from benchpress import lab_detail
+
+		bench = self._bench()
+		self._run_deploy(bench, site_result=Exception("bench new-site exploded"))
+
+		failure = lab_detail.get_lab(self.lab.name)["failure"]
+		self.assertEqual(failure["source"], "deploy")
+		self.assertIn("bench new-site exploded", failure["reason"])
 
 	def test_step_lines_are_published_as_the_step_type(self):
 		bench = self._bench()

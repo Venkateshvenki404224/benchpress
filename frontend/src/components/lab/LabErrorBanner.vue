@@ -28,7 +28,7 @@
 						data-test="view-failing-log"
 						@click="emit('view-log')"
 					>
-						View failing log lines
+						{{ logButtonLabel }}
 					</Button>
 				</div>
 			</div>
@@ -47,6 +47,14 @@ import AlertIcon from "~icons/lucide/circle-alert";
 
 const RUN_LABEL = { build: "Image build failed", deploy: "Deploy failed" };
 
+// A build failure inside a deploy is reported against the build (`lab_detail._deploy_failure`),
+// so the button has to name the tab that actually holds the Docker output — the deploy log's
+// tail only says the build broke.
+const LOG_BUTTON_LABEL = {
+	build: "Open the Build log",
+	deploy: "View failing log lines",
+};
+
 const props = defineProps({
 	// The `failure` object `benchpress.api.get_lab` returns.
 	failure: { type: Object, required: true },
@@ -55,8 +63,16 @@ const props = defineProps({
 
 const emit = defineEmits(["edit", "view-log"]);
 
+// A build log carries no steps — `_build_lab_with_logs` writes one opening marker and
+// Docker's own "Step 17/23" lines are not markers — so a build's step is always the word
+// "started" dressed up as information. Only a deploy names a step worth reading.
 const headline = computed(() => {
 	const run = RUN_LABEL[props.failure.source] ?? "Last run failed";
-	return props.failure.step ? `${run} at: ${props.failure.step}` : run;
+	const step = props.failure.source === "build" ? "" : props.failure.step;
+	return step ? `${run} at: ${step}` : run;
 });
+
+const logButtonLabel = computed(
+	() => LOG_BUTTON_LABEL[props.failure.source] ?? "View failing log lines"
+);
 </script>

@@ -60,6 +60,31 @@ IP_ATTRS = {"NetworkSettings": {"Networks": {"benchpress": {"IPAddress": "172.30
 NO_IP_ATTRS = {"NetworkSettings": {"Networks": {"benchpress": {"IPAddress": ""}}}}
 
 
+class TestWriteFileToContainer(unittest.TestCase):
+	"""The exec result used to be discarded, so a file that never landed looked written."""
+
+	def _client_exec_returning(self, result):
+		client = MagicMock()
+		client.containers.get.return_value.exec_run.return_value = result
+		return client
+
+	@patch("benchpress.docker_manager.get_client")
+	def test_a_zero_exit_returns_without_complaint(self, get_client):
+		get_client.return_value = self._client_exec_returning((0, b""))
+
+		docker_manager.write_file_to_container("cid", "hello", "/etc/wireguard/wg0.conf")
+
+	@patch("benchpress.docker_manager.get_client")
+	def test_a_non_zero_exit_raises_naming_the_path_and_the_output(self, get_client):
+		get_client.return_value = self._client_exec_returning((1, b"Read-only file system"))
+
+		with self.assertRaises(Exception) as caught:
+			docker_manager.write_file_to_container("cid", "hello", "/etc/wireguard/wg0.conf")
+
+		self.assertIn("/etc/wireguard/wg0.conf", str(caught.exception))
+		self.assertIn("Read-only file system", str(caught.exception))
+
+
 class TestWaitForContainerRunning(unittest.TestCase):
 	@patch("benchpress.docker_manager.time.sleep")
 	@patch("benchpress.docker_manager.get_client")

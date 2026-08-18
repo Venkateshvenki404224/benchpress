@@ -16,6 +16,4 @@ import frappe
 
 
 def execute():
-	frappe.db.set_value(
-		"Bench Site", {"status": "Creating"}, "status", "Inactive", update_modified=False
-	)
+	frappe.db.set_value("Bench Site", {"status": "Creating"}, "status", "Inactive", update_modified=False)

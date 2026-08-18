@@ -96,7 +96,11 @@ def configure_container(container_id: str, private_key: str, assigned_ip: str) -
 
 	config = render_container_config(private_key, assigned_ip)
 	write_file_to_container(container_id, config, "/etc/wireguard/wg0.conf")
-	exec_in_container(container_id, "chmod 600 /etc/wireguard/wg0.conf", user="root")
+	exit_code, output = exec_in_container(container_id, "chmod 600 /etc/wireguard/wg0.conf", user="root")
+	if exit_code != 0:
+		raise Exception(f"Securing wg0.conf failed inside container: {output}")
+	# The one tolerated exec here: the interface may legitimately be down already, and
+	# `|| true` is what makes that tolerance visible rather than a discarded exit code.
 	exec_in_container(container_id, "wg-quick down wg0 || true", user="root")
 	exit_code, output = exec_in_container(container_id, "wg-quick up wg0", user="root")
 	if exit_code != 0:
