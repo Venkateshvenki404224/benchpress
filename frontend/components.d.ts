@@ -17,6 +17,7 @@ declare module 'vue' {
     AppSearch: typeof import('./src/components/AppSearch.vue')['default']
     BackLink: typeof import('./src/components/BackLink.vue')['default']
     CheckList: typeof import('./src/components/CheckList.vue')['default']
+    CodeServerDialog: typeof import('./src/components/lab/CodeServerDialog.vue')['default']
     ConnectionCard: typeof import('./src/components/lab/ConnectionCard.vue')['default']
     ConnectionDetails: typeof import('./src/components/lab/ConnectionDetails.vue')['default']
     ConnectionTestCard: typeof import('./src/components/device/ConnectionTestCard.vue')['default']

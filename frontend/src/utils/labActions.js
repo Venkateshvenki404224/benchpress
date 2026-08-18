@@ -202,3 +202,53 @@ function hostLabel(bench) {
 	const host = benchHost(bench);
 	return host ? `${host}:${SITE_PORT}` : "";
 }
+
+export const PROMPT_LOADING = "loading";
+export const PROMPT_READY = "ready";
+export const PROMPT_ERROR = "error";
+
+/**
+ * What the IDE dialog says while the password it was opened for is fetched.
+ *
+ * The IDE tab is opened by the click itself; this dialog exists so the password
+ * arrives with it instead of being hunted for behind the "Reveal secrets"
+ * toggle. It is never put in the URL — a query parameter would land in browser
+ * history, in the container's access log and in every proxy in between.
+ *
+ * @param {object} state
+ * @param {boolean} state.loading Whether `get_code_server_credentials` is in flight.
+ * @param {string|object} state.error What it failed with, if it failed.
+ * @param {string} state.password What it returned.
+ * @returns {{status: string, message: string, password: string, error: string}}
+ */
+export function codeServerPrompt({ loading, error, password } = {}) {
+	if (loading) return prompt(PROMPT_LOADING, "Fetching this lab's IDE password…");
+	if (error) {
+		return prompt(
+			PROMPT_ERROR,
+			"The IDE opened, but its password could not be read. Connection details holds it.",
+			{ error: errorText(error) }
+		);
+	}
+	if (!password) {
+		return prompt(
+			PROMPT_ERROR,
+			"This lab has no IDE password recorded. Redeploy it to set one."
+		);
+	}
+	return prompt(
+		PROMPT_READY,
+		"code-server asks for this password. Every redeploy replaces it.",
+		{
+			password,
+		}
+	);
+}
+
+function prompt(status, message, rest = {}) {
+	return { status, message, password: "", error: "", ...rest };
+}
+
+function errorText(error) {
+	return typeof error === "string" ? error : error?.message || "";
+}

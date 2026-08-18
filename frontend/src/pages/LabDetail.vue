@@ -87,6 +87,13 @@
 					</div>
 				</template>
 			</Tabs>
+
+			<CodeServerDialog
+				v-model="showCodeServerPassword"
+				:loading="codeServerCredentials.loading"
+				:error="codeServerCredentials.error"
+				:password="codeServerCredentials.data?.password ?? ''"
+			/>
 		</template>
 	</div>
 </template>
@@ -101,6 +108,7 @@ import EmptyState from "@/components/EmptyState.vue";
 import LogViewer from "@/components/LogViewer.vue";
 import SectionCard from "@/components/SectionCard.vue";
 import DeployPipeline from "@/components/deploy/DeployPipeline.vue";
+import CodeServerDialog from "@/components/lab/CodeServerDialog.vue";
 import ConnectionCard from "@/components/lab/ConnectionCard.vue";
 import ConnectionDetails from "@/components/lab/ConnectionDetails.vue";
 import ContainerStatusCard from "@/components/lab/ContainerStatusCard.vue";
@@ -139,6 +147,12 @@ const building = ref(false);
 
 const lab = createResource({ url: "benchpress.api.get_lab", params: { name: labId }, auto: true });
 const credentials = createResource({ url: "benchpress.api.get_bench_credentials" });
+// Fetched at the moment the IDE is opened, never on page load: a password on
+// screen nobody asked for is a password on a screenshot.
+const codeServerCredentials = createResource({
+	url: "benchpress.api.get_code_server_credentials",
+});
+const showCodeServerPassword = ref(false);
 const deployLogs = createResource({ url: "benchpress.api.get_deploy_logs" });
 const buildLogs = createListResource({
 	doctype: "Build Log",
@@ -261,9 +275,27 @@ function openSite(site = null) {
 	if (address) window.open(address, "_blank");
 }
 
+// The tab is opened by the click itself — a `window.open` after an awaited fetch
+// is a popup, not a navigation, and browsers block it. The password follows into
+// the dialog, so the user reads it beside the login form instead of hunting for
+// it behind "Reveal secrets".
+//
+// `restart_code_server` is the other endpoint with no caller. It belongs in the
+// overflow menu the day an acceptance run shows code-server needs a nudge; until
+// then it would be a button for a problem nobody has had.
 function openCodeServer() {
 	const address = ideUrl(bench.value);
-	if (address) window.open(address, "_blank");
+	if (!address || !bench.value) return;
+	window.open(address, "_blank");
+	// The address opened is the helper's, not the one the endpoint returns:
+	// issue #130 repoints `ideUrl` alone. The call is for the password, and for
+	// the guards it already carries — bench Running, and an address the deploy
+	// actually stored.
+	codeServerCredentials.reset();
+	showCodeServerPassword.value = true;
+	// The dialog is where a failure is read, so the rejection is swallowed here
+	// rather than reported twice.
+	codeServerCredentials.submit({ bench_name: bench.value.name }).catch(() => {});
 }
 
 /** Lab recipes are edited on the desk form; the SPA has no editor yet. */

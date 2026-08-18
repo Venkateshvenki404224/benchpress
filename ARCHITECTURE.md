@@ -185,14 +185,18 @@ Layer 5: Create site (create-site.sh)
 
 | Component | Purpose |
 |-----------|---------|
-| **LogViewer** | Parses raw logs into collapsible steps |
+| **DeployPipeline** | The eleven deploy steps, their state and their durations, derived from the log |
+| **DeployStepRow** | One deploy step with its status and elapsed time |
+| **RawLogPanel** | The unparsed deploy log, with a download |
+| **LogViewer** | Parses raw logs into collapsible steps (build logs, which have no steps of ours) |
 | **LogStep** | Single log step with status indicator |
+| **CodeServerDialog** | The IDE password, surfaced at the moment the IDE tab is opened |
 
 ### Real-Time Communication
 
 The frontend listens for WebSocket events published by the backend:
 
-- **`bench_deploy_log`** — During deployment, streamed to DeployPage's Terminal component
+- **`bench_deploy_log`** — During deployment, appended to LabDetail's live buffer and rendered by `DeployPipeline` / `DeployStepRow` / `RawLogPanel`
 - **`lab_build_log`** — During image build, triggers LabsPage refresh
 
 Pattern:
@@ -206,6 +210,25 @@ this.$socket.on("bench_deploy_log", (data) => { this.logs.push(data) })
 ```
 
 ---
+
+## Shell Access — Where the Terminal Actually Is
+
+There is **no web terminal in this app**: no `ttyd`, no `xterm.js`, no PTY endpoint. A user gets a shell
+in exactly two ways, both over the WireGuard tunnel:
+
+1. **SSH** — `ssh <ssh_username>@<wg_ip>` with the SSH password from Connection details. `linkuser.sh`
+   renames the image's `frappe` user to the lab's own username, sets the password, grants passwordless
+   `sudo` for `bench`/`supervisord`/`supervisorctl`/`service` only, and appends the nvm node path plus
+   `frappe-bench/env/bin` to its `.bashrc` — so `bench` resolves on login with no PATH fix.
+2. **The terminal inside code-server** — `restart.sh` launches code-server against
+   `/home/<ssh_username>/frappe-bench`, so its integrated terminal opens in the bench directory as the
+   same user, with the same PATH.
+
+The deploy log is not a terminal either. It is a stored `Deploy Log` document plus a `bench_deploy_log`
+socket stream, rendered by the components in the table above.
+
+The terminal windows in [docs/index.html](docs/index.html) and `www/home.html` are **marketing mockups** —
+static markup of a session that is not running anywhere.
 
 ## Complete Workflow: Lab → Bench → SSH
 
@@ -282,5 +305,10 @@ this.$socket.on("bench_deploy_log", (data) => { this.logs.push(data) })
 
 - **Docker network**: `benchpress` (172.30.0.0/24)
 - **VPN pool**: 172.27.0.0/16 (vpn_management Network Pool `pool-wg0`), WireGuard port 44556, owned by the vpn_management app
-- **VPN access**: direct tunnel to the container's `wg0` — ports 22 (SSH), 8000 (Frappe web), 9000 (Frappe WebSocket)
+- **VPN access**: direct tunnel to the container's `wg0` — ports 22 (SSH), 8000 (Frappe web), 8080 (code-server), 9000 (Frappe WebSocket)
+- **code-server binds `0.0.0.0:8080` with `cert: false`** (`deploy_manager._start_code_server`), so it is
+  plaintext HTTP on every interface of the container — including the shared `benchpress` bridge, not only
+  the WireGuard address. Its password is the only control. That holds while WireGuard is the sole ingress;
+  it is a prerequisite to fix before [#129](https://github.com/Venkateshvenki404224/benchpress/issues/129)
+  puts a public hostname in front of it.
 - **Container volumes**: `benchpress-{bench_name}-data` → `/home/frappe`

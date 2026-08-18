@@ -526,6 +526,27 @@ class TestApi(IntegrationTestCase):
 		self.assertEqual(creds["password"], "cs-secret")
 		self.assert_within_budget("get_code_server_credentials", elapsed_ms)
 
+	# The IDE button now calls this endpoint at the moment it is clicked, so its two
+	# guards are what a user reads when the IDE cannot answer — not an assumption.
+	def test_get_code_server_credentials_refuses_a_bench_that_is_not_running(self):
+		with self.assertRaises(frappe.ValidationError):
+			api.get_code_server_credentials(self.action_bench.name)
+
+	def test_get_code_server_credentials_refuses_a_bench_with_no_address(self):
+		# A failed code-server step clears the address, and this class rolls back
+		# only once, so the fixture is put back for its siblings.
+		self.addCleanup(self._restore_code_server_url, self.bench.code_server_url)
+		self._set_code_server_url("")
+		with self.assertRaises(frappe.ValidationError):
+			api.get_code_server_credentials(self.bench.name)
+
+	def _restore_code_server_url(self, url):
+		self._set_code_server_url(url)
+
+	def _set_code_server_url(self, url):
+		frappe.db.set_value("Bench Instance", self.bench.name, "code_server_url", url)
+		frappe.clear_document_cache("Bench Instance", self.bench.name)
+
 	# --- Enqueue endpoints (patch frappe.enqueue, assert contract) -----------
 
 	def test_create_lab_from_template_contract_and_timing(self):

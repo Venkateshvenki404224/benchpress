@@ -3,9 +3,13 @@ import {
 	CONNECT_VPN,
 	DEPLOY,
 	OPEN,
+	PROMPT_ERROR,
+	PROMPT_LOADING,
+	PROMPT_READY,
 	REBUILD,
 	VIEW_LOG,
 	WAIT,
+	codeServerPrompt,
 	deployDialogAction,
 	ideUrl,
 	primaryAction,
@@ -206,5 +210,39 @@ describe("deployDialogAction", () => {
 			label: "View the failing log",
 			disabled: false,
 		});
+	});
+});
+
+describe("codeServerPrompt", () => {
+	it("says the password is on its way while the fetch is in flight", () => {
+		expect(codeServerPrompt({ loading: true })).toMatchObject({
+			status: PROMPT_LOADING,
+			password: "",
+		});
+	});
+
+	it("hands over the password the fetch returned", () => {
+		expect(codeServerPrompt({ password: "s3cret" })).toMatchObject({
+			status: PROMPT_READY,
+			password: "s3cret",
+		});
+	});
+
+	it("points at Connection details when the fetch failed", () => {
+		const prompt = codeServerPrompt({ error: new Error("Bench must be running") });
+		expect(prompt.status).toBe(PROMPT_ERROR);
+		expect(prompt.error).toBe("Bench must be running");
+		expect(prompt.password).toBe("");
+	});
+
+	it("treats a missing password as a failure, not as an empty one", () => {
+		expect(codeServerPrompt({ password: "" })).toMatchObject({
+			status: PROMPT_ERROR,
+			password: "",
+		});
+	});
+
+	it("reads a string error as its own message", () => {
+		expect(codeServerPrompt({ error: "denied" }).error).toBe("denied");
 	});
 });
