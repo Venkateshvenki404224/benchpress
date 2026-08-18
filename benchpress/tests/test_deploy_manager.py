@@ -917,3 +917,27 @@ class TestRecordPrimarySite(IntegrationTestCase):
 		_deactivate_bench_sites(bench)
 
 		self.assertEqual(frappe.db.get_value("Bench Site", {"bench": bench.name}, "status"), "Inactive")
+
+	@patch("benchpress.mariadb_manager.drop_site_database")
+	def test_teardown_drops_the_real_db_when_the_domain_has_drifted(self, mock_drop):
+		"""`full_domain` is recomputed from the editable `Bench Instance.domain`, so it drifts from
+		the name a site's database was created under. Teardown must still drop the real database."""
+		from benchpress.api import _drop_bench_site_databases
+		from benchpress.deploy_manager import _record_primary_site
+
+		bench = self._bench()
+		# The database is created under the bare site_name (deploy passes `bench.site_name`).
+		frappe.db.set_value("Bench Instance", bench.name, "domain", "example.com")
+		_record_primary_site(bench, self.lab, "secret-one")
+
+		site = frappe.get_doc("Bench Site", {"bench": bench.name})
+		# The controller rewrote full_domain, drifting it from the created name.
+		self.assertEqual(site.full_domain, f"{bench.site_name}.example.com")
+
+		bench.database_server = "db-any"
+		_drop_bench_site_databases(bench)
+
+		dropped = {call.args[1] for call in mock_drop.call_args_list}
+		# The name the database was actually created under must be among those dropped.
+		self.assertIn(bench.site_name, dropped)
+		self.assertIn(site.full_domain, dropped)

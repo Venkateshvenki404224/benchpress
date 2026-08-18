@@ -252,7 +252,15 @@ def _delete_bench(bench) -> dict:
 
 
 def _drop_bench_site_databases(bench) -> None:
-	"""Drop the database behind every extra site on this bench, one failure at a time."""
+	"""Drop the database behind every site on this bench, one failure at a time.
+
+	`full_domain` is recomputed from the editable `Bench Instance.domain` on every `Bench Site`
+	save (`BenchSite.compute_full_domain`), so it drifts from the name a site's database was
+	actually created under — and `get_database_name` hashes that name, so a drifted value drops a
+	hash that never existed and orphans the real database. Both candidate names are dropped, which
+	the idempotent `DROP DATABASE IF EXISTS` makes safe: whichever one keyed the database dies, the
+	other is a no-op.
+	"""
 	if not bench.database_server:
 		return
 	from benchpress.mariadb_manager import drop_site_database
@@ -261,11 +269,11 @@ def _drop_bench_site_databases(bench) -> None:
 	# `if_owner`, so an admin deleting somebody else's instance would silently skip their sites
 	# and leave the databases behind.
 	sites = frappe.get_all("Bench Site", filters={"bench": bench.name}, fields=["site_name", "full_domain"])
-	for site in sites:
+	for name in {n for site in sites for n in (site.site_name, site.full_domain) if n}:
 		try:
-			drop_site_database(bench.database_server, site.full_domain or site.site_name)
+			drop_site_database(bench.database_server, name)
 		except Exception:
-			frappe.log_error(title=f"Failed to drop DB for {site.site_name}", message=frappe.get_traceback())
+			frappe.log_error(title=f"Failed to drop DB for {name}", message=frappe.get_traceback())
 
 
 @frappe.whitelist()
