@@ -3,12 +3,18 @@ import {
 	CONNECT_VPN,
 	DEPLOY,
 	OPEN,
+	PROMPT_ERROR,
+	PROMPT_LOADING,
+	PROMPT_READY,
 	REBUILD,
 	VIEW_LOG,
 	WAIT,
+	codeServerPrompt,
 	deployDialogAction,
+	ideUrl,
 	primaryAction,
 	siteLabel,
+	siteOpenAction,
 	siteUrl,
 } from "./labActions";
 
@@ -105,6 +111,57 @@ describe("siteUrl", () => {
 		expect(siteUrl({})).toBeNull();
 		expect(siteUrl(null)).toBeNull();
 	});
+
+	it("answers for the row it is handed, not for the bench", () => {
+		const bench = { wg_ip: "172.27.0.2", site_name: "lab-abc" };
+		expect(siteUrl(bench, { site_name: "lab-abc" })).toBe(SITE);
+		// The container serves its own site and nothing else, so any other row is
+		// unreachable — opening the bench's site from it would be the old lie.
+		expect(siteUrl(bench, { site_name: "somebody-elses" })).toBeNull();
+	});
+});
+
+describe("siteOpenAction", () => {
+	const active = { status: "Active", url: SITE };
+
+	it("opens only when the site is running and the tunnel is up", () => {
+		expect(siteOpenAction({ ...active, vpnConnected: true })).toMatchObject({
+			label: "Open",
+			disabled: false,
+			hint: "",
+		});
+	});
+
+	it("blames the tunnel when the site is running and the tunnel is not", () => {
+		const state = siteOpenAction({ ...active, vpnConnected: false });
+		expect(state).toMatchObject({ label: "Unreachable", disabled: true });
+		expect(state.hint).toContain("VPN");
+	});
+
+	// The two reasons send the user somewhere different — the VPN page, or Deploy —
+	// so a stopped site says so even with the tunnel up, and never says "Unreachable".
+	it("blames the container when the site is not running, tunnel or no tunnel", () => {
+		for (const status of ["Inactive", "Creating", "Error"]) {
+			for (const vpnConnected of [true, false]) {
+				const state = siteOpenAction({ status, url: SITE, vpnConnected });
+				expect(state).toMatchObject({ label: "Not running", disabled: true });
+				expect(state.hint).toContain("stopped");
+			}
+		}
+	});
+
+	it("stays disabled for a running site nothing serves", () => {
+		const state = siteOpenAction({ status: "Active", url: null, vpnConnected: true });
+		expect(state).toMatchObject({ label: "Unreachable", disabled: true });
+		expect(state.hint).toContain("Nothing serves");
+	});
+});
+
+describe("ideUrl", () => {
+	it("is the same host on code-server's port", () => {
+		expect(ideUrl({ wg_ip: "172.27.0.2" })).toBe("http://172.27.0.2:8080/");
+		expect(ideUrl({})).toBeNull();
+	});
 });
 
 describe("siteLabel", () => {
@@ -153,5 +210,39 @@ describe("deployDialogAction", () => {
 			label: "View the failing log",
 			disabled: false,
 		});
+	});
+});
+
+describe("codeServerPrompt", () => {
+	it("says the password is on its way while the fetch is in flight", () => {
+		expect(codeServerPrompt({ loading: true })).toMatchObject({
+			status: PROMPT_LOADING,
+			password: "",
+		});
+	});
+
+	it("hands over the password the fetch returned", () => {
+		expect(codeServerPrompt({ password: "s3cret" })).toMatchObject({
+			status: PROMPT_READY,
+			password: "s3cret",
+		});
+	});
+
+	it("points at Connection details when the fetch failed", () => {
+		const prompt = codeServerPrompt({ error: new Error("Bench must be running") });
+		expect(prompt.status).toBe(PROMPT_ERROR);
+		expect(prompt.error).toBe("Bench must be running");
+		expect(prompt.password).toBe("");
+	});
+
+	it("treats a missing password as a failure, not as an empty one", () => {
+		expect(codeServerPrompt({ password: "" })).toMatchObject({
+			status: PROMPT_ERROR,
+			password: "",
+		});
+	});
+
+	it("reads a string error as its own message", () => {
+		expect(codeServerPrompt({ error: "denied" }).error).toBe("denied");
 	});
 });

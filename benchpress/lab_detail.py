@@ -19,7 +19,7 @@ output — still only have `=== … ===` markers, so both are read.
 import frappe
 
 from benchpress.credits import config, passes
-from benchpress.deploy_pipeline import scan_log
+from benchpress.deploy_pipeline import scan_log, step_label
 
 BENCH_FIELDS = [
 	"name",
@@ -41,6 +41,9 @@ BENCH_FIELDS = [
 ]
 
 SITE_FIELDS = ["name", "site_name", "full_domain", "status"]
+
+# The step a deploy is inside when it builds the image, as `scan_log` reports it.
+IMAGE_STEP = step_label("image")
 
 
 def get_lab(name: str) -> dict:
@@ -156,29 +159,75 @@ def _failure(lab, bench: dict | None) -> dict | None:
 	if lab.status == "Error":
 		return _read_failure("Build Log", {"lab": lab.name}, "build")
 	if bench and bench.status == "Error":
-		return _read_failure("Deploy Log", {"bench": bench.name}, "deploy")
+		return _deploy_failure(lab.name, bench["name"])
 	return None
 
 
+def _deploy_failure(lab_name: str, bench_name: str) -> dict | None:
+	"""The last deploy's failure — attributed to the image build when that is what broke.
+
+	A deploy that misses the image cache builds, and `deploy_manager._run_build` puts
+	`Lab.status` back the way it found it so one tenant's failed build does not mark the
+	catalog entry every other tenant reads. That is why the `Lab.status` arm above never
+	fires here: without this, the banner would blame the deploy and show its tail, while the
+	Docker output that actually explains the failure sat in a `Build Log` nothing pointed at.
+	"""
+	log = _latest_log("Deploy Log", {"bench": bench_name})
+	if not log:
+		return None
+	if _broke_preparing_the_image(log.message):
+		build = _build_failure_since(lab_name, log.timestamp)
+		if build:
+			return build
+	return _failure_payload(log, "deploy")
+
+
+def _broke_preparing_the_image(message: str) -> bool:
+	"""Did the run die inside the step that resolves or builds the image?"""
+	return scan_log(message or "").step == IMAGE_STEP
+
+
+def _build_failure_since(lab_name: str, deploy_started) -> dict | None:
+	"""The failed build this deploy ran, if it ran one.
+
+	Bounded by the deploy's own log timestamp so an older failed build — somebody else's, or
+	one since fixed — cannot be blamed for this run. The image step can also fail without any
+	build at all (cache resolution, adopting a tag), and then there is nothing here to find.
+	"""
+	log = _latest_log(
+		"Build Log", {"lab": lab_name, "log_type": "error", "timestamp": (">=", deploy_started)}
+	)
+	return _failure_payload(log, "build") if log else None
+
+
 def _read_failure(doctype: str, filters: dict, source: str) -> dict | None:
-	"""The failing step and reason, read past the caller's own row scoping.
+	"""The failing step and reason of the newest matching log, or ``None``."""
+	log = _latest_log(doctype, filters)
+	return _failure_payload(log, source) if log else None
+
+
+def _latest_log(doctype: str, filters: dict) -> dict | None:
+	"""The newest matching run log, read past the caller's own row scoping.
 
 	Deliberately `get_all`: labs are global recipes, so the build that failed is usually an
-	admin's, and `build_log_query_conditions` would empty this banner for everyone else. Only
-	the derived step and reason leave the server — never `message`. The `Deploy Log` arm needs
-	no scoping either, since `_failure` only ever passes a bench `_caller_bench` returned.
+	admin's, and `build_log_query_conditions` would empty this banner for everyone else. The
+	`Deploy Log` arm needs no scoping either, since `_failure` only ever passes a bench
+	`_caller_bench` returned.
 	"""
 	logs = frappe.get_all(
 		doctype,
 		filters=filters,
-		fields=["name", "message"],
+		fields=["name", "message", "timestamp"],
 		order_by="timestamp desc",
 		limit_page_length=1,
 	)
-	if not logs:
-		return None
-	step, reason = _parse_failure(logs[0].message or "")
-	return {"source": source, "log": logs[0].name, "step": step, "reason": reason}
+	return logs[0] if logs else None
+
+
+def _failure_payload(log: dict, source: str) -> dict:
+	"""What the banner renders. Only the derived step and reason leave the server — never `message`."""
+	step, reason = _parse_failure(log.message or "")
+	return {"source": source, "log": log.name, "step": step, "reason": reason}
 
 
 def _parse_failure(message: str) -> tuple[str, str]:

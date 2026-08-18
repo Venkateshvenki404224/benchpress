@@ -249,18 +249,34 @@ def exec_in_container(
 		workdir=workdir,
 		environment=environment,
 	)
-	return exit_code, output.decode("utf-8", errors="replace")
+	return exit_code, _decoded(output)
 
 
 def write_file_to_container(container_id: str, content: str, path: str) -> None:
-	"""Write a file into a running container using docker exec."""
+	"""Write a file into a running container using docker exec, raising when it did not land.
+
+	The exec result used to be discarded, which made a failed write invisible: every caller
+	writes a file something later depends on — `common_site_config.json`, `wg0.conf`, the
+	code-server config — so a silent failure surfaced as a site that cannot find redis, a
+	tunnel serving the wrong key, or an IDE that never starts, long after the deploy said
+	it was fine.
+	"""
 	client = get_client()
 	container = client.containers.get(container_id)
 	escaped = content.replace("'", "'\\''")
-	container.exec_run(
+	exit_code, output = container.exec_run(
 		cmd=["bash", "-c", f"mkdir -p $(dirname {path}) && cat > {path} << 'WGEOF'\n{escaped}\nWGEOF"],
 		user="root",
 	)
+	if exit_code != 0:
+		raise Exception(f"Writing {path} failed (exit {exit_code}): {_decoded(output)}")
+
+
+def _decoded(output) -> str:
+	"""Docker's exec output as text, whether it came back as bytes or not at all."""
+	if isinstance(output, bytes):
+		return output.decode("utf-8", errors="replace")
+	return "" if output is None else str(output)
 
 
 def get_container_health(container_id: str) -> str:

@@ -60,17 +60,12 @@
 								:connected="vpnStatus.connected"
 								@register="router.push('/devices')"
 							/>
-							<SitesCard v-bind="sitesProps" :can-create="false" @open="openSite" />
+							<SitesCard v-bind="sitesProps" @open="openSite" />
 						</div>
 					</div>
 
 					<div v-else-if="tab.key === 'sites'" class="pt-4">
-						<SitesCard
-							v-bind="sitesProps"
-							:can-create="!!bench"
-							@create="createSite"
-							@open="openSite"
-						/>
+						<SitesCard v-bind="sitesProps" @open="openSite" />
 					</div>
 
 					<div v-else class="pt-4">
@@ -92,6 +87,13 @@
 					</div>
 				</template>
 			</Tabs>
+
+			<CodeServerDialog
+				v-model="showCodeServerPassword"
+				:loading="codeServerCredentials.loading"
+				:error="codeServerCredentials.error"
+				:password="codeServerCredentials.data?.password ?? ''"
+			/>
 		</template>
 	</div>
 </template>
@@ -106,6 +108,7 @@ import EmptyState from "@/components/EmptyState.vue";
 import LogViewer from "@/components/LogViewer.vue";
 import SectionCard from "@/components/SectionCard.vue";
 import DeployPipeline from "@/components/deploy/DeployPipeline.vue";
+import CodeServerDialog from "@/components/lab/CodeServerDialog.vue";
 import ConnectionCard from "@/components/lab/ConnectionCard.vue";
 import ConnectionDetails from "@/components/lab/ConnectionDetails.vue";
 import ContainerStatusCard from "@/components/lab/ContainerStatusCard.vue";
@@ -114,8 +117,8 @@ import LabHeader from "@/components/lab/LabHeader.vue";
 import SitesCard from "@/components/lab/SitesCard.vue";
 import { openDeployRun } from "@/data/deployRun";
 import { userContext } from "@/data/userContext";
-import { vpnStatus } from "@/data/vpnStatus";
-import { siteUrl } from "@/utils/labActions";
+import { reloadVpnStatus, vpnStatus } from "@/data/vpnStatus";
+import { ideUrl, siteUrl } from "@/utils/labActions";
 import { useSocket } from "@/socket";
 import { ErrorMessage, Tabs, createListResource, createResource, dayjsLocal } from "frappe-ui";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
@@ -144,6 +147,12 @@ const building = ref(false);
 
 const lab = createResource({ url: "benchpress.api.get_lab", params: { name: labId }, auto: true });
 const credentials = createResource({ url: "benchpress.api.get_bench_credentials" });
+// Fetched at the moment the IDE is opened, never on page load: a password on
+// screen nobody asked for is a password on a screenshot.
+const codeServerCredentials = createResource({
+	url: "benchpress.api.get_code_server_credentials",
+});
+const showCodeServerPassword = ref(false);
 const deployLogs = createResource({ url: "benchpress.api.get_deploy_logs" });
 const buildLogs = createListResource({
 	doctype: "Build Log",
@@ -163,7 +172,6 @@ const buildAction = createResource({
 });
 const deployAction = createResource({ url: "benchpress.api.create_bench", onSuccess: refresh });
 const benchAction = createResource({ url: "benchpress.api.bench_action", onSuccess: refresh });
-const createSiteAction = createResource({ url: "benchpress.api.create_site", onSuccess: refresh });
 
 const bench = computed(() => lab.data?.bench ?? null);
 const sites = computed(() => lab.data?.sites ?? []);
@@ -178,12 +186,11 @@ const actionError = computed(
 // The lab as the header should read it, including the optimistic build state.
 const labView = computed(() => (building.value ? { ...lab.data, status: "Building" } : lab.data));
 
+// Each row carries the address its own Open button opens, resolved through the
+// one URL helper — the card renders what it is handed and resolves nothing.
 const sitesProps = computed(() => ({
-	sites: sites.value,
-	labApps: lab.data?.apps ?? [],
+	sites: sites.value.map((site) => ({ ...site, url: siteUrl(bench.value, site) })),
 	reachable: vpnStatus.connected,
-	creating: createSiteAction.loading,
-	createError: createSiteAction.error || "",
 }));
 
 /** Age of the health reading in seconds; null when the bench was never polled. */
@@ -261,22 +268,34 @@ async function deleteBench() {
 	router.push("/labs");
 }
 
-function createSite({ siteName, apps }) {
-	createSiteAction.submit({
-		data: JSON.stringify({
-			site_name: siteName,
-			bench: bench.value?.name,
-			apps: apps.map((name) => ({ name })),
-		}),
-	});
+// The header hands over no site, so it opens the bench's own; a row hands over
+// its site, and opens that one.
+function openSite(site = null) {
+	const address = siteUrl(bench.value, site);
+	if (address) window.open(address, "_blank");
 }
 
-function openSite() {
-	if (siteAddress.value) window.open(siteAddress.value, "_blank");
-}
-
+// The tab is opened by the click itself — a `window.open` after an awaited fetch
+// is a popup, not a navigation, and browsers block it. The password follows into
+// the dialog, so the user reads it beside the login form instead of hunting for
+// it behind "Reveal secrets".
+//
+// `restart_code_server` is the other endpoint with no caller. It belongs in the
+// overflow menu the day an acceptance run shows code-server needs a nudge; until
+// then it would be a button for a problem nobody has had.
 function openCodeServer() {
-	if (bench.value?.code_server_url) window.open(bench.value.code_server_url, "_blank");
+	const address = ideUrl(bench.value);
+	if (!address || !bench.value) return;
+	window.open(address, "_blank");
+	// The address opened is the helper's, not the one the endpoint returns:
+	// issue #130 repoints `ideUrl` alone. The call is for the password, and for
+	// the guards it already carries — bench Running, and an address the deploy
+	// actually stored.
+	codeServerCredentials.reset();
+	showCodeServerPassword.value = true;
+	// The dialog is where a failure is read, so the rejection is swallowed here
+	// rather than reported twice.
+	codeServerCredentials.submit({ bench_name: bench.value.name }).catch(() => {});
 }
 
 /** Lab recipes are edited on the desk form; the SPA has no editor yet. */
@@ -332,6 +351,10 @@ function endRun(liveRun, liveLog) {
 onMounted(() => {
 	socket?.on("bench_deploy_log", onDeployLog);
 	socket?.on("lab_build_log", onBuildLog);
+	// Every open button on this page is gated on the tunnel, and the tunnel is
+	// brought up outside the app — so ask again on arrival rather than trusting
+	// whatever the SPA read at boot.
+	reloadVpnStatus();
 });
 
 onUnmounted(() => {

@@ -13,7 +13,6 @@ from benchpress.credits.guard import (
 	cap_builds_per_day,
 	cap_concurrent_instances,
 	cap_devices,
-	cap_sites_per_instance,
 	payload_runway,
 	requires_credits,
 )
@@ -197,7 +196,7 @@ def create_bench(data: str) -> dict:
 
 @frappe.whitelist()
 def bench_action(bench_name: str, action: str) -> dict:
-	from benchpress.docker_manager import restart_container, start_container, stop_container
+	from benchpress.docker_manager import restart_container, start_container
 
 	require_bench_access(bench_name)
 	if action == "delete" and not is_admin():
@@ -205,29 +204,49 @@ def bench_action(bench_name: str, action: str) -> dict:
 
 	bench = frappe.get_doc("Bench Instance", bench_name)
 
-	if action == "start":
-		start_container(bench.container_id)
-		bench.status = "Running"
-		bench.started_at = frappe.utils.now_datetime()
-		metering.on_bench_running(bench)
-	elif action == "stop":
-		stop_container(bench.container_id)
-		bench.status = "Stopped"
-		metering.on_bench_stopped(bench)
-	elif action == "restart":
-		restart_container(bench.container_id)
-		bench.status = "Running"
-		# A restart does not interrupt the session — the instance was billable before and is
-		# billable after — so this only starts a meter that was not already running.
-		metering.on_bench_running(bench)
-	elif action == "delete":
+	if action == "delete":
 		return _delete_bench(bench)
-	else:
+	if action == "stop":
+		return _stop_bench(bench)
+
+	if action not in ("start", "restart"):
 		frappe.throw(_("Invalid action: {0}").format(action))
 
+	_require_container(bench)
+	if action == "start":
+		start_container(bench.container_id)
+		bench.started_at = frappe.utils.now_datetime()
+	else:
+		restart_container(bench.container_id)
+
+	bench.status = "Running"
+	# A restart does not interrupt the session — the instance was billable before and is
+	# billable after — so this only starts a meter that was not already running.
+	metering.on_bench_running(bench)
 	bench.save()
 	frappe.db.commit()
 	return {"name": bench.name, "status": bench.status}
+
+
+def _require_container(bench) -> None:
+	"""Refuse a container action on an instance that has no container.
+
+	A `Draft` instance has never been deployed and a reaped one has had its container removed,
+	so handing Docker an empty id raises its own error at the user, naming nothing they can act
+	on. `Bench Instance.enqueue_start` makes the same check; one message covers every action
+	because the remedy is the same one.
+	"""
+	if not bench.container_id:
+		frappe.throw(_("This instance has no container — deploy it first."))
+
+
+def _stop_bench(bench) -> dict:
+	"""Stop through `deploy_manager.stop_bench`, the one path that also deactivates the sites."""
+	from benchpress.deploy_manager import stop_bench
+
+	_require_container(bench)
+	stop_bench(bench.name)
+	return {"name": bench.name, "status": "Stopped"}
 
 
 def _delete_bench(bench) -> dict:
@@ -344,85 +363,6 @@ def get_device_wg_config(device_name: str) -> str:
 	from benchpress.vpn_adapter import get_device_config
 
 	return get_device_config(device_name)
-
-
-@frappe.whitelist()
-@requires_credits(caps=(cap_sites_per_instance,))
-def create_site(data: str) -> dict:
-	require_app_user()
-	data = frappe.parse_json(data)
-
-	bench_name = data.get("bench")
-	if bench_name:
-		require_bench_access(bench_name)
-
-	doc = frappe.get_doc(
-		{
-			"doctype": "Bench Site",
-			"site_name": data.get("site_name"),
-			"bench": bench_name,
-		}
-	)
-
-	for app in data.get("apps", []):
-		doc.append(
-			"apps_installed",
-			{
-				"app_name": app.get("name"),
-				"app_label": app.get("label", app.get("name")),
-			},
-		)
-
-	doc.insert()
-
-	frappe.enqueue(
-		"benchpress.api._create_site_on_bench",
-		site_doc_name=doc.name,
-		queue="long",
-		timeout=600,
-		enqueue_after_commit=True,
-	)
-
-	return {"name": doc.name, "status": "Creating"}
-
-
-def _create_site_on_bench(site_doc_name: str) -> None:
-	from benchpress.deploy_manager import create_site_in_container
-
-	site = frappe.get_doc("Bench Site", site_doc_name)
-	bench = frappe.get_doc("Bench Instance", site.bench)
-	db_server = frappe.get_doc("Database Server", bench.database_server)
-
-	try:
-		admin_password = bench.get_password("admin_password")
-		site.admin_password = admin_password
-		site_name = site.full_domain or site.site_name
-		apps_csv = ",".join(a.app_name for a in site.apps_installed if a.app_name.lower() != "frappe")
-
-		exit_code, output = create_site_in_container(
-			bench.container_id, db_server, site_name, admin_password, apps_csv
-		)
-
-		if exit_code != 0:
-			site.status = "Error"
-			site.save(ignore_permissions=True)
-			frappe.db.commit()
-			frappe.log_error(title=f"Site creation failed: {site_name}", message=output[:500])
-			return
-
-		site.status = "Active"
-		site.save(ignore_permissions=True)
-		frappe.db.commit()
-
-	except Exception:
-		site.reload()
-		site.status = "Error"
-		site.save(ignore_permissions=True)
-		frappe.db.commit()
-		frappe.log_error(
-			title=f"Site creation failed: {site_doc_name}",
-			message=frappe.get_traceback(),
-		)
 
 
 @frappe.whitelist()

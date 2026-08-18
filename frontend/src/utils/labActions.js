@@ -18,6 +18,7 @@ export const REBUILD = "rebuild";
 export const WAIT = "wait";
 
 export const SITE_PORT = 8000;
+export const IDE_PORT = 8080;
 
 /**
  * The primary button for a lab and the caller's deployment of it.
@@ -113,14 +114,77 @@ export function deployDialogAction({ runState, vpnConnected, siteUrl } = {}) {
 }
 
 /**
- * Where a bench's site actually answers.
+ * The host a bench answers on — the single source of every address on this page.
  *
- * The domain is a label, not a route — nothing resolves it. The site is served
- * by the container itself, reachable over the tunnel on its WireGuard address.
+ * Every open action routes through the two helpers below, so issue #130 (giving
+ * each instance a public `<instance-id>.benchpress.cloud` hostname) repoints one
+ * function rather than hunting call sites. Today a bench answers only on its
+ * WireGuard address, over the tunnel.
  */
-export function siteUrl(bench) {
-	const host = bench?.wg_ip || bench?.container_ip;
-	return host ? `http://${host}:${SITE_PORT}` : null;
+function benchHost(bench) {
+	return bench?.wg_ip || bench?.container_ip || null;
+}
+
+/**
+ * Where a site actually answers, or null when nothing serves it.
+ *
+ * With no site it is the bench's own site. With one, it is that row's address —
+ * and a row naming anything else has none: the container pins `default_site` to
+ * the bench's site and nginx serves only that, so claiming otherwise would open
+ * one site from another site's button.
+ *
+ * The domain is a label, not a route — nothing resolves it.
+ */
+export function siteUrl(bench, site = null) {
+	const host = benchHost(bench);
+	if (!host) return null;
+	if (site && site.site_name !== bench?.site_name) return null;
+	return `http://${host}:${SITE_PORT}`;
+}
+
+/**
+ * The Open button on one site row: what it says, and why it cannot be pressed.
+ *
+ * A stopped container and a down tunnel are different problems with different
+ * remedies, so they never collapse into one word — telling a user on the VPN to
+ * register a device is how this UI lost their trust once already. The button is
+ * never hidden, only disabled with its reason, as everywhere else on this page.
+ *
+ * @param {object} state
+ * @param {string} state.status `Bench Site.status`.
+ * @param {string|null} state.url Where this row's site answers, if anything serves it.
+ * @param {boolean} state.vpnConnected Whether this device's tunnel is up.
+ * @returns {{label: string, disabled: boolean, hint: string}}
+ */
+export function siteOpenAction({ status, url, vpnConnected } = {}) {
+	if (status !== "Active") {
+		return {
+			label: "Not running",
+			disabled: true,
+			hint: "This site's container is stopped. Deploy the lab to bring it back.",
+		};
+	}
+	if (!vpnConnected) {
+		return {
+			label: "Unreachable",
+			disabled: true,
+			hint: "Register this device on the VPN to reach this site.",
+		};
+	}
+	if (!url) {
+		return {
+			label: "Unreachable",
+			disabled: true,
+			hint: "Nothing serves this site — the container answers only on its own site.",
+		};
+	}
+	return { label: "Open", disabled: false, hint: "" };
+}
+
+/** Where the IDE answers — the same host, code-server's port. */
+export function ideUrl(bench) {
+	const host = benchHost(bench);
+	return host ? `http://${host}:${IDE_PORT}/` : null;
 }
 
 /** What that address is called on screen. */
@@ -135,6 +199,56 @@ export function siteLabel(bench, site) {
 }
 
 function hostLabel(bench) {
-	const host = bench?.wg_ip || bench?.container_ip;
+	const host = benchHost(bench);
 	return host ? `${host}:${SITE_PORT}` : "";
+}
+
+export const PROMPT_LOADING = "loading";
+export const PROMPT_READY = "ready";
+export const PROMPT_ERROR = "error";
+
+/**
+ * What the IDE dialog says while the password it was opened for is fetched.
+ *
+ * The IDE tab is opened by the click itself; this dialog exists so the password
+ * arrives with it instead of being hunted for behind the "Reveal secrets"
+ * toggle. It is never put in the URL — a query parameter would land in browser
+ * history, in the container's access log and in every proxy in between.
+ *
+ * @param {object} state
+ * @param {boolean} state.loading Whether `get_code_server_credentials` is in flight.
+ * @param {string|object} state.error What it failed with, if it failed.
+ * @param {string} state.password What it returned.
+ * @returns {{status: string, message: string, password: string, error: string}}
+ */
+export function codeServerPrompt({ loading, error, password } = {}) {
+	if (loading) return prompt(PROMPT_LOADING, "Fetching this lab's IDE password…");
+	if (error) {
+		return prompt(
+			PROMPT_ERROR,
+			"The IDE opened, but its password could not be read. Connection details holds it.",
+			{ error: errorText(error) }
+		);
+	}
+	if (!password) {
+		return prompt(
+			PROMPT_ERROR,
+			"This lab has no IDE password recorded. Redeploy it to set one."
+		);
+	}
+	return prompt(
+		PROMPT_READY,
+		"code-server asks for this password. Every redeploy replaces it.",
+		{
+			password,
+		}
+	);
+}
+
+function prompt(status, message, rest = {}) {
+	return { status, message, password: "", error: "", ...rest };
+}
+
+function errorText(error) {
+	return typeof error === "string" ? error : error?.message || "";
 }

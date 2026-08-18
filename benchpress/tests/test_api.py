@@ -26,7 +26,6 @@ BUDGETS_MS = {
 	"build_lab_image": 300,
 	"prewarm_catalog": 300,
 	"create_bench": 1500,
-	"create_site": 1500,
 	"bench_action": 800,
 	"get_deploy_logs": 400,
 	"add_device": 400,
@@ -527,6 +526,27 @@ class TestApi(IntegrationTestCase):
 		self.assertEqual(creds["password"], "cs-secret")
 		self.assert_within_budget("get_code_server_credentials", elapsed_ms)
 
+	# The IDE button now calls this endpoint at the moment it is clicked, so its two
+	# guards are what a user reads when the IDE cannot answer — not an assumption.
+	def test_get_code_server_credentials_refuses_a_bench_that_is_not_running(self):
+		with self.assertRaises(frappe.ValidationError):
+			api.get_code_server_credentials(self.action_bench.name)
+
+	def test_get_code_server_credentials_refuses_a_bench_with_no_address(self):
+		# A failed code-server step clears the address, and this class rolls back
+		# only once, so the fixture is put back for its siblings.
+		self.addCleanup(self._restore_code_server_url, self.bench.code_server_url)
+		self._set_code_server_url("")
+		with self.assertRaises(frappe.ValidationError):
+			api.get_code_server_credentials(self.bench.name)
+
+	def _restore_code_server_url(self, url):
+		self._set_code_server_url(url)
+
+	def _set_code_server_url(self, url):
+		frappe.db.set_value("Bench Instance", self.bench.name, "code_server_url", url)
+		frappe.clear_document_cache("Bench Instance", self.bench.name)
+
 	# --- Enqueue endpoints (patch frappe.enqueue, assert contract) -----------
 
 	def test_create_lab_from_template_contract_and_timing(self):
@@ -565,22 +585,14 @@ class TestApi(IntegrationTestCase):
 		self.assertTrue(frappe.db.exists("Bench Instance", result["name"]))
 		self.assert_within_budget("create_bench", elapsed_ms)
 
-	def test_create_site_contract_and_timing(self):
-		data = frappe.as_json({"bench": self.bench.name, "site_name": "cli-site", "apps": []})
-		with patch("frappe.enqueue") as enqueue:
-			result, elapsed_ms = _timed(lambda: api.create_site(data))
-		self.addCleanup(frappe.delete_doc, "Bench Site", result["name"], force=True, ignore_permissions=True)
-		enqueue.assert_called_once()
-		self.assertTrue(enqueue.call_args.kwargs["enqueue_after_commit"])
-		self.assertEqual(result["status"], "Creating")
-		self.assert_within_budget("create_site", elapsed_ms)
-
 	# --- Docker / manager side effects (patch module functions) --------------
 
 	def test_bench_action_start_stop_restart_and_timing(self):
 		with (
 			patch("benchpress.docker_manager.start_container"),
-			patch("benchpress.docker_manager.stop_container"),
+			# Stop routes through `deploy_manager.stop_bench`, which bound its Docker call at
+			# import — so the patch has to land on that module, not on `docker_manager`.
+			patch("benchpress.deploy_manager.stop_container"),
 			patch("benchpress.docker_manager.restart_container"),
 			patch("benchpress.docker_manager.remove_container"),
 		):
@@ -589,6 +601,46 @@ class TestApi(IntegrationTestCase):
 				self.assertEqual(result["name"], self.action_bench.name)
 				self.assertEqual(result["status"], expected)
 				self.assert_within_budget("bench_action", elapsed_ms)
+
+	def test_bench_action_stop_deactivates_the_sites(self):
+		"""The SPA's Stop and the worker's stop are one path, so neither can skip the rows."""
+		site = frappe.get_doc(
+			{
+				"doctype": "Bench Site",
+				"bench": self.action_bench.name,
+				"site_name": "stop-path.localhost",
+				"status": "Active",
+			}
+		).insert(ignore_permissions=True)
+		self.addCleanup(frappe.delete_doc, "Bench Site", site.name, force=True, ignore_permissions=True)
+		self.addCleanup(frappe.db.commit)
+
+		with patch("benchpress.deploy_manager.stop_container"):
+			api.bench_action(self.action_bench.name, "stop")
+
+		self.assertEqual(frappe.db.get_value("Bench Site", site.name, "status"), "Inactive")
+
+	def test_bench_action_on_an_instance_with_no_container_never_reaches_docker(self):
+		"""A Draft or reaped instance has no container id; Docker's own error names nothing
+		the user can act on, so the guard has to fire before the call."""
+		lab = _ensure_lab("api-timing-no-container-lab")
+		bench = _ensure_bench(lab, status="Draft")
+		self.addCleanup(frappe.delete_doc, "Lab", lab.name, force=True, ignore_permissions=True)
+		self.addCleanup(frappe.delete_doc, "Bench Instance", bench.name, force=True, ignore_permissions=True)
+
+		for action in ("start", "stop", "restart"):
+			with (
+				self.subTest(action=action),
+				patch("benchpress.docker_manager.start_container") as start,
+				patch("benchpress.deploy_manager.stop_container") as stop,
+				patch("benchpress.docker_manager.restart_container") as restart,
+			):
+				with self.assertRaises(frappe.ValidationError) as caught:
+					api.bench_action(bench.name, action)
+				self.assertIn("deploy it first", str(caught.exception))
+				start.assert_not_called()
+				stop.assert_not_called()
+				restart.assert_not_called()
 
 	def test_restart_code_server_contract_and_timing(self):
 		with patch("benchpress.docker_manager.exec_in_container", return_value=(0, "ok")):

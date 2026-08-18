@@ -44,6 +44,18 @@ def _delete_bench_sites(bench_name):
 		frappe.delete_doc("Bench Site", name, force=True, ignore_permissions=True)
 
 
+def _make_bench_site(bench_name, site_name, status="Active"):
+	"""A `Bench Site` row a deploy would have recorded, for tests about what happens to it."""
+	return frappe.get_doc(
+		{
+			"doctype": "Bench Site",
+			"bench": bench_name,
+			"site_name": site_name,
+			"status": status,
+		}
+	).insert(ignore_permissions=True)
+
+
 def _fresh_bench(case, lab_name):
 	frappe.set_user("Administrator")
 	existing = get_instance_id("Administrator", lab_name)
@@ -88,6 +100,18 @@ def _ensure_owner(email):
 			}
 		).insert(ignore_permissions=True)
 	return email
+
+
+def _exec_results(failures: dict | None):
+	"""An `exec_in_container` stand-in that fails only the commands a test named."""
+
+	def run(container_id, command, *args, **kwargs):
+		for fragment, result in (failures or {}).items():
+			if fragment in command:
+				return result
+		return (0, "")
+
+	return run
 
 
 class TestDeployManager(IntegrationTestCase):
@@ -164,6 +188,25 @@ class TestDeployManager(IntegrationTestCase):
 		mock_stop.assert_not_called()
 		bench.reload()
 		self.assertEqual(bench.status, "Stopped")
+
+	@patch("benchpress.deploy_manager.stop_container")
+	def test_stop_bench_deactivates_every_site_on_the_bench(self, mock_stop):
+		"""Nothing answers inside a stopped container, so no row may stay Active."""
+		from benchpress.deploy_manager import stop_bench
+
+		bench = self._fresh_bench()
+		bench.container_id = "container-stop-sites"
+		bench.status = "Running"
+		bench.save(ignore_permissions=True)
+		_make_bench_site(bench.name, "one.localhost")
+		_make_bench_site(bench.name, "two.localhost")
+		frappe.db.commit()
+
+		stop_bench(bench.name)
+		stop_bench(bench.name)  # a second stop is a no-op, not an error
+
+		statuses = frappe.get_all("Bench Site", filters={"bench": bench.name}, pluck="status")
+		self.assertEqual(statuses, ["Inactive", "Inactive"])
 
 	@patch("benchpress.deploy_manager._deploy_bench")
 	@patch("benchpress.deploy_manager.remove_container")
@@ -410,54 +453,6 @@ class TestDeployManager(IntegrationTestCase):
 		for call in mock_msgprint.call_args_list:
 			self.assertIn("already in progress", str(call.args[0]))
 
-	# --- _create_site_on_bench (add-site path) ---
-
-	def _make_bench_site(self, bench):
-		site = frappe.get_doc(
-			{
-				"doctype": "Bench Site",
-				"site_name": "arity-test-site",
-				"bench": bench.name,
-				"status": "Creating",
-				"apps_installed": [{"app_name": "benchpress", "app_label": "BenchPress"}],
-			}
-		).insert(ignore_permissions=True)
-		frappe.db.commit()
-		self.addCleanup(
-			lambda n=site.name: (
-				frappe.delete_doc("Bench Site", n, force=True, ignore_permissions=True)
-				if frappe.db.exists("Bench Site", n)
-				else None
-			)
-		)
-		return site
-
-	@patch("benchpress.deploy_manager.create_site_in_container", autospec=True)
-	def test_create_site_on_bench_matches_signature_and_activates_site(self, mock_create):
-		from benchpress.api import _create_site_on_bench
-
-		bench = self._fresh_bench()
-		bench.database_server = self.db_server_name
-		bench.container_id = "container-arity-test"
-		bench.admin_password = "test-admin-pw"
-		bench.save(ignore_permissions=True)
-		frappe.db.commit()
-
-		site = self._make_bench_site(bench)
-		# autospec enforces the real 5-arg signature: a stale 6-arg call raises
-		# TypeError inside the except block, which would leave status = Error.
-		mock_create.return_value = (0, "site created")
-
-		_create_site_on_bench(site.name)
-
-		site.reload()
-		self.assertEqual(site.status, "Active")
-		mock_create.assert_called_once()
-		args = mock_create.call_args.args
-		self.assertEqual(args[0], "container-arity-test")
-		self.assertEqual(args[2], "arity-test-site")
-		self.assertEqual(args[4], "benchpress")
-
 	# --- build_linkuser_args (Lab.shell wiring) ---
 
 	def test_build_linkuser_args_includes_lab_shell(self):
@@ -530,10 +525,15 @@ class TestDeployStepMarkers(IntegrationTestCase):
 		self.addCleanup(lambda name=bench.name: frappe.db.delete("Deploy Log", {"bench": name}))
 		return bench
 
-	def _run_deploy(self, bench, site_result=(0, "site created"), cache_hit=True):
+	def _run_deploy(
+		self, bench, site_result=(0, "site created"), cache_hit=True, exec_failures=None, write_error=None
+	):
 		"""A whole deploy with every side effect mocked but the log itself.
 
 		`cache_hit=False` leaves the image step to the caller, so it has to build.
+		`exec_failures` maps a fragment of a container command to the result that command
+		returns, so one exec can fail while the rest of the run succeeds. `write_error` makes
+		every `write_file_to_container` raise, the way a read-only target path would.
 		"""
 		from benchpress import deploy_manager
 
@@ -545,7 +545,7 @@ class TestDeployStepMarkers(IntegrationTestCase):
 			patch.object(deploy_manager, "create_bench_container", autospec=True) as mock_create,
 			patch.object(deploy_manager, "start_container", autospec=True),
 			patch.object(deploy_manager, "wait_for_container_running", autospec=True) as mock_wait,
-			patch.object(deploy_manager, "write_file_to_container", autospec=True),
+			patch.object(deploy_manager, "write_file_to_container", autospec=True) as mock_write,
 			patch.object(deploy_manager, "exec_in_container", autospec=True) as mock_exec,
 			patch.object(deploy_manager, "create_site_in_container", autospec=True) as mock_site,
 			patch.object(deploy_manager, "remove_container", autospec=True),
@@ -557,7 +557,9 @@ class TestDeployStepMarkers(IntegrationTestCase):
 			mock_infra.return_value = self.db_server_name
 			mock_create.return_value = "cid-steps"
 			mock_wait.return_value = "172.30.0.11"
-			mock_exec.return_value = (0, "")
+			mock_exec.side_effect = _exec_results(exec_failures)
+			if write_error:
+				mock_write.side_effect = Exception(write_error)
 			mock_peer.return_value = {
 				"peer": "peer-steps",
 				"assigned_ip": "172.27.0.11",
@@ -690,6 +692,134 @@ class TestDeployStepMarkers(IntegrationTestCase):
 		self.assertIn("Compiling translations for hrms", build_log.message)
 		self.assertIn("=== Build complete: benchpress/steps:built ===", build_log.message)
 		self.assertEqual(build_log.log_type, "success")
+
+	# --- Phase 3: a command the run does not check is a claim it cannot make ---
+
+	def _enable_code_server(self):
+		before = frappe.db.get_value("Lab", self.lab.name, "enable_code_server")
+		frappe.db.set_value("Lab", self.lab.name, "enable_code_server", 1)
+		self.addCleanup(frappe.db.set_value, "Lab", self.lab.name, "enable_code_server", before)
+		frappe.db.commit()
+
+	def _bench_field(self, bench, field):
+		return frappe.db.get_value("Bench Instance", bench.name, field)
+
+	def test_a_failed_restart_fails_step_ten_and_stores_no_ide_address(self):
+		"""An address that answers nothing is worse than a deploy that admits it broke."""
+		bench = self._bench()
+		self._enable_code_server()
+		frappe.db.set_value("Bench Instance", bench.name, "code_server_url", "http://stale:8080/")
+		frappe.db.commit()
+
+		self._run_deploy(bench, exec_failures={"restart.sh": (1, "code-server: no such unit")})
+
+		log = self._log(bench.name)
+		self.assertIn("restart.sh failed (exit 1): code-server: no such unit", log)
+		self.assertNotIn("code-server ready at", log)
+		self.assertEqual(self._bench_field(bench, "status"), "Error")
+		# The empty field is the contract: `LabHeader.showCodeServer` reads it to hide the button.
+		self.assertFalse(self._bench_field(bench, "code_server_url"))
+
+	def test_a_failed_config_permission_fix_fails_step_ten(self):
+		"""A config code-server cannot read, or that every account can, is not a working IDE."""
+		bench = self._bench()
+		self._enable_code_server()
+
+		self._run_deploy(bench, exec_failures={"chmod 600": (1, "Operation not permitted")})
+
+		log = self._log(bench.name)
+		self.assertIn("Securing the code-server config failed (exit 1)", log)
+		self.assertNotIn("code-server ready at", log)
+		self.assertFalse(self._bench_field(bench, "code_server_url"))
+
+	def test_a_working_step_ten_stores_the_address_and_says_ready_once(self):
+		bench = self._bench()
+		self._enable_code_server()
+
+		self._run_deploy(bench)
+
+		log = self._log(bench.name)
+		self.assertEqual(log.count("code-server ready at"), 1)
+		self.assertEqual(self._bench_field(bench, "code_server_url"), "http://172.27.0.11:8080/")
+		self.assertEqual(self._bench_field(bench, "status"), "Running")
+
+	def test_a_failed_file_write_fails_the_deploy_at_the_step_that_wrote_it(self):
+		"""Hole 4: a silently unwritten `common_site_config.json` is a site that cannot find redis."""
+		bench = self._bench()
+
+		self._run_deploy(bench, write_error="Writing common_site_config.json failed (exit 1): read-only")
+
+		keys = [step["step_key"] for step in self._emitted_steps(bench.name)]
+		self.assertEqual(keys[-1], "site_config")
+		self.assertIn("common_site_config.json failed", self._log(bench.name))
+		self.assertEqual(self._bench_field(bench, "status"), "Error")
+
+	def test_a_failed_asset_build_warns_and_the_deploy_still_finishes(self):
+		"""The one deliberate asymmetry: stale assets are recoverable, a killed deploy is not."""
+		bench = self._bench()
+
+		self._run_deploy(bench, exec_failures={"bench build": (1, "esbuild: hrms bundle exploded")})
+
+		log = self._log(bench.name)
+		self.assertIn("bench build failed (exit 1)", log)
+		self.assertIn("esbuild: hrms bundle exploded", log)
+		self.assertEqual(self._bench_field(bench, "status"), "Running")
+		self.assertIn("Step 11/11", log)
+
+	def test_a_clean_deploy_writes_no_warning_lines(self):
+		"""The checks above must not turn a healthy run into a noisy one."""
+		bench = self._bench()
+		self._enable_code_server()
+
+		self._run_deploy(bench)
+
+		self.assertNotIn("failed", self._log(bench.name))
+
+	def test_a_build_failure_inside_a_deploy_is_attributed_to_the_build(self):
+		"""Hole 6: the banner must name the build and point at the log holding Docker's error."""
+		from benchpress import deploy_manager, lab_detail
+
+		bench = self._bench()
+		self.addCleanup(frappe.db.delete, "Build Log", {"lab": self.lab.name})
+		status_before = frappe.db.get_value("Lab", self.lab.name, "status")
+
+		def exploding_build(lab, log_fn=None, **kwargs):
+			log_fn("Step 3/8 : RUN bench get-app --branch nope hrms")
+			raise Exception("branch 'nope' not found in upstream origin")
+
+		with (
+			patch.object(deploy_manager.image_cache, "resolve", return_value=("fresh:tag", False)),
+			patch.object(deploy_manager, "build_lab_image", side_effect=exploding_build),
+		):
+			self._run_deploy(bench, cache_hit=False)
+
+		# `_run_build` restores the lab, which is exactly why `Lab.status` cannot carry this.
+		self.assertEqual(frappe.db.get_value("Lab", self.lab.name, "status"), status_before)
+
+		failure = lab_detail.get_lab(self.lab.name)["failure"]
+		self.assertEqual(failure["source"], "build")
+		self.assertIn("branch 'nope' not found", failure["reason"])
+		self.assertEqual(
+			failure["log"],
+			frappe.get_all(
+				"Build Log",
+				filters={"lab": self.lab.name},
+				order_by="timestamp desc",
+				limit_page_length=1,
+				pluck="name",
+			)[0],
+		)
+
+	def test_a_deploy_that_broke_after_the_image_still_blames_the_deploy(self):
+		"""The redirect is bounded to the image step, so an unrelated failure keeps its own log."""
+		from benchpress import lab_detail
+
+		bench = self._bench()
+		self._run_deploy(bench, site_result=Exception("bench new-site exploded"))
+
+		failure = lab_detail.get_lab(self.lab.name)["failure"]
+		self.assertEqual(failure["source"], "deploy")
+		self.assertIn("bench new-site exploded", failure["reason"])
 
 	def test_step_lines_are_published_as_the_step_type(self):
 		bench = self._bench()
@@ -898,6 +1028,27 @@ class TestRecordPrimarySite(IntegrationTestCase):
 		self.assertEqual(site.status, "Active")
 		self.assertEqual([row.app_name for row in site.apps_installed], ["frappe"])
 
+	def test_the_controller_alone_owns_full_domain(self):
+		"""Two writers meant the label could name a site that does not exist.
+
+		`_record_primary_site` no longer stamps `full_domain`; the controller derives it from the
+		editable `Bench Instance.domain`. The name the site was created under is `site_name`, and
+		relabelling the instance must never move it.
+		"""
+		from benchpress.deploy_manager import _record_primary_site
+
+		bench = self._bench()
+		_record_primary_site(bench, self.lab, "secret-one")
+		created = frappe.db.get_value("Bench Site", {"bench": bench.name}, "full_domain")
+		self.assertEqual(created, bench.site_name)
+
+		frappe.db.set_value("Bench Instance", bench.name, "domain", "relabelled.example")
+		_record_primary_site(bench, self.lab, "secret-one")
+
+		site = frappe.get_doc("Bench Site", {"bench": bench.name})
+		self.assertEqual(site.site_name, bench.site_name)
+		self.assertEqual(site.full_domain, f"{bench.site_name}.relabelled.example")
+
 	def test_a_second_deploy_refreshes_the_row_instead_of_duplicating_it(self):
 		from benchpress.deploy_manager import _record_primary_site
 
@@ -917,6 +1068,26 @@ class TestRecordPrimarySite(IntegrationTestCase):
 		_deactivate_bench_sites(bench)
 
 		self.assertEqual(frappe.db.get_value("Bench Site", {"bench": bench.name}, "status"), "Inactive")
+
+	@patch("benchpress.deploy_manager.stop_container")
+	def test_a_deploy_returns_a_stopped_site_to_active(self, mock_stop):
+		"""The round trip, which needs no code of its own: `_record_primary_site` already writes
+		`Active`, so a stop followed by a deploy must land back where it started."""
+		from benchpress.deploy_manager import _record_primary_site, stop_bench
+
+		bench = self._bench()
+		bench.container_id = "container-round-trip"
+		bench.save(ignore_permissions=True)
+		_record_primary_site(bench, self.lab, "secret-one")
+		frappe.db.commit()
+
+		stop_bench(bench.name)
+		self.assertEqual(frappe.db.get_value("Bench Site", {"bench": bench.name}, "status"), "Inactive")
+
+		bench.reload()
+		_record_primary_site(bench, self.lab, "secret-one")
+
+		self.assertEqual(frappe.db.get_value("Bench Site", {"bench": bench.name}, "status"), "Active")
 
 	@patch("benchpress.mariadb_manager.drop_site_database")
 	def test_teardown_drops_the_real_db_when_the_domain_has_drifted(self, mock_drop):
