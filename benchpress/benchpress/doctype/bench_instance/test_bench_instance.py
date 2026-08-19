@@ -73,6 +73,30 @@ class IntegrationTestBenchInstance(IntegrationTestCase):
 		bench = self._insert_bench()
 		self.assertTrue(bench.site_name.endswith(".localhost"))
 
+	def test_before_insert_honors_a_caller_supplied_site_name(self):
+		frappe.set_user("Administrator")
+		existing = get_instance_id("Administrator", self.lab_name)
+		if frappe.db.exists("Bench Instance", existing):
+			frappe.delete_doc("Bench Instance", existing, force=True, ignore_permissions=True)
+			frappe.db.commit()
+		bench = frappe.get_doc(
+			{
+				"doctype": "Bench Instance",
+				"lab": self.lab_name,
+				"site_name": "caller-chosen.localhost",
+			}
+		).insert(ignore_permissions=True)
+		frappe.db.commit()
+		self.addCleanup(
+			lambda n=bench.name: frappe.delete_doc("Bench Instance", n, force=True, ignore_permissions=True)
+			if frappe.db.exists("Bench Instance", n)
+			else None
+		)
+		self.addCleanup(frappe.db.commit)
+
+		self.assertEqual(bench.site_name, "caller-chosen.localhost")
+		self.assertEqual(bench.bench_name, get_instance_id("Administrator", self.lab_name))
+
 	def test_before_insert_derives_ssh_username_from_email(self):
 		bench = self._insert_bench()
 		self.assertEqual(bench.ssh_username, "administrator")

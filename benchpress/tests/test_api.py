@@ -585,6 +585,33 @@ class TestApi(IntegrationTestCase):
 		self.assertTrue(frappe.db.exists("Bench Instance", result["name"]))
 		self.assert_within_budget("create_bench", elapsed_ms)
 
+	def _set_base_domain(self, value):
+		before = frappe.db.get_single_value("BenchPress Settings", "base_domain")
+		frappe.db.set_single_value("BenchPress Settings", "base_domain", value)
+		self.addCleanup(frappe.db.set_single_value, "BenchPress Settings", "base_domain", before)
+
+	def test_create_bench_honors_an_explicit_site_name(self):
+		self._set_base_domain("benchpress.cloud")
+		data = frappe.as_json({"lab": self.create_lab.name, "site_name": "acme"})
+		with patch("frappe.enqueue"):
+			result = api.create_bench(data)
+		self.addCleanup(
+			frappe.delete_doc, "Bench Instance", result["name"], force=True, ignore_permissions=True
+		)
+		self.assertEqual(
+			frappe.db.get_value("Bench Instance", result["name"], "site_name"), "acme.benchpress.cloud"
+		)
+
+	def test_create_bench_without_site_name_keeps_the_default(self):
+		data = frappe.as_json({"lab": self.create_lab.name})
+		with patch("frappe.enqueue"):
+			result = api.create_bench(data)
+		self.addCleanup(
+			frappe.delete_doc, "Bench Instance", result["name"], force=True, ignore_permissions=True
+		)
+		site_name = frappe.db.get_value("Bench Instance", result["name"], "site_name")
+		self.assertTrue(site_name.endswith(".localhost"))
+
 	# --- Docker / manager side effects (patch module functions) --------------
 
 	def test_bench_action_start_stop_restart_and_timing(self):

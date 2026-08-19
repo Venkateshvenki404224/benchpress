@@ -142,6 +142,7 @@ def _counts_by_bench(doctype: str, column: str, bench_names: list[str]) -> dict[
 def create_bench(data: str) -> dict:
 	require_app_user()
 	from benchpress.benchpress.doctype.bench_instance import get_instance_id
+	from benchpress.docker_manager import resolve_site_name
 
 	data = frappe.parse_json(data)
 
@@ -150,6 +151,7 @@ def create_bench(data: str) -> dict:
 		frappe.throw(_("Lab is required to create a bench."))
 
 	lab = frappe.get_cached_doc("Lab", lab_name)
+	requested_site_name = data.get("site_name") or data.get("site")
 
 	instance_id = get_instance_id(frappe.session.user, lab_name)
 	if frappe.db.exists("Bench Instance", instance_id):
@@ -164,6 +166,7 @@ def create_bench(data: str) -> dict:
 				"lab": lab_name,
 				"frappe_version": lab.frappe_version,
 				"domain": data.get("domain"),
+				"site_name": resolve_site_name(requested_site_name),
 				"status": "Draft",
 			}
 		)
