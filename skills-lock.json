@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "skills": {
+    "code-style": {
+      "source": "frappe/skills",
+      "sourceType": "github",
+      "skillPath": "skills/code-style/SKILL.md",
+      "computedHash": "158e8cc8fa680cd8650e11f42cb940757d70353a607cd3144e6158d8add91e66"
+    },
+    "draft-security-advisory": {
+      "source": "frappe/skills",
+      "sourceType": "github",
+      "skillPath": "skills/draft-security-advisory/SKILL.md",
+      "computedHash": "9237b3e0081b65964101e3f00b0f8df733dea06ac4a7d112483878b6f91902b9"
+    },
+    "frappe-app-dev": {
+      "source": "frappe/skills",
+      "sourceType": "github",
+      "skillPath": "skills/frappe-app-dev/SKILL.md",
+      "computedHash": "53fc33422fc32f67527bc98af3f5d2e09c51e5b969f7114deefbb3c0bd6eb49f"
+    },
+    "quality-code-review": {
+      "source": "frappe/skills",
+      "sourceType": "github",
+      "skillPath": "skills/quality-code-review/SKILL.md",
+      "computedHash": "79d9f493033700d576f62ae8f7ebeb2c6c97d0e8854b75e030ad239ff61fd276"
+    },
+    "resolve-backport-conflicts": {
+      "source": "frappe/skills",
+      "sourceType": "github",
+      "skillPath": "skills/resolve-backport-conflicts/SKILL.md",
+      "computedHash": "0b72672daf96ef494b17ca20cdcb8a203fb0e0c4b8aa368280ec3aa1d996a01a"
+    },
+    "technical-writing": {
+      "source": "frappe/skills",
+      "sourceType": "github",
+      "skillPath": "skills/technical-writing/SKILL.md",
+      "computedHash": "49637619390d6eb95a34b931aa257f1edf0c06fb291368ec02769007bf7b37ec"
+    },
+    "ui-design": {
+      "source": "frappe/skills",
+      "sourceType": "github",
+      "skillPath": "skills/ui-design/SKILL.md",
+      "computedHash": "c3dec2ce532f6f99bcf827030430dc4bb1528f3d654f2736a3612f85e4afcf28"
+    }
+  }
+}
