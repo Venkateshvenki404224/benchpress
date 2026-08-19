@@ -25,33 +25,35 @@
 ## What is BenchPress?
 
 Spinning up a Frappe bench to try an app, reproduce a bug, or hand a client a demo
-usually means an afternoon of Docker, nginx, and database setup — repeated for every
-new environment, on a machine you then have to keep tidy.
+usually takes an afternoon of Docker, nginx, and database setup. You repeat this
+work for every new environment, on a machine you then have to keep tidy.
 
-BenchPress turns that into a form. Describe a **Lab** — a Frappe version and the list
-of apps you want — and it builds a Docker image, deploys a container, gives it a
-private WireGuard IP, and hands you an SSH command and a working site URL. When you
-are done with the environment, you delete it.
+BenchPress turns that into a form. Describe a **Lab** — a Frappe version and the
+list of apps you want. BenchPress then builds a Docker image, deploys a container,
+and gives it a private WireGuard IP. You get back an SSH command and a working
+site URL. When you finish with the environment, you delete it.
 
 BenchPress solves a narrower, different problem than a hosting platform like
-Frappe Cloud: fast onboarding for teams running Frappe-based projects — a lead
-defines the app stack once, and a new developer or intern gets a working bench
-in one click instead of losing a day to setup. It is itself a Frappe app: the
-whole thing installs onto a bench you already run, with a Vue 3 SPA on the front
-and `frappe.qb` and background jobs on the back.
+Frappe Cloud. It gives teams fast onboarding for Frappe-based projects: a lead
+defines the app stack once, and a new developer or intern then gets a working
+bench in one click, instead of losing a day to setup.
 
-**What you get per Lab:** a reproducible image, a running bench container, a private
-VPN address reachable from your laptop, SSH access, code-server, and per-site
-management — with build and deploy output streamed live into the browser.
+BenchPress is itself a Frappe app. It installs onto a bench you already run,
+with a Vue 3 SPA on the front and `frappe.qb` and background jobs on the back.
+
+**What you get per Lab:** a reproducible image, a running bench container, a
+private VPN address reachable from your laptop, SSH access, code-server, and
+per-site management. BenchPress streams build and deploy output live into the
+browser.
 
 ![Labs List](docs/images/labs-list.png)
 
 [![Watch the video](https://img.youtube.com/vi/DzTNwA39PqA/maxresdefault.jpg)](https://www.youtube.com/watch?v=DzTNwA39PqA)
 
-> **Disposable sandboxes, not production hosting.** A Lab is a throwaway development
-> environment with credentials shown in the UI. See
-> [Production Safety & Compatibility](docs/production-safety.md) before pointing
-> anything important at it.
+> **Disposable sandboxes, not production hosting.** A Lab is a throwaway
+> development environment, and its UI shows the credentials in plain text. See
+> [Production Safety & Compatibility](docs/production-safety.md) before you
+> point anything important at it.
 
 ---
 
@@ -77,12 +79,12 @@ Then open `http://your-site.localhost:8000/frontend` and create your first Lab.
 
 ---
 
-## Licence
+## License Summary
 
 BenchPress is free software under the **GNU Affero General Public License v3.0 only**.
 If you run a modified version as a network service, the AGPL requires you to offer its
 users the corresponding source. See [License](#license) for the notice, and
-[TRADEMARKS.md](TRADEMARKS.md) for what the licence does *not* cover.
+[TRADEMARKS.md](TRADEMARKS.md) for what the license does *not* cover.
 
 ---
 
@@ -127,7 +129,7 @@ users the corresponding source. See [License](#license) for the notice, and
 - [WireGuard Setup](docs/wireguard-setup.md) -- Detailed WireGuard configuration
 - [Upgrading a BenchPress Install](docs/upgrading.md) -- Backup-gated upgrade and rollback runbook
 - [Database Backup & Restore](docs/database-backup-restore.md) -- Where nightly MariaDB dumps live and the verified restore runbook
-- [Changelog](CHANGELOG.md) -- Notable changes per release; read before a multi-release upgrade
+- [Changelog](CHANGELOG.md) -- Notable changes per release. Read it before a multi-release upgrade
 
 ---
 
@@ -145,10 +147,11 @@ There is no simple way to say *"Give me a fresh Frappe bench with ERPNext and HR
 
 ## The Solution
 
-BenchPress is a **self-hosted onboarding and dev-environment tool**, built entirely
-as a Frappe app — not a Frappe Cloud alternative; it solves a different, narrower
-problem: getting a new developer or intern a working bench in minutes instead of
-a day of manual setup. It automates the entire bench lifecycle through a modern web UI:
+BenchPress is a **self-hosted onboarding and dev-environment tool**, built
+entirely as a Frappe app. It is not a Frappe Cloud alternative. It solves a
+different, narrower problem: getting a new developer or intern a working bench
+in minutes, instead of a day of manual setup. It automates the entire bench
+lifecycle through a web UI:
 
 1. **Create a Lab** -- Define a reusable template with your desired Frappe apps (CRM, ERPNext, HRMS, LMS, Helpdesk, Wiki, etc.), the Frappe version, and resource limits (CPU, memory)
 2. **Build once** -- Docker image with all apps baked in via a 5-layer cached Dockerfile, rebuilt only when configuration changes
@@ -161,53 +164,48 @@ a day of manual setup. It automates the entire bench lifecycle through a modern 
 
 ## Architecture
 
-```
-                                +---------------------------+
-                                |       User's Browser      |
-                                |  Vue 3 SPA (frappe-ui)    |
-                                +-------------+-------------+
-                                              |
-                                     HTTPS / WebSocket
-                                              |
-                                +-------------v-------------+
-                                |      Frappe Web Server     |
-                                |  (BenchPress Frappe App)   |
-                                |                            |
-                                |  api.py ---- REST API      |
-                                |  hooks.py -- Scheduler     |
-                                |  vpn_adapter -- VPN seam   |
-                                +---+--------+----------+---+
-                                    |        |          |
-                     +--------------+   +----v----+  +--v--------------+
-                     |                  |  Redis   |  | deploy_manager  |
-                     |                  |  Queue   |  | (Background     |
-                     |                  |  (RQ)    |  |  Workers)       |
-                     |                  +----+-----+  +--+---------+---+
-                     |                       |           |         |
-              +------v------+         +------v------+    |   +-----v--------+
-              |  WireGuard  |         |   Docker    |<---+   | stats_       |
-              | (wg0, owned |         |   Engine    |        | collector    |
-              | by vpn_mgmt)|         |   (SDK)     |        | (cron 1min) |
-              | 172.27.0.0  |         +------+------+        +--------------+
-              |  /16 pool   |                |
-              +------+------+                |
-                     |              +--------v---------+
-                     |              |  benchpress       |
-                     |              |  Docker Network   |
-                     |              |  172.30.0.0/24    |
-                     |              +---+-----+-----+--+
-                     |                  |     |     |
-                 Direct tunnel    +-----v-+ +-v---+ +v-------+   +------------------+
-                 to container     | Bench | |Bench| | Bench  |   | benchpress-      |
-                 wg0 (22,8000,    | Ctr 1 | |Ctr 2| | Ctr N  +-->| mariadb          |
-                 9000)            |       | |     | |        |   | (shared MariaDB) |
-                     +----------->| SSH   | |SSH  | | SSH    |   +------------------+
-                                  | Frappe| |Frapp| | Frappe |
-                                  +---+---+ +--+--+ +---+----+   +------------------+
-                                      |        |        |         | benchpress-      |
-                                      +--------+--------+-------->| redis            |
-                                                                  | (shared Redis)   |
-                                                                  +------------------+
+The browser talks to the Frappe web server over HTTPS and WebSocket. The web
+server dispatches builds and deploys to the Redis queue and `deploy_manager`,
+which drive the Docker engine. WireGuard gives each bench container a direct,
+routable tunnel, and every container shares the same MariaDB and Redis
+containers.
+
+```mermaid
+flowchart TD
+    Browser["User's Browser<br/>Vue 3 SPA (frappe-ui)"]
+    Web["Frappe Web Server<br/>(BenchPress Frappe App)<br/>api.py — REST API<br/>hooks.py — Scheduler<br/>vpn_adapter — VPN seam"]
+    RQ["Redis Queue (RQ)"]
+    DM["deploy_manager<br/>(Background Workers)"]
+    SC["stats_collector<br/>(cron, every 1 min)"]
+    WG["WireGuard (wg0)<br/>owned by vpn_management<br/>172.27.0.0/16 pool"]
+    Docker["Docker Engine (SDK)"]
+    Net["benchpress Docker Network<br/>172.30.0.0/24"]
+    C1["Bench Container 1<br/>SSH + Frappe"]
+    C2["Bench Container 2<br/>SSH + Frappe"]
+    CN["Bench Container N<br/>SSH + Frappe"]
+    MariaDB[("benchpress-mariadb<br/>shared MariaDB")]
+    Redis[("benchpress-redis<br/>shared Redis")]
+
+    Browser -- "HTTPS / WebSocket" --> Web
+    Web --> RQ
+    Web --> DM
+    Web --> WG
+    RQ --> Docker
+    DM --> Docker
+    DM --> SC
+    Docker --> Net
+    Net --> C1
+    Net --> C2
+    Net --> CN
+    WG -- "direct tunnel: 22, 8000, 9000" --> C1
+    WG -.-> C2
+    WG -.-> CN
+    C1 --> MariaDB
+    C2 --> MariaDB
+    CN --> MariaDB
+    C1 --> Redis
+    C2 --> Redis
+    CN --> Redis
 ```
 
 ### How the Pieces Fit Together
@@ -217,7 +215,7 @@ a day of manual setup. It automates the entire bench lifecycle through a modern 
 | **Frappe Web Server** | Hosts the BenchPress app, serves the Vue 3 SPA, handles REST API calls, and publishes real-time WebSocket events |
 | **Redis Queue (RQ)** | Processes long-running background jobs: Docker image builds (up to 60 min) and container deployments |
 | **Docker Engine** | Builds images from the 5-layer Dockerfile template, creates and manages containers with CPU/memory limits |
-| **WireGuard (wg0)** | Kernel-level VPN owned by the **vpn_management** app (wg-agent sidecar, listen port 44556). Each bench claims a unique IP (172.27.0.X) from the network pool; clients reach ports 22, 8000, and 9000 directly over the tunnel |
+| **WireGuard (wg0)** | Kernel-level VPN owned by the **vpn_management** app (wg-agent sidecar, listen port 44556). Each bench claims a unique IP (172.27.0.X) from the network pool. Clients reach ports 22, 8000, and 9000 directly over the tunnel |
 | **Shared MariaDB** | A `benchpress-mariadb` container shared across all benches, managed via `docker-compose.yml`. Each site gets its own database (named by SHA1 hash). Managed via the Database Server DocType |
 | **Shared Redis** | A `benchpress-redis` container shared across all benches. DB 0 = cache, DB 1 = queue, DB 2 = socketio. Also managed via `docker-compose.yml` with `restart: always` |
 | **Stats Collector** | Cron job running every minute that polls the Docker stats API for all running containers and updates CPU/memory/health metrics (VPN transfer stats are polled by vpn_management) |
@@ -227,22 +225,48 @@ a day of manual setup. It automates the entire bench lifecycle through a modern 
 
 ## Container Lifecycle
 
-```
-  CREATE LAB            BUILD IMAGE              DEPLOY BENCH                ACCESS
-  (Template)           (Docker Build)          (Container + VPN)          (SSH + Web)
- +-----------+     +------------------+     +---------------------+     +-------------+
- |           |     |                  |     |                     |     |             |
- | Lab ID    |     | Layer 1: apt     |     | 1. Check image      |     | WireGuard   |
- | Frappe v  +---->| Layer 2: SSH     +---->| 2. Ensure shared    +---->| client .conf|
- | Apps[]    |     | Layer 3: bench   |     |    MariaDB + Redis  |     |             |
- | CPU/Mem   |     | Layer 4: apps    |     | 3. Create container |     | ssh frappe@ |
- |           |     | Layer 5: site    |     | 4. Register VPN Peer|     | 172.27.0.X  |
- |           |     |                  |     | 5. Set SSH password |     |             |
- +-----------+     +------------------+     +---------------------+     +-------------+
-   Status:            Cached layers            Logs streamed via          Ports:
-   Draft              rebuild only             WebSocket in               22   -> SSH
-                      when config              real-time                  8000 -> Web
-                      changes                                             9000 -> Socket.io
+A Lab moves through four stages: you define it, BenchPress builds its image,
+BenchPress deploys it as a container with a VPN peer, and you connect over
+SSH or the web.
+
+```mermaid
+flowchart LR
+    subgraph CL["Create Lab<br/>(Template)"]
+        direction TB
+        CL1["Lab ID"]
+        CL2["Frappe version"]
+        CL3["Apps[]"]
+        CL4["CPU / memory"]
+    end
+
+    subgraph BI["Build Image<br/>(Docker Build)"]
+        direction TB
+        BI1["Layer 1: apt"]
+        BI2["Layer 2: SSH"]
+        BI3["Layer 3: bench"]
+        BI4["Layer 4: apps"]
+        BI5["Layer 5: site"]
+    end
+
+    subgraph DEP["Deploy Bench<br/>(Container + VPN)"]
+        direction TB
+        DEP1["1. Check image"]
+        DEP2["2. Start shared MariaDB + Redis"]
+        DEP3["3. Create container"]
+        DEP4["4. Register VPN peer"]
+        DEP5["5. Set SSH password"]
+    end
+
+    subgraph ACC["Access<br/>(SSH + Web)"]
+        direction TB
+        ACC1["WireGuard client .conf"]
+        ACC2["ssh frappe@172.27.0.X"]
+        ACC3["Ports: 22 → SSH, 8000 → Web, 9000 → Socket.io"]
+    end
+
+    CL -- "Status: Draft" --> BI
+    BI -- "Cached layers rebuild<br/>only when config changes" --> DEP
+    DEP -- "Logs stream via<br/>WebSocket in real time" --> ACC
 ```
 
 ---
@@ -256,7 +280,7 @@ a day of manual setup. It automates the entire bench lifecycle through a modern 
 | **Containers** | Docker Engine (Python SDK) | Image builds, container lifecycle, resource limits |
 | **VPN** | WireGuard via the vpn_management app | Secure SSH/web access to containers without exposed ports (wg-agent sidecar, port 44556) |
 | **Database** | MariaDB (shared container) | Single `benchpress-mariadb` container shared across all benches via docker-compose |
-| **Cache/Queue** | Redis (shared container) + RQ | Single `benchpress-redis` container shared across all benches; RQ for background jobs on host |
+| **Cache/Queue** | Redis (shared container) + RQ | Single `benchpress-redis` container shared across all benches. RQ handles background jobs on the host |
 | **Real-time** | Socket.io via Frappe | Live log streaming during builds and deployments |
 | **Routing** | In-container WireGuard (`wg0`) | Direct tunnel to each container's VPN IP — no iptables DNAT or port mapping |
 | **Linting** | Ruff (Python) + Biome (JS) | Code quality enforcement |
@@ -284,7 +308,7 @@ a day of manual setup. It automates the entire bench lifecycle through a modern 
 
 ## Screenshots
 
-The frontend is a Vue 3 Single Page Application built with Vite, TailwindCSS, and the `frappe-ui` component library. It features a sidebar navigation with Lucide icons and a clean, professional design.
+The frontend is a Vue 3 Single Page Application built with Vite, TailwindCSS, and the `frappe-ui` component library. It has a sidebar navigation with Lucide icons.
 
 ### Labs List (`/frontend/labs`)
 
@@ -304,7 +328,7 @@ Form to create a lab: set Lab ID, title, Frappe version, resource limits (memory
 
 Tabbed view with three panels:
 - **Dashboard** -- Lab info card, installed apps badges, connection info panel (VPN IP, SSH command, username, password with show/hide toggle and copy-to-clipboard), and container status card with CPU/memory progress bars
-- **Sites** -- The bench's site, its installed apps, and an Open button (disabled with a reason when the VPN tunnel or container isn't reachable)
+- **Sites** -- The bench's site, its installed apps, and an Open button (disabled with a reason when the VPN tunnel or container is not reachable)
 - **Build Log** -- Collapsible step viewer (GitHub Actions-style) parsing Docker build output into expandable steps with success/error/running indicators
 
 ### Bench Instances (`/frontend/bench-instances`)
@@ -341,7 +365,7 @@ Modal dialog to configure Docker (socket path, base domain, default image, Traef
 
 ## Data Model (DocTypes)
 
-BenchPress uses 10 DocTypes to model the complete bench lifecycle (VPN DocTypes live in the vpn_management app). A further 7 DocTypes (Credit Account, Credit Ledger Entry, Credit Pack, Credit Settings, Instance Size, Always On Pass, Waitlist Entry) back the optional metering layer described in [Credits & Shared Deployments](#credits--shared-deployments-optional) and are omitted below since they don't apply to a plain self-hosted install:
+BenchPress uses 10 DocTypes to model the complete bench lifecycle (VPN DocTypes live in the vpn_management app). A further 7 DocTypes (Credit Account, Credit Ledger Entry, Credit Pack, Credit Settings, Instance Size, Always On Pass, Waitlist Entry) back the optional metering layer described in [Credits & Shared Deployments](#credits--shared-deployments-optional) and are omitted below since they do not apply to a plain self-hosted install:
 
 | DocType | Type | Purpose | Key Fields |
 |---------|------|---------|------------|
@@ -430,7 +454,7 @@ These are called via `frappe.client.run_doc_method` on a Bench Instance document
 
 ## Prerequisites
 
-Before installing BenchPress, ensure your host machine has:
+Before you install BenchPress, make sure your host machine has:
 
 | Requirement | Version | Purpose |
 |------------|---------|---------|
@@ -439,7 +463,7 @@ Before installing BenchPress, ensure your host machine has:
 | Node.js | 24+ | Frontend build toolchain |
 | Docker Engine | 20+ | Container management (must be running) |
 | Docker Compose | v2+ | Manages shared MariaDB + Redis infrastructure |
-| WireGuard | Any | Handled by the vpn_management app (wg-agent sidecar); the Docker host only needs WireGuard kernel support |
+| WireGuard | Any | Handled by the vpn_management app (wg-agent sidecar). The Docker host only needs WireGuard kernel support |
 
 > **Note:** MariaDB and Redis for bench containers are managed automatically via Docker Compose (`benchpress-mariadb` and `benchpress-redis` containers). You only need MariaDB and Redis on the host for Frappe itself.
 
@@ -898,11 +922,11 @@ how many labs a given person can run at once.
 
 The whole layer is off by default: `BenchPress Settings.enable_credits` is unchecked on a fresh
 site, and every check in `benchpress.credits.guard.requires_credits` short-circuits to a no-op
-while it's off. Turning it on unlocks, all configured in the **Credit Settings** singleton:
+while it is off. Turning it on unlocks the following, all configured in the **Credit Settings** singleton:
 
 - **Signup grants** -- new accounts start with a configurable number of free credits
-- **Metered runtime** -- each **Instance Size** has a credits-per-hour rate; deploys are refused
-  without at least an hour of runway
+- **Metered runtime** -- each **Instance Size** has a credits-per-hour rate. BenchPress refuses
+  deploys without at least an hour of runway
 - **Concurrency and build caps** -- separate limits for free vs. paid accounts, plus a daily build
   cap and a max-devices cap (`0` means unlimited on any of these)
 - **Auto-reap** -- idle instances past `Reap After Days` are cleaned up automatically
@@ -974,14 +998,14 @@ those users the corresponding source of your modified version. Running an
 unmodified copy, or a modified copy only you use, triggers nothing.
 
 Benches that BenchPress provisions are **not** derivative works of BenchPress.
-Whatever you build inside a Lab is yours, under whatever licence you choose.
+Whatever you build inside a Lab is yours, under whatever license you choose.
 
 The VPN plane lives in
 [vpn_management](https://github.com/Venkateshvenki404224/vpn_management), a required
-dependency, under the same licence.
+dependency, under the same license.
 
 Third-party components are listed in
-[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md), each under its own licence, and the
+[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md), each under its own license, and the
 Frappe apps BenchPress integrates with in
 [docs/integration-notices.md](docs/integration-notices.md). The
 BenchPress name and logo are trademarks and are **not** covered by the AGPL grant —
