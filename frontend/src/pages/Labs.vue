@@ -146,6 +146,7 @@ import OnboardingPanel from "@/components/overview/OnboardingPanel.vue";
 import { labsResource } from "@/data/labs";
 import { userContext } from "@/data/userContext";
 import { labelFor as appLabel } from "@/utils/appIcons";
+import { ALL, matches, optionsFrom } from "@/utils/filters";
 import { benchLabel } from "@/utils/labSpecs";
 import { Button, FormControl, Select, dayjsLocal } from "frappe-ui";
 import { computed, onMounted, ref } from "vue";
@@ -169,8 +170,6 @@ const COLUMNS = [
 	{ label: "Deployed as", key: "deployed_as", width: "190px" },
 	{ label: "Last run", key: "last_run", width: "96px" },
 ];
-
-const ALL = "__all__";
 
 const router = useRouter();
 const search = ref("");
@@ -203,15 +202,6 @@ const ownerOptions = computed(() =>
 	)
 );
 
-/** "All" plus each value actually present, so no filter offers an empty result. */
-function optionsFrom(label, values) {
-	const present = [...new Set(values.filter(Boolean))].sort();
-	return [
-		{ label: `${label}: all`, value: ALL },
-		...present.map((value) => ({ label: value, value })),
-	];
-}
-
 const rows = computed(() =>
 	labs.value.filter(
 		(lab) =>
@@ -221,10 +211,6 @@ const rows = computed(() =>
 			matchesSearch(lab)
 	)
 );
-
-function matches(value, filter) {
-	return filter === ALL || value === filter;
-}
 
 function matchesSearch(lab) {
 	const query = search.value.trim().toLowerCase();
