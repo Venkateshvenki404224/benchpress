@@ -8,6 +8,7 @@ import frappe
 
 from benchpress.credits.seed import seed_defaults
 from benchpress.indexes import ensure_indexes
+from benchpress.lab_templates import seed_lab_templates
 from benchpress.vpn_access import grant_vpn_access
 
 
@@ -26,6 +27,9 @@ def after_install():
 
 	# Same reason: seed_credit_config would never fire on a fresh install.
 	seed_defaults()
+
+	# Same reason again: seed_lab_templates would never fire on a fresh install.
+	seed_lab_templates()
 	ensure_indexes()
 
 	# setup.sh requires host-level access (docker group, sysctl, sudoers).

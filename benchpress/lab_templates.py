@@ -3,18 +3,14 @@
 
 """Catalog of ready-made lab templates.
 
-Templates are versioned in code so an admin can spin up a common stack
-(Frappe, ERPNext, CRM) without typing every app's git URL and resources by
-hand. ``create_lab_from_template`` materialises a template into an ordinary,
-editable Lab document, after which the normal build/deploy flow takes over.
+Templates live in the `Lab Template` DocType, so an admin adds, edits or retires a stack
+(Frappe, ERPNext, CRM) from Desk instead of editing source and shipping a PR.
+``create_lab_from_template`` materialises a template into an ordinary, editable Lab document,
+after which the normal build/deploy flow takes over.
 """
 
 import frappe
 from frappe import _
-
-# Bumped whenever the template set or its fields change so an install can tell
-# which catalog a lab was created against.
-CATALOG_VERSION = 6
 
 # Each template names its `Instance Size`. `memory_limit` / `cpu_cores` below must agree
 # with it: they are what the card renders, and `Lab.apply_instance_size` overwrites them.
@@ -23,29 +19,49 @@ CATALOG_VERSION = 6
 # suffix. The ceiling only exists so a pathological catalog cannot spin.
 MAX_LAB_ID_ATTEMPTS = 50
 
-LAB_TEMPLATES = [
+TEMPLATE_FIELDS = [
+	"name as key",
+	"title",
+	"description",
+	"frappe_version",
+	"instance_size",
+	"memory_limit",
+	"cpu_cores",
+	"eta_minutes",
+	"most_used",
+]
+APP_FIELDS = ["app_name", "app_label", "git_url", "branch"]
+
+# Seeded once into `Lab Template` (fresh install and `bench migrate` alike) and never read
+# directly at runtime after that — `seed_lab_templates` only inserts what's missing, so an
+# admin's edit or deletion in Desk survives every later migrate.
+SEED_TEMPLATES = [
 	{
 		"key": "frappe",
-		"eta_minutes": 3,
-		"most_used": False,
 		"title": "Frappe Framework",
 		"description": "Bare Frappe bench with no extra apps — the lightest starting point.",
 		"frappe_version": "version-15",
 		"instance_size": "Small",
 		"memory_limit": "1g",
 		"cpu_cores": 1,
+		"eta_minutes": 3,
+		"most_used": 0,
+		"is_active": 1,
+		"sort_order": 1,
 		"apps": [],
 	},
 	{
 		"key": "erpnext",
-		"eta_minutes": 6,
-		"most_used": True,
 		"title": "ERPNext",
 		"description": "Full ERP suite: accounting, inventory, manufacturing and more.",
 		"frappe_version": "version-15",
 		"instance_size": "Medium",
 		"memory_limit": "2g",
 		"cpu_cores": 2,
+		"eta_minutes": 6,
+		"most_used": 1,
+		"is_active": 1,
+		"sort_order": 2,
 		"apps": [
 			{
 				"app_name": "erpnext",
@@ -57,14 +73,16 @@ LAB_TEMPLATES = [
 	},
 	{
 		"key": "crm",
-		"eta_minutes": 4,
-		"most_used": False,
 		"title": "Frappe CRM",
 		"description": "Lightweight sales CRM on Frappe — leads, deals and contacts.",
 		"frappe_version": "version-15",
 		"instance_size": "Small",
 		"memory_limit": "1g",
 		"cpu_cores": 1,
+		"eta_minutes": 4,
+		"most_used": 0,
+		"is_active": 1,
+		"sort_order": 3,
 		"apps": [
 			{
 				"app_name": "crm",
@@ -76,14 +94,16 @@ LAB_TEMPLATES = [
 	},
 	{
 		"key": "hrms",
-		"eta_minutes": 5,
-		"most_used": False,
 		"title": "Frappe HR",
 		"description": "HR & payroll suite — employees, leaves, attendance and payroll.",
 		"frappe_version": "version-15",
 		"instance_size": "Medium",
 		"memory_limit": "2g",
 		"cpu_cores": 2,
+		"eta_minutes": 5,
+		"most_used": 0,
+		"is_active": 1,
+		"sort_order": 4,
 		# hrms requires erpnext, so erpnext must install first. The
 		# build/deploy pipeline installs apps in this listed order.
 		"apps": [
@@ -103,14 +123,16 @@ LAB_TEMPLATES = [
 	},
 	{
 		"key": "lms",
-		"eta_minutes": 4,
-		"most_used": False,
 		"title": "Frappe Learning",
 		"description": "Learning management system — courses, quizzes and batches.",
 		"frappe_version": "version-15",
 		"instance_size": "Small",
 		"memory_limit": "1g",
 		"cpu_cores": 1,
+		"eta_minutes": 4,
+		"most_used": 0,
+		"is_active": 1,
+		"sort_order": 5,
 		# lms requires payments, so payments must install first. The
 		# build/deploy pipeline installs apps in this listed order.
 		"apps": [
@@ -130,14 +152,16 @@ LAB_TEMPLATES = [
 	},
 	{
 		"key": "helpdesk",
-		"eta_minutes": 4,
-		"most_used": False,
 		"title": "Frappe Helpdesk",
 		"description": "Customer support desk — tickets, SLAs and a knowledge base.",
 		"frappe_version": "version-15",
 		"instance_size": "Small",
 		"memory_limit": "1g",
 		"cpu_cores": 1,
+		"eta_minutes": 4,
+		"most_used": 0,
+		"is_active": 1,
+		"sort_order": 6,
 		# helpdesk requires telephony, so telephony must install first. The
 		# build/deploy pipeline installs apps in this listed order.
 		"apps": [
@@ -157,14 +181,16 @@ LAB_TEMPLATES = [
 	},
 	{
 		"key": "india-compliance",
-		"eta_minutes": 7,
-		"most_used": False,
 		"title": "ERPNext + India Compliance",
 		"description": "ERPNext with GST, e-invoicing and TDS for Indian businesses.",
 		"frappe_version": "version-15",
 		"instance_size": "Medium",
 		"memory_limit": "2g",
 		"cpu_cores": 2,
+		"eta_minutes": 7,
+		"most_used": 0,
+		"is_active": 1,
+		"sort_order": 7,
 		# india_compliance extends ERPNext, so ERPNext must install first. The
 		# build/deploy pipeline installs apps in this listed order.
 		"apps": [
@@ -186,21 +212,48 @@ LAB_TEMPLATES = [
 
 
 def get_templates() -> list[dict]:
-	"""Return the full catalog of lab templates."""
-	return LAB_TEMPLATES
+	"""Return the active catalog of lab templates, in display order."""
+	templates = frappe.get_all(
+		"Lab Template", filters={"is_active": 1}, fields=TEMPLATE_FIELDS, order_by="sort_order asc"
+	)
+	apps = _apps_by_template([template.key for template in templates])
+	for template in templates:
+		template["apps"] = apps.get(template.key, [])
+	return templates
+
+
+def _apps_by_template(keys: list[str]) -> dict[str, list[dict]]:
+	"""Every listed template's app rows, fetched in one query and grouped by template key.
+
+	`Lab App` is shared with `Lab.apps` — rows are told apart by `parenttype`, not a second,
+	near-duplicate child doctype.
+	"""
+	if not keys:
+		return {}
+	rows = frappe.get_all(
+		"Lab App",
+		filters={"parent": ("in", keys), "parenttype": "Lab Template"},
+		fields=["parent", *APP_FIELDS],
+		order_by="idx asc",
+	)
+	grouped: dict[str, list[dict]] = {}
+	for row in rows:
+		grouped.setdefault(row.pop("parent"), []).append(row)
+	return grouped
 
 
 def get_catalog() -> list[dict]:
 	"""The catalog as the Templates page reads it: each template and the lab it built."""
 	built = _labs_by_template()
-	return [{**template, "lab": built.get(template["key"])} for template in LAB_TEMPLATES]
+	return [{**template, "lab": built.get(template["key"])} for template in get_templates()]
 
 
 def _labs_by_template() -> dict[str, dict]:
 	"""The newest lab built from each template, of the labs the caller may see."""
+	keys = frappe.get_all("Lab Template", pluck="name")
 	labs = frappe.get_list(
 		"Lab",
-		filters={"template": ("in", [template["key"] for template in LAB_TEMPLATES])},
+		filters={"template": ("in", keys)},
 		fields=["name", "title", "status", "template"],
 		order_by="creation desc",
 		limit_page_length=0,
@@ -213,10 +266,21 @@ def _labs_by_template() -> dict[str, dict]:
 
 def get_template(key: str) -> dict:
 	"""Return a single template by key, or throw if it is unknown."""
-	for template in LAB_TEMPLATES:
-		if template["key"] == key:
-			return template
-	frappe.throw(_("Unknown lab template '{0}'.").format(key or ""))
+	if not frappe.db.exists("Lab Template", key):
+		frappe.throw(_("Unknown lab template '{0}'.").format(key or ""))
+	doc = frappe.get_doc("Lab Template", key)
+	return {
+		"key": doc.name,
+		"title": doc.title,
+		"description": doc.description,
+		"frappe_version": doc.frappe_version,
+		"instance_size": doc.instance_size,
+		"memory_limit": doc.memory_limit,
+		"cpu_cores": doc.cpu_cores,
+		"eta_minutes": doc.eta_minutes,
+		"most_used": doc.most_used,
+		"apps": [{field: app.get(field) for field in APP_FIELDS} for app in doc.apps],
+	}
 
 
 def available_lab_id(base: str) -> str:
@@ -266,3 +330,12 @@ def seeded_instance_size(template: dict) -> str | None:
 	"""
 	size = template.get("instance_size")
 	return size if size and frappe.db.exists("Instance Size", size) else None
+
+
+def seed_lab_templates() -> None:
+	"""Idempotent. Safe to call on every install and from the patch — inserts only what's missing."""
+	existing = set(frappe.get_all("Lab Template", pluck="name"))
+	for template in SEED_TEMPLATES:
+		if template["key"] in existing:
+			continue
+		frappe.get_doc({"doctype": "Lab Template", **template}).insert(ignore_permissions=True)

@@ -18,6 +18,16 @@ REQUIRED_FIELDS = {
 
 
 class TestLabTemplates(IntegrationTestCase):
+	@classmethod
+	def setUpClass(cls):
+		super().setUpClass()
+		frappe.set_user("Administrator")
+		# The test site predates `Lab Template`, so the patch that seeds it has already been
+		# recorded as run. Seeding here is idempotent and doubles as a test of the seeder.
+		lab_templates.seed_lab_templates()
+		# Class fixtures must outlive the per-test transaction.
+		frappe.db.commit()  # nosemgrep
+
 	def setUp(self):
 		frappe.set_user("Administrator")
 
