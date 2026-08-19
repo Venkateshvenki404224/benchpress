@@ -70,8 +70,9 @@
   {
    "description": "Set when the lab was created from a catalog template; blank for hand-written labs.",
    "fieldname": "template",
-   "fieldtype": "Data",
+   "fieldtype": "Link",
    "label": "Template",
+   "options": "Lab Template",
    "read_only": 1
   },
   {
