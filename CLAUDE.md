@@ -73,6 +73,8 @@ cd e2e && npx playwright test  # has its own config — running from the app roo
 - `uvx pre-commit@4.3.0 run --all-files` — ruff (Python) + prettier/eslint (JS/Vue).
   **Never run `yarn lint`** — that's biome, a different style than the repo has
   ever used, and it will rewrite every frontend file.
+- Write the commit message with the `technical-writing` skill: plain, short,
+  no filler — the Conventional Commits header above still applies.
 - Full checklist: [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Two things that will bite you
@@ -95,3 +97,13 @@ cd e2e && npx playwright test  # has its own config — running from the app roo
 - **Reviewing a diff or PR** → `quality-code-review`.
 - **Docs, commit messages, PR descriptions, the README** → `technical-writing`.
 - **New or changed doctype forms/list views** → `ui-design`.
+
+## graphify
+
+This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
+
+Rules:
+- For codebase questions, first run `graphify query "<question>"` when graphify-out/graph.json exists. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw grep output.
+- If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
+- Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
+- After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
