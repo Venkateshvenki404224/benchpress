@@ -14,7 +14,7 @@ from frappe import _
 
 # Bumped whenever the template set or its fields change so an install can tell
 # which catalog a lab was created against.
-CATALOG_VERSION = 5
+CATALOG_VERSION = 6
 
 # Each template names its `Instance Size`. `memory_limit` / `cpu_cores` below must agree
 # with it: they are what the card renders, and `Lab.apply_instance_size` overwrites them.
@@ -84,13 +84,21 @@ LAB_TEMPLATES = [
 		"instance_size": "Medium",
 		"memory_limit": "2g",
 		"cpu_cores": 2,
+		# hrms requires erpnext, so erpnext must install first. The
+		# build/deploy pipeline installs apps in this listed order.
 		"apps": [
+			{
+				"app_name": "erpnext",
+				"app_label": "ERPNext",
+				"git_url": "https://github.com/frappe/erpnext",
+				"branch": "version-15",
+			},
 			{
 				"app_name": "hrms",
 				"app_label": "Frappe HR",
 				"git_url": "https://github.com/frappe/hrms",
 				"branch": "version-15",
-			}
+			},
 		],
 	},
 	{
@@ -103,13 +111,21 @@ LAB_TEMPLATES = [
 		"instance_size": "Small",
 		"memory_limit": "1g",
 		"cpu_cores": 1,
+		# lms requires payments, so payments must install first. The
+		# build/deploy pipeline installs apps in this listed order.
 		"apps": [
+			{
+				"app_name": "payments",
+				"app_label": "Payments",
+				"git_url": "https://github.com/frappe/payments",
+				"branch": "version-15",
+			},
 			{
 				"app_name": "lms",
 				"app_label": "Frappe Learning",
 				"git_url": "https://github.com/frappe/lms",
 				"branch": "main",
-			}
+			},
 		],
 	},
 	{
@@ -122,13 +138,21 @@ LAB_TEMPLATES = [
 		"instance_size": "Small",
 		"memory_limit": "1g",
 		"cpu_cores": 1,
+		# helpdesk requires telephony, so telephony must install first. The
+		# build/deploy pipeline installs apps in this listed order.
 		"apps": [
+			{
+				"app_name": "telephony",
+				"app_label": "Telephony",
+				"git_url": "https://github.com/frappe/telephony",
+				"branch": "develop",
+			},
 			{
 				"app_name": "helpdesk",
 				"app_label": "Frappe Helpdesk",
 				"git_url": "https://github.com/frappe/helpdesk",
 				"branch": "main",
-			}
+			},
 		],
 	},
 	{
