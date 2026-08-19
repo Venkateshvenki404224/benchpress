@@ -602,6 +602,31 @@ class TestApi(IntegrationTestCase):
 			frappe.db.get_value("Bench Instance", result["name"], "site_name"), "acme.benchpress.cloud"
 		)
 
+	def test_create_bench_rejects_a_duplicate_site_name(self):
+		self._set_base_domain("benchpress.cloud")
+		other_lab = _ensure_lab("api-timing-dup-site-lab")
+		other_bench = _ensure_bench(other_lab)
+		self.addCleanup(
+			frappe.delete_doc, "Bench Instance", other_bench.name, force=True, ignore_permissions=True
+		)
+		self.addCleanup(frappe.delete_doc, "Lab", other_lab.name, force=True, ignore_permissions=True)
+		site = frappe.get_doc(
+			{
+				"doctype": "Bench Site",
+				"bench": other_bench.name,
+				"site_name": "acme.benchpress.cloud",
+				"status": "Active",
+			}
+		).insert(ignore_permissions=True)
+		self.addCleanup(frappe.delete_doc, "Bench Site", site.name, force=True, ignore_permissions=True)
+		frappe.db.commit()
+
+		data = frappe.as_json({"lab": self.create_lab.name, "site_name": "acme"})
+		with self.assertRaises(frappe.ValidationError):
+			api.create_bench(data)
+		instance_id = get_instance_id(frappe.session.user, self.create_lab.name)
+		self.assertFalse(frappe.db.exists("Bench Instance", instance_id))
+
 	def test_create_bench_without_site_name_keeps_the_default(self):
 		data = frappe.as_json({"lab": self.create_lab.name})
 		with patch("frappe.enqueue"):
