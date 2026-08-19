@@ -142,6 +142,7 @@ def _counts_by_bench(doctype: str, column: str, bench_names: list[str]) -> dict[
 def create_bench(data: str) -> dict:
 	require_app_user()
 	from benchpress.benchpress.doctype.bench_instance import get_instance_id
+	from benchpress.docker_manager import resolve_site_name
 
 	data = frappe.parse_json(data)
 
@@ -150,10 +151,15 @@ def create_bench(data: str) -> dict:
 		frappe.throw(_("Lab is required to create a bench."))
 
 	lab = frappe.get_cached_doc("Lab", lab_name)
+	requested_site_name = data.get("site_name") or data.get("site")
 
 	instance_id = get_instance_id(frappe.session.user, lab_name)
 	if frappe.db.exists("Bench Instance", instance_id):
 		doc = frappe.get_doc("Bench Instance", instance_id)
+		site_name = resolve_site_name(requested_site_name, exclude_bench=doc.name)
+		if site_name and site_name != doc.site_name:
+			_assert_site_name_changeable(doc)
+			doc.site_name = site_name
 		doc.status = "Deploying"
 		doc.save()
 	else:
@@ -164,6 +170,7 @@ def create_bench(data: str) -> dict:
 				"lab": lab_name,
 				"frappe_version": lab.frappe_version,
 				"domain": data.get("domain"),
+				"site_name": resolve_site_name(requested_site_name),
 				"status": "Draft",
 			}
 		)
@@ -192,6 +199,25 @@ def create_bench(data: str) -> dict:
 	)
 
 	return {"name": doc.name, "status": "Deploying"}
+
+
+def _assert_site_name_changeable(doc) -> None:
+	"""Refuse to rename a bench whose current name might still own a live database.
+
+	`Draft` is the only status that guarantees no live site exists under `doc.site_name`:
+	either nothing was ever deployed, or `teardown_bench` ran and actually dropped the
+	database before resetting status. `stop_bench` marks the instance `Stopped` and
+	deactivates its `Bench Site` rows WITHOUT dropping the database (only `teardown_bench`
+	does that) — so `Stopped` must still block a rename, or the old database would be
+	silently orphaned. The caller stops/deletes the instance first to rename it.
+	"""
+	if doc.status != "Draft":
+		frappe.throw(
+			_(
+				"'{0}' is already deployed as '{1}'. Stop or delete this instance before choosing "
+				"a different site name."
+			).format(doc.name, doc.site_name)
+		)
 
 
 @frappe.whitelist()

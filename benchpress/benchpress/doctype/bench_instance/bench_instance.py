@@ -15,7 +15,8 @@ class BenchInstance(Document):
 	def before_insert(self):
 		instance_id = get_instance_id(frappe.session.user, self.lab)
 		self.bench_name = instance_id
-		self.site_name = f"{instance_id}.localhost"
+		if not self.site_name:
+			self.site_name = f"{instance_id}.localhost"
 		self.ssh_username = self._derive_username()
 
 	def autoname(self):

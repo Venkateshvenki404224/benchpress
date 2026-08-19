@@ -31,6 +31,52 @@ def validate_lab_id(lab_id: str) -> None:
 		)
 
 
+SITE_LABEL_MAX_LENGTH = 63
+SITE_LABEL_RE = re.compile(r"^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$")
+
+
+def resolve_site_name(raw_site_name: str | None, *, exclude_bench: str | None = None) -> str | None:
+	"""Normalize a caller-chosen site name and refuse anything unsafe or already taken.
+
+	Returns `None` when `raw_site_name` is empty, so the caller falls back to its own
+	default. A bare label is required — dots are rejected rather than treated as an
+	already-qualified domain, so the resolved name is always exactly
+	`<label>.<base_domain>`, never an arbitrary suffix a caller supplied. The resolved
+	name becomes a MariaDB db/user name and an on-disk site folder, both unique
+	server-wide, so the collision check is global — `exclude_bench` exists only so a
+	redeploy can recheck its own name without colliding with itself.
+	"""
+	if not raw_site_name or not raw_site_name.strip():
+		return None
+	candidate = raw_site_name.strip().lower()
+	if "." in candidate:
+		frappe.throw(
+			_(
+				"Site name '{0}' must be a single label without dots — the domain is added automatically."
+			).format(raw_site_name)
+		)
+	if not SITE_LABEL_RE.match(candidate) or len(candidate) > SITE_LABEL_MAX_LENGTH:
+		frappe.throw(
+			_(
+				"Site name '{0}' is not valid: use lowercase letters, numbers and single '-' "
+				"separators, starting and ending with a letter or number (max {1} characters), "
+				"e.g. 'acme' or 'acme-labs'."
+			).format(raw_site_name, SITE_LABEL_MAX_LENGTH)
+		)
+	base_domain = frappe.db.get_single_value("BenchPress Settings", "base_domain") or "localhost"
+	resolved = f"{candidate}.{base_domain}"
+	_assert_site_name_available(resolved, exclude_bench)
+	return resolved
+
+
+def _assert_site_name_available(site_name: str, exclude_bench: str | None) -> None:
+	filters = {"site_name": site_name, "status": ("!=", "Inactive")}
+	if exclude_bench:
+		filters["bench"] = ("!=", exclude_bench)
+	if frappe.db.exists("Bench Site", filters):
+		frappe.throw(_("Site name '{0}' is already in use. Choose a different name.").format(site_name))
+
+
 def _get_host_block_devices() -> list[str]:
 	try:
 		result = subprocess.run(

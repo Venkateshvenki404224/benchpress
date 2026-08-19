@@ -585,6 +585,124 @@ class TestApi(IntegrationTestCase):
 		self.assertTrue(frappe.db.exists("Bench Instance", result["name"]))
 		self.assert_within_budget("create_bench", elapsed_ms)
 
+	def _set_base_domain(self, value):
+		before = frappe.db.get_single_value("BenchPress Settings", "base_domain")
+		frappe.db.set_single_value("BenchPress Settings", "base_domain", value)
+		self.addCleanup(frappe.db.set_single_value, "BenchPress Settings", "base_domain", before)
+
+	def test_create_bench_honors_an_explicit_site_name(self):
+		self._set_base_domain("benchpress.cloud")
+		data = frappe.as_json({"lab": self.create_lab.name, "site_name": "acme"})
+		with patch("frappe.enqueue"):
+			result = api.create_bench(data)
+		self.addCleanup(
+			frappe.delete_doc, "Bench Instance", result["name"], force=True, ignore_permissions=True
+		)
+		self.assertEqual(
+			frappe.db.get_value("Bench Instance", result["name"], "site_name"), "acme.benchpress.cloud"
+		)
+
+	def test_create_bench_rejects_a_duplicate_site_name(self):
+		self._set_base_domain("benchpress.cloud")
+		other_lab = _ensure_lab("api-timing-dup-site-lab")
+		other_bench = _ensure_bench(other_lab)
+		self.addCleanup(
+			frappe.delete_doc, "Bench Instance", other_bench.name, force=True, ignore_permissions=True
+		)
+		self.addCleanup(frappe.delete_doc, "Lab", other_lab.name, force=True, ignore_permissions=True)
+		site = frappe.get_doc(
+			{
+				"doctype": "Bench Site",
+				"bench": other_bench.name,
+				"site_name": "acme.benchpress.cloud",
+				"status": "Active",
+			}
+		).insert(ignore_permissions=True)
+		self.addCleanup(frappe.delete_doc, "Bench Site", site.name, force=True, ignore_permissions=True)
+		frappe.db.commit()
+
+		data = frappe.as_json({"lab": self.create_lab.name, "site_name": "acme"})
+		with self.assertRaises(frappe.ValidationError):
+			api.create_bench(data)
+		instance_id = get_instance_id(frappe.session.user, self.create_lab.name)
+		self.assertFalse(frappe.db.exists("Bench Instance", instance_id))
+
+	def test_create_bench_refuses_to_rename_a_deployed_instance(self):
+		self._set_base_domain("benchpress.cloud")
+		lab = _ensure_lab("api-timing-rename-running-lab", apps=[_lab_app()])
+		self.addCleanup(frappe.delete_doc, "Lab", lab.name, force=True, ignore_permissions=True)
+		bench = _ensure_bench(lab, status="Running", site_name="original.benchpress.cloud")
+		self.addCleanup(frappe.delete_doc, "Bench Instance", bench.name, force=True, ignore_permissions=True)
+
+		data = frappe.as_json({"lab": lab.name, "site_name": "renamed"})
+		with self.assertRaises(frappe.ValidationError):
+			api.create_bench(data)
+		self.assertEqual(
+			frappe.db.get_value("Bench Instance", bench.name, "site_name"), "original.benchpress.cloud"
+		)
+
+	def test_create_bench_refuses_to_rename_a_stopped_instance(self):
+		"""`stop_bench` never drops the database, so a `Stopped` instance's site is still live."""
+		self._set_base_domain("benchpress.cloud")
+		lab = _ensure_lab("api-timing-rename-stopped-lab", apps=[_lab_app()])
+		self.addCleanup(frappe.delete_doc, "Lab", lab.name, force=True, ignore_permissions=True)
+		bench = _ensure_bench(lab, status="Stopped", site_name="original.benchpress.cloud")
+		self.addCleanup(frappe.delete_doc, "Bench Instance", bench.name, force=True, ignore_permissions=True)
+
+		data = frappe.as_json({"lab": lab.name, "site_name": "renamed"})
+		with self.assertRaises(frappe.ValidationError):
+			api.create_bench(data)
+		self.assertEqual(
+			frappe.db.get_value("Bench Instance", bench.name, "site_name"), "original.benchpress.cloud"
+		)
+
+	def test_create_bench_allows_a_new_site_name_after_teardown(self):
+		self._set_base_domain("benchpress.cloud")
+		lab = _ensure_lab("api-timing-rename-draft-lab", apps=[_lab_app()])
+		self.addCleanup(frappe.delete_doc, "Lab", lab.name, force=True, ignore_permissions=True)
+		bench = _ensure_bench(lab, status="Draft", site_name="old.benchpress.cloud")
+		self.addCleanup(frappe.delete_doc, "Bench Instance", bench.name, force=True, ignore_permissions=True)
+
+		data = frappe.as_json({"lab": lab.name, "site_name": "fresh"})
+		with patch("frappe.enqueue"):
+			result = api.create_bench(data)
+		self.assertEqual(result["status"], "Deploying")
+		self.assertEqual(
+			frappe.db.get_value("Bench Instance", bench.name, "site_name"), "fresh.benchpress.cloud"
+		)
+
+	def test_create_bench_redeploy_with_the_same_site_name_is_a_no_op(self):
+		self._set_base_domain("benchpress.cloud")
+		lab = _ensure_lab("api-timing-rename-noop-lab", apps=[_lab_app()])
+		self.addCleanup(frappe.delete_doc, "Lab", lab.name, force=True, ignore_permissions=True)
+		bench = _ensure_bench(lab, status="Running", site_name="stable.benchpress.cloud")
+		self.addCleanup(frappe.delete_doc, "Bench Instance", bench.name, force=True, ignore_permissions=True)
+
+		data = frappe.as_json({"lab": lab.name, "site_name": "stable"})
+		with patch("frappe.enqueue"):
+			result = api.create_bench(data)
+		self.assertEqual(result["status"], "Deploying")
+		self.assertEqual(
+			frappe.db.get_value("Bench Instance", bench.name, "site_name"), "stable.benchpress.cloud"
+		)
+
+		data_without_site_name = frappe.as_json({"lab": lab.name})
+		with patch("frappe.enqueue"):
+			api.create_bench(data_without_site_name)
+		self.assertEqual(
+			frappe.db.get_value("Bench Instance", bench.name, "site_name"), "stable.benchpress.cloud"
+		)
+
+	def test_create_bench_without_site_name_keeps_the_default(self):
+		data = frappe.as_json({"lab": self.create_lab.name})
+		with patch("frappe.enqueue"):
+			result = api.create_bench(data)
+		self.addCleanup(
+			frappe.delete_doc, "Bench Instance", result["name"], force=True, ignore_permissions=True
+		)
+		site_name = frappe.db.get_value("Bench Instance", result["name"], "site_name")
+		self.assertTrue(site_name.endswith(".localhost"))
+
 	# --- Docker / manager side effects (patch module functions) --------------
 
 	def test_bench_action_start_stop_restart_and_timing(self):

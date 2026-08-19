@@ -43,7 +43,7 @@ class IntegrationTestBenchInstance(IntegrationTestCase):
 		frappe.db.commit()
 		super().tearDownClass()
 
-	def _insert_bench(self):
+	def _insert_bench(self, **extra):
 		frappe.set_user("Administrator")
 		existing = get_instance_id("Administrator", self.lab_name)
 		if frappe.db.exists("Bench Instance", existing):
@@ -53,6 +53,7 @@ class IntegrationTestBenchInstance(IntegrationTestCase):
 			{
 				"doctype": "Bench Instance",
 				"lab": self.lab_name,
+				**extra,
 			}
 		).insert(ignore_permissions=True)
 		frappe.db.commit()
@@ -72,6 +73,11 @@ class IntegrationTestBenchInstance(IntegrationTestCase):
 	def test_before_insert_sets_site_name_with_localhost_suffix(self):
 		bench = self._insert_bench()
 		self.assertTrue(bench.site_name.endswith(".localhost"))
+
+	def test_before_insert_honors_a_caller_supplied_site_name(self):
+		bench = self._insert_bench(site_name="caller-chosen.localhost")
+		self.assertEqual(bench.site_name, "caller-chosen.localhost")
+		self.assertEqual(bench.bench_name, get_instance_id("Administrator", self.lab_name))
 
 	def test_before_insert_derives_ssh_username_from_email(self):
 		bench = self._insert_bench()
