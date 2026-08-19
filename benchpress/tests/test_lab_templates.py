@@ -47,10 +47,16 @@ class TestLabTemplates(IntegrationTestCase):
 		self.assertEqual(lab_templates.get_template("erpnext")["key"], "erpnext")
 
 	def test_first_party_app_templates_present(self):
-		for key in ("hrms", "lms", "helpdesk"):
+		# Each first-party app template also lists the dependency that app's own
+		# hooks.py declares in `required_apps`, installed before the app itself.
+		expected = {
+			"hrms": ["erpnext", "hrms"],
+			"lms": ["payments", "lms"],
+			"helpdesk": ["telephony", "helpdesk"],
+		}
+		for key, app_names in expected.items():
 			template = lab_templates.get_template(key)
-			self.assertEqual(len(template["apps"]), 1)
-			self.assertEqual(template["apps"][0]["app_name"], key)
+			self.assertEqual([app["app_name"] for app in template["apps"]], app_names)
 
 	def test_india_compliance_template_installs_erpnext_first(self):
 		template = lab_templates.get_template("india-compliance")
