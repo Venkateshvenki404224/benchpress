@@ -208,6 +208,27 @@ SEED_TEMPLATES = [
 			},
 		],
 	},
+	{
+		"key": "erpnext-16",
+		"title": "ERPNext",
+		"description": "Full ERP suite: accounting, inventory, manufacturing and more.",
+		"frappe_version": "version-16",
+		"instance_size": "Medium",
+		"memory_limit": "2g",
+		"cpu_cores": 2,
+		"eta_minutes": 6,
+		"most_used": 0,
+		"is_active": 1,
+		"sort_order": 8,
+		"apps": [
+			{
+				"app_name": "erpnext",
+				"app_label": "ERPNext",
+				"git_url": "https://github.com/frappe/erpnext",
+				"branch": "version-16",
+			}
+		],
+	},
 ]
 
 
