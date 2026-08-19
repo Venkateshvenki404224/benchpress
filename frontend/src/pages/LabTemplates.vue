@@ -8,7 +8,21 @@
 			</p>
 		</div>
 
-		<p v-if="templates.loading && !rows.length" class="text-body text-ink-gray-5">
+		<div v-if="allTemplates.length" class="mb-3 flex flex-wrap items-center gap-2">
+			<FormControl
+				class="w-[240px]"
+				type="text"
+				placeholder="Search templates"
+				v-model="search"
+				data-test="templates-search"
+			>
+				<template #prefix><SearchIcon class="size-3.5 text-ink-gray-4" /></template>
+			</FormControl>
+			<Select v-model="appsFilter" :options="appOptions" data-test="filter-apps" />
+			<Select v-model="versionFilter" :options="versionOptions" data-test="filter-version" />
+		</div>
+
+		<p v-if="templates.loading && !allTemplates.length" class="text-body text-ink-gray-5">
 			Loading templates…
 		</p>
 
@@ -94,6 +108,16 @@
 			</article>
 		</div>
 
+		<SectionCard v-else-if="allTemplates.length" :padded="false">
+			<EmptyState message="No templates match these filters.">
+				<template #action>
+					<Button variant="subtle" data-test="clear-filters" @click="clearFilters">
+						Clear filters
+					</Button>
+				</template>
+			</EmptyState>
+		</SectionCard>
+
 		<SectionCard v-else :padded="false">
 			<EmptyState
 				message="The template catalog is empty — create a lab from scratch instead."
@@ -115,10 +139,22 @@ import EmptyState from "@/components/EmptyState.vue";
 import SectionCard from "@/components/SectionCard.vue";
 import { openDeployRun } from "@/data/deployRun";
 import { labsResource } from "@/data/labs";
+import { labelFor as appLabel } from "@/utils/appIcons";
+import { ALL, matches, optionsFrom } from "@/utils/filters";
 import { cpuLabel, etaLabel, memoryLabel } from "@/utils/labSpecs";
-import { Badge, Button, ErrorMessage, createResource, toast } from "frappe-ui";
+import {
+	Badge,
+	Button,
+	ErrorMessage,
+	FormControl,
+	Select,
+	createResource,
+	toast,
+} from "frappe-ui";
 import { computed, ref } from "vue";
 import { useRouter } from "vue-router";
+
+import SearchIcon from "~icons/lucide/search";
 
 // The catalog is `benchpress/lab_templates.py` — every entry, its apps, its
 // resources, its estimate and the "Most used" flag come from there. Nothing
@@ -135,7 +171,47 @@ const LAB_STATES = {
 
 const templates = createResource({ url: "benchpress.api.get_lab_templates", auto: true });
 
-const rows = computed(() => templates.data ?? []);
+const allTemplates = computed(() => templates.data ?? []);
+
+const search = ref("");
+const appsFilter = ref(ALL);
+const versionFilter = ref(ALL);
+
+const appOptions = computed(() =>
+	optionsFrom("Apps", allTemplates.value.flatMap(appsOf), appLabel)
+);
+const versionOptions = computed(() =>
+	optionsFrom(
+		"Version",
+		allTemplates.value.map((template) => template.frappe_version)
+	)
+);
+
+const rows = computed(() =>
+	allTemplates.value.filter(
+		(template) =>
+			matches(template.frappe_version, versionFilter.value) &&
+			matchesApps(template) &&
+			matchesSearch(template)
+	)
+);
+
+function matchesApps(template) {
+	return appsFilter.value === ALL || appsOf(template).includes(appsFilter.value);
+}
+
+function matchesSearch(template) {
+	const query = search.value.trim().toLowerCase();
+	if (!query) return true;
+	const haystack = [template.key, template.title, template.description, ...appsOf(template)];
+	return haystack.some((value) => (value || "").toLowerCase().includes(query));
+}
+
+function clearFilters() {
+	search.value = "";
+	appsFilter.value = ALL;
+	versionFilter.value = ALL;
+}
 
 const createAction = createResource({ url: "benchpress.api.create_lab_from_template" });
 const deployAction = createResource({ url: "benchpress.api.create_bench" });
