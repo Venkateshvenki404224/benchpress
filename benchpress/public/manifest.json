@@ -1,0 +1,23 @@
+{
+	"name": "BenchPress",
+	"short_name": "BenchPress",
+	"description": "Press a button. Get a Frappe bench. Self-hosted, Docker-powered, VPN-secured.",
+	"start_url": "/frontend",
+	"display": "standalone",
+	"theme_color": "#0a0d14",
+	"background_color": "#0a0d14",
+	"icons": [
+		{
+			"src": "/assets/benchpress/images/logo/web-app-manifest-192x192.png",
+			"sizes": "192x192",
+			"type": "image/png",
+			"purpose": "any"
+		},
+		{
+			"src": "/assets/benchpress/images/logo/web-app-manifest-512x512.png",
+			"sizes": "512x512",
+			"type": "image/png",
+			"purpose": "any"
+		}
+	]
+}
