@@ -16,7 +16,7 @@
 [![Docker](https://img.shields.io/badge/Docker-Powered-2496ED.svg)](https://docker.com)
 [![WireGuard](https://img.shields.io/badge/WireGuard-VPN-88171A.svg)](https://wireguard.com)
 
-*A self-hosted alternative to Frappe Cloud, built entirely as a Frappe app.*
+*A self-hosted onboarding and dev-environment tool for teams running Frappe apps.*
 
 </div>
 
@@ -33,9 +33,12 @@ of apps you want — and it builds a Docker image, deploys a container, gives it
 private WireGuard IP, and hands you an SSH command and a working site URL. When you
 are done with the environment, you delete it.
 
-It is a self-hosted alternative to Frappe Cloud, and it is itself a Frappe app: the
-whole thing installs onto a bench you already run, with a Vue 3 SPA on the front and
-`frappe.qb` and background jobs on the back.
+BenchPress solves a narrower, different problem than a hosting platform like
+Frappe Cloud: fast onboarding for teams running Frappe-based projects — a lead
+defines the app stack once, and a new developer or intern gets a working bench
+in one click instead of losing a day to setup. It is itself a Frappe app: the
+whole thing installs onto a bench you already run, with a Vue 3 SPA on the front
+and `frappe.qb` and background jobs on the back.
 
 **What you get per Lab:** a reproducible image, a running bench container, a private
 VPN address reachable from your laptop, SSH access, code-server, and per-site
@@ -105,6 +108,7 @@ users the corresponding source. See [License](#license) for the notice, and
 - [Supported Frappe Apps](#supported-frappe-apps)
 - [VPN Device Management](#vpn-device-management)
 - [Configuration Reference](#configuration-reference)
+- [Credits & Shared Deployments (Optional)](#credits--shared-deployments-optional)
 - [Contributing](#contributing)
 - [License](#license)
 - [Trademarks](TRADEMARKS.md)
@@ -141,7 +145,10 @@ There is no simple way to say *"Give me a fresh Frappe bench with ERPNext and HR
 
 ## The Solution
 
-BenchPress is a **self-hosted Frappe Cloud alternative** built entirely as a Frappe app. It automates the entire bench lifecycle through a modern web UI:
+BenchPress is a **self-hosted onboarding and dev-environment tool**, built entirely
+as a Frappe app — not a Frappe Cloud alternative; it solves a different, narrower
+problem: getting a new developer or intern a working bench in minutes instead of
+a day of manual setup. It automates the entire bench lifecycle through a modern web UI:
 
 1. **Create a Lab** -- Define a reusable template with your desired Frappe apps (CRM, ERPNext, HRMS, LMS, Helpdesk, Wiki, etc.), the Frappe version, and resource limits (CPU, memory)
 2. **Build once** -- Docker image with all apps baked in via a 5-layer cached Dockerfile, rebuilt only when configuration changes
@@ -260,12 +267,12 @@ BenchPress is a **self-hosted Frappe Cloud alternative** built entirely as a Fra
 
 - **Lab Templates** -- Define reusable bench configurations with apps, Frappe version (v14, v15, v16, develop), and resource limits
 - **5-Layer Cached Docker Builds** -- System deps, SSH config, bench init, app install, and site creation each cached separately. Only changed layers rebuild.
-- **One-Click Deploy** -- Background job handles image build, container creation, VPN peer registration, SSH password, and site creation against the shared MariaDB. Admin password is `admin` for easy access
+- **One-Click Deploy** -- Background job handles image build, container creation, VPN peer registration, SSH password, and site creation against the shared MariaDB. A random per-lab Admin password is generated and shown in the Connection Info panel
 - **Live Build & Deploy Logs** -- GitHub Actions-style collapsible log viewer with status indicators (success/error/running), streamed in real-time via WebSocket
 - **WireGuard VPN** -- Generates a keypair, claims an IP from the vpn_management network pool (172.27.0.0/16), and registers a VPN Peer
 - **Resource Controls** -- CPU cores and memory limits per lab, enforced by Docker `--cpus` and `--memory` flags
 - **Container Management** -- Start, stop, restart, redeploy, and delete benches from the dashboard
-- **Multi-Site Support** -- Create multiple Frappe sites per bench container, each with its own set of installed apps
+- **Automatic Site Provisioning** -- Each bench gets its Frappe site created automatically on deploy, with the lab's apps installed
 - **VPN Device Management** -- Register persistent devices (Laptop, Mobile, etc.), generate WireGuard configs per device, and manage device lifecycle from a dedicated page
 - **Confirmation Dialogs** -- Destructive actions (deploy, stop, delete) require explicit confirmation before execution
 - **Stats Monitoring** -- CPU and memory usage polled every minute from the Docker stats API, displayed as progress bars
@@ -297,7 +304,7 @@ Form to create a lab: set Lab ID, title, Frappe version, resource limits (memory
 
 Tabbed view with three panels:
 - **Dashboard** -- Lab info card, installed apps badges, connection info panel (VPN IP, SSH command, username, password with show/hide toggle and copy-to-clipboard), and container status card with CPU/memory progress bars
-- **Sites** -- List of Frappe sites in the bench with create-site dialog (site name + app selection checkboxes)
+- **Sites** -- The bench's site, its installed apps, and an Open button (disabled with a reason when the VPN tunnel or container isn't reachable)
 - **Build Log** -- Collapsible step viewer (GitHub Actions-style) parsing Docker build output into expandable steps with success/error/running indicators
 
 ### Bench Instances (`/frontend/bench-instances`)
@@ -334,7 +341,7 @@ Modal dialog to configure Docker (socket path, base domain, default image, Traef
 
 ## Data Model (DocTypes)
 
-BenchPress uses 10 DocTypes to model the complete bench lifecycle (VPN DocTypes live in the vpn_management app):
+BenchPress uses 10 DocTypes to model the complete bench lifecycle (VPN DocTypes live in the vpn_management app). A further 7 DocTypes (Credit Account, Credit Ledger Entry, Credit Pack, Credit Settings, Instance Size, Always On Pass, Waitlist Entry) back the optional metering layer described in [Credits & Shared Deployments](#credits--shared-deployments-optional) and are omitted below since they don't apply to a plain self-hosted install:
 
 | DocType | Type | Purpose | Key Fields |
 |---------|------|---------|------------|
@@ -395,11 +402,7 @@ All endpoints require authentication and use `@frappe.whitelist()`. Long-running
 | `benchpress.api.bench_action` | POST | Execute action: `start`, `stop`, `restart`, `delete` |
 | `benchpress.api.get_deploy_logs` | GET | Get last 20 deploy log entries for a bench |
 
-### Site Endpoints
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `benchpress.api.create_site` | POST | Create a new site and enqueue setup inside the container |
+> **Note:** A bench's site is created automatically during deploy (`deploy_manager.create_site_in_container`) — there is no separate site-creation endpoint.
 
 ### Device Endpoints
 
@@ -628,9 +631,9 @@ bench start
 # http://172.27.0.X:8000
 ```
 
-### Step 6: Manage Sites
+### Step 6: Check the Site
 
-From the Lab Detail page's **Sites** tab, create additional Frappe sites inside the running bench. Select which apps to install on each site. Sites can be enabled, disabled, backed up, or dropped.
+The Lab Detail page's **Sites** tab shows the bench's site, its installed apps, and an Open button — the site itself was already created and provisioned during deploy (Step 3).
 
 ---
 
@@ -884,6 +887,31 @@ Device management is backed by the **VPN Peer** DocType in the vpn_management ap
 | Every 1 minute | `benchpress.stats_collector.collect_bench_stats` | Polls Docker CPU/memory/health for running containers (VPN transfer counters are updated by vpn_management's own `poll_status` job) |
 | Every 5 minutes | `benchpress.mariadb_manager.scheduled_health_check` | Checks shared MariaDB health, attempts restart if down |
 | Daily at 2 AM | `benchpress.mariadb_manager.scheduled_backup` | Full MariaDB backup with 7-day retention |
+
+---
+
+## Credits & Shared Deployments (Optional)
+
+A single self-hosted install needs none of this — skip the section. It exists for the case where
+one BenchPress instance is shared across a larger team or the public, and something has to decide
+how many labs a given person can run at once.
+
+The whole layer is off by default: `BenchPress Settings.enable_credits` is unchecked on a fresh
+site, and every check in `benchpress.credits.guard.requires_credits` short-circuits to a no-op
+while it's off. Turning it on unlocks, all configured in the **Credit Settings** singleton:
+
+- **Signup grants** -- new accounts start with a configurable number of free credits
+- **Metered runtime** -- each **Instance Size** has a credits-per-hour rate; deploys are refused
+  without at least an hour of runway
+- **Concurrency and build caps** -- separate limits for free vs. paid accounts, plus a daily build
+  cap and a max-devices cap (`0` means unlimited on any of these)
+- **Auto-reap** -- idle instances past `Reap After Days` are cleaned up automatically
+- **Always On Pass** -- a paid, fixed-price monthly exemption from reaping for one instance
+- **Credit Packs** -- purchasable top-ups (label, price, credit amount)
+- **Waitlist-gated signup** -- optionally require an invite before self-serve signup opens
+
+None of this changes what a self-hosted install does out of the box: unmetered, unlimited, no
+account required beyond your own Frappe login.
 
 ---
 

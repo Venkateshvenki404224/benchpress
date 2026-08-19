@@ -10,10 +10,13 @@ No new component library, no Bootstrap, no Material UI. Details in *Constraints*
 
 ## 1. What BenchPress is
 
-BenchPress is a **self-hosted alternative to Frappe Cloud**. A team runs it on
-their own server. It lets people spin up isolated Frappe/ERPNext development
-environments — each one a Docker container with its own database, its own site,
-and browser-based VS Code — and reach them privately over a WireGuard VPN.
+BenchPress is a **self-hosted onboarding and dev-environment tool for Frappe
+teams** — not a Frappe Cloud alternative; it solves a narrower, different
+problem: getting a new developer or intern a working bench in minutes. A team
+runs it on their own server. It lets people spin up isolated Frappe/ERPNext
+development environments — each one a Docker container with its own database,
+its own site, and browser-based VS Code — and reach them privately over a
+WireGuard VPN.
 
 The one-line version a new user should understand within five seconds of
 landing: *"Create a Frappe environment, press deploy, get a working site and a
