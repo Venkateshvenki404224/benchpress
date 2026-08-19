@@ -2,9 +2,9 @@
 
 ## Overview
 
-A complete UI redesign of the BenchPress frontend — the self-hosted Frappe Cloud
-alternative that spins up isolated Frappe/ERPNext environments in Docker
-containers and exposes them over WireGuard.
+A complete UI redesign of the BenchPress frontend — the self-hosted onboarding
+and dev-environment tool that spins up isolated Frappe/ERPNext environments in
+Docker containers and exposes them over WireGuard.
 
 The redesign covers all ten existing routes plus the five screens
 `DESIGN_BRIEF.md` §6 says are missing (overview, onboarding, deploy progress,

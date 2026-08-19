@@ -18,7 +18,7 @@ After deploying a bench, the **Dashboard** tab on the Lab Detail page shows a **
 | **SSH Command** | Full SSH command to connect | `ssh frappe@172.27.0.5` |
 | **Username** | SSH username (derived from your email) | `john` |
 | **Su Password** | SSH password for the user | `a1b2c3d4e5f6` |
-| **Admin Password** | Frappe admin password for the site | `admin` |
+| **Admin Password** | Frappe admin password for the site, randomly generated per lab | `xK3mP9qRtL` |
 | **VS Port Forward** | Port forward command for VS Code remote | `172.27.0.5:8000` |
 
 Each field has a **copy button** that copies the value to your clipboard with a "Copied to clipboard" confirmation.
@@ -73,7 +73,7 @@ After running `bench start` inside the container:
 
 Log in with:
 - **Username**: `Administrator`
-- **Password**: `admin` (the Admin Password shown in Connection Info)
+- **Password**: the Admin Password shown in Connection Info
 
 ---
 
