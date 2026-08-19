@@ -1,10 +1,14 @@
 # Copyright (c) 2026, Venkatesh and Contributors
 # See license.txt
 
+import tempfile
+import unittest
 from contextlib import nullcontext
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import frappe
+import yaml
 from frappe.tests import IntegrationTestCase
 
 from benchpress.benchpress.doctype.bench_instance import get_instance_id
@@ -743,6 +747,35 @@ class TestDeployStepMarkers(IntegrationTestCase):
 		self.assertEqual(self._bench_field(bench, "code_server_url"), "http://172.27.0.11:8080/")
 		self.assertEqual(self._bench_field(bench, "status"), "Running")
 
+	# --- public_url (phase 1: public site hostname) ---
+
+	def _set_base_domain(self, value):
+		before = frappe.db.get_single_value("BenchPress Settings", "base_domain")
+		frappe.db.set_single_value("BenchPress Settings", "base_domain", value)
+		frappe.clear_cache(doctype="BenchPress Settings")
+		self.addCleanup(frappe.db.set_single_value, "BenchPress Settings", "base_domain", before)
+		self.addCleanup(frappe.clear_cache, doctype="BenchPress Settings")
+		frappe.db.commit()
+
+	def test_public_url_set_when_base_domain_is_configured(self):
+		from benchpress import deploy_manager
+
+		bench = self._bench()
+		self._set_base_domain("benchpress.cloud")
+
+		with patch.object(deploy_manager, "_write_instance_route", autospec=True):
+			self._run_deploy(bench)
+
+		self.assertEqual(self._bench_field(bench, "public_url"), f"https://{bench.name}.benchpress.cloud")
+
+	def test_public_url_stays_unset_with_localhost_base_domain(self):
+		bench = self._bench()
+		self._set_base_domain("localhost")
+
+		self._run_deploy(bench)
+
+		self.assertFalse(self._bench_field(bench, "public_url"))
+
 	def test_a_failed_file_write_fails_the_deploy_at_the_step_that_wrote_it(self):
 		"""Hole 4: a silently unwritten `common_site_config.json` is a site that cannot find redis."""
 		bench = self._bench()
@@ -1112,3 +1145,49 @@ class TestRecordPrimarySite(IntegrationTestCase):
 		# The name the database was actually created under must be among those dropped.
 		self.assertIn(bench.site_name, dropped)
 		self.assertIn(site.full_domain, dropped)
+
+
+class TestPublicSiteUrlHelpers(unittest.TestCase):
+	"""Pure-function tests, no container/DB — see phase-1-public-site-hostname.md."""
+
+	def test_public_site_url_is_none_when_base_domain_unset(self):
+		from benchpress.deploy_manager import _public_site_url
+
+		self.assertIsNone(_public_site_url("inst-1", None))
+		self.assertIsNone(_public_site_url("inst-1", ""))
+
+	def test_public_site_url_is_none_for_localhost(self):
+		from benchpress.deploy_manager import _public_site_url
+
+		self.assertIsNone(_public_site_url("inst-1", "localhost"))
+
+	def test_public_site_url_shape(self):
+		from benchpress.deploy_manager import _public_site_url
+
+		self.assertEqual(_public_site_url("inst-1", "benchpress.cloud"), "https://inst-1.benchpress.cloud")
+
+	def test_write_instance_route_writes_router_and_service(self):
+		from benchpress import deploy_manager
+
+		with tempfile.TemporaryDirectory() as tmp:
+			with patch.object(deploy_manager, "TRAEFIK_DYNAMIC_DIR", Path(tmp) / "instances"):
+				deploy_manager._write_instance_route("inst-1", "benchpress.cloud", "172.30.0.11")
+				config = yaml.safe_load((Path(tmp) / "instances" / "inst-1.yml").read_text())
+
+			router = config["http"]["routers"]["site-inst-1"]
+			self.assertEqual(router["rule"], "Host(`inst-1.benchpress.cloud`)")
+			self.assertEqual(router["service"], "site-inst-1")
+			self.assertEqual(router["tls"], {})
+
+			service = config["http"]["services"]["site-inst-1"]
+			self.assertEqual(service["loadBalancer"]["servers"], [{"url": "http://172.30.0.11:8000"}])
+
+	def test_write_instance_route_no_ops_for_localhost(self):
+		from benchpress import deploy_manager
+
+		with tempfile.TemporaryDirectory() as tmp:
+			target_dir = Path(tmp) / "instances"
+			with patch.object(deploy_manager, "TRAEFIK_DYNAMIC_DIR", target_dir):
+				deploy_manager._write_instance_route("inst-1", "localhost", "172.30.0.11")
+
+			self.assertFalse(target_dir.exists())

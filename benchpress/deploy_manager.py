@@ -4,8 +4,10 @@
 import json
 import secrets
 import shlex
+from pathlib import Path
 
 import frappe
+import yaml
 from frappe.utils.file_lock import LockTimeoutError
 from frappe.utils.synchronization import filelock
 
@@ -57,6 +59,48 @@ NOTHING_TO_ROLL_BACK = "Cleanup: nothing to roll back — no container was creat
 SITE_HTTP_PORT = 8000
 
 ADOPTED_MARKER = "already exists — adopting it"
+
+# Module constant, not inlined, so tests can monkeypatch it to a tmp path.
+TRAEFIK_DYNAMIC_DIR = Path("/etc/traefik/dynamic/instances")
+
+
+def _public_site_url(instance_id: str, base_domain: str | None) -> str | None:
+	if not base_domain or base_domain == "localhost":
+		return None
+	return f"https://{instance_id}.{base_domain}"
+
+
+def _write_instance_route(instance_id: str, base_domain: str, container_ip: str) -> None:
+	"""Write a Traefik file-provider route for this instance's site.
+
+	`tls: {}` (empty section, no `certResolver`) deliberately — it turns TLS on for this
+	router using Traefik's existing default cert store, which already holds the wildcard
+	SAN from the control-plane router. No new ACME issuance happens per instance.
+
+	One file per instance, named by instance ID, so a redeploy naturally overwrites it
+	with the fresh `container_ip` — no dedup logic needed.
+	"""
+	if not base_domain or base_domain == "localhost":
+		return
+	TRAEFIK_DYNAMIC_DIR.mkdir(parents=True, exist_ok=True)
+	config = {
+		"http": {
+			"routers": {
+				f"site-{instance_id}": {
+					"rule": f"Host(`{instance_id}.{base_domain}`)",
+					"entryPoints": ["websecure"],
+					"service": f"site-{instance_id}",
+					"tls": {},
+				},
+			},
+			"services": {
+				f"site-{instance_id}": {
+					"loadBalancer": {"servers": [{"url": f"http://{container_ip}:{SITE_HTTP_PORT}"}]}
+				},
+			},
+		}
+	}
+	(TRAEFIK_DYNAMIC_DIR / f"{instance_id}.yml").write_text(yaml.safe_dump(config))
 
 
 def _cleanup_failed_deploy(bench, container_id, append_log) -> None:
@@ -241,6 +285,8 @@ def _deploy_bench(bench_name: str) -> None:
 		frappe.db.commit()
 
 		settings = frappe.get_cached_doc("BenchPress Settings")
+		bench.public_url = _public_site_url(bench.name, settings.base_domain)
+		_write_instance_route(bench.name, settings.base_domain, container_ip)
 
 		_setup_container_vpn(bench, container_id, pipeline)
 
