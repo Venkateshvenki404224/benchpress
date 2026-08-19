@@ -1,0 +1,157 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "field:key",
+ "creation": "2026-08-19 08:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "key",
+  "title",
+  "description",
+  "column_break_meta",
+  "frappe_version",
+  "instance_size",
+  "memory_limit",
+  "cpu_cores",
+  "eta_minutes",
+  "column_break_flags",
+  "most_used",
+  "is_active",
+  "sort_order",
+  "apps"
+ ],
+ "fields": [
+  {
+   "description": "Catalog identity. Also the Lab's `template` value, so this must never be renamed once a Lab has been built from it.",
+   "fieldname": "key",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Key",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "title",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Title",
+   "reqd": 1
+  },
+  {
+   "fieldname": "description",
+   "fieldtype": "Small Text",
+   "label": "Description"
+  },
+  {
+   "fieldname": "column_break_meta",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "frappe_version",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Frappe Version",
+   "options": "version-15\nversion-14\nversion-16\ndevelop",
+   "reqd": 1
+  },
+  {
+   "fieldname": "instance_size",
+   "fieldtype": "Link",
+   "label": "Instance Size",
+   "options": "Instance Size"
+  },
+  {
+   "description": "Must agree with Instance Size above where one is set — this is what the template card renders and what a built Lab starts with.",
+   "fieldname": "memory_limit",
+   "fieldtype": "Data",
+   "label": "Memory Limit"
+  },
+  {
+   "fieldname": "cpu_cores",
+   "fieldtype": "Int",
+   "label": "CPU Cores"
+  },
+  {
+   "fieldname": "eta_minutes",
+   "fieldtype": "Int",
+   "label": "ETA (minutes)"
+  },
+  {
+   "fieldname": "column_break_flags",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "0",
+   "fieldname": "most_used",
+   "fieldtype": "Check",
+   "label": "Most Used"
+  },
+  {
+   "default": "1",
+   "description": "Inactive templates disappear from the catalog without being deleted — a Lab already built from one keeps working.",
+   "fieldname": "is_active",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Is Active"
+  },
+  {
+   "default": "0",
+   "description": "Ascending display order on the Templates page.",
+   "fieldname": "sort_order",
+   "fieldtype": "Int",
+   "label": "Sort Order"
+  },
+  {
+   "fieldname": "apps",
+   "fieldtype": "Table",
+   "label": "Apps",
+   "options": "Lab App"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-08-19 08:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Benchpress",
+ "name": "Lab Template",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "BenchPress Admin",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "read": 1,
+   "role": "BenchPress User"
+  }
+ ],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "sort_order",
+ "sort_order": "ASC",
+ "states": [],
+ "track_changes": 1
+}
