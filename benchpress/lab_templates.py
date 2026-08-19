@@ -229,6 +229,157 @@ SEED_TEMPLATES = [
 			}
 		],
 	},
+	{
+		"key": "frappe-16",
+		"title": "Frappe Framework",
+		"description": "Bare Frappe bench with no extra apps — the lightest starting point.",
+		"frappe_version": "version-16",
+		"instance_size": "Small",
+		"memory_limit": "1g",
+		"cpu_cores": 1,
+		"eta_minutes": 3,
+		"most_used": 0,
+		"is_active": 1,
+		"sort_order": 9,
+		"apps": [],
+	},
+	{
+		"key": "crm-16",
+		"title": "Frappe CRM",
+		"description": "Lightweight sales CRM on Frappe — leads, deals and contacts.",
+		"frappe_version": "version-16",
+		"instance_size": "Small",
+		"memory_limit": "1g",
+		"cpu_cores": 1,
+		"eta_minutes": 4,
+		"most_used": 0,
+		"is_active": 1,
+		"sort_order": 10,
+		"apps": [
+			{
+				"app_name": "crm",
+				"app_label": "Frappe CRM",
+				"git_url": "https://github.com/frappe/crm",
+				"branch": "main",
+			}
+		],
+	},
+	{
+		"key": "hrms-16",
+		"title": "Frappe HR",
+		"description": "HR & payroll suite — employees, leaves, attendance and payroll.",
+		"frappe_version": "version-16",
+		"instance_size": "Medium",
+		"memory_limit": "2g",
+		"cpu_cores": 2,
+		"eta_minutes": 5,
+		"most_used": 0,
+		"is_active": 1,
+		"sort_order": 11,
+		# hrms requires erpnext, so erpnext must install first. The
+		# build/deploy pipeline installs apps in this listed order.
+		"apps": [
+			{
+				"app_name": "erpnext",
+				"app_label": "ERPNext",
+				"git_url": "https://github.com/frappe/erpnext",
+				"branch": "version-16",
+			},
+			{
+				"app_name": "hrms",
+				"app_label": "Frappe HR",
+				"git_url": "https://github.com/frappe/hrms",
+				"branch": "version-16",
+			},
+		],
+	},
+	{
+		"key": "lms-16",
+		"title": "Frappe Learning",
+		"description": "Learning management system — courses, quizzes and batches.",
+		"frappe_version": "version-16",
+		"instance_size": "Small",
+		"memory_limit": "1g",
+		"cpu_cores": 1,
+		"eta_minutes": 4,
+		"most_used": 0,
+		"is_active": 1,
+		"sort_order": 12,
+		# lms requires payments, so payments must install first. The
+		# build/deploy pipeline installs apps in this listed order.
+		"apps": [
+			{
+				"app_name": "payments",
+				"app_label": "Payments",
+				"git_url": "https://github.com/frappe/payments",
+				"branch": "version-16",
+			},
+			{
+				"app_name": "lms",
+				"app_label": "Frappe Learning",
+				"git_url": "https://github.com/frappe/lms",
+				"branch": "main",
+			},
+		],
+	},
+	{
+		"key": "helpdesk-16",
+		"title": "Frappe Helpdesk",
+		"description": "Customer support desk — tickets, SLAs and a knowledge base.",
+		"frappe_version": "version-16",
+		"instance_size": "Small",
+		"memory_limit": "1g",
+		"cpu_cores": 1,
+		"eta_minutes": 4,
+		"most_used": 0,
+		"is_active": 1,
+		"sort_order": 13,
+		# helpdesk requires telephony, so telephony must install first. The
+		# build/deploy pipeline installs apps in this listed order.
+		"apps": [
+			{
+				"app_name": "telephony",
+				"app_label": "Telephony",
+				"git_url": "https://github.com/frappe/telephony",
+				"branch": "develop",
+			},
+			{
+				"app_name": "helpdesk",
+				"app_label": "Frappe Helpdesk",
+				"git_url": "https://github.com/frappe/helpdesk",
+				"branch": "main",
+			},
+		],
+	},
+	{
+		"key": "india-compliance-16",
+		"title": "ERPNext + India Compliance",
+		"description": "ERPNext with GST, e-invoicing and TDS for Indian businesses.",
+		"frappe_version": "version-16",
+		"instance_size": "Medium",
+		"memory_limit": "2g",
+		"cpu_cores": 2,
+		"eta_minutes": 7,
+		"most_used": 0,
+		"is_active": 1,
+		"sort_order": 14,
+		# india_compliance extends ERPNext, so ERPNext must install first. The
+		# build/deploy pipeline installs apps in this listed order.
+		"apps": [
+			{
+				"app_name": "erpnext",
+				"app_label": "ERPNext",
+				"git_url": "https://github.com/frappe/erpnext",
+				"branch": "version-16",
+			},
+			{
+				"app_name": "india_compliance",
+				"app_label": "India Compliance",
+				"git_url": "https://github.com/resilient-tech/india-compliance",
+				"branch": "version-16",
+			},
+		],
+	},
 ]
 
 

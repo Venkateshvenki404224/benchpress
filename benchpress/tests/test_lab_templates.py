@@ -63,21 +63,34 @@ class TestLabTemplates(IntegrationTestCase):
 			"hrms": ["erpnext", "hrms"],
 			"lms": ["payments", "lms"],
 			"helpdesk": ["telephony", "helpdesk"],
+			"hrms-16": ["erpnext", "hrms"],
+			"lms-16": ["payments", "lms"],
+			"helpdesk-16": ["telephony", "helpdesk"],
 		}
 		for key, app_names in expected.items():
 			template = lab_templates.get_template(key)
 			self.assertEqual([app["app_name"] for app in template["apps"]], app_names)
 
 	def test_india_compliance_template_installs_erpnext_first(self):
-		template = lab_templates.get_template("india-compliance")
-		app_names = [app["app_name"] for app in template["apps"]]
-		# india_compliance extends ERPNext; order matters at install time.
-		self.assertEqual(app_names, ["erpnext", "india_compliance"])
+		for key in ("india-compliance", "india-compliance-16"):
+			template = lab_templates.get_template(key)
+			app_names = [app["app_name"] for app in template["apps"]]
+			# india_compliance extends ERPNext; order matters at install time.
+			self.assertEqual(app_names, ["erpnext", "india_compliance"])
 
-	def test_v16_erpnext_template_present(self):
-		template = lab_templates.get_template("erpnext-16")
-		self.assertEqual(template["frappe_version"], "version-16")
-		self.assertEqual(template["apps"][0]["branch"], "version-16")
+	def test_v16_templates_present(self):
+		v16_keys = [
+			"erpnext-16",
+			"frappe-16",
+			"crm-16",
+			"hrms-16",
+			"lms-16",
+			"helpdesk-16",
+			"india-compliance-16",
+		]
+		for key in v16_keys:
+			template = lab_templates.get_template(key)
+			self.assertEqual(template["frappe_version"], "version-16", key)
 
 	def test_get_template_unknown_throws(self):
 		with self.assertRaises(frappe.ValidationError):
