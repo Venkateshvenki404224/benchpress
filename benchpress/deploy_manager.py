@@ -116,6 +116,17 @@ def _write_instance_route(instance_id: str, base_domain: str, container_ip: str)
 	(TRAEFIK_DYNAMIC_DIR / f"{instance_id}.yml").write_text(yaml.safe_dump(config))
 
 
+def _delete_instance_route(instance_id: str) -> None:
+	"""Remove this instance's Traefik route file, if any.
+
+	Torn-down containers free their IP back to Docker, which can hand it to the next
+	deployed instance. A route file left behind after teardown is live routing state
+	that would keep pointing the old public hostname at whatever container ends up
+	with that IP next — so this has to run at teardown, not just redeploy.
+	"""
+	(TRAEFIK_DYNAMIC_DIR / f"{instance_id}.yml").unlink(missing_ok=True)
+
+
 def _cleanup_failed_deploy(bench, container_id, append_log) -> None:
 	"""Best-effort teardown of resources created by this failed run.
 
@@ -589,6 +600,11 @@ def teardown_bench(bench) -> None:
 			remove_container(bench.container_id)
 		except Exception:
 			pass  # best-effort
+
+	try:
+		_delete_instance_route(bench.name)
+	except Exception:
+		pass  # best-effort
 
 	remove_bench_volume(bench.name)
 	_drop_site_database(bench)

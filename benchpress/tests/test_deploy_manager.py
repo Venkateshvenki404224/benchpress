@@ -1164,6 +1164,37 @@ class TestRecordPrimarySite(IntegrationTestCase):
 		self.assertIn(bench.site_name, dropped)
 		self.assertIn(site.full_domain, dropped)
 
+	def test_teardown_removes_the_instance_route_file(self):
+		"""Freed container IPs get reused by Docker — a stale route file left after teardown
+		would keep pointing the old public hostname at whoever gets that IP next. See
+		phase-3-teardown-cleanup.md."""
+		from benchpress import deploy_manager
+		from benchpress.deploy_manager import teardown_bench
+
+		bench = self._bench()
+
+		with tempfile.TemporaryDirectory() as tmp:
+			with patch.object(deploy_manager, "TRAEFIK_DYNAMIC_DIR", Path(tmp) / "instances"):
+				deploy_manager._write_instance_route(bench.name, "benchpress.cloud", "172.30.0.11")
+				route_file = Path(tmp) / "instances" / f"{bench.name}.yml"
+				self.assertTrue(route_file.exists())
+
+				teardown_bench(bench)
+
+				self.assertFalse(route_file.exists())
+
+	def test_teardown_does_not_raise_when_no_route_file_exists(self):
+		"""The `base_domain = localhost` case: phase 1 never wrote a route file, so teardown
+		must no-op cleanly rather than raising on a missing path."""
+		from benchpress import deploy_manager
+		from benchpress.deploy_manager import teardown_bench
+
+		bench = self._bench()
+
+		with tempfile.TemporaryDirectory() as tmp:
+			with patch.object(deploy_manager, "TRAEFIK_DYNAMIC_DIR", Path(tmp) / "instances"):
+				teardown_bench(bench)
+
 
 class TestPublicSiteUrlHelpers(unittest.TestCase):
 	"""Pure-function tests, no container/DB — see phase-1-public-site-hostname.md."""
