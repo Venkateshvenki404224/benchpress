@@ -53,10 +53,8 @@ jspm_packages/
 
 # Aider AI Chat
 .aider*
-CLAUDE.md
 .mcp.json
 everything-claude-code/
-.claude
 
 # Frontend build output
 benchpress/public/frontend/
