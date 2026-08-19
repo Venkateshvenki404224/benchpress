@@ -4,8 +4,10 @@
 import json
 import secrets
 import shlex
+from pathlib import Path
 
 import frappe
+import yaml
 from frappe.utils.file_lock import LockTimeoutError
 from frappe.utils.synchronization import filelock
 
@@ -57,6 +59,72 @@ NOTHING_TO_ROLL_BACK = "Cleanup: nothing to roll back — no container was creat
 SITE_HTTP_PORT = 8000
 
 ADOPTED_MARKER = "already exists — adopting it"
+
+# Module constant, not inlined, so tests can monkeypatch it to a tmp path.
+TRAEFIK_DYNAMIC_DIR = Path("/etc/traefik/dynamic/instances")
+
+
+def _public_site_url(instance_id: str, base_domain: str | None) -> str | None:
+	if not base_domain or base_domain == "localhost":
+		return None
+	return f"https://{instance_id}.{base_domain}"
+
+
+def _public_ide_url(instance_id: str, base_domain: str | None) -> str | None:
+	if not base_domain or base_domain == "localhost":
+		return None
+	return f"https://ide-{instance_id}.{base_domain}"
+
+
+def _write_instance_route(instance_id: str, base_domain: str, container_ip: str) -> None:
+	"""Write Traefik file-provider routes for this instance's site and its code-server IDE.
+
+	`tls: {}` (empty section, no `certResolver`) deliberately — it turns TLS on for these
+	routers using Traefik's existing default cert store, which already holds the wildcard
+	SAN from the control-plane router. No new ACME issuance happens per instance.
+
+	One file per instance, named by instance ID, so a redeploy naturally overwrites it
+	with the fresh `container_ip` — no dedup logic needed.
+	"""
+	if not base_domain or base_domain == "localhost":
+		return
+	TRAEFIK_DYNAMIC_DIR.mkdir(parents=True, exist_ok=True)
+	config = {
+		"http": {
+			"routers": {
+				f"site-{instance_id}": {
+					"rule": f"Host(`{instance_id}.{base_domain}`)",
+					"entryPoints": ["websecure"],
+					"service": f"site-{instance_id}",
+					"tls": {},
+				},
+				f"ide-{instance_id}": {
+					"rule": f"Host(`ide-{instance_id}.{base_domain}`)",
+					"entryPoints": ["websecure"],
+					"service": f"ide-{instance_id}",
+					"tls": {},
+				},
+			},
+			"services": {
+				f"site-{instance_id}": {
+					"loadBalancer": {"servers": [{"url": f"http://{container_ip}:{SITE_HTTP_PORT}"}]}
+				},
+				f"ide-{instance_id}": {"loadBalancer": {"servers": [{"url": f"http://{container_ip}:8080"}]}},
+			},
+		}
+	}
+	(TRAEFIK_DYNAMIC_DIR / f"{instance_id}.yml").write_text(yaml.safe_dump(config))
+
+
+def _delete_instance_route(instance_id: str) -> None:
+	"""Remove this instance's Traefik route file, if any.
+
+	Torn-down containers free their IP back to Docker, which can hand it to the next
+	deployed instance. A route file left behind after teardown is live routing state
+	that would keep pointing the old public hostname at whatever container ends up
+	with that IP next — so this has to run at teardown, not just redeploy.
+	"""
+	(TRAEFIK_DYNAMIC_DIR / f"{instance_id}.yml").unlink(missing_ok=True)
 
 
 def _cleanup_failed_deploy(bench, container_id, append_log) -> None:
@@ -241,6 +309,8 @@ def _deploy_bench(bench_name: str) -> None:
 		frappe.db.commit()
 
 		settings = frappe.get_cached_doc("BenchPress Settings")
+		bench.public_url = _public_site_url(bench.name, settings.base_domain)
+		_write_instance_route(bench.name, settings.base_domain, container_ip)
 
 		_setup_container_vpn(bench, container_id, pipeline)
 
@@ -308,7 +378,7 @@ def _deploy_bench(bench_name: str) -> None:
 		pipeline.log(f"Site served on port {SITE_HTTP_PORT}")
 
 		if getattr(lab, "enable_code_server", 0):
-			_start_code_server(bench, container_id, pipeline)
+			_start_code_server(bench, container_id, pipeline, settings)
 		else:
 			pipeline.log("Code server is disabled for this lab — skipped")
 
@@ -351,7 +421,7 @@ def _deploy_bench(bench_name: str) -> None:
 		_notify_owner(bench.owner, f"Bench deploy failed: {bench.bench_name}", "Bench Instance", bench.name)
 
 
-def _start_code_server(bench, container_id: str, pipeline) -> None:
+def _start_code_server(bench, container_id: str, pipeline, settings) -> None:
 	"""Configure code-server, launch it, and only then claim it is up.
 
 	Every exec is checked. The config write decides whether code-server can authenticate at
@@ -379,7 +449,10 @@ def _start_code_server(bench, container_id: str, pipeline) -> None:
 	_checked_exec(container_id, "bash /opt/benchpress/scripts/restart.sh", "restart.sh")
 
 	bench.code_server_password = code_server_password
-	bench.code_server_url = f"http://{bench.wg_ip or bench.container_ip or '127.0.0.1'}:8080/"
+	bench.code_server_url = (
+		_public_ide_url(bench.name, settings.base_domain)
+		or f"http://{bench.wg_ip or bench.container_ip or '127.0.0.1'}:8080/"
+	)
 	pipeline.log(f"code-server ready at {bench.code_server_url}")
 
 
@@ -527,6 +600,11 @@ def teardown_bench(bench) -> None:
 			remove_container(bench.container_id)
 		except Exception:
 			pass  # best-effort
+
+	try:
+		_delete_instance_route(bench.name)
+	except Exception:
+		pass  # best-effort
 
 	remove_bench_volume(bench.name)
 	_drop_site_database(bench)
