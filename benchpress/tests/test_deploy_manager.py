@@ -736,15 +736,33 @@ class TestDeployStepMarkers(IntegrationTestCase):
 		self.assertNotIn("code-server ready at", log)
 		self.assertFalse(self._bench_field(bench, "code_server_url"))
 
-	def test_a_working_step_ten_stores_the_address_and_says_ready_once(self):
+	def test_a_working_step_ten_stores_the_tunnel_address_on_localhost(self):
 		bench = self._bench()
 		self._enable_code_server()
+		self._set_base_domain("localhost")
 
 		self._run_deploy(bench)
 
 		log = self._log(bench.name)
 		self.assertEqual(log.count("code-server ready at"), 1)
 		self.assertEqual(self._bench_field(bench, "code_server_url"), "http://172.27.0.11:8080/")
+		self.assertEqual(self._bench_field(bench, "status"), "Running")
+
+	def test_a_working_step_ten_stores_the_public_ide_hostname(self):
+		from benchpress import deploy_manager
+
+		bench = self._bench()
+		self._enable_code_server()
+		self._set_base_domain("benchpress.cloud")
+
+		with patch.object(deploy_manager, "_write_instance_route", autospec=True):
+			self._run_deploy(bench)
+
+		log = self._log(bench.name)
+		self.assertEqual(log.count("code-server ready at"), 1)
+		self.assertEqual(
+			self._bench_field(bench, "code_server_url"), f"https://ide-{bench.name}.benchpress.cloud"
+		)
 		self.assertEqual(self._bench_field(bench, "status"), "Running")
 
 	# --- public_url (phase 1: public site hostname) ---
@@ -1166,6 +1184,22 @@ class TestPublicSiteUrlHelpers(unittest.TestCase):
 
 		self.assertEqual(_public_site_url("inst-1", "benchpress.cloud"), "https://inst-1.benchpress.cloud")
 
+	def test_public_ide_url_is_none_when_base_domain_unset(self):
+		from benchpress.deploy_manager import _public_ide_url
+
+		self.assertIsNone(_public_ide_url("inst-1", None))
+		self.assertIsNone(_public_ide_url("inst-1", ""))
+
+	def test_public_ide_url_is_none_for_localhost(self):
+		from benchpress.deploy_manager import _public_ide_url
+
+		self.assertIsNone(_public_ide_url("inst-1", "localhost"))
+
+	def test_public_ide_url_shape(self):
+		from benchpress.deploy_manager import _public_ide_url
+
+		self.assertEqual(_public_ide_url("inst-1", "benchpress.cloud"), "https://ide-inst-1.benchpress.cloud")
+
 	def test_write_instance_route_writes_router_and_service(self):
 		from benchpress import deploy_manager
 
@@ -1181,6 +1215,14 @@ class TestPublicSiteUrlHelpers(unittest.TestCase):
 
 			service = config["http"]["services"]["site-inst-1"]
 			self.assertEqual(service["loadBalancer"]["servers"], [{"url": "http://172.30.0.11:8000"}])
+
+			ide_router = config["http"]["routers"]["ide-inst-1"]
+			self.assertEqual(ide_router["rule"], "Host(`ide-inst-1.benchpress.cloud`)")
+			self.assertEqual(ide_router["service"], "ide-inst-1")
+			self.assertEqual(ide_router["tls"], {})
+
+			ide_service = config["http"]["services"]["ide-inst-1"]
+			self.assertEqual(ide_service["loadBalancer"]["servers"], [{"url": "http://172.30.0.11:8080"}])
 
 	def test_write_instance_route_no_ops_for_localhost(self):
 		from benchpress import deploy_manager

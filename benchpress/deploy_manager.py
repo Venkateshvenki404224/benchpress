@@ -70,11 +70,17 @@ def _public_site_url(instance_id: str, base_domain: str | None) -> str | None:
 	return f"https://{instance_id}.{base_domain}"
 
 
-def _write_instance_route(instance_id: str, base_domain: str, container_ip: str) -> None:
-	"""Write a Traefik file-provider route for this instance's site.
+def _public_ide_url(instance_id: str, base_domain: str | None) -> str | None:
+	if not base_domain or base_domain == "localhost":
+		return None
+	return f"https://ide-{instance_id}.{base_domain}"
 
-	`tls: {}` (empty section, no `certResolver`) deliberately — it turns TLS on for this
-	router using Traefik's existing default cert store, which already holds the wildcard
+
+def _write_instance_route(instance_id: str, base_domain: str, container_ip: str) -> None:
+	"""Write Traefik file-provider routes for this instance's site and its code-server IDE.
+
+	`tls: {}` (empty section, no `certResolver`) deliberately — it turns TLS on for these
+	routers using Traefik's existing default cert store, which already holds the wildcard
 	SAN from the control-plane router. No new ACME issuance happens per instance.
 
 	One file per instance, named by instance ID, so a redeploy naturally overwrites it
@@ -92,11 +98,18 @@ def _write_instance_route(instance_id: str, base_domain: str, container_ip: str)
 					"service": f"site-{instance_id}",
 					"tls": {},
 				},
+				f"ide-{instance_id}": {
+					"rule": f"Host(`ide-{instance_id}.{base_domain}`)",
+					"entryPoints": ["websecure"],
+					"service": f"ide-{instance_id}",
+					"tls": {},
+				},
 			},
 			"services": {
 				f"site-{instance_id}": {
 					"loadBalancer": {"servers": [{"url": f"http://{container_ip}:{SITE_HTTP_PORT}"}]}
 				},
+				f"ide-{instance_id}": {"loadBalancer": {"servers": [{"url": f"http://{container_ip}:8080"}]}},
 			},
 		}
 	}
@@ -354,7 +367,7 @@ def _deploy_bench(bench_name: str) -> None:
 		pipeline.log(f"Site served on port {SITE_HTTP_PORT}")
 
 		if getattr(lab, "enable_code_server", 0):
-			_start_code_server(bench, container_id, pipeline)
+			_start_code_server(bench, container_id, pipeline, settings)
 		else:
 			pipeline.log("Code server is disabled for this lab — skipped")
 
@@ -397,7 +410,7 @@ def _deploy_bench(bench_name: str) -> None:
 		_notify_owner(bench.owner, f"Bench deploy failed: {bench.bench_name}", "Bench Instance", bench.name)
 
 
-def _start_code_server(bench, container_id: str, pipeline) -> None:
+def _start_code_server(bench, container_id: str, pipeline, settings) -> None:
 	"""Configure code-server, launch it, and only then claim it is up.
 
 	Every exec is checked. The config write decides whether code-server can authenticate at
@@ -425,7 +438,10 @@ def _start_code_server(bench, container_id: str, pipeline) -> None:
 	_checked_exec(container_id, "bash /opt/benchpress/scripts/restart.sh", "restart.sh")
 
 	bench.code_server_password = code_server_password
-	bench.code_server_url = f"http://{bench.wg_ip or bench.container_ip or '127.0.0.1'}:8080/"
+	bench.code_server_url = (
+		_public_ide_url(bench.name, settings.base_domain)
+		or f"http://{bench.wg_ip or bench.container_ip or '127.0.0.1'}:8080/"
+	)
 	pipeline.log(f"code-server ready at {bench.code_server_url}")
 
 
