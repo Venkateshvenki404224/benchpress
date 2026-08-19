@@ -1079,6 +1079,20 @@ class TestRecordPrimarySite(IntegrationTestCase):
 		self.assertEqual(site.status, "Active")
 		self.assertEqual([row.app_name for row in site.apps_installed], ["frappe"])
 
+	def test_a_caller_chosen_site_name_carries_through_to_the_bench_site_row(self):
+		"""Closes the loop on issue #125: the row must carry the chosen name, not just a hash."""
+		from benchpress.deploy_manager import _record_primary_site
+
+		bench = self._bench()
+		bench.site_name = "acme.benchpress.cloud"
+		bench.save(ignore_permissions=True)
+
+		_record_primary_site(bench, self.lab, "secret-one")
+
+		site = frappe.get_doc("Bench Site", {"bench": bench.name})
+		self.assertEqual(site.site_name, "acme.benchpress.cloud")
+		self.assertEqual(frappe.db.get_value("Bench Instance", bench.name, "site_name"), site.site_name)
+
 	def test_the_controller_alone_owns_full_domain(self):
 		"""Two writers meant the label could name a site that does not exist.
 
