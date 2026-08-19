@@ -41,7 +41,13 @@
 					<span
 						class="grid size-8 flex-none place-items-center rounded-md border border-outline-gray-1 bg-surface-white"
 					>
-						<AppIcon :app="markFor(template)" :size="20" />
+						<img
+							v-if="template.logo"
+							:src="template.logo"
+							:alt="template.title"
+							class="size-full rounded-md object-cover"
+						/>
+						<AppIcon v-else :app="markFor(template)" :size="20" />
 					</span>
 					<div class="min-w-0 flex-1">
 						<h2 class="truncate text-sm font-semibold text-ink-gray-9">

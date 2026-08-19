@@ -39,52 +39,58 @@ def _app(app_name="erpnext", git_url="https://github.com/frappe/erpnext", branch
 	return {"app_name": app_name, "git_url": git_url, "branch": branch}
 
 
-class TestBuildSpecHash(unittest.TestCase):
-	def test_row_order_cannot_change_the_hash(self):
+class TestBuildSpec(unittest.TestCase):
+	"""`build_spec` is no longer the tag's identity — the tag is static per lab now — but it's
+	still what `Lab.reset_status_if_spec_changed` compares to detect a Ready lab gone stale.
+	"""
+
+	def test_row_order_does_not_change_the_spec(self):
 		crm, erpnext = _app("crm", "https://github.com/frappe/crm", "main"), _app()
 		self.assertEqual(
-			image_cache.build_spec_hash(_spec(apps=[crm, erpnext])),
-			image_cache.build_spec_hash(_spec(apps=[erpnext, crm])),
+			image_cache.build_spec(_spec(apps=[crm, erpnext])),
+			image_cache.build_spec(_spec(apps=[erpnext, crm])),
 		)
 
-	def test_a_changed_branch_changes_the_hash(self):
+	def test_a_changed_branch_changes_the_spec(self):
 		moved = _app(branch="version-14")
 		self.assertNotEqual(
-			image_cache.build_spec_hash(_spec(apps=[_app()])),
-			image_cache.build_spec_hash(_spec(apps=[moved])),
+			image_cache.build_spec(_spec(apps=[_app()])),
+			image_cache.build_spec(_spec(apps=[moved])),
 		)
 
-	def test_a_changed_app_changes_the_hash(self):
+	def test_a_changed_app_changes_the_spec(self):
 		self.assertNotEqual(
-			image_cache.build_spec_hash(_spec(apps=[_app()])),
-			image_cache.build_spec_hash(_spec(apps=[_app(), _app("hrms")])),
+			image_cache.build_spec(_spec(apps=[_app()])),
+			image_cache.build_spec(_spec(apps=[_app(), _app("hrms")])),
 		)
 
-	def test_a_changed_git_url_changes_the_hash(self):
+	def test_a_changed_git_url_changes_the_spec(self):
 		fork = _app(git_url="https://github.com/someone/erpnext")
 		self.assertNotEqual(
-			image_cache.build_spec_hash(_spec(apps=[_app()])),
-			image_cache.build_spec_hash(_spec(apps=[fork])),
+			image_cache.build_spec(_spec(apps=[_app()])),
+			image_cache.build_spec(_spec(apps=[fork])),
 		)
 
-	def test_a_changed_frappe_version_changes_the_hash(self):
+	def test_a_changed_frappe_version_changes_the_spec(self):
 		self.assertNotEqual(
-			image_cache.build_spec_hash(_spec("version-15")),
-			image_cache.build_spec_hash(_spec("version-16")),
+			image_cache.build_spec(_spec("version-15")),
+			image_cache.build_spec(_spec("version-16")),
 		)
 
-	def test_app_name_case_cannot_change_the_hash(self):
-		# The build lowercases app names, so two specs that build the same image must hash alike.
+	def test_app_name_case_cannot_change_the_spec(self):
+		# The build lowercases app names, so two specs that build the same image must compare equal.
 		self.assertEqual(
-			image_cache.build_spec_hash(_spec(apps=[_app("ERPNext")])),
-			image_cache.build_spec_hash(_spec(apps=[_app("erpnext")])),
+			image_cache.build_spec(_spec(apps=[_app("ERPNext")])),
+			image_cache.build_spec(_spec(apps=[_app("erpnext")])),
 		)
 
-	def test_the_tag_is_the_shared_repository_plus_the_hash(self):
+	def test_the_tag_is_static_per_lab_id(self):
 		spec = _spec(apps=[_app()])
-		tag = image_cache.cache_tag(spec)
-		self.assertEqual(tag, f"{image_cache.CACHE_REPOSITORY}:{image_cache.build_spec_hash(spec)}")
-		self.assertEqual(len(tag.split(":")[1]), image_cache.HASH_LENGTH)
+		self.assertEqual(image_cache.cache_tag(spec), f"{image_cache.CACHE_REPOSITORY}/{spec.lab_id}:lab")
+		# Editing the spec must not change the tag — that's the whole point of a static tag;
+		# staleness is `Lab.reset_status_if_spec_changed`'s job, not the tag's.
+		changed = _spec(apps=[_app(), _app("hrms")])
+		self.assertEqual(image_cache.cache_tag(spec), image_cache.cache_tag(changed))
 
 
 def _client_with_tags(*tags):
@@ -112,7 +118,7 @@ class TestResolve(unittest.TestCase):
 	def test_resolve_reports_a_miss_for_an_unknown_spec(self):
 		with patch(
 			"benchpress.docker_manager.get_client",
-			return_value=_client_with_tags("benchpress/cache:000000000000"),
+			return_value=_client_with_tags("benchpress/some-other-lab:lab"),
 		):
 			_tag, hit = image_cache.resolve(_spec(apps=[_app()]))
 		self.assertFalse(hit)
@@ -237,41 +243,55 @@ class TestDeployReusesTheSharedImage(IntegrationTestCase):
 		)
 		return logs[0].message if logs else ""
 
-	def test_a_cache_hit_performs_no_build(self):
+	def test_a_ready_lab_with_its_image_cached_performs_no_build(self):
 		bench = self._bench()
 		tag = image_cache.cache_tag(self.lab)
-		frappe.db.set_value("Lab", self.lab.name, {"status": "Draft", "image_tag": None})
+		frappe.db.set_value("Lab", self.lab.name, {"status": "Ready", "image_tag": tag})
 		frappe.db.commit()
 
 		client = self._run_deploy(bench, cached_tags=[tag])
 
 		client.api.build.assert_not_called()
-		self.assertEqual(frappe.db.get_value("Lab", self.lab.name, "image_tag"), tag)
-		self.assertEqual(frappe.db.get_value("Lab", self.lab.name, "status"), "Ready")
+		self.assertIn(f"Using built image {tag}", self._log(bench.name))
 
-	def test_the_step_still_explains_itself_on_a_hit(self):
+	def test_the_step_explains_which_image_it_used(self):
 		bench = self._bench()
 		tag = image_cache.cache_tag(self.lab)
+		frappe.db.set_value("Lab", self.lab.name, {"status": "Ready", "image_tag": tag})
+		frappe.db.commit()
 
 		self._run_deploy(bench, cached_tags=[tag])
 
 		log = self._log(bench.name)
 		self.assertIn("Step 2/11", log)
-		self.assertIn(f"Cache hit: reusing shared image {tag}", log)
+		self.assertIn(f"Using built image {tag}", log)
 
-	def test_a_miss_builds_and_tags_by_content_hash(self):
+	def test_a_deploy_never_builds_it_fails_fast_instead(self):
+		"""The core contract this phase adds: deploy is a lookup, never a build."""
 		bench = self._bench()
-		frappe.db.set_value("Lab", self.lab.name, {"status": "Ready", "image_tag": "benchpress/stale:latest"})
+		frappe.db.set_value("Lab", self.lab.name, {"status": "Draft", "image_tag": None})
 		frappe.db.commit()
 
-		client = self._run_deploy(bench, cached_tags=["benchpress/cache:000000000000"])
+		client = self._run_deploy(bench, cached_tags=[])
 
-		client.api.build.assert_called_once()
-		self.assertEqual(client.api.build.call_args.kwargs["tag"], image_cache.cache_tag(self.lab))
-		# A Ready lab whose apps changed used to keep pointing at the previous recipe's image.
-		self.assertEqual(
-			frappe.db.get_value("Lab", self.lab.name, "image_tag"), image_cache.cache_tag(self.lab)
+		client.api.build.assert_not_called()
+		self.assertEqual(frappe.db.get_value("Bench Instance", bench.name, "status"), "Error")
+		self.assertIn("No built image", self._log(bench.name))
+
+	def test_a_stale_tag_on_a_ready_lab_also_fails_fast(self):
+		"""`status == Ready` alone isn't enough — the tag must match what's actually cached."""
+		bench = self._bench()
+		frappe.db.set_value(
+			"Lab",
+			self.lab.name,
+			{"status": "Ready", "image_tag": f"{image_cache.CACHE_REPOSITORY}/stale:lab"},
 		)
+		frappe.db.commit()
+
+		client = self._run_deploy(bench, cached_tags=[image_cache.cache_tag(self.lab)])
+
+		client.api.build.assert_not_called()
+		self.assertEqual(frappe.db.get_value("Bench Instance", bench.name, "status"), "Error")
 
 
 class TestPrewarmCatalog(IntegrationTestCase):
@@ -326,7 +346,7 @@ class TestPrewarmCatalog(IntegrationTestCase):
 		for call in enqueue.call_args_list:
 			self.assertEqual(call.kwargs["queue"], "long")
 
-	def test_a_template_build_tags_by_the_template_s_own_hash(self):
+	def test_a_template_build_tags_by_the_template_s_own_key(self):
 		from benchpress import lab_templates
 
 		client = _client_with_tags()
@@ -341,7 +361,7 @@ class TestPrewarmCatalog(IntegrationTestCase):
 class TestSweepCachedImages(IntegrationTestCase):
 	"""Cached images outlive their Labs, so an unswept cache leaks disk without bound."""
 
-	ORPHAN = "benchpress/cache:deadbeefdead"
+	ORPHAN = "benchpress/orphan-lab:lab"
 
 	@classmethod
 	def setUpClass(cls):
@@ -385,7 +405,7 @@ class TestSweepCachedImages(IntegrationTestCase):
 	def test_a_catalog_tag_is_kept_even_with_no_lab(self):
 		from benchpress import lab_templates
 
-		catalog = image_cache.cache_tag(image_cache.template_spec(lab_templates.get_template("lms")))
+		catalog = image_cache.cache_tag(image_cache.template_spec(lab_templates.get_template("erpnext")))
 		result, _client = self._sweep(catalog, self.ORPHAN)
 		self.assertEqual(result["removed"], [self.ORPHAN])
 

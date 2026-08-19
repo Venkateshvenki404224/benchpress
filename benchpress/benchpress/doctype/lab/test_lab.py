@@ -56,3 +56,32 @@ class IntegrationTestLab(IntegrationTestCase):
 
 		with self.assertRaisesRegex(frappe.ValidationError, "CPU cores must be at least 1"):
 			lab.insert()
+
+	def test_a_ready_lab_s_spec_change_resets_it_to_draft(self):
+		lab = _new_lab("spec-change-resets")
+		lab.append("apps", {"app_name": "crm", "git_url": "https://github.com/frappe/crm", "branch": "main"})
+		lab.insert()
+		lab.status = "Ready"
+		lab.image_tag = "benchpress/spec-change-resets:lab"
+		lab.save()
+		self.addCleanup(lab.delete)
+
+		lab.append(
+			"apps", {"app_name": "hrms", "git_url": "https://github.com/frappe/hrms", "branch": "version-16"}
+		)
+		lab.save()
+
+		self.assertEqual(lab.status, "Draft")
+
+	def test_a_ready_lab_saved_with_no_spec_change_stays_ready(self):
+		lab = _new_lab("spec-unchanged-stays-ready")
+		lab.insert()
+		lab.status = "Ready"
+		lab.image_tag = "benchpress/spec-unchanged-stays-ready:lab"
+		lab.save()
+		self.addCleanup(lab.delete)
+
+		lab.title = "Test Lab (renamed)"
+		lab.save()
+
+		self.assertEqual(lab.status, "Ready")

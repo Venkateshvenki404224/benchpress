@@ -8,6 +8,7 @@ from pathlib import Path
 
 import frappe
 import yaml
+from frappe import _
 from frappe.utils.file_lock import LockTimeoutError
 from frappe.utils.synchronization import filelock
 
@@ -61,7 +62,12 @@ SITE_HTTP_PORT = 8000
 ADOPTED_MARKER = "already exists — adopting it"
 
 # Module constant, not inlined, so tests can monkeypatch it to a tmp path.
-TRAEFIK_DYNAMIC_DIR = Path("/etc/traefik/dynamic/instances")
+# Flat, not a subdirectory: Traefik's file provider does not recurse, so this
+# must be the exact directory the `directory:` provider in traefik.yml.template
+# watches, and the exact host path bind-mounted read-write into queue-long /
+# read-only into traefik in docker-compose.prod.yml. dynamic.yml (the
+# control-plane router) lives in this same directory.
+TRAEFIK_DYNAMIC_DIR = Path("/etc/traefik/dynamic")
 
 
 def _public_site_url(instance_id: str, base_domain: str | None) -> str | None:
@@ -645,34 +651,17 @@ def _drop_site_database(bench) -> None:
 
 
 def _prepare_lab_image(lab, pipeline, user: str) -> None:
-	"""Adopt the shared image for this lab's spec, or build it if nobody has yet.
+	"""Use this lab's already-built image, or fail immediately — deploy never builds.
 
-	The cache is keyed by the build spec rather than by the lab, so the second user to deploy a
-	given template performs no build at all. It also closes a staleness hole in the old
-	`status == "Ready"` check: editing a Ready lab's apps changed what should be built but kept
-	pointing at the image built from the previous recipe.
-
-	A build started here writes a `Build Log`, as an explicit rebuild does; the deploy log
-	keeps the step and a pointer to it.
+	Building is the explicit admin action (`build_lab`) alone; a deploy that finds no image, or
+	finds a lab that isn't `Ready` (its spec changed since the last build — see
+	`Lab.reset_status_if_spec_changed`), throws right away instead of eating a 10-40 minute build
+	inside what the caller expects to be a fast operation.
 	"""
 	tag, hit = image_cache.resolve(lab)
-	if not hit:
-		pipeline.log(f"Building lab image for {lab.title} — output goes to the build log")
-		image_tag = _run_build(lab, user)
-		pipeline.log(f"Lab image ready: {image_tag}")
-		return
-	pipeline.log(f"Cache hit: reusing shared image {tag} — no build needed")
-	_adopt_cached_image(lab, tag)
-
-
-def _adopt_cached_image(lab, tag: str) -> None:
-	"""Point the lab at an image somebody else's build already produced."""
-	if lab.image_tag == tag and lab.status == "Ready":
-		return
-	lab.image_tag = tag
-	lab.status = "Ready"
-	lab.save(ignore_permissions=True)
-	frappe.db.commit()  # nosemgrep -- the container is created from this tag, so persist it first
+	if not hit or lab.status != "Ready" or lab.image_tag != tag:
+		frappe.throw(_("No built image for lab '{0}'. Build it first from the Lab record.").format(lab.title))
+	pipeline.log(f"Using built image {tag}")
 
 
 def _build_lab_with_logs(lab, log_fn) -> None:
