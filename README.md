@@ -49,8 +49,6 @@ browser.
 
 ![Labs List](docs/images/labs-list.png)
 
-[![Watch the video](https://img.youtube.com/vi/DzTNwA39PqA/maxresdefault.jpg)](https://www.youtube.com/watch?v=DzTNwA39PqA)
-
 > **Disposable sandboxes, not production hosting.** A Lab is a throwaway
 > development environment, and its UI shows the credentials in plain text. See
 > [Production Safety & Compatibility](docs/production-safety.md) before you
