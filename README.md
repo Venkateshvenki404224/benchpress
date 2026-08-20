@@ -5,8 +5,6 @@
   <img src="benchpress/public/images/logo/logo-light.png" alt="BenchPress Logo" width="600">
 </picture>
 
-# BenchPress
-
 **Press a button. Get a Frappe bench. Self-hosted, Docker-powered, VPN-secured.**
 
 [![CI](https://github.com/Venkateshvenki404224/benchpress/actions/workflows/ci.yml/badge.svg?branch=develop)](https://github.com/Venkateshvenki404224/benchpress/actions/workflows/ci.yml)
