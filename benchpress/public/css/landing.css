@@ -206,9 +206,9 @@ h2 {
 }
 .header__brand img {
 	display: block;
-	width: 32px;
 	height: 32px;
-	border-radius: 8px;
+	width: auto;
+	object-fit: contain;
 }
 .header__nav {
 	display: flex;

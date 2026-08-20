@@ -1,6 +1,9 @@
 <div align="center">
 
-<img src="benchpress/public/images/logo/logo.png" alt="BenchPress Logo" width="600" />
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="benchpress/public/images/logo/logo-dark.png">
+  <img src="benchpress/public/images/logo/logo-light.png" alt="BenchPress Logo" width="600">
+</picture>
 
 # BenchPress
 

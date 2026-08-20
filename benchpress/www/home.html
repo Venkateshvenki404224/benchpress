@@ -19,17 +19,17 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{{ title | e }}</title>
   <meta name="description" content="Pre-configured Frappe sites — ERPNext, HR, CRM, Helpdesk — deployed in one click as containers on your own server, reachable only over your private VPN.">
-  <link rel="icon" type="image/svg+xml" href="/assets/benchpress/images/logo/favicon.svg">
-  <link rel="icon" type="image/png" sizes="32x32" href="/assets/benchpress/images/logo/favicon-32.png">
-  <link rel="icon" type="image/png" sizes="64x64" href="/assets/benchpress/images/logo/favicon-64.png">
-  <link rel="icon" type="image/png" sizes="96x96" href="/assets/benchpress/images/logo/favicon-96x96.png">
-  <link rel="apple-touch-icon" href="/assets/benchpress/images/logo/apple-touch-icon.png">
-  <link rel="manifest" href="/assets/benchpress/manifest.json">
+  <link rel="icon" type="image/svg+xml" href="/assets/benchpress/images/logo/favicon.svg?v={{ asset_version | e }}">
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/benchpress/images/logo/favicon-32.png?v={{ asset_version | e }}">
+  <link rel="icon" type="image/png" sizes="64x64" href="/assets/benchpress/images/logo/favicon-64.png?v={{ asset_version | e }}">
+  <link rel="icon" type="image/png" sizes="96x96" href="/assets/benchpress/images/logo/favicon-96x96.png?v={{ asset_version | e }}">
+  <link rel="apple-touch-icon" href="/assets/benchpress/images/logo/apple-touch-icon.png?v={{ asset_version | e }}">
+  <link rel="manifest" href="/assets/benchpress/manifest.json?v={{ asset_version | e }}">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;600&family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/assets/benchpress/css/landing.css">
-  <link rel="stylesheet" href="/assets/benchpress/css/landing-mock.css">
+  <link rel="stylesheet" href="/assets/benchpress/css/landing.css?v={{ asset_version | e }}">
+  <link rel="stylesheet" href="/assets/benchpress/css/landing-mock.css?v={{ asset_version | e }}">
 </head>
 <body data-csrf-token="{{ csrf_token | e }}">
 
@@ -37,14 +37,13 @@
 <header class="header">
   <div class="shell">
     <a class="header__brand" href="#start">
-      <img src="/assets/benchpress/images/landing/mark.svg" alt="">
-      <span>Benchpress</span>
+      <img src="/assets/benchpress/images/logo/logo-dark.png?v={{ asset_version | e }}" alt="Benchpress">
     </a>
     <nav class="header__nav">
       <a href="#templates">Templates</a>
       <a href="#how">How it works</a>
       <a href="#agents">For agents</a>
-      <a href="#pricing">Pricing</a>
+      {#- Pricing section is disabled below until the pack/rate numbers are final; drop this link back in alongside it. -#}
     </nav>
     <div class="header__actions">
       <a class="button button--ghost-dark" href="{{ repo_url | e }}" aria-label="GitHub"><i class="icon" data-lucide="github"></i><span class="button__label">GitHub</span></a>
@@ -79,7 +78,7 @@
       {#- The film is exported from the design tool after launch; until the mp4 lands, the frame
           holds the endcard rather than a black box. -#}
       <div class="hero__endcard">
-        <img src="/assets/benchpress/images/landing/logo-wordmark.svg" alt="BenchPress">
+        <img src="/assets/benchpress/images/logo/logo-dark.png?v={{ asset_version | e }}" alt="BenchPress">
         <span>Pick a template. Press deploy. Done.</span>
         <code>{{ repo_url | e }}</code>
       </div>
@@ -270,7 +269,7 @@
     <div class="notice">
       <strong>If a step fails</strong>
       <span>the run stops at that step, the container is discarded, and nothing is metered — a failed run costs nothing.</span>
-      <a href="#pricing">See credit rates</a>
+      {#- Pricing section is disabled below until the pack/rate numbers are final; drop this link back in alongside it. -#}
     </div>
   </div>
 </section>
@@ -402,7 +401,9 @@
   </div>
 </section>
 
-<!-- 9 · Pricing -->
+{#- 9 · Pricing — disabled for now, pack/rate numbers aren't final yet. The three nav/footer
+   links to #pricing are commented out alongside this; re-enable all of them together. -#}
+{#-
 <section class="section section--panel" id="pricing">
   <div class="shell">
     <div class="lede">
@@ -450,6 +451,7 @@
     </div>
   </div>
 </section>
+-#}
 
 <!-- 10 · Comparison -->
 <section class="section">
@@ -550,14 +552,14 @@
   <div class="shell">
     <div class="footer__grid">
       <div>
-        <img src="/assets/benchpress/images/landing/logo-wordmark.svg" alt="BenchPress">
+        <img src="/assets/benchpress/images/logo/logo-dark.png?v={{ asset_version | e }}" alt="BenchPress">
         <p class="footer__blurb">Pre-configured Frappe sites, deployed in one click and kept on your private network.</p>
       </div>
       <div class="footer__column">
         <span>Product</span>
         <a href="#templates">Templates</a>
         <a href="#how">How it works</a>
-        <a href="#pricing">Pricing</a>
+        {#- Pricing section is disabled below until the pack/rate numbers are final; drop this link back in alongside it. -#}
       </div>
       <div class="footer__column">
         <span>Developers</span>
@@ -580,6 +582,6 @@
 </footer>
 
 <script src="https://unpkg.com/lucide@0.451.0/dist/umd/lucide.min.js"></script>
-<script src="/assets/benchpress/js/landing.js"></script>
+<script src="/assets/benchpress/js/landing.js?v={{ asset_version | e }}"></script>
 </body>
 </html>
