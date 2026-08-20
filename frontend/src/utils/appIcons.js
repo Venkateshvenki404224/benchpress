@@ -21,6 +21,10 @@ export const APP_LABEL = {
 	helpdesk: "Helpdesk",
 	lms: "Learning",
 	india_compliance: "India Compliance",
+	telephony: "Telephony",
+	payments: "Payments",
+	vpn_management: "VPN Management",
+	benchpress: "BenchPress",
 };
 
 const APP_ICON = {

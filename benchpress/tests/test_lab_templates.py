@@ -118,11 +118,15 @@ class TestLabTemplates(IntegrationTestCase):
 		self.assertEqual(lab.template, "erpnext")
 
 	def test_catalog_points_a_used_template_at_the_lab_it_built(self):
-		lab = self._make_lab("hrms", "tmpl-hrms-used")
+		# Picked from the live catalog, not hardcoded: the active template set is
+		# admin-curated data (templates get deactivated), and this test only needs
+		# *some* active template that no lab has used yet.
+		unused = next(t["key"] for t in lab_templates.get_catalog() if not t["lab"])
+		lab = self._make_lab(unused, f"tmpl-{unused}-used")
 		catalog = {template["key"]: template for template in lab_templates.get_catalog()}
 
-		self.assertEqual(catalog["hrms"]["lab"]["name"], lab.name)
-		self.assertEqual(catalog["hrms"]["lab"]["status"], lab.status)
+		self.assertEqual(catalog[unused]["lab"]["name"], lab.name)
+		self.assertEqual(catalog[unused]["lab"]["status"], lab.status)
 
 	def test_catalog_reports_a_lab_only_where_one_was_built(self):
 		for template in lab_templates.get_catalog():

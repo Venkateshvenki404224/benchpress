@@ -3,7 +3,13 @@
 		<span
 			class="grid size-10 flex-none place-items-center rounded-md border border-outline-gray-1 bg-surface-white"
 		>
-			<AppIcon :app="primaryApp" :size="24" />
+			<img
+				v-if="lab.logo"
+				:src="lab.logo"
+				:alt="lab.title"
+				class="size-full rounded-md object-cover"
+			/>
+			<AppIcon v-else :app="primaryApp" :size="24" />
 		</span>
 
 		<div class="min-w-0 flex-1">

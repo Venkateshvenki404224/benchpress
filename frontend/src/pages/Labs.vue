@@ -69,7 +69,13 @@
 					<span
 						class="grid size-7 flex-none place-items-center rounded-md border border-outline-gray-1 bg-surface-white"
 					>
-						<AppIcon :app="primaryApp(row)" :size="17" />
+						<img
+							v-if="row.logo"
+							:src="row.logo"
+							:alt="row.title"
+							class="size-full rounded-md object-cover"
+						/>
+						<AppIcon v-else :app="primaryApp(row)" :size="17" />
 					</span>
 					<span class="min-w-0" :data-test="`lab-${row.name}`">
 						<span class="block truncate text-body font-medium text-ink-gray-9">
@@ -88,20 +94,33 @@
 					{{ row.frappe_version }}
 				</span>
 
-				<div v-else-if="column.key === 'apps'" class="flex min-w-0 flex-wrap gap-1">
+				<div v-else-if="column.key === 'apps'" class="flex min-w-0 items-center gap-1">
 					<span
-						v-for="app in row.app_names"
+						v-for="app in visibleApps(row)"
 						:key="app"
-						class="rounded bg-surface-gray-2 px-1.5 py-px text-2xs text-ink-gray-7"
+						class="whitespace-nowrap rounded bg-surface-gray-2 px-1.5 py-px text-2xs text-ink-gray-7"
 					>
 						{{ appLabel(app) }}
 					</span>
+					<Tooltip v-if="hiddenApps(row).length" :text="hiddenAppsText(row)">
+						<span
+							class="whitespace-nowrap rounded bg-surface-gray-2 px-1.5 py-px text-2xs text-ink-gray-5"
+						>
+							+{{ hiddenApps(row).length }}
+						</span>
+					</Tooltip>
 					<span v-if="!row.app_names.length" class="text-2xs text-ink-gray-4">
 						Bare bench
 					</span>
 				</div>
 
-				<StatusBadge v-else-if="column.key === 'status'" :status="row.status" />
+				<!-- A deployed lab's row answers "what is it doing now": the running
+				     instance's state outranks the image's Ready. Undeployed labs keep
+				     showing the image lifecycle (Draft/Building/Ready/Error). -->
+				<StatusBadge
+					v-else-if="column.key === 'status'"
+					:status="row.deployed_as?.status || row.status"
+				/>
 
 				<div v-else-if="column.key === 'deployed_as'" class="min-w-0">
 					<template v-if="row.deployed_as">
@@ -148,7 +167,7 @@ import { userContext } from "@/data/userContext";
 import { labelFor as appLabel } from "@/utils/appIcons";
 import { ALL, matches, optionsFrom } from "@/utils/filters";
 import { benchLabel } from "@/utils/labSpecs";
-import { Button, FormControl, Select, dayjsLocal } from "frappe-ui";
+import { Button, FormControl, Select, Tooltip, dayjsLocal } from "frappe-ui";
 import { computed, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 
@@ -165,7 +184,7 @@ import SearchIcon from "~icons/lucide/search";
 const COLUMNS = [
 	{ label: "Lab", key: "lab", width: "240px" },
 	{ label: "Version", key: "frappe_version", width: "96px" },
-	{ label: "Apps", key: "apps", width: "140px" },
+	{ label: "Apps", key: "apps", width: "168px" },
 	{ label: "Status", key: "status", width: "112px" },
 	{ label: "Deployed as", key: "deployed_as", width: "190px" },
 	{ label: "Last run", key: "last_run", width: "96px" },
@@ -224,6 +243,22 @@ function clearFilters() {
 	statusFilter.value = ALL;
 	versionFilter.value = ALL;
 	ownerFilter.value = ALL;
+}
+
+// Rows are a fixed 52px, so the cell can't wrap: show two badges and fold the
+// rest into a "+N" whose tooltip lists them.
+const MAX_APP_BADGES = 2;
+
+function visibleApps(lab) {
+	return (lab.app_names ?? []).slice(0, MAX_APP_BADGES);
+}
+
+function hiddenApps(lab) {
+	return (lab.app_names ?? []).slice(MAX_APP_BADGES);
+}
+
+function hiddenAppsText(lab) {
+	return hiddenApps(lab).map(appLabel).join(", ");
 }
 
 /** The mark a lab wears — its first non-Frappe app, else the Frappe mark. */
