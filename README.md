@@ -11,7 +11,7 @@
 [![Linters](https://github.com/Venkateshvenki404224/benchpress/actions/workflows/linter.yml/badge.svg)](https://github.com/Venkateshvenki404224/benchpress/actions/workflows/linter.yml)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-green.svg)](license.txt)
 [![Frappe Framework](https://img.shields.io/badge/Built%20on-Frappe%20v16-blue)](https://frappeframework.com)
-[![FOSS Hack 2026](https://img.shields.io/badge/FOSS%20Hack-2026-orange)](https://fossunited.org)
+[![FOSS Hack 2026 Winner](https://img.shields.io/badge/FOSS%20Hack%202026-Winner-FFB300)](https://fossunited.org/hack/fosshack26/p/f5fk2d9gqd)
 [![Python 3.14+](https://img.shields.io/badge/Python-3.14+-3776AB.svg)](https://python.org)
 [![Vue 3](https://img.shields.io/badge/Vue-3-4FC08D.svg)](https://vuejs.org)
 [![Docker](https://img.shields.io/badge/Docker-Powered-2496ED.svg)](https://docker.com)
@@ -1016,7 +1016,7 @@ see [TRADEMARKS.md](TRADEMARKS.md).
 
 <div align="center">
 
-Built for **FOSS Hack 2026** by [Venkatesh](https://github.com/Venkateshvenki404224)
+🏆 Winner of [**FOSS Hack 2026**](https://fossunited.org/hack/fosshack26/p/f5fk2d9gqd), built by [Venkatesh](https://github.com/Venkateshvenki404224)
 
 Powered by [Frappe Framework](https://frappeframework.com)
 
