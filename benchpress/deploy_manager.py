@@ -85,15 +85,26 @@ def _public_ide_url(instance_id: str, base_domain: str | None) -> str | None:
 def _write_instance_route(instance_id: str, base_domain: str, container_ip: str) -> None:
 	"""Write Traefik file-provider routes for this instance's site and its code-server IDE.
 
-	`tls: {}` (empty section, no `certResolver`) deliberately — it turns TLS on for these
-	routers using Traefik's existing default cert store, which already holds the wildcard
-	SAN from the control-plane router. No new ACME issuance happens per instance.
+	The routers name their own certificate (`certResolver` + the wildcard domain set)
+	rather than `tls: {}`: the control-plane router's cert covers *its* hostname's
+	wildcard, which is not necessarily `base_domain` — with a bare `tls: {}` and no
+	matching cert in the store, Traefik silently serves its self-signed default and
+	every instance URL dies with a certificate error. Every instance writes the same
+	domain set, so Traefik issues the `*.{base_domain}` wildcard once and shares it.
 
 	One file per instance, named by instance ID, so a redeploy naturally overwrites it
 	with the fresh `container_ip` — no dedup logic needed.
 	"""
 	if not base_domain or base_domain == "localhost":
 		return
+
+	def tls():
+		# Fresh dict per router: a shared one would serialize as a YAML anchor/alias.
+		return {
+			"certResolver": "letsencrypt",
+			"domains": [{"main": base_domain, "sans": [f"*.{base_domain}"]}],
+		}
+
 	TRAEFIK_DYNAMIC_DIR.mkdir(parents=True, exist_ok=True)
 	config = {
 		"http": {
@@ -102,13 +113,13 @@ def _write_instance_route(instance_id: str, base_domain: str, container_ip: str)
 					"rule": f"Host(`{instance_id}.{base_domain}`)",
 					"entryPoints": ["websecure"],
 					"service": f"site-{instance_id}",
-					"tls": {},
+					"tls": tls(),
 				},
 				f"ide-{instance_id}": {
 					"rule": f"Host(`ide-{instance_id}.{base_domain}`)",
 					"entryPoints": ["websecure"],
 					"service": f"ide-{instance_id}",
-					"tls": {},
+					"tls": tls(),
 				},
 			},
 			"services": {
@@ -161,16 +172,6 @@ def _cleanup_failed_deploy(bench, container_id, append_log) -> None:
 	bench.container_id = None
 	bench.container_ip = None
 	bench.wg_ip = None
-
-
-def remove_bench_volume(bench_name: str) -> None:
-	"""Remove the bench data volume if it exists."""
-	from benchpress.docker_manager import get_client
-
-	try:
-		get_client().volumes.get(f"benchpress-{bench_name}-data").remove(force=True)
-	except Exception:
-		pass  # best-effort
 
 
 def build_linkuser_args(bench, lab, settings, ssh_password: str) -> list[str]:
@@ -612,7 +613,6 @@ def teardown_bench(bench) -> None:
 	except Exception:
 		pass  # best-effort
 
-	remove_bench_volume(bench.name)
 	_drop_site_database(bench)
 	# Marked, not deleted: a redeploy refreshes them, and the reaper leaves the instance
 	# one click from running.

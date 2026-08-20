@@ -230,8 +230,6 @@ class TestDeployManager(IntegrationTestCase):
 		bench.save(ignore_permissions=True)
 		frappe.db.commit()
 
-		mock_client.return_value.volumes.get.return_value = MagicMock()
-
 		status_at_deploy = {}
 
 		def capture_status(bench_name):
@@ -248,7 +246,10 @@ class TestDeployManager(IntegrationTestCase):
 	@patch("benchpress.deploy_manager.remove_container")
 	@patch("benchpress.deploy_manager.stop_container")
 	@patch("benchpress.docker_manager.get_client")
-	def test_redeploy_bench_removes_data_volume(self, mock_client, mock_stop, mock_remove, mock_deploy):
+	def test_redeploy_bench_never_touches_volumes(self, mock_client, mock_stop, mock_remove, mock_deploy):
+		# The per-bench data volume is gone (the bench lives in the container's own
+		# layer), so teardown has no volume work left — a regression here would mean
+		# the copy-on-create cost crept back in.
 		from benchpress.deploy_manager import redeploy_bench
 
 		bench = self._fresh_bench()
@@ -256,13 +257,9 @@ class TestDeployManager(IntegrationTestCase):
 		bench.save(ignore_permissions=True)
 		frappe.db.commit()
 
-		mock_vol = MagicMock()
-		mock_client.return_value.volumes.get.return_value = mock_vol
-
 		redeploy_bench(bench.name)
 
-		mock_client.return_value.volumes.get.assert_called_with(f"benchpress-{bench.bench_name}-data")
-		mock_vol.remove.assert_called_once_with(force=True)
+		mock_client.return_value.volumes.get.assert_not_called()
 
 	@patch("benchpress.deploy_manager._deploy_bench")
 	@patch("benchpress.deploy_manager.remove_container")
@@ -279,8 +276,6 @@ class TestDeployManager(IntegrationTestCase):
 		frappe.db.set_value("Bench Instance", bench.name, "database_server", self.db_server_name)
 		frappe.db.commit()
 		bench.reload()
-
-		mock_client.return_value.volumes.get.return_value = MagicMock()
 
 		redeploy_bench(bench.name)
 		mock_drop_db.assert_called_once_with(self.db_server_name, bench.site_name)
@@ -328,8 +323,8 @@ class TestDeployManager(IntegrationTestCase):
 		self.assertEqual(mock_deploy.call_count, 2)
 
 	@patch("benchpress.deploy_manager._deploy_bench")
-	@patch("benchpress.deploy_manager.remove_bench_volume")
-	def test_redeploy_skipped_when_lock_held(self, mock_volume, mock_deploy):
+	@patch("benchpress.deploy_manager.remove_container")
+	def test_redeploy_skipped_when_lock_held(self, mock_remove, mock_deploy):
 		from benchpress.deploy_manager import redeploy_bench
 
 		bench = self._fresh_bench()
@@ -338,7 +333,7 @@ class TestDeployManager(IntegrationTestCase):
 		with self._held_deploy_lock(bench.name):
 			redeploy_bench(bench.name)
 
-		mock_volume.assert_not_called()
+		mock_remove.assert_not_called()
 		mock_deploy.assert_not_called()
 
 	def _deploy_log(self, bench_name):
@@ -372,7 +367,6 @@ class TestDeployManager(IntegrationTestCase):
 			patch.object(deploy_manager, "start_container", autospec=True),
 			patch.object(deploy_manager, "wait_for_container_running", autospec=True) as mock_wait,
 			patch.object(deploy_manager, "remove_container", autospec=True) as mock_remove_container,
-			patch.object(deploy_manager, "remove_bench_volume", autospec=True) as mock_remove_volume,
 			patch.object(deploy_manager, "_notify_owner", autospec=True),
 			patch("benchpress.vpn_adapter.remove_bench_peer", autospec=True) as mock_remove_peer,
 		):
@@ -384,7 +378,6 @@ class TestDeployManager(IntegrationTestCase):
 
 		mock_remove_container.assert_called_once_with("cid-cleanup")
 		mock_remove_peer.assert_called_once()
-		mock_remove_volume.assert_not_called()
 		bench.reload()
 		self.assertEqual(bench.status, "Error")
 		self.assertIsNone(bench.container_id)
@@ -1216,10 +1209,18 @@ class TestPublicSiteUrlHelpers(unittest.TestCase):
 				deploy_manager._write_instance_route("inst-1", "benchpress.cloud", "172.30.0.11")
 				config = yaml.safe_load((Path(tmp) / "instances" / "inst-1.yml").read_text())
 
+			# The routers must name their certificate: with a bare `tls: {}` and no
+			# cert covering `*.base_domain` in the store, Traefik serves its
+			# self-signed default and every instance URL fails TLS.
+			expected_tls = {
+				"certResolver": "letsencrypt",
+				"domains": [{"main": "benchpress.cloud", "sans": ["*.benchpress.cloud"]}],
+			}
+
 			router = config["http"]["routers"]["site-inst-1"]
 			self.assertEqual(router["rule"], "Host(`inst-1.benchpress.cloud`)")
 			self.assertEqual(router["service"], "site-inst-1")
-			self.assertEqual(router["tls"], {})
+			self.assertEqual(router["tls"], expected_tls)
 
 			service = config["http"]["services"]["site-inst-1"]
 			self.assertEqual(service["loadBalancer"]["servers"], [{"url": "http://172.30.0.11:8000"}])
@@ -1227,7 +1228,7 @@ class TestPublicSiteUrlHelpers(unittest.TestCase):
 			ide_router = config["http"]["routers"]["ide-inst-1"]
 			self.assertEqual(ide_router["rule"], "Host(`ide-inst-1.benchpress.cloud`)")
 			self.assertEqual(ide_router["service"], "ide-inst-1")
-			self.assertEqual(ide_router["tls"], {})
+			self.assertEqual(ide_router["tls"], expected_tls)
 
 			ide_service = config["http"]["services"]["ide-inst-1"]
 			self.assertEqual(ide_service["loadBalancer"]["servers"], [{"url": "http://172.30.0.11:8080"}])

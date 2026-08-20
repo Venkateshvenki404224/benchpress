@@ -15,8 +15,8 @@
 		</template>
 
 		<p class="border-b border-outline-gray-1 px-4 py-2.5 text-2xs text-ink-gray-5">
-			Everything below is reachable only over the VPN. Passwords are regenerated on every
-			redeploy.
+			The public URL works from anywhere; everything else is reachable only over the VPN.
+			Passwords are regenerated on every redeploy.
 		</p>
 
 		<ul class="divide-y divide-outline-gray-1">
@@ -79,7 +79,7 @@
 // re-masks. Copy feedback is a tooltip on the button that was pressed, which
 // replaces the teleported page-corner alert the old screen used.
 import SectionCard from "@/components/SectionCard.vue";
-import { ideUrl } from "@/utils/labActions";
+import { ideUrl, privateSiteUrl } from "@/utils/labActions";
 import { Button, FormControl, Tooltip } from "frappe-ui";
 import { computed, ref } from "vue";
 
@@ -96,7 +96,6 @@ const props = defineProps({
 	bench: { type: Object, required: true },
 	// What `get_bench_credentials` returned; empty until it resolves.
 	credentials: { type: Object, default: () => ({}) },
-	siteUrl: { type: String, default: null },
 });
 
 const revealed = ref(false);
@@ -107,7 +106,10 @@ const address = computed(() => props.bench.wg_ip || props.bench.container_ip || 
 
 const rows = computed(() =>
 	[
-		{ key: "site", label: "Site URL", value: props.siteUrl },
+		// Both addresses, always: the public one for sharing outside the tunnel,
+		// the private one for teammates already on the VPN.
+		{ key: "public-url", label: "Public URL", value: props.bench.public_url },
+		{ key: "private-url", label: "Private URL (VPN)", value: privateSiteUrl(props.bench) },
 		{ key: "wg-ip", label: "WireGuard IP", value: props.bench.wg_ip },
 		codeServerRow(),
 		sshRow(),

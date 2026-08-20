@@ -65,7 +65,7 @@ def build_lab_image(lab_name: str) -> dict:
 		"benchpress.deploy_manager.build_lab",
 		lab_name=lab_name,
 		queue="long",
-		timeout=3600,
+		timeout=10800,
 	)
 	return {"name": lab_name, "status": "Building"}
 

@@ -45,11 +45,12 @@
 
 		<div class="flex flex-col items-end gap-1">
 			<div class="flex items-center gap-2">
-				<!-- Off-tunnel the IDE is unreachable; the caption below covers both buttons. -->
+				<!-- A tunnel-only IDE address is unreachable off-tunnel; a public one opens
+				     from anywhere. The caption below covers both buttons. -->
 				<Button
 					v-if="showCodeServer"
 					variant="subtle"
-					:disabled="!vpnConnected"
+					:disabled="!vpnConnected && urlNeedsVpn(ideUrl(bench))"
 					data-test="open-code-server"
 					@click="emit('code-server')"
 				>
@@ -92,7 +93,7 @@
 import AppIcon from "@/components/AppIcon.vue";
 import StatusBadge from "@/components/StatusBadge.vue";
 import { rateLabel } from "@/utils/credits";
-import { OPEN, REBUILD, primaryAction } from "@/utils/labActions";
+import { OPEN, REBUILD, ideUrl, primaryAction, urlNeedsVpn } from "@/utils/labActions";
 import { cpuLabel, memoryLabel } from "@/utils/labSpecs";
 import { Button, ConfirmDialog, Dropdown } from "frappe-ui";
 import { computed, ref } from "vue";

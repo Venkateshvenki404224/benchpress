@@ -23,7 +23,7 @@ from benchpress.request_cache import clear_local_cache, local_cache
 CACHE_REPOSITORY = "benchpress"
 TAGS_ATTRIBUTE = "benchpress_cached_image_tags"
 
-BUILD_TIMEOUT = 3600
+BUILD_TIMEOUT = 10800
 SWEEP_TIMEOUT = 600
 PREWARM_JOB_ID = "benchpress_prewarm_catalog"
 SWEEP_JOB_ID = "benchpress_sweep_cached_images"

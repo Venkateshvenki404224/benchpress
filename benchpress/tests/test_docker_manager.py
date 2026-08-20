@@ -232,6 +232,18 @@ class TestDockerManagerBlockIO(IntegrationTestCase):
 			docker_manager.create_bench_container(bench, lab)
 			return mock_client.return_value.containers.create.call_args.kwargs
 
+	def test_no_volume_is_mounted_over_the_bench(self):
+		# A named volume at /home/frappe made Docker copy the whole multi-GB bench
+		# into it on every create (minutes per deploy, no persistence gained — the
+		# volume died with its container). The bench lives in the container's own
+		# copy-on-write layer now; this pins the mount from coming back.
+		lab = _make_lab("no-volume")
+		self.addCleanup(frappe.delete_doc, "Lab", lab.name, force=True, ignore_permissions=True)
+
+		kwargs = self._container_create_kwargs(lab)
+
+		self.assertNotIn("volumes", kwargs)
+
 	def test_lab_block_io_limits_passed_to_container(self):
 		lab = _make_lab("blockio-custom", iops_limit=500, bps_limit=2 * 1024 * 1024)
 		self.addCleanup(frappe.delete_doc, "Lab", lab.name, force=True, ignore_permissions=True)

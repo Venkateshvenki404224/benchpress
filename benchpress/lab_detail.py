@@ -32,6 +32,7 @@ BENCH_FIELDS = [
 	"container_id",
 	"container_ip",
 	"wg_ip",
+	"public_url",
 	"domain",
 	"site_name",
 	"ssh_username",
