@@ -339,6 +339,11 @@ def _deploy_bench(bench_name: str) -> None:
 		pipeline.log(f"{bench_dir}/sites/common_site_config.json written")
 
 		pipeline.step("site")
+		# The container is always fresh here, so a database that already exists can only be
+		# the leftover of an interrupted earlier run (worker killed mid `bench new-site`).
+		# `bench new-site` refuses to overwrite it; dropping it first makes deploy
+		# re-runnable instead of permanently wedged on its own debris.
+		_drop_site_database(bench)
 		apps_csv = ",".join(a.app_name for a in lab.apps if a.app_name.lower() != "frappe")
 		pipeline.log(f"Site {site_name} with {apps_csv or 'frappe'}")
 		exit_code, output = create_site_in_container(

@@ -16,7 +16,12 @@ class BenchInstance(Document):
 		instance_id = get_instance_id(frappe.session.user, self.lab)
 		self.bench_name = instance_id
 		if not self.site_name:
-			self.site_name = f"{instance_id}.localhost"
+			# The site is named by its public hostname so Frappe resolves the Host
+			# header to it directly — a `.localhost` site only answers through the
+			# default_site fallback and reads as a dev artifact on every screen.
+			base_domain = frappe.get_cached_doc("BenchPress Settings").base_domain
+			suffix = base_domain if base_domain and base_domain != "localhost" else "localhost"
+			self.site_name = f"{instance_id}.{suffix}"
 		self.ssh_username = self._derive_username()
 
 	def autoname(self):
