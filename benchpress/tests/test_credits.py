@@ -321,21 +321,23 @@ class TestCredits(IntegrationTestCase):
 		self.assertEqual(self.balance(), settled)
 		self.assertEqual(self.burn_rate(), 0.0)
 
-	def test_a_cache_hit_build_writes_no_usage_row(self):
+	def test_a_deploy_against_a_built_image_writes_no_usage_row(self):
+		"""Deploy never builds, so the image step never charges — only an explicit build does."""
 		self.enable_credits()
+		tag = f"benchpress/{self.lab.name}:lab"
+		frappe.db.set_value("Lab", self.lab.name, {"status": "Ready", "image_tag": tag})
 		lab = frappe.get_doc("Lab", self.lab.name)
-		with patch.object(deploy_manager.image_cache, "resolve", return_value=("cached:tag", True)):
+
+		with patch.object(deploy_manager.image_cache, "resolve", return_value=(tag, True)):
 			deploy_manager._prepare_lab_image(lab, MagicMock(), frappe.session.user)
+
 		self.assertEqual(self.entry_count(), 0)
 
-	def test_a_cache_miss_build_writes_exactly_one_usage_row(self):
+	def test_a_build_writes_exactly_one_usage_row(self):
 		self.enable_credits()
 		lab = frappe.get_doc("Lab", self.lab.name)
-		with (
-			patch.object(deploy_manager.image_cache, "resolve", return_value=("fresh:tag", False)),
-			patch.object(deploy_manager, "build_lab_image", return_value="fresh:tag"),
-		):
-			deploy_manager._prepare_lab_image(lab, MagicMock(), frappe.session.user)
+		with patch.object(deploy_manager, "build_lab_image", return_value="fresh:tag"):
+			deploy_manager._build_lab_with_logs(lab, None)
 		self.addCleanup(self.purge_build_logs, lab.name)
 
 		entries = [entry for entry in self.entries() if entry.entry_type == "Usage"]

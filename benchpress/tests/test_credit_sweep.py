@@ -328,7 +328,7 @@ class TestCreditSweep(IntegrationTestCase):
 		self.stopped_for_days(100)
 		self.assertEqual(reaper.reap_stopped_instances(), {"reaped": [], "warned": []})
 
-	def test_reaping_removes_the_container_volume_and_database_and_keeps_the_lab(self):
+	def test_reaping_removes_the_container_and_database_and_keeps_the_lab(self):
 		self.enable_credits()
 		self.stopped_for_days(REAP_AFTER_DAYS + 1)
 		frappe.db.set_value(
@@ -347,7 +347,7 @@ class TestCreditSweep(IntegrationTestCase):
 		stop.assert_called_once()
 		remove.assert_called_once()
 		drop.assert_called_once()
-		client.return_value.volumes.get.assert_called_once()
+		client.return_value.volumes.get.assert_not_called()
 		self.assertTrue(frappe.db.exists("Lab", self.lab.name), "the recipe must survive the reap")
 		self.assertEqual(frappe.db.get_value(BENCH, self.bench.name, "status"), "Draft")
 
