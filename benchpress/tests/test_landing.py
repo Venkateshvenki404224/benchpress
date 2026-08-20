@@ -50,16 +50,27 @@ class TestLanding(IntegrationTestCase):
 		self.assertIn("Join the waitlist.", html)
 
 	def test_pricing_is_read_from_the_documents(self):
+		"""The Pricing section is commented out in home.html until the pack/rate numbers are
+		final (see the block's disabled-for-now note), so nothing here reaches the page yet --
+		assert the context assembles it correctly instead. Restore the `html`-based assertions
+		below once the section is back."""
+		context = home.get_context(frappe._dict())
+		self.assertEqual(
+			{pack.pack_label for pack in config.active_packs()},
+			{pack["pack_label"] for pack in context.packs},
+		)
+		self.assertEqual(
+			{size.size_label for size in config.instance_sizes()},
+			{row["label"] for row in context.sizes},
+		)
+
 		html = self.render_as_guest()
 		for pack in config.active_packs():
-			self.assertIn(pack.pack_label, html)
-		for size in config.instance_sizes():
-			self.assertIn(f"{size.size_label} instance", html)
+			self.assertNotIn(pack.pack_label, html)
 
 	def test_a_price_edited_in_desk_changes_the_page(self):
-		before = self.render_as_guest()
-		self.assertNotIn("₹12,345", before)
-
+		"""Same disabled-section caveat as above: a new price now only has to reach the
+		context, not the page. Restore the `html`-based assertions once Pricing is back."""
 		frappe.set_user("Administrator")
 		self.addCleanup(_delete_pack)
 		frappe.get_doc(
@@ -73,9 +84,12 @@ class TestLanding(IntegrationTestCase):
 			}
 		).insert(ignore_permissions=True)
 
-		after = self.render_as_guest()
-		self.assertIn("₹12,345", after)
-		self.assertIn(PACK, after)
+		context = home.get_context(frappe._dict())
+		self.assertIn(PACK, {pack["pack_label"] for pack in context.packs})
+
+		html = self.render_as_guest()
+		self.assertNotIn("₹12,345", html)
+		self.assertNotIn(PACK, html)
 
 	def test_an_inactive_pack_is_not_offered(self):
 		frappe.set_user("Administrator")
