@@ -31,13 +31,13 @@ npx agent-browser@0.21.4 --session docs screenshot docs/images/labs-list.png
 | `new-lab-filled.png` | `/frontend/labs/new` | The same form filled in, with two apps and a live summary |
 | `lab-detail.png` | `/frontend/labs/:id` | Lab detail — both status axes, connection details, sites |
 | `connection-info.png` | Lab detail > Dashboard | The connection card with its masked secrets |
-| `deploy-log-tab.png` | Lab detail > Deploy log | The eleven-step stepper on a failed run, with the error banner |
+| `deploy-log-tab.png` | Lab detail > Deploy log | The eleven-step stepper on a successful run, each step with its duration |
 | `build-log-tab.png` | Lab detail > Build log | A stored image build |
 | `bench-instances.png` | `/frontend/bench-instances` | The instances table |
 | `deploy-logs.png` | `/frontend/deploy-logs` | Deploy history — result, last step, duration, retention note |
 | `build-logs.png` | `/frontend/build-logs` | Build history, reached from Labs (admin only) |
 | `devices.png` | `/frontend/devices` | Devices — tunnel state, registered devices, connection test |
-| `settings.png` | `/frontend/settings` | Settings as a page: three grouped cards and the save bar |
+| `settings.png` | `/frontend/settings` | Settings as a dialog: the Server nav, the Domains pane and the save bar |
 
 ## Not captured
 
