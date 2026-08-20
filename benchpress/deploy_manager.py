@@ -371,6 +371,17 @@ def _deploy_bench(bench_name: str) -> None:
 		linkuser_args = build_linkuser_args(bench, lab, settings, ssh_password)
 		pipeline.step("ssh_user")
 		pipeline.log(f"linkuser.sh {bench.ssh_username}")
+		# The image bakes a copy of linkuser.sh, but the app's copy is authoritative:
+		# pushing it before the run rolls script fixes out to every already-built lab
+		# image without an image rebuild (rebuilding the largest lab costs ~1.5h).
+		# Joined with pathlib, not get_app_path(parts...): that helper scrubs each part
+		# and would turn the real "lab-templates" directory into "lab_templates".
+		linkuser_script = (
+			Path(frappe.get_app_path("benchpress")) / "lab-templates" / "scripts" / "linkuser.sh"
+		)
+		write_file_to_container(
+			container_id, linkuser_script.read_text(), "/opt/benchpress/scripts/linkuser.sh"
+		)
 		linkuser_cmd = "bash /opt/benchpress/scripts/linkuser.sh " + " ".join(f"'{a}'" for a in linkuser_args)
 		exit_code, output = exec_in_container(container_id, linkuser_cmd, user="root")
 		if output:
