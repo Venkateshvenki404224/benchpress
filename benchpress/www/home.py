@@ -33,6 +33,13 @@ LICENSE_LABEL = "AGPL-3.0"
 VIDEO_DIRECTORY = ("public", "videos")
 HERO_VIDEO = "hero.mp4"
 HERO_POSTER = "hero-poster.jpg"
+CACHE_BUST_PATHS = (
+	("public", "css", "landing.css"),
+	("public", "css", "landing-mock.css"),
+	("public", "js", "landing.js"),
+	("public", "images", "logo"),
+	("public", "manifest.json"),
+)
 
 no_cache = 1
 
@@ -53,6 +60,7 @@ def get_context(context):
 	context.phases = PHASES
 	context.active_phase = ACTIVE_PHASE
 	context.csrf_token = session_csrf_token()
+	context.asset_version = asset_version()
 	return context
 
 
@@ -134,3 +142,22 @@ def asset_url(filename: str) -> str | None:
 	# "public/videos" would look for `hero_poster.jpg` and never find the poster.
 	path = frappe.get_app_path("benchpress", *VIDEO_DIRECTORY, filename)
 	return f"/assets/benchpress/videos/{filename}" if os.path.exists(path) else None
+
+
+def asset_version() -> str:
+	"""Cache-busting token for the page's hand-linked favicons, CSS, JS and logo images.
+
+	Those are referenced by plain filename instead of through Frappe's bundled-asset pipeline, so
+	nothing tells Cloudflare's edge cache a file changed underneath a stable URL — the CDN can
+	keep serving a pre-edit copy for its full `max-age`. Deriving the token from the newest mtime
+	among the watched paths means editing any one of them changes every `?v=` on the page, forcing
+	a fresh fetch past the CDN instead of waiting out the cache or a manual purge.
+	"""
+	mtimes = []
+	for parts in CACHE_BUST_PATHS:
+		path = frappe.get_app_path("benchpress", *parts)
+		if os.path.isdir(path):
+			mtimes += [os.path.getmtime(os.path.join(path, name)) for name in os.listdir(path)]
+		elif os.path.exists(path):
+			mtimes.append(os.path.getmtime(path))
+	return str(int(max(mtimes))) if mtimes else "0"

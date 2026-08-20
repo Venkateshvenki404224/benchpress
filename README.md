@@ -1,8 +1,9 @@
 <div align="center">
 
-<img src="benchpress/public/images/logo/logo.png" alt="BenchPress Logo" width="600" />
-
-# BenchPress
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="benchpress/public/images/logo/logo-dark.png">
+  <img src="benchpress/public/images/logo/logo-light.png" alt="BenchPress Logo" width="600">
+</picture>
 
 **Press a button. Get a Frappe bench. Self-hosted, Docker-powered, VPN-secured.**
 
