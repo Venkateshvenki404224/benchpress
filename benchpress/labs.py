@@ -71,11 +71,7 @@ def get_labs() -> list[dict]:
 
 
 def _template_logos(template_keys: list[str]) -> dict:
-	"""The catalog logo each lab inherits, in one query.
-
-	Joined on `Lab.template` (the template a lab was created from). A hand-made
-	lab has no template and simply falls back to its first app's mark.
-	"""
+	"""The catalog logo each lab inherits from its template, in one query."""
 	if not template_keys:
 		return {}
 	rows = frappe.get_all(

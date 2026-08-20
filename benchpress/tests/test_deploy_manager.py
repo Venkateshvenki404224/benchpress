@@ -247,9 +247,6 @@ class TestDeployManager(IntegrationTestCase):
 	@patch("benchpress.deploy_manager.stop_container")
 	@patch("benchpress.docker_manager.get_client")
 	def test_redeploy_bench_never_touches_volumes(self, mock_client, mock_stop, mock_remove, mock_deploy):
-		# The per-bench data volume is gone (the bench lives in the container's own
-		# layer), so teardown has no volume work left — a regression here would mean
-		# the copy-on-create cost crept back in.
 		from benchpress.deploy_manager import redeploy_bench
 
 		bench = self._fresh_bench()
@@ -441,13 +438,18 @@ class TestDeployManager(IntegrationTestCase):
 			self.assertTrue(call.kwargs["deduplicate"])
 
 	@patch("frappe.msgprint")
-	@patch("frappe.enqueue", return_value=None)
-	def test_deduped_enqueue_messages_user(self, mock_enqueue, mock_msgprint):
+	@patch("frappe.enqueue")
+	@patch(
+		"benchpress.benchpress.doctype.bench_instance.bench_instance.is_job_enqueued",
+		return_value=True,
+	)
+	def test_deduped_enqueue_messages_user(self, mock_enqueued, mock_enqueue, mock_msgprint):
 		bench = self._fresh_bench()
 
 		bench.enqueue_deploy()
 		bench.enqueue_redeploy()
 
+		mock_enqueue.assert_not_called()
 		for call in mock_msgprint.call_args_list:
 			self.assertIn("already in progress", str(call.args[0]))
 
@@ -781,14 +783,9 @@ class TestDeployStepMarkers(IntegrationTestCase):
 		self.assertEqual(self._bench_field(bench, "status"), "Error")
 
 	def test_the_assets_step_never_builds_in_the_container(self):
-		"""Deploy never builds: assets ship in the image (`bench build --production` at image
-		build time). The old in-container fallback probed for `sites/assets/<app>/dist`, a
-		layout SPA-style apps never use, and so re-ran `bench build` live on every deploy of
-		such labs — inside the instance's own memory limit, for 20+ minutes.
-		"""
+		"""Assets ship in the image; the deploy must never run `bench build` itself."""
 		bench = self._bench()
 
-		# Would fail the run if any exec still invoked `bench build`.
 		self._run_deploy(bench, exec_failures={"bench build": (1, "must never be called")})
 
 		log = self._log(bench.name)
@@ -1214,9 +1211,6 @@ class TestPublicSiteUrlHelpers(unittest.TestCase):
 				deploy_manager._write_instance_route("inst-1", "benchpress.cloud", "172.30.0.11")
 				config = yaml.safe_load((Path(tmp) / "instances" / "inst-1.yml").read_text())
 
-			# The routers must name their certificate: with a bare `tls: {}` and no
-			# cert covering `*.base_domain` in the store, Traefik serves its
-			# self-signed default and every instance URL fails TLS.
 			expected_tls = {
 				"certResolver": "letsencrypt",
 				"domains": [{"main": "benchpress.cloud", "sans": ["*.benchpress.cloud"]}],

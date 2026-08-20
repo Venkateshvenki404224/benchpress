@@ -35,7 +35,7 @@ from benchpress.notifications import notify_owner
 
 
 def _remove_stale_container(bench) -> None:
-	"""Remove any existing container, preserving the data volume."""
+	"""Remove any existing container for this bench."""
 	from benchpress.docker_manager import get_client
 
 	client = get_client()
@@ -85,12 +85,9 @@ def _public_ide_url(instance_id: str, base_domain: str | None) -> str | None:
 def _write_instance_route(instance_id: str, base_domain: str, container_ip: str) -> None:
 	"""Write Traefik file-provider routes for this instance's site and its code-server IDE.
 
-	The routers name their own certificate (`certResolver` + the wildcard domain set)
-	rather than `tls: {}`: the control-plane router's cert covers *its* hostname's
-	wildcard, which is not necessarily `base_domain` — with a bare `tls: {}` and no
-	matching cert in the store, Traefik silently serves its self-signed default and
-	every instance URL dies with a certificate error. Every instance writes the same
-	domain set, so Traefik issues the `*.{base_domain}` wildcard once and shares it.
+	The routers name their certificate explicitly: every instance shares one
+	`*.{base_domain}` wildcard, issued once by the resolver. A bare `tls: {}` would
+	serve Traefik's self-signed default whenever the store holds no covering cert.
 
 	One file per instance, named by instance ID, so a redeploy naturally overwrites it
 	with the fresh `container_ip` — no dedup logic needed.
@@ -99,7 +96,6 @@ def _write_instance_route(instance_id: str, base_domain: str, container_ip: str)
 		return
 
 	def tls():
-		# Fresh dict per router: a shared one would serialize as a YAML anchor/alias.
 		return {
 			"certResolver": "letsencrypt",
 			"domains": [{"main": base_domain, "sans": [f"*.{base_domain}"]}],
@@ -148,8 +144,8 @@ def _cleanup_failed_deploy(bench, container_id, append_log) -> None:
 	"""Best-effort teardown of resources created by this failed run.
 
 	Fires only when this run created a container — earlier failures leave the
-	previous deploy's container and peer untouched. Never touches the data
-	volume and never raises: the except block must still record Error state.
+	previous deploy's container and peer untouched. Never raises: the except
+	block must still record Error state.
 
 	Either way the outcome is written to the log, so the screen reporting the
 	failure can state what was rolled back instead of inferring it from silence.
@@ -201,7 +197,7 @@ def create_site_in_container(
 	container_id: str, db_server, site_name: str, admin_password: str, apps_csv: str
 ) -> tuple[int, str]:
 	"""Run setup-site.sh inside a bench container using a temporary MariaDB user."""
-	bench_dir = "/home/frappe/frappe-bench"  # fixed: the data volume binds at /home/frappe
+	bench_dir = "/home/frappe/frappe-bench"
 	db_name, temp_user, temp_password = create_mariadb_user(db_server.name, site_name)
 	try:
 		return exec_in_container(
@@ -321,7 +317,7 @@ def _deploy_bench(bench_name: str) -> None:
 
 		_setup_container_vpn(bench, container_id, pipeline)
 
-		bench_dir = "/home/frappe/frappe-bench"  # fixed: the data volume binds at /home/frappe
+		bench_dir = "/home/frappe/frappe-bench"
 		site_name = bench.site_name
 		config = {
 			**db_server.get_connection_config(),
@@ -339,10 +335,7 @@ def _deploy_bench(bench_name: str) -> None:
 		pipeline.log(f"{bench_dir}/sites/common_site_config.json written")
 
 		pipeline.step("site")
-		# The container is always fresh here, so a database that already exists can only be
-		# the leftover of an interrupted earlier run (worker killed mid `bench new-site`).
-		# `bench new-site` refuses to overwrite it; dropping it first makes deploy
-		# re-runnable instead of permanently wedged on its own debris.
+		# Drop the leftover of an interrupted run; `bench new-site` refuses to overwrite it.
 		_drop_site_database(bench)
 		apps_csv = ",".join(a.app_name for a in lab.apps if a.app_name.lower() != "frappe")
 		pipeline.log(f"Site {site_name} with {apps_csv or 'frappe'}")
@@ -355,13 +348,7 @@ def _deploy_bench(bench_name: str) -> None:
 		_record_primary_site(bench, lab, admin_password)
 
 		pipeline.step("assets")
-		# Assets ship in the image: its build already ran `bench build --production`
-		# (lab-templates/Dockerfile layer 5). The old in-container check looked for
-		# `sites/assets/<app>/dist`, a layout SPA-style apps (crm, helpdesk, lms) and
-		# asset-less apps (payments, telephony) never use — so it re-ran `bench build`
-		# live on every deploy of such labs, for 20+ minutes, inside the instance's
-		# own memory limit. Deploy never builds; rebuilding the lab image is the one
-		# way to refresh a stale bundle.
+		# Deploy never builds; rebuilding the lab image is how a stale bundle is refreshed.
 		pipeline.log("Assets ship in the image — bundled at build time")
 
 		if not bench.ssh_username:
@@ -371,11 +358,7 @@ def _deploy_bench(bench_name: str) -> None:
 		linkuser_args = build_linkuser_args(bench, lab, settings, ssh_password)
 		pipeline.step("ssh_user")
 		pipeline.log(f"linkuser.sh {bench.ssh_username}")
-		# The image bakes a copy of linkuser.sh, but the app's copy is authoritative:
-		# pushing it before the run rolls script fixes out to every already-built lab
-		# image without an image rebuild (rebuilding the largest lab costs ~1.5h).
-		# Joined with pathlib, not get_app_path(parts...): that helper scrubs each part
-		# and would turn the real "lab-templates" directory into "lab_templates".
+		# The app's copy of linkuser.sh is authoritative over the one baked into the image.
 		linkuser_script = (
 			Path(frappe.get_app_path("benchpress")) / "lab-templates" / "scripts" / "linkuser.sh"
 		)

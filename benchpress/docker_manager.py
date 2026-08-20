@@ -215,10 +215,8 @@ def create_bench_container(bench_doc, lab_doc) -> str:
 		hostname=name,
 		cap_add=["NET_ADMIN"],
 		devices=["/dev/net/tun:/dev/net/tun:rwm"],
-		# No volume over /home/frappe: the bench lives in the image and the container's
-		# own copy-on-write layer. A named volume here forced Docker to copy the whole
-		# multi-GB bench on every create (~2-17 min per deploy) for zero persistence —
-		# teardown always removed the volume with the container anyway.
+		# No volume over /home/frappe — a named volume forces a full copy of the bench
+		# on every create; the container's own layer is the bench's storage.
 		mem_limit=lab_doc.memory_limit or "512m",
 		nano_cpus=int((lab_doc.cpu_cores or 1) * 1e9),
 		pids_limit=pids_limit,

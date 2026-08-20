@@ -233,10 +233,7 @@ class TestDockerManagerBlockIO(IntegrationTestCase):
 			return mock_client.return_value.containers.create.call_args.kwargs
 
 	def test_no_volume_is_mounted_over_the_bench(self):
-		# A named volume at /home/frappe made Docker copy the whole multi-GB bench
-		# into it on every create (minutes per deploy, no persistence gained — the
-		# volume died with its container). The bench lives in the container's own
-		# copy-on-write layer now; this pins the mount from coming back.
+		"""A named volume over /home/frappe forces a full bench copy on every create."""
 		lab = _make_lab("no-volume")
 		self.addCleanup(frappe.delete_doc, "Lab", lab.name, force=True, ignore_permissions=True)
 

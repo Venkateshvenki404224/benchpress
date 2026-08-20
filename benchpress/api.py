@@ -7,6 +7,7 @@ from frappe.query_builder import DocType
 from frappe.query_builder.functions import Count
 
 from benchpress import image_cache, lab_detail, lab_templates, labs
+from benchpress.benchpress.doctype.bench_instance.bench_instance import DEPLOY_JOB_TIMEOUT
 from benchpress.credits import account, metering, payments
 from benchpress.credits.guard import (
 	build_charge,
@@ -192,11 +193,7 @@ def create_bench(data: str) -> dict:
 		"benchpress.deploy_manager.deploy_bench",
 		bench_name=doc.name,
 		queue="long",
-		# Covers the measured worst case with headroom: a 7-app first deploy spends
-		# most of an hour in site install + the SSH user's chown over a ~20GB bench.
-		# RQ kills the job at this limit while the real work keeps running orphaned
-		# in the container — the instance then wedges in "Deploying" forever.
-		timeout=7200,
+		timeout=DEPLOY_JOB_TIMEOUT,
 		job_id=f"deploy_bench:{doc.name}",
 		deduplicate=True,
 		enqueue_after_commit=True,

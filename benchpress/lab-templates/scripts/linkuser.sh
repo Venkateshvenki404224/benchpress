@@ -65,12 +65,7 @@ fi
 BASHEOF
 fi
 
-# No chown of /home/frappe: the tenant user is the image's frappe user *renamed*
-# (usermod --login keeps uid 1000), and every file in the image is already owned
-# by uid 1000 — ownership is stored numerically, so nothing needs changing. The
-# recursive chown this script used to run here walked 120k-1M+ inodes changing
-# zero of them, and was the single largest cost of every deploy (measured 514s
-# on a 6GB bench, ~30 min on a 20GB one).
+# No chown needed: the rename keeps uid 1000, which already owns every file.
 
 cat > "/.benchpress_config" << CFGEOF
 {

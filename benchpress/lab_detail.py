@@ -51,8 +51,6 @@ def get_lab(name: str) -> dict:
 	return {
 		"name": lab.name,
 		"lab_id": lab.lab_id,
-		# The catalog logo the lab inherits from the template it was created from;
-		# None for a hand-made lab, and the screen falls back to the app mark.
 		"logo": frappe.db.get_value("Lab Template", lab.template, "logo") if lab.template else None,
 		"title": lab.title,
 		"description": lab.description,
