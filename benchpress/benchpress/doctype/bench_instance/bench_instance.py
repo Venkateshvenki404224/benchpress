@@ -52,7 +52,9 @@ class BenchInstance(Document):
 			"benchpress.deploy_manager.deploy_bench",
 			bench_name=self.name,
 			queue="long",
-			timeout=1800,
+			# Same ceiling as api.create_bench: the real worst case (7-app install +
+			# chown of a ~20GB bench) far exceeds the old 30 minutes.
+			timeout=7200,
 			job_id=f"deploy_bench:{self.name}",
 			deduplicate=True,
 		)
@@ -75,7 +77,9 @@ class BenchInstance(Document):
 			"benchpress.deploy_manager.redeploy_bench",
 			bench_name=self.name,
 			queue="long",
-			timeout=1800,
+			# Same ceiling as api.create_bench: the real worst case (7-app install +
+			# chown of a ~20GB bench) far exceeds the old 30 minutes.
+			timeout=7200,
 			job_id=f"deploy_bench:{self.name}",
 			deduplicate=True,
 		)

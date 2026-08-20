@@ -192,7 +192,11 @@ def create_bench(data: str) -> dict:
 		"benchpress.deploy_manager.deploy_bench",
 		bench_name=doc.name,
 		queue="long",
-		timeout=3600,
+		# Covers the measured worst case with headroom: a 7-app first deploy spends
+		# most of an hour in site install + the SSH user's chown over a ~20GB bench.
+		# RQ kills the job at this limit while the real work keeps running orphaned
+		# in the container — the instance then wedges in "Deploying" forever.
+		timeout=7200,
 		job_id=f"deploy_bench:{doc.name}",
 		deduplicate=True,
 		enqueue_after_commit=True,

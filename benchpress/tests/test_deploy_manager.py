@@ -780,15 +780,20 @@ class TestDeployStepMarkers(IntegrationTestCase):
 		self.assertIn("common_site_config.json failed", self._log(bench.name))
 		self.assertEqual(self._bench_field(bench, "status"), "Error")
 
-	def test_a_failed_asset_build_warns_and_the_deploy_still_finishes(self):
-		"""The one deliberate asymmetry: stale assets are recoverable, a killed deploy is not."""
+	def test_the_assets_step_never_builds_in_the_container(self):
+		"""Deploy never builds: assets ship in the image (`bench build --production` at image
+		build time). The old in-container fallback probed for `sites/assets/<app>/dist`, a
+		layout SPA-style apps never use, and so re-ran `bench build` live on every deploy of
+		such labs — inside the instance's own memory limit, for 20+ minutes.
+		"""
 		bench = self._bench()
 
-		self._run_deploy(bench, exec_failures={"bench build": (1, "esbuild: hrms bundle exploded")})
+		# Would fail the run if any exec still invoked `bench build`.
+		self._run_deploy(bench, exec_failures={"bench build": (1, "must never be called")})
 
 		log = self._log(bench.name)
-		self.assertIn("bench build failed (exit 1)", log)
-		self.assertIn("esbuild: hrms bundle exploded", log)
+		self.assertIn("Assets ship in the image", log)
+		self.assertNotIn("must never be called", log)
 		self.assertEqual(self._bench_field(bench, "status"), "Running")
 		self.assertIn("Step 11/11", log)
 

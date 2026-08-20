@@ -355,7 +355,14 @@ def _deploy_bench(bench_name: str) -> None:
 		_record_primary_site(bench, lab, admin_password)
 
 		pipeline.step("assets")
-		_ensure_assets(container_id, bench_dir, lab, pipeline)
+		# Assets ship in the image: its build already ran `bench build --production`
+		# (lab-templates/Dockerfile layer 5). The old in-container check looked for
+		# `sites/assets/<app>/dist`, a layout SPA-style apps (crm, helpdesk, lms) and
+		# asset-less apps (payments, telephony) never use — so it re-ran `bench build`
+		# live on every deploy of such labs, for 20+ minutes, inside the instance's
+		# own memory limit. Deploy never builds; rebuilding the lab image is the one
+		# way to refresh a stale bundle.
+		pipeline.log("Assets ship in the image — bundled at build time")
 
 		if not bench.ssh_username:
 			bench.ssh_username = bench._derive_username(bench.owner)
@@ -513,49 +520,6 @@ def _site_app_names(lab) -> list[str]:
 	"""The apps this site was created with — frappe first, then the lab's own, in order."""
 	extras = [row.app_name for row in (lab.apps or []) if row.app_name and row.app_name.lower() != "frappe"]
 	return ["frappe", *extras]
-
-
-def _ensure_assets(container_id: str, bench_dir: str, lab, pipeline) -> None:
-	"""Bundle the apps the image did not already bundle — normally none of them.
-
-	Asked of the container, not assumed from the Dockerfile: the cache key does not cover
-	the Dockerfile, so an image built before assets moved into it must still build here.
-	"""
-	missing = sorted(_asset_app_names(lab) - _bundled_apps(container_id, bench_dir))
-	if not missing:
-		pipeline.log("Assets already bundled in the image — no build needed")
-		return
-	pipeline.log(f"bench build — no bundle in the image for: {', '.join(missing)}")
-	exit_code, output = exec_in_container(container_id, "bench build", user="frappe", workdir=bench_dir)
-	if exit_code != 0:
-		# The one step in this pipeline that logs instead of raising, deliberately: a site with
-		# stale or missing bundles still loads and the user can rebuild from the IDE, so losing
-		# an otherwise-good deploy over asset bundling costs more than it saves. The captured
-		# output goes into the line so the warning is actionable. Do not "fix" this into a raise.
-		pipeline.log(
-			f"bench build failed (exit {exit_code}) — assets may be stale: {output.strip()}", "warning"
-		)
-		return
-	pipeline.log("bench build finished")
-
-
-def _asset_app_names(lab) -> set[str]:
-	"""Every app whose bundle this instance serves. Frappe is always one of them."""
-	return {"frappe"} | {row.app_name.strip().lower() for row in (lab.apps or []) if row.app_name}
-
-
-def _bundled_apps(container_id: str, bench_dir: str) -> set[str]:
-	"""Apps that already carry a bundle, in one exec.
-
-	The glob is expanded by the container's shell: app names come from a Lab row and must
-	never be interpolated into a command string.
-	"""
-	exit_code, output = exec_in_container(
-		container_id, "ls -d sites/assets/*/dist 2>/dev/null", user="frappe", workdir=bench_dir
-	)
-	if exit_code != 0:
-		return set()
-	return {path.split("/")[2] for path in output.split() if path.count("/") == 3}
 
 
 def _setup_container_vpn(bench, container_id: str, pipeline) -> None:
