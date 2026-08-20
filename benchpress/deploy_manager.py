@@ -8,6 +8,7 @@ from pathlib import Path
 
 import frappe
 import yaml
+from frappe import _
 from frappe.utils.file_lock import LockTimeoutError
 from frappe.utils.synchronization import filelock
 
@@ -34,7 +35,7 @@ from benchpress.notifications import notify_owner
 
 
 def _remove_stale_container(bench) -> None:
-	"""Remove any existing container, preserving the data volume."""
+	"""Remove any existing container for this bench."""
 	from benchpress.docker_manager import get_client
 
 	client = get_client()
@@ -61,7 +62,12 @@ SITE_HTTP_PORT = 8000
 ADOPTED_MARKER = "already exists — adopting it"
 
 # Module constant, not inlined, so tests can monkeypatch it to a tmp path.
-TRAEFIK_DYNAMIC_DIR = Path("/etc/traefik/dynamic/instances")
+# Flat, not a subdirectory: Traefik's file provider does not recurse, so this
+# must be the exact directory the `directory:` provider in traefik.yml.template
+# watches, and the exact host path bind-mounted read-write into queue-long /
+# read-only into traefik in docker-compose.prod.yml. dynamic.yml (the
+# control-plane router) lives in this same directory.
+TRAEFIK_DYNAMIC_DIR = Path("/etc/traefik/dynamic")
 
 
 def _public_site_url(instance_id: str, base_domain: str | None) -> str | None:
@@ -79,15 +85,22 @@ def _public_ide_url(instance_id: str, base_domain: str | None) -> str | None:
 def _write_instance_route(instance_id: str, base_domain: str, container_ip: str) -> None:
 	"""Write Traefik file-provider routes for this instance's site and its code-server IDE.
 
-	`tls: {}` (empty section, no `certResolver`) deliberately — it turns TLS on for these
-	routers using Traefik's existing default cert store, which already holds the wildcard
-	SAN from the control-plane router. No new ACME issuance happens per instance.
+	The routers name their certificate explicitly: every instance shares one
+	`*.{base_domain}` wildcard, issued once by the resolver. A bare `tls: {}` would
+	serve Traefik's self-signed default whenever the store holds no covering cert.
 
 	One file per instance, named by instance ID, so a redeploy naturally overwrites it
 	with the fresh `container_ip` — no dedup logic needed.
 	"""
 	if not base_domain or base_domain == "localhost":
 		return
+
+	def tls():
+		return {
+			"certResolver": "letsencrypt",
+			"domains": [{"main": base_domain, "sans": [f"*.{base_domain}"]}],
+		}
+
 	TRAEFIK_DYNAMIC_DIR.mkdir(parents=True, exist_ok=True)
 	config = {
 		"http": {
@@ -96,13 +109,13 @@ def _write_instance_route(instance_id: str, base_domain: str, container_ip: str)
 					"rule": f"Host(`{instance_id}.{base_domain}`)",
 					"entryPoints": ["websecure"],
 					"service": f"site-{instance_id}",
-					"tls": {},
+					"tls": tls(),
 				},
 				f"ide-{instance_id}": {
 					"rule": f"Host(`ide-{instance_id}.{base_domain}`)",
 					"entryPoints": ["websecure"],
 					"service": f"ide-{instance_id}",
-					"tls": {},
+					"tls": tls(),
 				},
 			},
 			"services": {
@@ -131,8 +144,8 @@ def _cleanup_failed_deploy(bench, container_id, append_log) -> None:
 	"""Best-effort teardown of resources created by this failed run.
 
 	Fires only when this run created a container — earlier failures leave the
-	previous deploy's container and peer untouched. Never touches the data
-	volume and never raises: the except block must still record Error state.
+	previous deploy's container and peer untouched. Never raises: the except
+	block must still record Error state.
 
 	Either way the outcome is written to the log, so the screen reporting the
 	failure can state what was rolled back instead of inferring it from silence.
@@ -155,16 +168,6 @@ def _cleanup_failed_deploy(bench, container_id, append_log) -> None:
 	bench.container_id = None
 	bench.container_ip = None
 	bench.wg_ip = None
-
-
-def remove_bench_volume(bench_name: str) -> None:
-	"""Remove the bench data volume if it exists."""
-	from benchpress.docker_manager import get_client
-
-	try:
-		get_client().volumes.get(f"benchpress-{bench_name}-data").remove(force=True)
-	except Exception:
-		pass  # best-effort
 
 
 def build_linkuser_args(bench, lab, settings, ssh_password: str) -> list[str]:
@@ -194,7 +197,7 @@ def create_site_in_container(
 	container_id: str, db_server, site_name: str, admin_password: str, apps_csv: str
 ) -> tuple[int, str]:
 	"""Run setup-site.sh inside a bench container using a temporary MariaDB user."""
-	bench_dir = "/home/frappe/frappe-bench"  # fixed: the data volume binds at /home/frappe
+	bench_dir = "/home/frappe/frappe-bench"
 	db_name, temp_user, temp_password = create_mariadb_user(db_server.name, site_name)
 	try:
 		return exec_in_container(
@@ -314,7 +317,7 @@ def _deploy_bench(bench_name: str) -> None:
 
 		_setup_container_vpn(bench, container_id, pipeline)
 
-		bench_dir = "/home/frappe/frappe-bench"  # fixed: the data volume binds at /home/frappe
+		bench_dir = "/home/frappe/frappe-bench"
 		site_name = bench.site_name
 		config = {
 			**db_server.get_connection_config(),
@@ -332,6 +335,8 @@ def _deploy_bench(bench_name: str) -> None:
 		pipeline.log(f"{bench_dir}/sites/common_site_config.json written")
 
 		pipeline.step("site")
+		# Drop the leftover of an interrupted run; `bench new-site` refuses to overwrite it.
+		_drop_site_database(bench)
 		apps_csv = ",".join(a.app_name for a in lab.apps if a.app_name.lower() != "frappe")
 		pipeline.log(f"Site {site_name} with {apps_csv or 'frappe'}")
 		exit_code, output = create_site_in_container(
@@ -343,7 +348,8 @@ def _deploy_bench(bench_name: str) -> None:
 		_record_primary_site(bench, lab, admin_password)
 
 		pipeline.step("assets")
-		_ensure_assets(container_id, bench_dir, lab, pipeline)
+		# Deploy never builds; rebuilding the lab image is how a stale bundle is refreshed.
+		pipeline.log("Assets ship in the image — bundled at build time")
 
 		if not bench.ssh_username:
 			bench.ssh_username = bench._derive_username(bench.owner)
@@ -352,6 +358,13 @@ def _deploy_bench(bench_name: str) -> None:
 		linkuser_args = build_linkuser_args(bench, lab, settings, ssh_password)
 		pipeline.step("ssh_user")
 		pipeline.log(f"linkuser.sh {bench.ssh_username}")
+		# The app's copy of linkuser.sh is authoritative over the one baked into the image.
+		linkuser_script = (
+			Path(frappe.get_app_path("benchpress")) / "lab-templates" / "scripts" / "linkuser.sh"
+		)
+		write_file_to_container(
+			container_id, linkuser_script.read_text(), "/opt/benchpress/scripts/linkuser.sh"
+		)
 		linkuser_cmd = "bash /opt/benchpress/scripts/linkuser.sh " + " ".join(f"'{a}'" for a in linkuser_args)
 		exit_code, output = exec_in_container(container_id, linkuser_cmd, user="root")
 		if output:
@@ -503,49 +516,6 @@ def _site_app_names(lab) -> list[str]:
 	return ["frappe", *extras]
 
 
-def _ensure_assets(container_id: str, bench_dir: str, lab, pipeline) -> None:
-	"""Bundle the apps the image did not already bundle — normally none of them.
-
-	Asked of the container, not assumed from the Dockerfile: the cache key does not cover
-	the Dockerfile, so an image built before assets moved into it must still build here.
-	"""
-	missing = sorted(_asset_app_names(lab) - _bundled_apps(container_id, bench_dir))
-	if not missing:
-		pipeline.log("Assets already bundled in the image — no build needed")
-		return
-	pipeline.log(f"bench build — no bundle in the image for: {', '.join(missing)}")
-	exit_code, output = exec_in_container(container_id, "bench build", user="frappe", workdir=bench_dir)
-	if exit_code != 0:
-		# The one step in this pipeline that logs instead of raising, deliberately: a site with
-		# stale or missing bundles still loads and the user can rebuild from the IDE, so losing
-		# an otherwise-good deploy over asset bundling costs more than it saves. The captured
-		# output goes into the line so the warning is actionable. Do not "fix" this into a raise.
-		pipeline.log(
-			f"bench build failed (exit {exit_code}) — assets may be stale: {output.strip()}", "warning"
-		)
-		return
-	pipeline.log("bench build finished")
-
-
-def _asset_app_names(lab) -> set[str]:
-	"""Every app whose bundle this instance serves. Frappe is always one of them."""
-	return {"frappe"} | {row.app_name.strip().lower() for row in (lab.apps or []) if row.app_name}
-
-
-def _bundled_apps(container_id: str, bench_dir: str) -> set[str]:
-	"""Apps that already carry a bundle, in one exec.
-
-	The glob is expanded by the container's shell: app names come from a Lab row and must
-	never be interpolated into a command string.
-	"""
-	exit_code, output = exec_in_container(
-		container_id, "ls -d sites/assets/*/dist 2>/dev/null", user="frappe", workdir=bench_dir
-	)
-	if exit_code != 0:
-		return set()
-	return {path.split("/")[2] for path in output.split() if path.count("/") == 3}
-
-
 def _setup_container_vpn(bench, container_id: str, pipeline) -> None:
 	"""Replace any stale peer, claim a fresh tunnel IP, and configure the container.
 
@@ -606,7 +576,6 @@ def teardown_bench(bench) -> None:
 	except Exception:
 		pass  # best-effort
 
-	remove_bench_volume(bench.name)
 	_drop_site_database(bench)
 	# Marked, not deleted: a redeploy refreshes them, and the reaper leaves the instance
 	# one click from running.
@@ -645,34 +614,17 @@ def _drop_site_database(bench) -> None:
 
 
 def _prepare_lab_image(lab, pipeline, user: str) -> None:
-	"""Adopt the shared image for this lab's spec, or build it if nobody has yet.
+	"""Use this lab's already-built image, or fail immediately — deploy never builds.
 
-	The cache is keyed by the build spec rather than by the lab, so the second user to deploy a
-	given template performs no build at all. It also closes a staleness hole in the old
-	`status == "Ready"` check: editing a Ready lab's apps changed what should be built but kept
-	pointing at the image built from the previous recipe.
-
-	A build started here writes a `Build Log`, as an explicit rebuild does; the deploy log
-	keeps the step and a pointer to it.
+	Building is the explicit admin action (`build_lab`) alone; a deploy that finds no image, or
+	finds a lab that isn't `Ready` (its spec changed since the last build — see
+	`Lab.reset_status_if_spec_changed`), throws right away instead of eating a 10-40 minute build
+	inside what the caller expects to be a fast operation.
 	"""
 	tag, hit = image_cache.resolve(lab)
-	if not hit:
-		pipeline.log(f"Building lab image for {lab.title} — output goes to the build log")
-		image_tag = _run_build(lab, user)
-		pipeline.log(f"Lab image ready: {image_tag}")
-		return
-	pipeline.log(f"Cache hit: reusing shared image {tag} — no build needed")
-	_adopt_cached_image(lab, tag)
-
-
-def _adopt_cached_image(lab, tag: str) -> None:
-	"""Point the lab at an image somebody else's build already produced."""
-	if lab.image_tag == tag and lab.status == "Ready":
-		return
-	lab.image_tag = tag
-	lab.status = "Ready"
-	lab.save(ignore_permissions=True)
-	frappe.db.commit()  # nosemgrep -- the container is created from this tag, so persist it first
+	if not hit or lab.status != "Ready" or lab.image_tag != tag:
+		frappe.throw(_("No built image for lab '{0}'. Build it first from the Lab record.").format(lab.title))
+	pipeline.log(f"Using built image {tag}")
 
 
 def _build_lab_with_logs(lab, log_fn) -> None:

@@ -16,9 +16,11 @@ import {
 	siteLabel,
 	siteOpenAction,
 	siteUrl,
+	urlNeedsVpn,
 } from "./labActions";
 
 const SITE = "http://172.27.0.2:8000";
+const PUBLIC = "https://abc123.benchpress.cloud";
 
 // The whole contextual matrix the header has to get right. It is pure logic,
 // so it is asserted here rather than clicked through four times in a browser.
@@ -46,6 +48,12 @@ const MATRIX = [
 		state: { labStatus: "Ready", benchStatus: "Running", siteUrl: SITE },
 		up: { action: OPEN, label: "Open site", disabled: false },
 		down: { action: OPEN, label: "Open site — VPN off", disabled: true },
+	},
+	{
+		name: "a bench with a public address opens with or without the tunnel",
+		state: { labStatus: "Ready", benchStatus: "Running", siteUrl: PUBLIC },
+		up: { action: OPEN, label: "Open site", disabled: false },
+		down: { action: OPEN, label: "Open site", disabled: false },
 	},
 	{
 		name: "a failed image offers a rebuild in both tunnel states",
@@ -107,6 +115,10 @@ describe("siteUrl", () => {
 		expect(siteUrl({ container_ip: "172.30.0.5" })).toBe("http://172.30.0.5:8000");
 	});
 
+	it("prefers the public hostname over the tunnel address", () => {
+		expect(siteUrl({ public_url: PUBLIC, wg_ip: "172.27.0.2" })).toBe(PUBLIC);
+	});
+
 	it("has no address for a bench that never got one", () => {
 		expect(siteUrl({})).toBeNull();
 		expect(siteUrl(null)).toBeNull();
@@ -150,6 +162,15 @@ describe("siteOpenAction", () => {
 		}
 	});
 
+	it("opens a public address with the tunnel down", () => {
+		expect(
+			siteOpenAction({ status: "Active", url: PUBLIC, vpnConnected: false })
+		).toMatchObject({
+			label: "Open",
+			disabled: false,
+		});
+	});
+
 	it("stays disabled for a running site nothing serves", () => {
 		const state = siteOpenAction({ status: "Active", url: null, vpnConnected: true });
 		expect(state).toMatchObject({ label: "Unreachable", disabled: true });
@@ -161,6 +182,20 @@ describe("ideUrl", () => {
 	it("is the same host on code-server's port", () => {
 		expect(ideUrl({ wg_ip: "172.27.0.2" })).toBe("http://172.27.0.2:8080/");
 		expect(ideUrl({})).toBeNull();
+	});
+
+	it("prefers the address the deploy stored — public when the deployment has one", () => {
+		expect(
+			ideUrl({ code_server_url: "https://ide-abc123.benchpress.cloud", wg_ip: "172.27.0.2" })
+		).toBe("https://ide-abc123.benchpress.cloud");
+	});
+});
+
+describe("urlNeedsVpn", () => {
+	it("gates tunnel IPs and passes public hostnames", () => {
+		expect(urlNeedsVpn(SITE)).toBe(true);
+		expect(urlNeedsVpn(PUBLIC)).toBe(false);
+		expect(urlNeedsVpn(null)).toBe(false);
 	});
 });
 
@@ -196,6 +231,12 @@ describe("deployDialogAction", () => {
 		expect(
 			deployDialogAction({ runState: "success", vpnConnected: false, siteUrl: SITE })
 		).toMatchObject({ action: CONNECT_VPN, label: "Connect VPN to open", disabled: false });
+	});
+
+	it("offers a public address even with the tunnel down", () => {
+		expect(
+			deployDialogAction({ runState: "success", vpnConnected: false, siteUrl: PUBLIC })
+		).toMatchObject({ action: OPEN, label: "Open site", disabled: false });
 	});
 
 	it("cannot open a deployed bench that has no address yet", () => {

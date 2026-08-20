@@ -27,6 +27,7 @@ LAB_FIELDS = [
 	"instance_size",
 	"memory_limit",
 	"cpu_cores",
+	"template",
 	"owner",
 ]
 
@@ -62,9 +63,23 @@ def get_labs() -> list[dict]:
 	lab_names = [lab.name for lab in labs]
 	app_names = _app_names_by_lab(lab_names)
 	benches = _benches_by_lab(lab_names)
+	logos = _template_logos([lab.template for lab in labs if lab.template])
 	for lab in labs:
 		_attach_row_facts(lab, app_names.get(lab.name, []), benches.get(lab.name, []))
+		lab.logo = logos.get(lab.template)
 	return labs
+
+
+def _template_logos(template_keys: list[str]) -> dict:
+	"""The catalog logo each lab inherits from its template, in one query."""
+	if not template_keys:
+		return {}
+	rows = frappe.get_all(
+		"Lab Template",
+		filters={"name": ("in", template_keys), "logo": ("is", "set")},
+		fields=["name", "logo"],
+	)
+	return {row.name: row.logo for row in rows}
 
 
 def _attach_row_facts(lab: dict, app_names: list[str], benches: list[dict]) -> None:
@@ -106,10 +121,14 @@ def get_lab_form_options() -> dict:
 
 
 def _app_names_by_lab(lab_names: list[str]) -> dict:
-	"""Every lab's app list, in the order the pipeline installs them."""
+	"""Every lab's app list, in the order the pipeline installs them.
+
+	`Lab App` is shared with `Lab Template.apps`, and a lab built from a template keeps
+	the template's name — without the `parenttype` filter every app shows up twice.
+	"""
 	rows = frappe.get_all(
 		"Lab App",
-		filters={"parent": ("in", lab_names)},
+		filters={"parent": ("in", lab_names), "parenttype": "Lab"},
 		fields=["parent", "app_name"],
 		order_by="idx asc",
 		parent_doctype="Lab",

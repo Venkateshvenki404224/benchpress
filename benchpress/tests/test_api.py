@@ -693,7 +693,7 @@ class TestApi(IntegrationTestCase):
 			frappe.db.get_value("Bench Instance", bench.name, "site_name"), "stable.benchpress.cloud"
 		)
 
-	def test_create_bench_without_site_name_keeps_the_default(self):
+	def test_create_bench_without_site_name_defaults_to_the_public_hostname(self):
 		data = frappe.as_json({"lab": self.create_lab.name})
 		with patch("frappe.enqueue"):
 			result = api.create_bench(data)
@@ -701,7 +701,9 @@ class TestApi(IntegrationTestCase):
 			frappe.delete_doc, "Bench Instance", result["name"], force=True, ignore_permissions=True
 		)
 		site_name = frappe.db.get_value("Bench Instance", result["name"], "site_name")
-		self.assertTrue(site_name.endswith(".localhost"))
+		base_domain = frappe.get_cached_doc("BenchPress Settings").base_domain
+		suffix = base_domain if base_domain and base_domain != "localhost" else "localhost"
+		self.assertEqual(site_name, f"{result['name']}.{suffix}")
 
 	# --- Docker / manager side effects (patch module functions) --------------
 

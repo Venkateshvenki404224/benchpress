@@ -215,9 +215,8 @@ def create_bench_container(bench_doc, lab_doc) -> str:
 		hostname=name,
 		cap_add=["NET_ADMIN"],
 		devices=["/dev/net/tun:/dev/net/tun:rwm"],
-		volumes={
-			f"benchpress-{name}-data": {"bind": "/home/frappe", "mode": "rw"},
-		},
+		# No volume over /home/frappe — a named volume forces a full copy of the bench
+		# on every create; the container's own layer is the bench's storage.
 		mem_limit=lab_doc.memory_limit or "512m",
 		nano_cpus=int((lab_doc.cpu_cores or 1) * 1e9),
 		pids_limit=pids_limit,

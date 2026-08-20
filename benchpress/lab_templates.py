@@ -22,6 +22,7 @@ MAX_LAB_ID_ATTEMPTS = 50
 TEMPLATE_FIELDS = [
 	"name as key",
 	"title",
+	"logo",
 	"description",
 	"frappe_version",
 	"instance_size",

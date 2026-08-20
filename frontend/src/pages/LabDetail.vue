@@ -51,7 +51,6 @@
 								:lab="lab.data"
 								:bench="bench"
 								:credentials="credentials.data ?? {}"
-								:site-url="siteAddress"
 							/>
 						</div>
 

@@ -1,28 +1,18 @@
 # Copyright (c) 2026, Venkatesh and contributors
 # For license information, please see license.txt
 
-"""One image per build spec, not one per lab.
+"""One image per lab, tagged by the lab's own identity.
 
-A Lab used to own its image — `benchpress/<lab_id>:latest`, rebuilt from scratch for every user
-who picked the same template. Ten people choosing ERPNext meant ten 10-20 minute builds
-producing byte-identical images, and ten copies of them on disk.
-
-The tag is now derived from the spec rather than from the lab: `benchpress/cache:<hash>`, where
-the hash covers everything that decides the image contents — the Frappe branch and the sorted
-`(app, git url, branch)` triples. Two labs with the same recipe therefore resolve to the same
-tag, and the second one to deploy performs no build at all.
-
-**Accepted imprecision**: a new commit on an already-cached branch does not change the hash, so
-it does not invalidate the cache. Hashing commits would need a `git ls-remote` per app per
-deploy and would defeat caching for every app whose branch moves. Refresh is the job of the
-admin build action and `prewarm_catalog`, which rebuild the same tag in place.
+A Lab's image is tagged `benchpress/<lab_id>:lab` — static, not derived from the build spec. The
+first Lab created from a catalog template gets that template's own key as its `lab_id`
+(`lab_templates.available_lab_id`), so a template's prewarmed image and the first unmodified Lab
+built from it naturally resolve to the same tag with no extra bookkeeping. A Lab that diverges
+from its template (edited apps/version) needs its own rebuild — see `Lab.validate()`'s staleness
+check, which resets `status` to `Draft` when `build_spec` no longer matches what was last built.
 
 Docker is asked for its image list **once** per request or job: `cached_tags` memoises the set on
 `frappe.local`, so resolving a queue of labs costs one round trip, not one per lab.
 """
-
-import hashlib
-import json
 
 import frappe
 from frappe.utils import cstr
@@ -30,11 +20,10 @@ from frappe.utils import cstr
 from benchpress import lab_templates
 from benchpress.request_cache import clear_local_cache, local_cache
 
-CACHE_REPOSITORY = "benchpress/cache"
-HASH_LENGTH = 12
+CACHE_REPOSITORY = "benchpress"
 TAGS_ATTRIBUTE = "benchpress_cached_image_tags"
 
-BUILD_TIMEOUT = 3600
+BUILD_TIMEOUT = 10800
 SWEEP_TIMEOUT = 600
 PREWARM_JOB_ID = "benchpress_prewarm_catalog"
 SWEEP_JOB_ID = "benchpress_sweep_cached_images"
@@ -55,15 +44,9 @@ def build_spec(lab_doc) -> dict:
 	}
 
 
-def build_spec_hash(lab_doc) -> str:
-	"""Stable identity of one build spec. Child-row order cannot change it: the apps are sorted."""
-	spec = json.dumps(build_spec(lab_doc), sort_keys=True)
-	return hashlib.sha256(spec.encode()).hexdigest()[:HASH_LENGTH]
-
-
 def cache_tag(lab_doc) -> str:
-	"""The shared image tag this spec builds into."""
-	return f"{CACHE_REPOSITORY}:{build_spec_hash(lab_doc)}"
+	"""The static image tag this lab builds into."""
+	return f"{CACHE_REPOSITORY}/{lab_doc.lab_id}:lab"
 
 
 def resolve(lab_doc) -> tuple[str, bool]:
@@ -83,11 +66,25 @@ def clear_cached_tags() -> None:
 
 
 def list_cached_tags() -> set[str]:
+	"""Every `benchpress/<lab_id>:lab` image on this host.
+
+	Each lab is its own repository now, not a shared one — `benchpress/*` is a glob against the
+	repository name, not a fixed exact match, so it still costs one Docker round trip for every
+	lab's image, not one per lab. The whole `benchpress/` namespace is no longer exclusively
+	ours the way `benchpress/cache/` was, so the `:lab` tag suffix is what actually identifies an
+	image this module built — the prefix alone would also catch something like a stray hand-tagged
+	`benchpress/crm-lab:latest`.
+	"""
 	from benchpress.docker_manager import get_client
 
-	prefix = f"{CACHE_REPOSITORY}:"
-	images = get_client().images.list(name=CACHE_REPOSITORY)
-	return {tag for image in images for tag in (image.tags or []) if tag.startswith(prefix)}
+	prefix = f"{CACHE_REPOSITORY}/"
+	images = get_client().images.list(name=f"{CACHE_REPOSITORY}/*")
+	return {
+		tag
+		for image in images
+		for tag in (image.tags or [])
+		if tag.startswith(prefix) and tag.endswith(":lab")
+	}
 
 
 def template_spec(template: dict):

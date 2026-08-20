@@ -53,21 +53,21 @@ function waiting(label) {
 }
 
 function openAction({ vpnConnected, siteUrl }) {
-	if (!vpnConnected) {
-		return {
-			action: OPEN,
-			label: "Open site — VPN off",
-			disabled: true,
-			// Covers the IDE button too: both answer only on the bench's WireGuard address.
-			hint: "Register this device on the VPN to reach the site or the IDE.",
-		};
-	}
 	if (!siteUrl) {
 		return {
 			action: OPEN,
 			label: "Open site",
 			disabled: true,
 			hint: "This bench has no address yet.",
+		};
+	}
+	// A public address answers from anywhere; only the tunnel-only fallback gates on VPN.
+	if (urlNeedsVpn(siteUrl) && !vpnConnected) {
+		return {
+			action: OPEN,
+			label: "Open site — VPN off",
+			disabled: true,
+			hint: "Register this device on the VPN to reach the site or the IDE.",
 		};
 	}
 	return { action: OPEN, label: "Open site", disabled: false, hint: "" };
@@ -102,7 +102,7 @@ export function deployDialogAction({ runState, vpnConnected, siteUrl } = {}) {
 	if (runState !== "success") {
 		return { action: WAIT, label: "Deploying…", disabled: true, loading: true };
 	}
-	if (!vpnConnected) {
+	if (urlNeedsVpn(siteUrl) && !vpnConnected) {
 		return {
 			action: CONNECT_VPN,
 			label: "Connect VPN to open",
@@ -118,15 +118,37 @@ export function deployDialogAction({ runState, vpnConnected, siteUrl } = {}) {
  *
  * Every open action routes through the two helpers below, so issue #130 (giving
  * each instance a public `<instance-id>.benchpress.cloud` hostname) repoints one
- * function rather than hunting call sites. Today a bench answers only on its
- * WireGuard address, over the tunnel.
+ * function rather than hunting call sites. A bench with a `public_url` answers
+ * there from anywhere; without one it answers only on its WireGuard address,
+ * over the tunnel.
  */
 function benchHost(bench) {
 	return bench?.wg_ip || bench?.container_ip || null;
 }
 
+/** The tunnel-only address — answers only for devices on the WireGuard network. */
+export function privateSiteUrl(bench) {
+	const host = benchHost(bench);
+	return host ? `http://${host}:${SITE_PORT}` : null;
+}
+
+/**
+ * Whether an address answers only over the tunnel.
+ *
+ * Both address kinds are built by this codebase, never typed by hand: public
+ * ones are `https://` hostnames behind the reverse proxy (deploy_manager),
+ * private ones are plain-http tunnel IPs (this file). The scheme is therefore
+ * a reliable discriminator, not a heuristic.
+ */
+export function urlNeedsVpn(url) {
+	return !!url && url.startsWith("http://");
+}
+
 /**
  * Where a site actually answers, or null when nothing serves it.
+ *
+ * The public hostname wins when the bench has one — it works without the
+ * tunnel — and the WireGuard address is the fallback for VPN-only deployments.
  *
  * With no site it is the bench's own site. With one, it is that row's address —
  * and a row naming anything else has none: the container pins `default_site` to
@@ -136,10 +158,8 @@ function benchHost(bench) {
  * The domain is a label, not a route — nothing resolves it.
  */
 export function siteUrl(bench, site = null) {
-	const host = benchHost(bench);
-	if (!host) return null;
 	if (site && site.site_name !== bench?.site_name) return null;
-	return `http://${host}:${SITE_PORT}`;
+	return bench?.public_url || privateSiteUrl(bench);
 }
 
 /**
@@ -164,13 +184,6 @@ export function siteOpenAction({ status, url, vpnConnected } = {}) {
 			hint: "This site's container is stopped. Deploy the lab to bring it back.",
 		};
 	}
-	if (!vpnConnected) {
-		return {
-			label: "Unreachable",
-			disabled: true,
-			hint: "Register this device on the VPN to reach this site.",
-		};
-	}
 	if (!url) {
 		return {
 			label: "Unreachable",
@@ -178,11 +191,22 @@ export function siteOpenAction({ status, url, vpnConnected } = {}) {
 			hint: "Nothing serves this site — the container answers only on its own site.",
 		};
 	}
+	if (urlNeedsVpn(url) && !vpnConnected) {
+		return {
+			label: "Unreachable",
+			disabled: true,
+			hint: "Register this device on the VPN to reach this site.",
+		};
+	}
 	return { label: "Open", disabled: false, hint: "" };
 }
 
-/** Where the IDE answers — the same host, code-server's port. */
+/**
+ * Where the IDE answers. The deploy stores the public IDE hostname on the bench
+ * when the deployment has one; the tunnel address is the VPN-only fallback.
+ */
 export function ideUrl(bench) {
+	if (bench?.code_server_url) return bench.code_server_url;
 	const host = benchHost(bench);
 	return host ? `http://${host}:${IDE_PORT}/` : null;
 }

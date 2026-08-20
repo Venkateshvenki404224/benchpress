@@ -3,7 +3,7 @@
 
 import tempfile
 import unittest
-from contextlib import nullcontext
+from contextlib import contextmanager, nullcontext
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -80,17 +80,20 @@ def _fresh_bench(case, lab_name):
 	return bench
 
 
-def _cached_image():
-	"""Report a cache hit so a test that is not about the image step performs no real build.
+@contextmanager
+def _cached_image(lab_name):
+	"""Make `lab_name` deploy-ready: `Ready`, with an `image_tag` matching what resolve reports.
 
-	The image step resolves the shared cache by content hash, so a lab whose `image_tag` is a
-	fixture string now counts as a miss — and a miss shells out to Docker and builds a multi-GB
-	image. Every deploy that reaches step 2 in this file patches the resolve instead.
+	The image step now fails fast unless the lab is `Ready` *and* its stored `image_tag` matches
+	the freshly resolved tag — so this sets both together, rather than leaving a caller to pick a
+	fixture string that has to happen to match. Every deploy that reaches step 2 in this file
+	uses this instead of a real Docker socket.
 	"""
-	return patch(
-		"benchpress.deploy_manager.image_cache.resolve",
-		return_value=("benchpress/cache:cachedfixture", True),
-	)
+	tag = f"benchpress/{lab_name}:lab"
+	frappe.db.set_value("Lab", lab_name, {"status": "Ready", "image_tag": tag})
+	frappe.db.commit()
+	with patch("benchpress.deploy_manager.image_cache.resolve", return_value=(tag, True)):
+		yield tag
 
 
 def _ensure_owner(email):
@@ -227,8 +230,6 @@ class TestDeployManager(IntegrationTestCase):
 		bench.save(ignore_permissions=True)
 		frappe.db.commit()
 
-		mock_client.return_value.volumes.get.return_value = MagicMock()
-
 		status_at_deploy = {}
 
 		def capture_status(bench_name):
@@ -245,7 +246,7 @@ class TestDeployManager(IntegrationTestCase):
 	@patch("benchpress.deploy_manager.remove_container")
 	@patch("benchpress.deploy_manager.stop_container")
 	@patch("benchpress.docker_manager.get_client")
-	def test_redeploy_bench_removes_data_volume(self, mock_client, mock_stop, mock_remove, mock_deploy):
+	def test_redeploy_bench_never_touches_volumes(self, mock_client, mock_stop, mock_remove, mock_deploy):
 		from benchpress.deploy_manager import redeploy_bench
 
 		bench = self._fresh_bench()
@@ -253,13 +254,9 @@ class TestDeployManager(IntegrationTestCase):
 		bench.save(ignore_permissions=True)
 		frappe.db.commit()
 
-		mock_vol = MagicMock()
-		mock_client.return_value.volumes.get.return_value = mock_vol
-
 		redeploy_bench(bench.name)
 
-		mock_client.return_value.volumes.get.assert_called_with(f"benchpress-{bench.bench_name}-data")
-		mock_vol.remove.assert_called_once_with(force=True)
+		mock_client.return_value.volumes.get.assert_not_called()
 
 	@patch("benchpress.deploy_manager._deploy_bench")
 	@patch("benchpress.deploy_manager.remove_container")
@@ -276,8 +273,6 @@ class TestDeployManager(IntegrationTestCase):
 		frappe.db.set_value("Bench Instance", bench.name, "database_server", self.db_server_name)
 		frappe.db.commit()
 		bench.reload()
-
-		mock_client.return_value.volumes.get.return_value = MagicMock()
 
 		redeploy_bench(bench.name)
 		mock_drop_db.assert_called_once_with(self.db_server_name, bench.site_name)
@@ -325,8 +320,8 @@ class TestDeployManager(IntegrationTestCase):
 		self.assertEqual(mock_deploy.call_count, 2)
 
 	@patch("benchpress.deploy_manager._deploy_bench")
-	@patch("benchpress.deploy_manager.remove_bench_volume")
-	def test_redeploy_skipped_when_lock_held(self, mock_volume, mock_deploy):
+	@patch("benchpress.deploy_manager.remove_container")
+	def test_redeploy_skipped_when_lock_held(self, mock_remove, mock_deploy):
 		from benchpress.deploy_manager import redeploy_bench
 
 		bench = self._fresh_bench()
@@ -335,7 +330,7 @@ class TestDeployManager(IntegrationTestCase):
 		with self._held_deploy_lock(bench.name):
 			redeploy_bench(bench.name)
 
-		mock_volume.assert_not_called()
+		mock_remove.assert_not_called()
 		mock_deploy.assert_not_called()
 
 	def _deploy_log(self, bench_name):
@@ -353,7 +348,6 @@ class TestDeployManager(IntegrationTestCase):
 
 		bench = self._fresh_bench()
 		self._cleanup_deploy_logs(bench.name)
-		frappe.db.set_value("Lab", self.lab.name, {"status": "Ready", "image_tag": "benchpress/test:latest"})
 		frappe.db.set_value(
 			"Bench Instance",
 			bench.name,
@@ -362,7 +356,7 @@ class TestDeployManager(IntegrationTestCase):
 		frappe.db.commit()
 
 		with (
-			_cached_image(),
+			_cached_image(self.lab.name),
 			patch.object(deploy_manager, "ensure_infrastructure", autospec=True) as mock_infra,
 			patch.object(deploy_manager, "wait_for_mariadb", autospec=True),
 			patch.object(deploy_manager, "_remove_stale_container", autospec=True),
@@ -370,7 +364,6 @@ class TestDeployManager(IntegrationTestCase):
 			patch.object(deploy_manager, "start_container", autospec=True),
 			patch.object(deploy_manager, "wait_for_container_running", autospec=True) as mock_wait,
 			patch.object(deploy_manager, "remove_container", autospec=True) as mock_remove_container,
-			patch.object(deploy_manager, "remove_bench_volume", autospec=True) as mock_remove_volume,
 			patch.object(deploy_manager, "_notify_owner", autospec=True),
 			patch("benchpress.vpn_adapter.remove_bench_peer", autospec=True) as mock_remove_peer,
 		):
@@ -382,7 +375,6 @@ class TestDeployManager(IntegrationTestCase):
 
 		mock_remove_container.assert_called_once_with("cid-cleanup")
 		mock_remove_peer.assert_called_once()
-		mock_remove_volume.assert_not_called()
 		bench.reload()
 		self.assertEqual(bench.status, "Error")
 		self.assertIsNone(bench.container_id)
@@ -396,7 +388,6 @@ class TestDeployManager(IntegrationTestCase):
 
 		bench = self._fresh_bench()
 		self._cleanup_deploy_logs(bench.name)
-		frappe.db.set_value("Lab", self.lab.name, {"status": "Ready", "image_tag": "benchpress/test:latest"})
 		frappe.db.set_value(
 			"Bench Instance",
 			bench.name,
@@ -409,7 +400,7 @@ class TestDeployManager(IntegrationTestCase):
 		frappe.db.commit()
 
 		with (
-			_cached_image(),
+			_cached_image(self.lab.name),
 			patch.object(deploy_manager, "ensure_infrastructure", autospec=True) as mock_infra,
 			patch.object(deploy_manager, "remove_container", autospec=True) as mock_remove_container,
 			patch.object(deploy_manager, "_notify_owner", autospec=True),
@@ -447,13 +438,18 @@ class TestDeployManager(IntegrationTestCase):
 			self.assertTrue(call.kwargs["deduplicate"])
 
 	@patch("frappe.msgprint")
-	@patch("frappe.enqueue", return_value=None)
-	def test_deduped_enqueue_messages_user(self, mock_enqueue, mock_msgprint):
+	@patch("frappe.enqueue")
+	@patch(
+		"benchpress.benchpress.doctype.bench_instance.bench_instance.is_job_enqueued",
+		return_value=True,
+	)
+	def test_deduped_enqueue_messages_user(self, mock_enqueued, mock_enqueue, mock_msgprint):
 		bench = self._fresh_bench()
 
 		bench.enqueue_deploy()
 		bench.enqueue_redeploy()
 
+		mock_enqueue.assert_not_called()
 		for call in mock_msgprint.call_args_list:
 			self.assertIn("already in progress", str(call.args[0]))
 
@@ -507,7 +503,6 @@ class TestDeployStepMarkers(IntegrationTestCase):
 		cls.db_server_name = frappe.db.get_value(
 			"Database Server", {"container_name": "test-db-steps"}, "name"
 		)
-		frappe.db.set_value("Lab", cls.lab.name, {"status": "Ready", "image_tag": "benchpress/test:latest"})
 		frappe.db.commit()
 
 	@classmethod
@@ -534,7 +529,8 @@ class TestDeployStepMarkers(IntegrationTestCase):
 	):
 		"""A whole deploy with every side effect mocked but the log itself.
 
-		`cache_hit=False` leaves the image step to the caller, so it has to build.
+		`cache_hit=False` leaves the lab `Draft` with no `image_tag`, so the image step fails
+		fast — deploy never builds.
 		`exec_failures` maps a fragment of a container command to the result that command
 		returns, so one exec can fail while the rest of the run succeeds. `write_error` makes
 		every `write_file_to_container` raise, the way a read-only target path would.
@@ -542,13 +538,14 @@ class TestDeployStepMarkers(IntegrationTestCase):
 		from benchpress import deploy_manager
 
 		with (
-			_cached_image() if cache_hit else nullcontext(),
+			_cached_image(self.lab.name) if cache_hit else nullcontext(),
 			patch.object(deploy_manager, "ensure_infrastructure", autospec=True) as mock_infra,
 			patch.object(deploy_manager, "wait_for_mariadb", autospec=True),
 			patch.object(deploy_manager, "_remove_stale_container", autospec=True),
 			patch.object(deploy_manager, "create_bench_container", autospec=True) as mock_create,
 			patch.object(deploy_manager, "start_container", autospec=True),
 			patch.object(deploy_manager, "wait_for_container_running", autospec=True) as mock_wait,
+			patch.object(deploy_manager, "_write_instance_route", autospec=True),
 			patch.object(deploy_manager, "write_file_to_container", autospec=True) as mock_write,
 			patch.object(deploy_manager, "exec_in_container", autospec=True) as mock_exec,
 			patch.object(deploy_manager, "create_site_in_container", autospec=True) as mock_site,
@@ -665,37 +662,23 @@ class TestDeployStepMarkers(IntegrationTestCase):
 		# A room would broadcast past the user scoping the leak fix relies on.
 		self.assertFalse(any(call.get("room") for call in published))
 
-	def test_a_build_inside_a_deploy_writes_the_build_log_not_the_deploy_log(self):
-		"""The image step's Docker output belongs to the Build log tab."""
+	def test_an_unbuilt_lab_fails_the_image_step_without_touching_the_build_log(self):
+		"""Deploy is a lookup now, never a build — Phase 3. The image step fails fast at step
+		2/11 and the Build Log tab (a separate action's log) is never written by a deploy.
+		"""
 		from benchpress import deploy_manager
 
 		bench = self._bench()
 		self.addCleanup(frappe.db.delete, "Build Log", {"lab": self.lab.name})
 
-		def fake_build(lab, log_fn=None, **kwargs):
-			log_fn("Compiling translations for hrms")
-			return "benchpress/steps:built"
-
-		with (
-			patch.object(deploy_manager.image_cache, "resolve", return_value=("fresh:tag", False)),
-			patch.object(deploy_manager, "build_lab_image", side_effect=fake_build),
-		):
+		with patch.object(deploy_manager, "build_lab_image", autospec=True) as mock_build:
 			self._run_deploy(bench, cache_hit=False)
 
+		mock_build.assert_not_called()
 		deploy_log = self._log(bench.name)
-		self.assertIn("output goes to the build log", deploy_log)
-		self.assertNotIn("Compiling translations for hrms", deploy_log)
-
-		build_log = frappe.get_all(
-			"Build Log",
-			filters={"lab": self.lab.name},
-			fields=["message", "log_type"],
-			order_by="creation desc",
-			limit_page_length=1,
-		)[0]
-		self.assertIn("Compiling translations for hrms", build_log.message)
-		self.assertIn("=== Build complete: benchpress/steps:built ===", build_log.message)
-		self.assertEqual(build_log.log_type, "success")
+		self.assertIn("Step 2/11", deploy_log)
+		self.assertIn("No built image", deploy_log)
+		self.assertEqual(frappe.db.count("Build Log", {"lab": self.lab.name}), 0)
 
 	# --- Phase 3: a command the run does not check is a claim it cannot make ---
 
@@ -749,14 +732,11 @@ class TestDeployStepMarkers(IntegrationTestCase):
 		self.assertEqual(self._bench_field(bench, "status"), "Running")
 
 	def test_a_working_step_ten_stores_the_public_ide_hostname(self):
-		from benchpress import deploy_manager
-
 		bench = self._bench()
 		self._enable_code_server()
 		self._set_base_domain("benchpress.cloud")
 
-		with patch.object(deploy_manager, "_write_instance_route", autospec=True):
-			self._run_deploy(bench)
+		self._run_deploy(bench)
 
 		log = self._log(bench.name)
 		self.assertEqual(log.count("code-server ready at"), 1)
@@ -776,13 +756,10 @@ class TestDeployStepMarkers(IntegrationTestCase):
 		frappe.db.commit()
 
 	def test_public_url_set_when_base_domain_is_configured(self):
-		from benchpress import deploy_manager
-
 		bench = self._bench()
 		self._set_base_domain("benchpress.cloud")
 
-		with patch.object(deploy_manager, "_write_instance_route", autospec=True):
-			self._run_deploy(bench)
+		self._run_deploy(bench)
 
 		self.assertEqual(self._bench_field(bench, "public_url"), f"https://{bench.name}.benchpress.cloud")
 
@@ -805,15 +782,15 @@ class TestDeployStepMarkers(IntegrationTestCase):
 		self.assertIn("common_site_config.json failed", self._log(bench.name))
 		self.assertEqual(self._bench_field(bench, "status"), "Error")
 
-	def test_a_failed_asset_build_warns_and_the_deploy_still_finishes(self):
-		"""The one deliberate asymmetry: stale assets are recoverable, a killed deploy is not."""
+	def test_the_assets_step_never_builds_in_the_container(self):
+		"""Assets ship in the image; the deploy must never run `bench build` itself."""
 		bench = self._bench()
 
-		self._run_deploy(bench, exec_failures={"bench build": (1, "esbuild: hrms bundle exploded")})
+		self._run_deploy(bench, exec_failures={"bench build": (1, "must never be called")})
 
 		log = self._log(bench.name)
-		self.assertIn("bench build failed (exit 1)", log)
-		self.assertIn("esbuild: hrms bundle exploded", log)
+		self.assertIn("Assets ship in the image", log)
+		self.assertNotIn("must never be called", log)
 		self.assertEqual(self._bench_field(bench, "status"), "Running")
 		self.assertIn("Step 11/11", log)
 
@@ -826,43 +803,24 @@ class TestDeployStepMarkers(IntegrationTestCase):
 
 		self.assertNotIn("failed", self._log(bench.name))
 
-	def test_a_build_failure_inside_a_deploy_is_attributed_to_the_build(self):
-		"""Hole 6: the banner must name the build and point at the log holding Docker's error."""
-		from benchpress import deploy_manager, lab_detail
+	def test_an_unbuilt_image_is_attributed_to_the_deploy_not_a_build(self):
+		"""Phase 3: deploy never builds, so its own failure is never redirected to a Build Log —
+		there isn't one to redirect to, and there never will be for this failure mode.
+		"""
+		from benchpress import lab_detail
 
 		bench = self._bench()
-		self.addCleanup(frappe.db.delete, "Build Log", {"lab": self.lab.name})
-		status_before = frappe.db.get_value("Lab", self.lab.name, "status")
+		frappe.db.set_value("Lab", self.lab.name, {"status": "Draft", "image_tag": None})
+		frappe.db.commit()
 
-		def exploding_build(lab, log_fn=None, **kwargs):
-			log_fn("Step 3/8 : RUN bench get-app --branch nope hrms")
-			raise Exception("branch 'nope' not found in upstream origin")
-
-		with (
-			patch.object(deploy_manager.image_cache, "resolve", return_value=("fresh:tag", False)),
-			patch.object(deploy_manager, "build_lab_image", side_effect=exploding_build),
-		):
-			self._run_deploy(bench, cache_hit=False)
-
-		# `_run_build` restores the lab, which is exactly why `Lab.status` cannot carry this.
-		self.assertEqual(frappe.db.get_value("Lab", self.lab.name, "status"), status_before)
+		self._run_deploy(bench, cache_hit=False)
 
 		failure = lab_detail.get_lab(self.lab.name)["failure"]
-		self.assertEqual(failure["source"], "build")
-		self.assertIn("branch 'nope' not found", failure["reason"])
-		self.assertEqual(
-			failure["log"],
-			frappe.get_all(
-				"Build Log",
-				filters={"lab": self.lab.name},
-				order_by="timestamp desc",
-				limit_page_length=1,
-				pluck="name",
-			)[0],
-		)
+		self.assertEqual(failure["source"], "deploy")
+		self.assertIn("No built image", failure["reason"])
 
 	def test_a_deploy_that_broke_after_the_image_still_blames_the_deploy(self):
-		"""The redirect is bounded to the image step, so an unrelated failure keeps its own log."""
+		"""A failure past the image step is a deploy failure, plainly — nothing to redirect."""
 		from benchpress import lab_detail
 
 		bench = self._bench()
@@ -965,17 +923,17 @@ class TestTerminalStateNotifications(IntegrationTestCase):
 		from benchpress import deploy_manager
 
 		bench = self._owned_bench()
-		frappe.db.set_value("Lab", self.lab.name, {"status": "Ready", "image_tag": "benchpress/test:latest"})
 		frappe.db.commit()
 
 		with (
-			_cached_image(),
+			_cached_image(self.lab.name),
 			patch.object(deploy_manager, "ensure_infrastructure", autospec=True) as mock_infra,
 			patch.object(deploy_manager, "wait_for_mariadb", autospec=True),
 			patch.object(deploy_manager, "_remove_stale_container", autospec=True),
 			patch.object(deploy_manager, "create_bench_container", autospec=True) as mock_create,
 			patch.object(deploy_manager, "start_container", autospec=True),
 			patch.object(deploy_manager, "wait_for_container_running", autospec=True) as mock_wait,
+			patch.object(deploy_manager, "_write_instance_route", autospec=True),
 			patch.object(deploy_manager, "_setup_container_vpn", autospec=True),
 			patch.object(deploy_manager, "write_file_to_container", autospec=True),
 			patch.object(deploy_manager, "exec_in_container", autospec=True) as mock_exec,
@@ -1253,10 +1211,15 @@ class TestPublicSiteUrlHelpers(unittest.TestCase):
 				deploy_manager._write_instance_route("inst-1", "benchpress.cloud", "172.30.0.11")
 				config = yaml.safe_load((Path(tmp) / "instances" / "inst-1.yml").read_text())
 
+			expected_tls = {
+				"certResolver": "letsencrypt",
+				"domains": [{"main": "benchpress.cloud", "sans": ["*.benchpress.cloud"]}],
+			}
+
 			router = config["http"]["routers"]["site-inst-1"]
 			self.assertEqual(router["rule"], "Host(`inst-1.benchpress.cloud`)")
 			self.assertEqual(router["service"], "site-inst-1")
-			self.assertEqual(router["tls"], {})
+			self.assertEqual(router["tls"], expected_tls)
 
 			service = config["http"]["services"]["site-inst-1"]
 			self.assertEqual(service["loadBalancer"]["servers"], [{"url": "http://172.30.0.11:8000"}])
@@ -1264,7 +1227,7 @@ class TestPublicSiteUrlHelpers(unittest.TestCase):
 			ide_router = config["http"]["routers"]["ide-inst-1"]
 			self.assertEqual(ide_router["rule"], "Host(`ide-inst-1.benchpress.cloud`)")
 			self.assertEqual(ide_router["service"], "ide-inst-1")
-			self.assertEqual(ide_router["tls"], {})
+			self.assertEqual(ide_router["tls"], expected_tls)
 
 			ide_service = config["http"]["services"]["ide-inst-1"]
 			self.assertEqual(ide_service["loadBalancer"]["servers"], [{"url": "http://172.30.0.11:8080"}])

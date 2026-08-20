@@ -9,6 +9,7 @@
  "field_order": [
   "key",
   "title",
+  "logo",
   "description",
   "column_break_meta",
   "frappe_version",
@@ -38,6 +39,12 @@
    "in_list_view": 1,
    "label": "Title",
    "reqd": 1
+  },
+  {
+   "description": "Shown on the template card instead of the app mark. Falls back to the primary app's icon when unset.",
+   "fieldname": "logo",
+   "fieldtype": "Attach Image",
+   "label": "Logo"
   },
   {
    "fieldname": "description",

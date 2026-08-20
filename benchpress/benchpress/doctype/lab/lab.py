@@ -7,6 +7,7 @@ from frappe.model.document import Document
 from frappe.utils.data import cint
 
 from benchpress.docker_manager import validate_lab_id
+from benchpress.image_cache import build_spec
 
 BASELINE_CPU_CORES = 1
 
@@ -16,6 +17,19 @@ class Lab(Document):
 		validate_lab_id(self.lab_id)
 		self.apply_instance_size()
 		self.validate_cpu_cores()
+		self.reset_status_if_spec_changed()
+
+	def reset_status_if_spec_changed(self):
+		"""A `Ready` lab's image tag is static now (`benchpress/<lab_id>:lab`, not a content
+		hash), so an edit to what actually gets built no longer changes the tag by itself —
+		nothing else would catch a Ready lab quietly pointing at a stale image.
+		"""
+		if self.status != "Ready" or self.is_new():
+			return
+		before = self.get_doc_before_save()
+		if before and build_spec(self) != build_spec(before):
+			self.status = "Draft"
+			frappe.msgprint(_("Lab spec changed — rebuild the image before deploying."))
 
 	def apply_instance_size(self):
 		"""Copy the chosen size's resources onto the two fields Docker actually reads.

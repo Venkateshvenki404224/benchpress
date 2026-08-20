@@ -19,7 +19,7 @@ output — still only have `=== … ===` markers, so both are read.
 import frappe
 
 from benchpress.credits import config, passes
-from benchpress.deploy_pipeline import scan_log, step_label
+from benchpress.deploy_pipeline import scan_log
 
 BENCH_FIELDS = [
 	"name",
@@ -32,6 +32,7 @@ BENCH_FIELDS = [
 	"container_id",
 	"container_ip",
 	"wg_ip",
+	"public_url",
 	"domain",
 	"site_name",
 	"ssh_username",
@@ -42,9 +43,6 @@ BENCH_FIELDS = [
 
 SITE_FIELDS = ["name", "site_name", "full_domain", "status"]
 
-# The step a deploy is inside when it builds the image, as `scan_log` reports it.
-IMAGE_STEP = step_label("image")
-
 
 def get_lab(name: str) -> dict:
 	"""One lab, the caller's deployment of it, and why the last run failed."""
@@ -53,6 +51,7 @@ def get_lab(name: str) -> dict:
 	return {
 		"name": lab.name,
 		"lab_id": lab.lab_id,
+		"logo": frappe.db.get_value("Lab Template", lab.template, "logo") if lab.template else None,
 		"title": lab.title,
 		"description": lab.description,
 		"frappe_version": lab.frappe_version,
@@ -159,45 +158,19 @@ def _failure(lab, bench: dict | None) -> dict | None:
 	if lab.status == "Error":
 		return _read_failure("Build Log", {"lab": lab.name}, "build")
 	if bench and bench.status == "Error":
-		return _deploy_failure(lab.name, bench["name"])
+		return _deploy_failure(bench["name"])
 	return None
 
 
-def _deploy_failure(lab_name: str, bench_name: str) -> dict | None:
-	"""The last deploy's failure — attributed to the image build when that is what broke.
+def _deploy_failure(bench_name: str) -> dict | None:
+	"""The last deploy's failure.
 
-	A deploy that misses the image cache builds, and `deploy_manager._run_build` puts
-	`Lab.status` back the way it found it so one tenant's failed build does not mark the
-	catalog entry every other tenant reads. That is why the `Lab.status` arm above never
-	fires here: without this, the banner would blame the deploy and show its tail, while the
-	Docker output that actually explains the failure sat in a `Build Log` nothing pointed at.
+	Never redirected to a build's log any more — deploy never builds (Phase 3: it looks up an
+	already-built image or fails immediately), so a deploy's own failure is never actually a
+	build's.
 	"""
 	log = _latest_log("Deploy Log", {"bench": bench_name})
-	if not log:
-		return None
-	if _broke_preparing_the_image(log.message):
-		build = _build_failure_since(lab_name, log.timestamp)
-		if build:
-			return build
-	return _failure_payload(log, "deploy")
-
-
-def _broke_preparing_the_image(message: str) -> bool:
-	"""Did the run die inside the step that resolves or builds the image?"""
-	return scan_log(message or "").step == IMAGE_STEP
-
-
-def _build_failure_since(lab_name: str, deploy_started) -> dict | None:
-	"""The failed build this deploy ran, if it ran one.
-
-	Bounded by the deploy's own log timestamp so an older failed build — somebody else's, or
-	one since fixed — cannot be blamed for this run. The image step can also fail without any
-	build at all (cache resolution, adopting a tag), and then there is nothing here to find.
-	"""
-	log = _latest_log(
-		"Build Log", {"lab": lab_name, "log_type": "error", "timestamp": (">=", deploy_started)}
-	)
-	return _failure_payload(log, "build") if log else None
+	return _failure_payload(log, "deploy") if log else None
 
 
 def _read_failure(doctype: str, filters: dict, source: str) -> dict | None:

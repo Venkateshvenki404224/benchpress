@@ -7,6 +7,7 @@ from frappe.query_builder import DocType
 from frappe.query_builder.functions import Count
 
 from benchpress import image_cache, lab_detail, lab_templates, labs
+from benchpress.benchpress.doctype.bench_instance.bench_instance import DEPLOY_JOB_TIMEOUT
 from benchpress.credits import account, metering, payments
 from benchpress.credits.guard import (
 	build_charge,
@@ -65,7 +66,7 @@ def build_lab_image(lab_name: str) -> dict:
 		"benchpress.deploy_manager.build_lab",
 		lab_name=lab_name,
 		queue="long",
-		timeout=3600,
+		timeout=10800,
 	)
 	return {"name": lab_name, "status": "Building"}
 
@@ -192,7 +193,7 @@ def create_bench(data: str) -> dict:
 		"benchpress.deploy_manager.deploy_bench",
 		bench_name=doc.name,
 		queue="long",
-		timeout=3600,
+		timeout=DEPLOY_JOB_TIMEOUT,
 		job_id=f"deploy_bench:{doc.name}",
 		deduplicate=True,
 		enqueue_after_commit=True,

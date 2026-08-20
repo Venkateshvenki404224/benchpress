@@ -6,9 +6,12 @@ import re
 import frappe
 from frappe import _
 from frappe.model.document import Document
+from frappe.utils.background_jobs import is_job_enqueued
 
 from benchpress.benchpress.doctype.bench_instance import get_instance_id
 from benchpress.credits.guard import cap_concurrent_instances, instance_runway, requires_credits
+
+DEPLOY_JOB_TIMEOUT = 7200
 
 
 class BenchInstance(Document):
@@ -16,7 +19,9 @@ class BenchInstance(Document):
 		instance_id = get_instance_id(frappe.session.user, self.lab)
 		self.bench_name = instance_id
 		if not self.site_name:
-			self.site_name = f"{instance_id}.localhost"
+			base_domain = frappe.get_cached_doc("BenchPress Settings").base_domain
+			suffix = base_domain if base_domain and base_domain != "localhost" else "localhost"
+			self.site_name = f"{instance_id}.{suffix}"
 		self.ssh_username = self._derive_username()
 
 	def autoname(self):
@@ -43,17 +48,18 @@ class BenchInstance(Document):
 	@frappe.whitelist()
 	@requires_credits(cost=instance_runway, caps=(cap_concurrent_instances,))
 	def enqueue_deploy(self):
-		job = frappe.enqueue(
+		if is_job_enqueued(self._deploy_job_id()):
+			frappe.msgprint(_("A deploy is already in progress for this bench."))
+			return
+		frappe.enqueue(
 			"benchpress.deploy_manager.deploy_bench",
 			bench_name=self.name,
 			queue="long",
-			timeout=1800,
-			job_id=f"deploy_bench:{self.name}",
+			timeout=DEPLOY_JOB_TIMEOUT,
+			job_id=self._deploy_job_id(),
 			deduplicate=True,
+			enqueue_after_commit=True,
 		)
-		if not job:
-			frappe.msgprint(_("A deploy is already in progress for this bench."))
-			return
 		frappe.msgprint(_("Deploy started. Watch the Deploy Log for progress."))
 
 	@frappe.whitelist()
@@ -66,18 +72,22 @@ class BenchInstance(Document):
 	@frappe.whitelist()
 	@requires_credits(cost=instance_runway, caps=(cap_concurrent_instances,))
 	def enqueue_redeploy(self):
-		job = frappe.enqueue(
+		if is_job_enqueued(self._deploy_job_id()):
+			frappe.msgprint(_("A deploy is already in progress for this bench."))
+			return
+		frappe.enqueue(
 			"benchpress.deploy_manager.redeploy_bench",
 			bench_name=self.name,
 			queue="long",
-			timeout=1800,
-			job_id=f"deploy_bench:{self.name}",
+			timeout=DEPLOY_JOB_TIMEOUT,
+			job_id=self._deploy_job_id(),
 			deduplicate=True,
+			enqueue_after_commit=True,
 		)
-		if not job:
-			frappe.msgprint(_("A deploy is already in progress for this bench."))
-			return
 		frappe.msgprint(_("Redeploy started. Watch the Deploy Log for progress."))
+
+	def _deploy_job_id(self) -> str:
+		return f"deploy_bench:{self.name}"
 
 	@frappe.whitelist()
 	@requires_credits(cost=instance_runway, caps=(cap_concurrent_instances,))

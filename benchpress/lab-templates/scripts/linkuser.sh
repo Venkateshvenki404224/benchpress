@@ -65,7 +65,7 @@ fi
 BASHEOF
 fi
 
-chown -R "$USERNAME:$USERNAME" /home/frappe
+# No chown needed: the rename keeps uid 1000, which already owns every file.
 
 cat > "/.benchpress_config" << CFGEOF
 {

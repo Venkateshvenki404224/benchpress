@@ -70,9 +70,11 @@ class IntegrationTestBenchInstance(IntegrationTestCase):
 		expected = get_instance_id("Administrator", self.lab_name)
 		self.assertEqual(bench.bench_name, expected)
 
-	def test_before_insert_sets_site_name_with_localhost_suffix(self):
+	def test_before_insert_names_the_site_after_the_base_domain(self):
 		bench = self._insert_bench()
-		self.assertTrue(bench.site_name.endswith(".localhost"))
+		base_domain = frappe.get_cached_doc("BenchPress Settings").base_domain
+		suffix = base_domain if base_domain and base_domain != "localhost" else "localhost"
+		self.assertEqual(bench.site_name, f"{bench.bench_name}.{suffix}")
 
 	def test_before_insert_honors_a_caller_supplied_site_name(self):
 		bench = self._insert_bench(site_name="caller-chosen.localhost")

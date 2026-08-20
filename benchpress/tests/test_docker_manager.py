@@ -232,6 +232,15 @@ class TestDockerManagerBlockIO(IntegrationTestCase):
 			docker_manager.create_bench_container(bench, lab)
 			return mock_client.return_value.containers.create.call_args.kwargs
 
+	def test_no_volume_is_mounted_over_the_bench(self):
+		"""A named volume over /home/frappe forces a full bench copy on every create."""
+		lab = _make_lab("no-volume")
+		self.addCleanup(frappe.delete_doc, "Lab", lab.name, force=True, ignore_permissions=True)
+
+		kwargs = self._container_create_kwargs(lab)
+
+		self.assertNotIn("volumes", kwargs)
+
 	def test_lab_block_io_limits_passed_to_container(self):
 		lab = _make_lab("blockio-custom", iops_limit=500, bps_limit=2 * 1024 * 1024)
 		self.addCleanup(frappe.delete_doc, "Lab", lab.name, force=True, ignore_permissions=True)
