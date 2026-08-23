@@ -483,6 +483,21 @@ class TestDeployManager(IntegrationTestCase):
 
 		self.assertEqual(args[-1], "/bin/bash")
 
+	def test_linkuser_command_survives_hostile_arguments(self):
+		# The command runs as root in the container, and the lab title is free
+		# text. An apostrophe used to break the deploy; anything sharper walked
+		# into the shell. Every argument must round-trip exactly.
+		import shlex
+
+		from benchpress.deploy_manager import linkuser_command
+
+		args = ["tester", "o'brien@example.com", "Venki's Lab; rm -rf /", "$(id)", "`id`", ""]
+		command = linkuser_command(args)
+
+		parsed = shlex.split(command)
+		self.assertEqual(parsed[0:2], ["bash", "/opt/benchpress/scripts/linkuser.sh"])
+		self.assertEqual(parsed[2:], args)
+
 
 class TestDeployStepMarkers(IntegrationTestCase):
 	"""Phase 4: the run reports its eleven steps, in the order the code runs them."""
