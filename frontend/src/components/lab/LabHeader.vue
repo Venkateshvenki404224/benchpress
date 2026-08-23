@@ -99,30 +99,46 @@
 import AppIcon from "@/components/AppIcon.vue";
 import StatusBadge from "@/components/StatusBadge.vue";
 import { rateLabel } from "@/utils/credits";
-import { OPEN, REBUILD, ideUrl, primaryAction, urlNeedsVpn } from "@/utils/labActions";
+import {
+	DEPLOY,
+	OPEN,
+	REBUILD,
+	START,
+	ideUrl,
+	primaryAction,
+	urlNeedsVpn,
+} from "@/utils/labActions";
 import { cpuLabel, memoryLabel } from "@/utils/labSpecs";
 import { Button, ConfirmDialog, Dropdown } from "frappe-ui";
 import { computed, ref } from "vue";
 
 import EllipsisIcon from "~icons/lucide/ellipsis";
 import HammerIcon from "~icons/lucide/hammer";
+import RefreshCwIcon from "~icons/lucide/refresh-cw";
 import SquareIcon from "~icons/lucide/square";
 import Trash2Icon from "~icons/lucide/trash-2";
 
-// Both destructive actions name what they destroy before they run. Deleting a
-// bench is irreversible and takes data with it, so the copy says so.
+// Every destructive action names what it destroys before it runs. Deleting a
+// bench is irreversible and takes data with it, so the copy says so — and a
+// redeploy destroys exactly as much, so it gets the same treatment.
 const CONFIRMATIONS = {
 	stop: {
 		event: "stop",
 		title: "Stop this bench?",
 		message:
-			"The container stops and the site goes offline until it is deployed again. Nothing is deleted.",
+			"The container stops and the site goes offline until it is started again. Nothing is deleted.",
 	},
 	delete: {
 		event: "delete",
 		title: "Delete this bench?",
 		message:
-			"This removes the container, its Docker volume and every site database on the shared MariaDB server. Site data and uploaded files are destroyed and cannot be recovered.",
+			"This removes the container and its site databases on the shared MariaDB server. Everything inside the container — code changes, uploaded files, installed apps — is destroyed and cannot be recovered.",
+	},
+	deploy: {
+		event: "deploy",
+		title: "Redeploy this bench?",
+		message:
+			"Redeploying replaces the container. Everything inside it — code changes, installed apps, uploaded files and the site database — is destroyed and rebuilt fresh from the lab image. To bring a stopped bench back as it was, use Start instead.",
 	},
 };
 
@@ -136,7 +152,7 @@ const props = defineProps({
 	siteUrl: { type: String, default: null },
 });
 
-const emit = defineEmits(["deploy", "rebuild", "open", "stop", "delete", "code-server"]);
+const emit = defineEmits(["deploy", "rebuild", "open", "start", "stop", "delete", "code-server"]);
 
 const confirming = ref(null);
 
@@ -200,6 +216,15 @@ const overflowOptions = computed(() => {
 			onClick: () => askConfirm("stop"),
 		});
 	}
+	// The fresh-container path for a bench whose primary action is Start or
+	// Open. Destructive, so it goes through the same confirmation as above.
+	if (props.bench?.container_id && primary.value.action !== DEPLOY) {
+		options.push({
+			label: "Redeploy bench",
+			icon: RefreshCwIcon,
+			onClick: () => askConfirm("deploy"),
+		});
+	}
 	if (props.bench && props.isAdmin) {
 		options.push({
 			label: "Delete bench",
@@ -214,6 +239,10 @@ const overflowOptions = computed(() => {
 function runPrimary() {
 	if (primary.value.action === OPEN) return emit("open");
 	if (primary.value.action === REBUILD) return emit("rebuild");
+	if (primary.value.action === START) return emit("start");
+	// With a container in place, deploy means replace — confirm it. With none,
+	// there is nothing to lose and the deploy just runs.
+	if (props.bench?.container_id) return askConfirm("deploy");
 	emit("deploy");
 }
 

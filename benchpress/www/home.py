@@ -39,6 +39,7 @@ CACHE_BUST_PATHS = (
 	("public", "js", "landing.js"),
 	("public", "images", "logo"),
 	("public", "manifest.json"),
+	("public", "videos"),
 )
 
 no_cache = 1
@@ -56,11 +57,11 @@ def get_context(context):
 	context.license_label = LICENSE_LABEL
 	context.waitlist_open = waitlist_open()
 	context.start_route = start_route(context.waitlist_open)
-	context.hero_media = hero_media()
 	context.phases = PHASES
 	context.active_phase = ACTIVE_PHASE
 	context.csrf_token = session_csrf_token()
 	context.asset_version = asset_version()
+	context.hero_media = hero_media(context.asset_version)
 	return context
 
 
@@ -123,25 +124,28 @@ def rupees(amount) -> str:
 	return f"₹{cint(amount):,}"
 
 
-def hero_media() -> dict:
+def hero_media(version: str) -> dict:
 	"""Which hero assets actually exist on disk.
 
-	The film is exported from the design tool, so the mp4 lands after the page does. The template
+	The film is rendered outside this repo, so the mp4 lands after the page does. The template
 	renders the video when it is there, the poster frame alone when only that is, and a static
 	endcard otherwise — dropping the file in is the entire swap.
 	"""
 	return {
-		"video": asset_url(HERO_VIDEO),
-		"poster": asset_url(HERO_POSTER),
+		"video": asset_url(HERO_VIDEO, version),
+		"poster": asset_url(HERO_POSTER, version),
 	}
 
 
-def asset_url(filename: str) -> str | None:
+def asset_url(filename: str, version: str) -> str | None:
 	# The directory is passed as separate parts on purpose: get_app_path scrubs hyphens into
 	# underscores in every part unless one of them is exactly "public", so a single
 	# "public/videos" would look for `hero_poster.jpg` and never find the poster.
 	path = frappe.get_app_path("benchpress", *VIDEO_DIRECTORY, filename)
-	return f"/assets/benchpress/videos/{filename}" if os.path.exists(path) else None
+	if not os.path.exists(path):
+		return None
+	# Recutting the film keeps the filename, so only the token tells the CDN the bytes changed.
+	return f"/assets/benchpress/videos/{filename}?v={version}"
 
 
 def asset_version() -> str:

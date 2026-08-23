@@ -14,6 +14,7 @@
 				@rebuild="buildImage"
 				@open="openSite"
 				@code-server="openCodeServer"
+				@start="runBenchAction('start')"
 				@stop="runBenchAction('stop')"
 				@delete="deleteBench"
 			/>
