@@ -54,8 +54,8 @@
 
 <!-- 2 · Hero -->
 <section class="section section--dark hero">
-  <div class="shell grid grid--2">
-    <div>
+  <div class="shell">
+    <div class="hero__intro">
       <div class="hero__pill">Open source · Self-hostable</div>
       <h1>Pick a template.<br>Press deploy. <span class="accent-green">Done.</span></h1>
       <p class="hero__copy">Benchpress turns a Frappe bench into one button. Pre-configured sites — ERPNext, HR, CRM, Helpdesk — provisioned as containers, reachable only over your private VPN. No bench commands, no SSH, no waiting on an engineer.</p>
@@ -70,7 +70,7 @@
 
     <div class="hero__film">
       {%- if hero_media.video %}
-      <video src="{{ hero_media.video | e }}" autoplay muted loop playsinline
+      <video src="{{ hero_media.video | e }}" autoplay muted loop playsinline controls preload="metadata"
              {% if hero_media.poster %}poster="{{ hero_media.poster | e }}"{% endif %}></video>
       {%- elif hero_media.poster %}
       <img src="{{ hero_media.poster | e }}" alt="Benchpress deploying an ERPNext site">

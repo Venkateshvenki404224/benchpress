@@ -232,9 +232,17 @@ h2 {
 	flex: none;
 }
 
-/* Hero */
+/* Hero
+ * Single column, not the site's two-up grid: the film is the product demo, and half a 1200px
+ * shell rendered it about 570px wide — too small to read the UI inside it. Stacked, it gets the
+ * full shell and roughly four times the area. */
 .hero {
-	padding: 88px 0 96px;
+	padding: 72px 0 88px;
+}
+.hero__intro {
+	max-width: 780px;
+	margin: 0 auto;
+	text-align: center;
 }
 .hero__pill {
 	display: inline-flex;
@@ -254,8 +262,8 @@ h2 {
 	margin-top: 24px;
 }
 .hero__copy {
-	max-width: 520px;
-	margin-top: 20px;
+	max-width: 620px;
+	margin: 20px auto 0;
 	font-size: 17px;
 	line-height: 1.55;
 	color: rgba(255, 255, 255, 0.74);
@@ -263,12 +271,14 @@ h2 {
 .hero__ctas {
 	margin-top: 32px;
 	display: flex;
+	justify-content: center;
 	gap: 12px;
 	flex-wrap: wrap;
 }
 .hero__trust {
 	margin-top: 28px;
 	display: flex;
+	justify-content: center;
 	gap: 24px;
 	flex-wrap: wrap;
 	font-size: 13px;
@@ -277,10 +287,11 @@ h2 {
 }
 .hero__film {
 	position: relative;
-	border-radius: 14px;
+	margin-top: 56px;
+	border-radius: 16px;
 	overflow: hidden;
 	border: 1px solid rgba(255, 255, 255, 0.16);
-	box-shadow: 0 30px 80px rgba(0, 0, 0, 0.45);
+	box-shadow: 0 40px 100px rgba(0, 0, 0, 0.55);
 	background: var(--ink);
 	aspect-ratio: 16/9;
 	width: 100%;
