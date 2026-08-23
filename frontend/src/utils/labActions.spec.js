@@ -7,6 +7,7 @@ import {
 	PROMPT_LOADING,
 	PROMPT_READY,
 	REBUILD,
+	START,
 	VIEW_LOG,
 	WAIT,
 	codeServerPrompt,
@@ -60,6 +61,15 @@ const MATRIX = [
 		state: { labStatus: "Error", benchStatus: "Error", isAdmin: true },
 		up: { action: REBUILD, label: "Rebuild image", disabled: false },
 		down: { action: REBUILD, label: "Rebuild image", disabled: false },
+	},
+	{
+		// The container's writable layer is everything the user has done inside
+		// it, and a deploy replaces the container. Resume is the default; the
+		// destructive path lives behind a confirmation in the overflow menu.
+		name: "a stopped bench starts again — deploy is never the default over user data",
+		state: { labStatus: "Ready", benchStatus: "Stopped" },
+		up: { action: START, label: "Start", disabled: false },
+		down: { action: START, label: "Start", disabled: false },
 	},
 ];
 

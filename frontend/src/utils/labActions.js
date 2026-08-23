@@ -14,6 +14,8 @@
 export const DEPLOY = "deploy";
 export const OPEN = "open";
 export const REBUILD = "rebuild";
+// Resume the stopped container as it is — nothing is rebuilt, nothing is lost.
+export const START = "start";
 // Something the server is already doing; the button only reports it.
 export const WAIT = "wait";
 
@@ -36,6 +38,13 @@ export function primaryAction(state = {}) {
 	if (state.labStatus === "Building") return waiting("Building image…");
 	if (state.benchStatus === "Deploying") return waiting("Deploying…");
 	if (state.benchStatus === "Running") return openAction(state);
+	// A stopped bench resumes. Deploy would replace the container — and the
+	// container's writable layer is everything the user has done inside it —
+	// so the destructive path is never the default. Redeploy lives in the
+	// overflow menu, behind a confirmation that names what it destroys.
+	if (state.benchStatus === "Stopped") {
+		return { action: START, label: "Start", disabled: false, hint: "" };
+	}
 	return { action: DEPLOY, label: "Deploy", disabled: false, hint: "" };
 }
 
