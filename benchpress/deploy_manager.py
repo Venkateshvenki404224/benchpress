@@ -65,11 +65,9 @@ SITE_HTTP_PORT = 8000
 ADOPTED_MARKER = "already exists — adopting it"
 
 # Module constant, not inlined, so tests can monkeypatch it to a tmp path.
-# Flat, not a subdirectory: Traefik's file provider does not recurse, so this
-# must be the exact directory the `directory:` provider in traefik.yml.template
-# watches, and the exact host path bind-mounted read-write into queue-long /
-# read-only into traefik in docker-compose.prod.yml. dynamic.yml (the
-# control-plane router) lives in this same directory.
+# Flat, not a subdirectory: Traefik's file provider does not recurse, so this must be the
+# exact directory the `directory:` provider in traefik.yml.template watches. dynamic.yml
+# (the control-plane router) lives in this same directory.
 TRAEFIK_DYNAMIC_DIR = Path("/etc/traefik/dynamic")
 
 # One file, one router, one identity set — the only place in this app that names a
@@ -91,6 +89,15 @@ PROTECTED_ROUTE_FILES = frozenset({CONTROL_PLANE_ROUTE_FILE, WILDCARD_ANCHOR_FIL
 # this resolves; it is the same TLS endpoint the internet reaches, which is the point —
 # checking anything else would prove something else.
 TRAEFIK_HOST = "traefik"
+
+
+class TraefikRouteDirectoryMissing(Exception):
+	"""Raised when the Traefik route directory is not mounted in this container.
+
+	`queue-long` mounts it read-write and traefik read-only; `backend` and
+	`queue-short` mount neither, and both consume `default`. Every caller therefore
+	reaches routing through `enqueue_route_sync`, which pins `queue="long"`.
+	"""
 
 
 def _public_site_url(instance_id: str, base_domain: str | None) -> str | None:
@@ -143,20 +150,36 @@ def _wildcard_anchor_config(base_domain: str) -> dict:
 	}
 
 
-def _atomic_write(path: Path, text: str) -> None:
-	"""Replace `path` in one step, so Traefik never reads a half-written file."""
+def _atomic_write(path: Path, text: str) -> bool:
+	"""Replace `path` in one step if the content differs; returns True when it wrote.
+
+	Traefik reloads on mtime, so an unchanged file is left alone — otherwise the
+	convergence cron would make the proxy reload every five minutes to say nothing.
+
+	Raises `TraefikRouteDirectoryMissing` rather than creating the directory: a bind mount
+	that is absent is a container that cannot reach Traefik, and creating it would turn
+	that into a file nobody reads.
+	"""
+	if not path.parent.is_dir():
+		raise TraefikRouteDirectoryMissing(
+			f"{path.parent} is not mounted in this container. It is a bind mount of "
+			"config/traefik/generated/dynamic, read-write only in queue-long, so the fix is "
+			"to reach routing through enqueue_route_sync — never to create the directory."
+		)
+
+	if path.exists() and path.read_text() == text:
+		return False
+
 	# Traefik's file provider parses only .yml, .yaml, .toml and .json, so the temp name is
 	# structurally invisible to the watcher rather than merely unlikely to be read.
 	tmp = path.with_name(f".{path.name}.tmp")
 	tmp.write_text(text)
 	os.replace(tmp, path)
+	return True
 
 
 def _ensure_wildcard_anchor(base_domain: str | None) -> bool:
-	"""Put the bench-zone wildcard in Traefik's certificate store, once.
-
-	Returns True when the file was written. Rewrites only on a real change: Traefik
-	reloads on mtime, and a deploy has no business making it reload to say nothing.
+	"""Put the bench-zone wildcard in Traefik's certificate store, once; True when written.
 
 	Never deleted at teardown — it has to outlive every bench, because it is what keeps
 	the certificate renewing.
@@ -165,13 +188,7 @@ def _ensure_wildcard_anchor(base_domain: str | None) -> bool:
 		return False
 
 	wanted = yaml.safe_dump(_wildcard_anchor_config(base_domain))
-	path = TRAEFIK_DYNAMIC_DIR / WILDCARD_ANCHOR_FILE
-	if path.exists() and path.read_text() == wanted:
-		return False
-
-	TRAEFIK_DYNAMIC_DIR.mkdir(parents=True, exist_ok=True)
-	_atomic_write(path, wanted)
-	return True
+	return _atomic_write(TRAEFIK_DYNAMIC_DIR / WILDCARD_ANCHOR_FILE, wanted)
 
 
 def _write_instance_route(instance_id: str, base_domain: str) -> None:
@@ -192,7 +209,6 @@ def _write_instance_route(instance_id: str, base_domain: str) -> None:
 	if not base_domain or base_domain == "localhost":
 		return
 
-	TRAEFIK_DYNAMIC_DIR.mkdir(parents=True, exist_ok=True)
 	config = {
 		"http": {
 			"routers": {
@@ -254,9 +270,7 @@ def sync_instance_route(bench_name: str) -> str:
 
 
 def enqueue_route_sync(bench_name: str) -> None:
-	"""Hand the route write to `queue-long`, the only worker that mounts the route directory."""
-	# `backend` has no mount at all and `default` is also consumed by `queue-short`, so a write
-	# from either lands in that container's filesystem and Traefik never sees it.
+	"""Hand the route write to `queue-long` — see `TraefikRouteDirectoryMissing`."""
 	frappe.enqueue(
 		"benchpress.deploy_manager.sync_instance_route",
 		bench_name=bench_name,
@@ -264,6 +278,18 @@ def enqueue_route_sync(bench_name: str) -> None:
 		job_id=f"route_sync:{bench_name}",
 		deduplicate=True,
 		enqueue_after_commit=True,  # the job re-reads `status`, so it must not start before the commit
+	)
+
+
+def enqueue_route_reconcile() -> None:
+	"""Convergence cron: hand the whole-directory pass to `queue-long`."""
+	# Scheduled jobs land on `default`, which `queue-short` also consumes — so the cron entry
+	# is this enqueuer and never the pass itself. See `TraefikRouteDirectoryMissing`.
+	frappe.enqueue(
+		"benchpress.deploy_manager.reconcile_instance_routes",
+		queue="long",
+		job_id="route_reconcile",
+		deduplicate=True,
 	)
 
 
@@ -280,10 +306,9 @@ def reconcile_instance_routes() -> dict:
 	502 rather than another tenant's site — but it is still a public hostname answering
 	for a bench that no longer exists, and only this pass removes one nothing deleted.
 
-	Must run on `queue-long`: it is the only container that mounts the route directory
-	read-write. That is also what keeps this from racing a deploy — both are `long` jobs
-	on a single worker, so a bench part-way through `_deploy_bench` is never read here
-	between its container IP being known and its status reaching `Running`.
+	Running on `queue-long` is also what keeps this from racing a deploy — both are `long`
+	jobs on a single worker, so a bench part-way through `_deploy_bench` is never read here
+	between its container being created and its status reaching `Running`.
 
 	Run it by hand with:
 	    bench --site frontend execute benchpress.deploy_manager.reconcile_instance_routes

@@ -86,6 +86,17 @@ def _fresh_bench(case, lab_name):
 	return bench
 
 
+def _mounted(tmp) -> Path:
+	"""The route directory arranged the way production has it: a bind mount that exists.
+
+	Tests create it rather than relying on the writers to, so the missing-mount guard is
+	exercised by the tests that are about it instead of bypassed by every other test.
+	"""
+	target_dir = Path(tmp) / "instances"
+	target_dir.mkdir()
+	return target_dir
+
+
 @contextmanager
 def _route_dir(base_domain="benchpress.cloud"):
 	"""A tmp route directory, with `base_domain` supplied rather than read from live settings.
@@ -589,6 +600,7 @@ class TestDeployStepMarkers(IntegrationTestCase):
 		route_dir = tempfile.TemporaryDirectory()
 		self.addCleanup(route_dir.cleanup)
 		self.route_dir = Path(route_dir.name) / "dynamic"
+		self.route_dir.mkdir()
 
 		with (
 			_cached_image(self.lab.name) if cache_hit else nullcontext(),
@@ -831,15 +843,15 @@ class TestDeployStepMarkers(IntegrationTestCase):
 		self.assertFalse(self._bench_field(bench, "public_url"))
 
 	def test_a_localhost_deploy_writes_no_traefik_config_at_all(self):
-		"""A dev checkout has no Traefik: the deploy completes and the route directory is
-		never even created — skipped silently, not attempted and failed."""
+		"""A dev checkout has no Traefik: the deploy completes and puts nothing in the route
+		directory — skipped silently, not attempted and failed."""
 		bench = self._bench()
 		self._set_base_domain("localhost")
 
 		self._run_deploy(bench)
 
 		self.assertIn("Step 11/11", self._log(bench.name))
-		self.assertFalse(self.route_dir.exists())
+		self.assertEqual(list(self.route_dir.iterdir()), [])
 
 	def test_a_public_deploy_writes_the_anchor_beside_the_instance_route(self):
 		"""The two halves ship together: without the anchor the instance routers name no
@@ -1273,7 +1285,7 @@ class TestRecordPrimarySite(IntegrationTestCase):
 		bench = self._bench()
 
 		with tempfile.TemporaryDirectory() as tmp:
-			with patch.object(deploy_manager, "TRAEFIK_DYNAMIC_DIR", Path(tmp) / "instances"):
+			with patch.object(deploy_manager, "TRAEFIK_DYNAMIC_DIR", _mounted(tmp)):
 				deploy_manager._write_instance_route(bench.name, "benchpress.cloud")
 				route_file = Path(tmp) / "instances" / f"{bench.name}.yml"
 				self.assertTrue(route_file.exists())
@@ -1291,7 +1303,7 @@ class TestRecordPrimarySite(IntegrationTestCase):
 		bench = self._bench()
 
 		with tempfile.TemporaryDirectory() as tmp:
-			with patch.object(deploy_manager, "TRAEFIK_DYNAMIC_DIR", Path(tmp) / "instances"):
+			with patch.object(deploy_manager, "TRAEFIK_DYNAMIC_DIR", _mounted(tmp)):
 				deploy_manager._ensure_wildcard_anchor("benchpress.cloud")
 				deploy_manager._write_instance_route(bench.name, "benchpress.cloud")
 				anchor = Path(tmp) / "instances" / "wildcard-anchor.yml"
@@ -1310,7 +1322,7 @@ class TestRecordPrimarySite(IntegrationTestCase):
 		bench = self._bench()
 
 		with tempfile.TemporaryDirectory() as tmp:
-			with patch.object(deploy_manager, "TRAEFIK_DYNAMIC_DIR", Path(tmp) / "instances"):
+			with patch.object(deploy_manager, "TRAEFIK_DYNAMIC_DIR", _mounted(tmp)):
 				teardown_bench(bench)
 
 
@@ -1353,7 +1365,7 @@ class TestPublicSiteUrlHelpers(unittest.TestCase):
 		from benchpress import deploy_manager
 
 		with tempfile.TemporaryDirectory() as tmp:
-			with patch.object(deploy_manager, "TRAEFIK_DYNAMIC_DIR", Path(tmp) / "instances"):
+			with patch.object(deploy_manager, "TRAEFIK_DYNAMIC_DIR", _mounted(tmp)):
 				deploy_manager._write_instance_route("inst-1", "benchpress.cloud")
 				config = yaml.safe_load((Path(tmp) / "instances" / "inst-1.yml").read_text())
 
@@ -1378,6 +1390,8 @@ class TestPublicSiteUrlHelpers(unittest.TestCase):
 			self.assertEqual(ide_service["loadBalancer"]["servers"], [{"url": "http://inst-1:8080"}])
 
 	def test_write_instance_route_no_ops_for_localhost(self):
+		"""Runs unmounted: the localhost return has to come before the missing-mount guard,
+		or a dev checkout would raise where it used to write nothing."""
 		from benchpress import deploy_manager
 
 		with tempfile.TemporaryDirectory() as tmp:
@@ -1398,7 +1412,7 @@ class TestPublicSiteUrlHelpers(unittest.TestCase):
 		from benchpress import deploy_manager
 
 		with tempfile.TemporaryDirectory() as tmp:
-			with patch.object(deploy_manager, "TRAEFIK_DYNAMIC_DIR", Path(tmp) / "instances"):
+			with patch.object(deploy_manager, "TRAEFIK_DYNAMIC_DIR", _mounted(tmp)):
 				deploy_manager._write_instance_route("inst-1", "benchpress.cloud")
 				written_text = (Path(tmp) / "instances" / "inst-1.yml").read_text()
 
@@ -1413,7 +1427,7 @@ class TestPublicSiteUrlHelpers(unittest.TestCase):
 		from benchpress import deploy_manager
 
 		with tempfile.TemporaryDirectory() as tmp:
-			with patch.object(deploy_manager, "TRAEFIK_DYNAMIC_DIR", Path(tmp) / "instances"):
+			with patch.object(deploy_manager, "TRAEFIK_DYNAMIC_DIR", _mounted(tmp)):
 				deploy_manager._write_instance_route("inst-1", "benchpress.cloud")
 				written_text = (Path(tmp) / "instances" / "inst-1.yml").read_text()
 
@@ -1432,13 +1446,28 @@ class TestPublicSiteUrlHelpers(unittest.TestCase):
 		from benchpress import deploy_manager
 
 		with tempfile.TemporaryDirectory() as tmp:
-			target_dir = Path(tmp) / "instances"
+			target_dir = _mounted(tmp)
 			with patch.object(deploy_manager, "TRAEFIK_DYNAMIC_DIR", target_dir):
 				deploy_manager._write_instance_route("inst-1", "benchpress.cloud")
 				deploy_manager._write_instance_route("inst-1", "benchpress.cloud")
 
 			# iterdir, so a leftover dotfile temp counts against this.
 			self.assertEqual([p.name for p in target_dir.iterdir()], ["inst-1.yml"])
+
+	def test_an_unchanged_route_is_not_rewritten(self):
+		"""Traefik reloads on mtime, and the convergence cron rewrites every running bench's
+		route every five minutes — so an identical write has to be a no-op."""
+		from benchpress import deploy_manager
+
+		with tempfile.TemporaryDirectory() as tmp:
+			target_dir = _mounted(tmp)
+			with patch.object(deploy_manager, "TRAEFIK_DYNAMIC_DIR", target_dir):
+				deploy_manager._write_instance_route("inst-1", "benchpress.cloud")
+				mtime = (target_dir / "inst-1.yml").stat().st_mtime_ns
+
+				deploy_manager._write_instance_route("inst-1", "benchpress.cloud")
+
+				self.assertEqual((target_dir / "inst-1.yml").stat().st_mtime_ns, mtime)
 
 
 class TestWildcardAnchor(unittest.TestCase):
@@ -1448,11 +1477,12 @@ class TestWildcardAnchor(unittest.TestCase):
 	"""
 
 	@contextmanager
-	def _anchor_dir(self):
+	def _anchor_dir(self, mounted=True):
+		"""`mounted=False` leaves the directory absent — the dev-checkout shape."""
 		from benchpress import deploy_manager
 
 		with tempfile.TemporaryDirectory() as tmp:
-			target_dir = Path(tmp) / "instances"
+			target_dir = _mounted(tmp) if mounted else Path(tmp) / "instances"
 			with patch.object(deploy_manager, "TRAEFIK_DYNAMIC_DIR", target_dir):
 				yield deploy_manager, target_dir
 
@@ -1517,11 +1547,11 @@ class TestWildcardAnchor(unittest.TestCase):
 
 	def test_anchor_no_ops_without_a_public_domain(self):
 		"""A dev checkout is byte-for-byte unaffected: skipped silently, not attempted
-		and failed. Matches `_write_instance_route`'s existing behaviour."""
+		and failed. Runs unmounted, so it also proves the return beats the guard."""
 		for base_domain in (None, "", "localhost"):
 			with (
 				self.subTest(base_domain=base_domain),
-				self._anchor_dir() as (
+				self._anchor_dir(mounted=False) as (
 					deploy_manager,
 					target_dir,
 				),
@@ -1529,6 +1559,79 @@ class TestWildcardAnchor(unittest.TestCase):
 				self.assertFalse(deploy_manager._ensure_wildcard_anchor(base_domain))
 
 				self.assertFalse(target_dir.exists())
+
+
+class TestRouteDirectoryGuard(unittest.TestCase):
+	"""A routing write from a container without the mount fails loudly.
+
+	See specs/in-progress/restart-free-dynamic-routing/phase-3-invariant-and-convergence.md.
+	"""
+
+	@contextmanager
+	def _unmounted(self):
+		from benchpress import deploy_manager
+
+		with tempfile.TemporaryDirectory() as tmp:
+			target_dir = Path(tmp) / "dynamic"
+			with patch.object(deploy_manager, "TRAEFIK_DYNAMIC_DIR", target_dir):
+				yield deploy_manager, target_dir
+
+	def test_writing_a_route_without_the_mount_raises_and_creates_nothing(self):
+		"""Creating the directory is the defect being replaced: the file then lands in this
+		container's own filesystem, which is the same outcome with none of the evidence."""
+		with self._unmounted() as (deploy_manager, target_dir):
+			with self.assertRaises(deploy_manager.TraefikRouteDirectoryMissing):
+				deploy_manager._write_instance_route("inst-1", "benchpress.cloud")
+
+			self.assertFalse(target_dir.exists())
+
+	def test_the_anchor_write_is_guarded_too(self):
+		"""Both writers go through `_atomic_write`, so the guard cannot drift between them."""
+		with self._unmounted() as (deploy_manager, target_dir):
+			with self.assertRaises(deploy_manager.TraefikRouteDirectoryMissing):
+				deploy_manager._ensure_wildcard_anchor("benchpress.cloud")
+
+			self.assertFalse(target_dir.exists())
+
+	def test_the_error_names_the_queue_that_has_the_mount(self):
+		"""The whole value of a custom exception here: a bare `FileNotFoundError` leaves the
+		reader to rediscover the mount topology from a traceback that shows none of it."""
+		with self._unmounted() as (deploy_manager, _target_dir):
+			with self.assertRaises(deploy_manager.TraefikRouteDirectoryMissing) as raised:
+				deploy_manager._write_instance_route("inst-1", "benchpress.cloud")
+
+		self.assertIn("queue-long", str(raised.exception))
+		self.assertIn("enqueue_route_sync", str(raised.exception))
+
+
+class TestRouteConvergenceSchedule(unittest.TestCase):
+	"""The `*/5` convergence tick — see phase-3-invariant-and-convergence.md."""
+
+	def test_the_tick_hands_the_pass_to_the_long_queue(self):
+		from benchpress.deploy_manager import enqueue_route_reconcile
+
+		with patch("frappe.enqueue") as enqueue:
+			enqueue_route_reconcile()
+
+		args, kwargs = enqueue.call_args
+		self.assertEqual(args[0], "benchpress.deploy_manager.reconcile_instance_routes")
+		self.assertEqual(kwargs["queue"], "long")
+		# Fixed, so a pass running longer than the interval does not queue behind itself.
+		self.assertEqual(kwargs["job_id"], "route_reconcile")
+		self.assertTrue(kwargs["deduplicate"])
+
+	def test_the_cron_entry_is_the_enqueuer_and_never_the_pass(self):
+		"""Frappe sends cron to `default`, which `queue-short` also consumes — and that
+		container has no route mount, so the pass itself would raise every five minutes."""
+		from benchpress.hooks import scheduler_events
+
+		cron_methods = [method for methods in scheduler_events["cron"].values() for method in methods]
+
+		self.assertIn(
+			"benchpress.deploy_manager.enqueue_route_reconcile",
+			scheduler_events["cron"]["*/5 * * * *"],
+		)
+		self.assertNotIn("benchpress.deploy_manager.reconcile_instance_routes", cron_methods)
 
 
 class TestCertificateVerification(unittest.TestCase):
@@ -1796,19 +1899,23 @@ class TestReconcileInstanceRoutes(IntegrationTestCase):
 			self.assertEqual(result["written"], len(self._instance_files(target_dir)))
 			self.assertIn(f"{bench.name}.yml", self._instance_files(target_dir))
 
-	def test_a_second_run_deletes_nothing(self):
+	def test_a_second_run_deletes_nothing_and_touches_nothing(self):
 		"""Idempotence is the read side agreeing with the write side. A pass that keeps finding
-		things to delete is one that disagrees with the files it just wrote."""
+		things to delete is one that disagrees with the files it just wrote — and one that
+		rewrites unchanged files is a Traefik reload every five minutes, since it reloads on
+		mtime."""
 		self._bench("Running", "172.30.0.14")
 
 		with _route_dir() as (deploy_manager, target_dir):
 			self._seed(target_dir, "091131f54bcdfc7bc37cbc45763547fa.yml")
 			deploy_manager.reconcile_instance_routes()
+			before = {p.name: p.stat().st_mtime_ns for p in target_dir.iterdir()}
 
 			result = deploy_manager.reconcile_instance_routes()
 
 			self.assertEqual(result["deleted"], 0)
 			self.assertFalse(result["anchored"])
+			self.assertEqual({p.name: p.stat().st_mtime_ns for p in target_dir.iterdir()}, before)
 
 	def test_reconcile_writes_nothing_at_all_without_a_public_domain(self):
 		"""A dev checkout must be byte-for-byte unaffected — and must not reap either, since a
