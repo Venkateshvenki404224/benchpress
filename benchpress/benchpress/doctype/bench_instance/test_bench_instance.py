@@ -2,6 +2,7 @@
 # See license.txt
 
 import hashlib
+from contextlib import contextmanager
 from unittest.mock import MagicMock, patch
 
 import frappe
@@ -124,18 +125,34 @@ class IntegrationTestBenchInstance(IntegrationTestCase):
 			result = bench._derive_username()
 		self.assertLessEqual(len(result), 32)
 
+	@contextmanager
+	def _default_runtime(self, value):
+		"""Set the Settings default for one test, without saving the whole Single.
+
+		`change_settings` saves the document, which validates every mandatory field.
+		`base_domain` is unset on a fresh CI site, so the save raises MandatoryError —
+		a ValidationError, which any test asserting ValidationError swallows as a pass.
+		"""
+		field = "default_bench_runtime"
+		previous = frappe.db.get_single_value("BenchPress Settings", field)
+		frappe.db.set_single_value("BenchPress Settings", field, value)
+		try:
+			yield
+		finally:
+			frappe.db.set_single_value("BenchPress Settings", field, previous)
+
 	def test_a_new_bench_takes_the_runtime_from_settings(self):
-		with self.change_settings("BenchPress Settings", default_bench_runtime="sysbox"):
+		with self._default_runtime("sysbox"):
 			bench = self._insert_bench()
 		self.assertEqual(bench.runtime, "sysbox")
 
 	def test_a_new_bench_falls_back_to_runc_when_settings_names_nothing(self):
-		with self.change_settings("BenchPress Settings", default_bench_runtime=""):
+		with self._default_runtime(""):
 			bench = self._insert_bench()
 		self.assertEqual(bench.runtime, "runc")
 
 	def test_an_admin_can_change_the_runtime_of_a_draft_bench(self):
-		with self.change_settings("BenchPress Settings", default_bench_runtime="sysbox"):
+		with self._default_runtime("sysbox"):
 			bench = self._insert_bench()
 		bench.runtime = "runc"
 		bench.save(ignore_permissions=True)
@@ -143,7 +160,7 @@ class IntegrationTestBenchInstance(IntegrationTestCase):
 
 	def test_a_non_admin_cannot_change_the_runtime(self):
 		"""The controller's own guard, reached with permlevel bypassed — it may not rely on it."""
-		with self.change_settings("BenchPress Settings", default_bench_runtime="sysbox"):
+		with self._default_runtime("sysbox"):
 			bench = self._insert_bench()
 		frappe.set_user(self.tenant)
 		bench.runtime = "runc"
@@ -151,14 +168,18 @@ class IntegrationTestBenchInstance(IntegrationTestCase):
 			bench.save(ignore_permissions=True)
 
 	def test_changing_the_runtime_of_a_running_bench_is_refused(self):
-		self.assertRaises(frappe.ValidationError, self._change_runtime_at_status, "Running")
+		# Matched on the message, not the class: MandatoryError is a ValidationError too,
+		# and a bare assertRaises here passed for months on the wrong exception.
+		with self.assertRaisesRegex(frappe.ValidationError, "already deployed"):
+			self._change_runtime_at_status("Running")
 
 	def test_changing_the_runtime_of_a_stopped_bench_is_refused(self):
 		"""A stopped bench still owns a container built under the old runtime."""
-		self.assertRaises(frappe.ValidationError, self._change_runtime_at_status, "Stopped")
+		with self.assertRaisesRegex(frappe.ValidationError, "already deployed"):
+			self._change_runtime_at_status("Stopped")
 
 	def _change_runtime_at_status(self, status):
-		with self.change_settings("BenchPress Settings", default_bench_runtime="sysbox"):
+		with self._default_runtime("sysbox"):
 			bench = self._insert_bench()
 		bench.status = status
 		bench.save(ignore_permissions=True)
