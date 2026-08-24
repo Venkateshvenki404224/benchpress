@@ -265,8 +265,12 @@ def wait_for_container_running(container_id: str, timeout: int = 60) -> str:
 
 
 def stop_container(container_id: str) -> None:
+	"""Stop a container; one that no longer exists is already stopped, not an error."""
 	client = get_client()
-	client.containers.get(container_id).stop(timeout=30)
+	try:
+		client.containers.get(container_id).stop(timeout=30)
+	except docker.errors.NotFound:
+		pass
 
 
 def restart_container(container_id: str) -> None:
@@ -322,6 +326,20 @@ def _decoded(output) -> str:
 	if isinstance(output, bytes):
 		return output.decode("utf-8", errors="replace")
 	return "" if output is None else str(output)
+
+
+def container_is_gone(container_id: str) -> bool:
+	"""True only when Docker positively reports the container does not exist.
+
+	A daemon error is not "gone": callers stop benches on this answer.
+	"""
+	try:
+		get_client().containers.get(container_id)
+		return False
+	except docker.errors.NotFound:
+		return True
+	except Exception:
+		return False
 
 
 def get_container_health(container_id: str) -> str:
