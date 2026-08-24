@@ -1,6 +1,7 @@
 # Copyright (c) 2026, Venkatesh and Contributors
 # See license.txt
 
+import ssl
 import tempfile
 import unittest
 from contextlib import contextmanager, nullcontext
@@ -359,6 +360,7 @@ class TestDeployManager(IntegrationTestCase):
 			_cached_image(self.lab.name),
 			patch.object(deploy_manager, "ensure_infrastructure", autospec=True) as mock_infra,
 			patch.object(deploy_manager, "wait_for_mariadb", autospec=True),
+			patch.object(deploy_manager, "_ensure_wildcard_anchor", autospec=True),
 			patch.object(deploy_manager, "_remove_stale_container", autospec=True),
 			patch.object(deploy_manager, "create_bench_container", autospec=True) as mock_create,
 			patch.object(deploy_manager, "start_container", autospec=True),
@@ -537,7 +539,13 @@ class TestDeployStepMarkers(IntegrationTestCase):
 		return bench
 
 	def _run_deploy(
-		self, bench, site_result=(0, "site created"), cache_hit=True, exec_failures=None, write_error=None
+		self,
+		bench,
+		site_result=(0, "site created"),
+		cache_hit=True,
+		exec_failures=None,
+		write_error=None,
+		cert_error=None,
 	):
 		"""A whole deploy with every side effect mocked but the log itself.
 
@@ -546,18 +554,32 @@ class TestDeployStepMarkers(IntegrationTestCase):
 		`exec_failures` maps a fragment of a container command to the result that command
 		returns, so one exec can fail while the rest of the run succeeds. `write_error` makes
 		every `write_file_to_container` raise, the way a read-only target path would.
+		`cert_error` is what the certificate check reports; only the socket is mocked, so the
+		line the log carries is still written by the real `_log_certificate_state`.
 		"""
 		from benchpress import deploy_manager
 
+		# Traefik's route directory is mounted into queue-long, not into the container the
+		# tests run in, so it is redirected rather than mocked — the real anchor and route
+		# writers run, and `self.route_dir` is what they wrote.
+		route_dir = tempfile.TemporaryDirectory()
+		self.addCleanup(route_dir.cleanup)
+		self.route_dir = Path(route_dir.name) / "dynamic"
+
 		with (
 			_cached_image(self.lab.name) if cache_hit else nullcontext(),
+			patch.object(deploy_manager, "TRAEFIK_DYNAMIC_DIR", self.route_dir),
 			patch.object(deploy_manager, "ensure_infrastructure", autospec=True) as mock_infra,
 			patch.object(deploy_manager, "wait_for_mariadb", autospec=True),
 			patch.object(deploy_manager, "_remove_stale_container", autospec=True),
 			patch.object(deploy_manager, "create_bench_container", autospec=True) as mock_create,
 			patch.object(deploy_manager, "start_container", autospec=True),
 			patch.object(deploy_manager, "wait_for_container_running", autospec=True) as mock_wait,
-			patch.object(deploy_manager, "_write_instance_route", autospec=True),
+			# Only the socket is mocked, not the reporting around it: a unit test must not
+			# depend on a running Traefik, but the log line must still be the real one.
+			patch.object(
+				deploy_manager, "_certificate_error", autospec=True, return_value=cert_error
+			) as mock_cert,
 			patch.object(deploy_manager, "write_file_to_container", autospec=True) as mock_write,
 			patch.object(deploy_manager, "exec_in_container", autospec=True) as mock_exec,
 			patch.object(deploy_manager, "create_site_in_container", autospec=True) as mock_site,
@@ -567,6 +589,7 @@ class TestDeployStepMarkers(IntegrationTestCase):
 			patch("benchpress.vpn_adapter.configure_container", autospec=True),
 			patch("benchpress.vpn_adapter.create_container_peer", autospec=True) as mock_peer,
 		):
+			self.cert_check = mock_cert
 			mock_infra.return_value = self.db_server_name
 			mock_create.return_value = "cid-steps"
 			mock_wait.return_value = "172.30.0.11"
@@ -783,6 +806,72 @@ class TestDeployStepMarkers(IntegrationTestCase):
 
 		self.assertFalse(self._bench_field(bench, "public_url"))
 
+	def test_a_localhost_deploy_writes_no_traefik_config_at_all(self):
+		"""A dev checkout has no Traefik: the deploy completes and the route directory is
+		never even created — skipped silently, not attempted and failed."""
+		bench = self._bench()
+		self._set_base_domain("localhost")
+
+		self._run_deploy(bench)
+
+		self.assertIn("Step 11/11", self._log(bench.name))
+		self.assertFalse(self.route_dir.exists())
+
+	def test_a_public_deploy_writes_the_anchor_beside_the_instance_route(self):
+		"""The two halves ship together: without the anchor the instance routers name no
+		resolver and nothing has asked for the wildcard, which is the 526 that reverted
+		this shape once already."""
+		bench = self._bench()
+		self._set_base_domain("benchpress.cloud")
+
+		self._run_deploy(bench)
+
+		written = sorted(p.name for p in self.route_dir.iterdir())
+		self.assertEqual(written, sorted(["wildcard-anchor.yml", f"{bench.name}.yml"]))
+		self.assertIn("Traefik wildcard anchor written for *.benchpress.cloud", self._log(bench.name))
+		self.assertNotIn("certResolver", (self.route_dir / f"{bench.name}.yml").read_text())
+
+	def test_a_public_deploy_states_which_certificate_serves_the_url(self):
+		"""Phase 2: the routers name no resolver, so the deploy has to say the store held a
+		certificate — otherwise the first evidence it did not is a user meeting a 526."""
+		bench = self._bench()
+		self._set_base_domain("benchpress.cloud")
+
+		self._run_deploy(bench)
+
+		self.cert_check.assert_called_once_with(f"{bench.name}.benchpress.cloud")
+		self.assertIn(
+			f"TLS ready for {bench.name}.benchpress.cloud on the *.benchpress.cloud wildcard",
+			self._log(bench.name),
+		)
+
+	def test_a_bad_certificate_warns_without_failing_the_deploy(self):
+		"""Non-fatal by design. The container is up and the site exists, so the owner can still
+		work over the VPN — turning a cosmetic problem into a failed deploy would cost more
+		than it reports."""
+		bench = self._bench()
+		self._set_base_domain("benchpress.cloud")
+
+		self._run_deploy(bench, cert_error=f"certificate does not cover {bench.name}.benchpress.cloud")
+
+		log = self._log(bench.name)
+		self.assertIn(f"WARNING: certificate does not cover {bench.name}.benchpress.cloud", log)
+		self.assertIn("the public URL will fail in a browser", log)
+		# The deploy still finished: eleven steps, and the bench is usable.
+		self.assertIn("Step 11/11", log)
+		self.assertEqual(self._bench_field(bench, "status"), "Running")
+
+	def test_a_localhost_deploy_opens_no_socket_and_logs_no_certificate_line(self):
+		"""A dev checkout has no Traefik, so checking would time out to say nothing. Matches
+		the anchor and route writers: skipped silently, not attempted and failed."""
+		bench = self._bench()
+		self._set_base_domain("localhost")
+
+		self._run_deploy(bench)
+
+		self.cert_check.assert_not_called()
+		self.assertNotIn("TLS ready", self._log(bench.name))
+
 	def test_a_failed_file_write_fails_the_deploy_at_the_step_that_wrote_it(self):
 		"""Hole 4: a silently unwritten `common_site_config.json` is a site that cannot find redis."""
 		bench = self._bench()
@@ -946,6 +1035,8 @@ class TestTerminalStateNotifications(IntegrationTestCase):
 			patch.object(deploy_manager, "start_container", autospec=True),
 			patch.object(deploy_manager, "wait_for_container_running", autospec=True) as mock_wait,
 			patch.object(deploy_manager, "_write_instance_route", autospec=True),
+			patch.object(deploy_manager, "_ensure_wildcard_anchor", autospec=True),
+			patch.object(deploy_manager, "_certificate_error", autospec=True, return_value=None),
 			patch.object(deploy_manager, "_setup_container_vpn", autospec=True),
 			patch.object(deploy_manager, "write_file_to_container", autospec=True),
 			patch.object(deploy_manager, "exec_in_container", autospec=True) as mock_exec,
@@ -1167,6 +1258,25 @@ class TestRecordPrimarySite(IntegrationTestCase):
 
 				self.assertFalse(route_file.exists())
 
+	def test_teardown_keeps_the_wildcard_anchor(self):
+		"""The anchor outlives every bench — it is what keeps the certificate renewing,
+		so a reaper that tidies it away would silently stop renewal."""
+		from benchpress import deploy_manager
+		from benchpress.deploy_manager import teardown_bench
+
+		bench = self._bench()
+
+		with tempfile.TemporaryDirectory() as tmp:
+			with patch.object(deploy_manager, "TRAEFIK_DYNAMIC_DIR", Path(tmp) / "instances"):
+				deploy_manager._ensure_wildcard_anchor("benchpress.cloud")
+				deploy_manager._write_instance_route(bench.name, "benchpress.cloud", "172.30.0.11")
+				anchor = Path(tmp) / "instances" / "wildcard-anchor.yml"
+
+				teardown_bench(bench)
+
+				self.assertFalse((Path(tmp) / "instances" / f"{bench.name}.yml").exists())
+				self.assertTrue(anchor.exists())
+
 	def test_teardown_does_not_raise_when_no_route_file_exists(self):
 		"""The `base_domain = localhost` case: phase 1 never wrote a route file, so teardown
 		must no-op cleanly rather than raising on a missing path."""
@@ -1223,10 +1333,9 @@ class TestPublicSiteUrlHelpers(unittest.TestCase):
 				deploy_manager._write_instance_route("inst-1", "benchpress.cloud", "172.30.0.11")
 				config = yaml.safe_load((Path(tmp) / "instances" / "inst-1.yml").read_text())
 
-			expected_tls = {
-				"certResolver": "letsencrypt",
-				"domains": [{"main": "benchpress.cloud", "sans": ["*.benchpress.cloud"]}],
-			}
+			# TLS on, no resolver — the certificate comes from the store, put there by
+			# `wildcard-anchor.yml`. See test_instance_route_names_no_certificate_resolver.
+			expected_tls = {}
 
 			router = config["http"]["routers"]["site-inst-1"]
 			self.assertEqual(router["rule"], "Host(`inst-1.benchpress.cloud`)")
@@ -1253,3 +1362,458 @@ class TestPublicSiteUrlHelpers(unittest.TestCase):
 				deploy_manager._write_instance_route("inst-1", "localhost", "172.30.0.11")
 
 			self.assertFalse(target_dir.exists())
+
+	def test_instance_route_names_no_certificate_resolver(self):
+		"""A resolver here would cost an ACME call per bench spawn.
+
+		Let's Encrypt allows five certificates per identifier set per seven days, so a
+		per-bench resolver caps the platform at about five benches a week. The wildcard is
+		held by `wildcard-anchor.yml` instead. Asserted against the rendered text because
+		the regression is a resolver at *any* depth, not one known key.
+		"""
+		from benchpress import deploy_manager
+
+		with tempfile.TemporaryDirectory() as tmp:
+			with patch.object(deploy_manager, "TRAEFIK_DYNAMIC_DIR", Path(tmp) / "instances"):
+				deploy_manager._write_instance_route("inst-1", "benchpress.cloud", "172.30.0.11")
+				written_text = (Path(tmp) / "instances" / "inst-1.yml").read_text()
+
+		self.assertNotIn("certResolver", written_text)
+		# Two separate `{}` literals, so PyYAML emits the mapping twice rather than an
+		# anchor/alias pair that Traefik would have to resolve.
+		self.assertEqual(written_text.count("tls: {}"), 2)
+
+
+class TestWildcardAnchor(unittest.TestCase):
+	"""`_ensure_wildcard_anchor` — the one place in this app that names a resolver.
+
+	See specs/completed/wildcard-cert-routing/phase-1-resolver-free-routers.md.
+	"""
+
+	@contextmanager
+	def _anchor_dir(self):
+		from benchpress import deploy_manager
+
+		with tempfile.TemporaryDirectory() as tmp:
+			target_dir = Path(tmp) / "instances"
+			with patch.object(deploy_manager, "TRAEFIK_DYNAMIC_DIR", target_dir):
+				yield deploy_manager, target_dir
+
+	def test_anchor_names_one_identity_set(self):
+		"""`domains` is fixed, so the resolver is asked for exactly one identity set no
+		matter which SNI arrives — a resolver without it issues per-SNI on demand."""
+		with self._anchor_dir() as (deploy_manager, target_dir):
+			self.assertTrue(deploy_manager._ensure_wildcard_anchor("benchpress.cloud"))
+
+			files = sorted(p.name for p in target_dir.iterdir())
+			self.assertEqual(files, ["wildcard-anchor.yml"])
+
+			config = yaml.safe_load((target_dir / "wildcard-anchor.yml").read_text())
+			router = config["http"]["routers"]["benchpress-wildcard-anchor"]
+			self.assertEqual(router["tls"]["certResolver"], "letsencrypt")
+			self.assertEqual(
+				router["tls"]["domains"],
+				[{"main": "benchpress.cloud", "sans": ["*.benchpress.cloud"]}],
+			)
+			# 0 is ignored by Traefik, so 1 is the floor — and every instance rule is
+			# 40+ characters, so the anchor can never win a tie on rule length.
+			self.assertEqual(router["priority"], 1)
+			self.assertEqual(router["service"], "benchpress-wildcard-anchor")
+			self.assertIn("benchpress-wildcard-anchor", config["http"]["services"])
+
+	def test_anchor_is_not_rewritten_when_unchanged(self):
+		"""Traefik reloads on mtime, so a deploy that changes nothing must not touch it."""
+		with self._anchor_dir() as (deploy_manager, target_dir):
+			deploy_manager._ensure_wildcard_anchor("benchpress.cloud")
+			anchor = target_dir / "wildcard-anchor.yml"
+			mtime = anchor.stat().st_mtime_ns
+
+			self.assertFalse(deploy_manager._ensure_wildcard_anchor("benchpress.cloud"))
+
+			self.assertEqual(anchor.stat().st_mtime_ns, mtime)
+
+	def test_anchor_is_rewritten_in_place_for_a_new_domain(self):
+		"""A changed `base_domain` replaces the anchor rather than adding a second one —
+		two anchors would be two identity sets against the weekly budget."""
+		with self._anchor_dir() as (deploy_manager, target_dir):
+			deploy_manager._ensure_wildcard_anchor("benchpress.cloud")
+
+			self.assertTrue(deploy_manager._ensure_wildcard_anchor("example.com"))
+
+			files = sorted(p.name for p in target_dir.iterdir())
+			self.assertEqual(files, ["wildcard-anchor.yml"])
+			config = yaml.safe_load((target_dir / "wildcard-anchor.yml").read_text())
+			router = config["http"]["routers"]["benchpress-wildcard-anchor"]
+			self.assertEqual(router["rule"], "Host(`tls-anchor.example.com`)")
+			self.assertEqual(
+				router["tls"]["domains"],
+				[{"main": "example.com", "sans": ["*.example.com"]}],
+			)
+
+	def test_anchor_no_ops_without_a_public_domain(self):
+		"""A dev checkout is byte-for-byte unaffected: skipped silently, not attempted
+		and failed. Matches `_write_instance_route`'s existing behaviour."""
+		for base_domain in (None, "", "localhost"):
+			with (
+				self.subTest(base_domain=base_domain),
+				self._anchor_dir() as (
+					deploy_manager,
+					target_dir,
+				),
+			):
+				self.assertFalse(deploy_manager._ensure_wildcard_anchor(base_domain))
+
+				self.assertFalse(target_dir.exists())
+
+
+class TestCertificateVerification(unittest.TestCase):
+	"""`_log_certificate_state` / `_certificate_error` — phase 2.
+
+	The check reports, it never acts and never raises. No test here opens a socket: the
+	unit under test is the reporting, and a test that needed a running Traefik would fail
+	for reasons that have nothing to do with the code.
+
+	See specs/completed/wildcard-cert-routing/phase-2-certificate-verification.md.
+	"""
+
+	def _pipeline(self):
+		pipeline = MagicMock()
+		pipeline.logged = []
+		pipeline.log.side_effect = lambda line, *args, **kwargs: pipeline.logged.append(line)
+		return pipeline
+
+	def test_a_healthy_certificate_is_stated_by_name(self):
+		"""Naming the wildcard is the point: it says the bench is served by the anchor's
+		certificate rather than by one of its own."""
+		from benchpress import deploy_manager
+
+		pipeline = self._pipeline()
+		with patch.object(deploy_manager, "_certificate_error", autospec=True, return_value=None):
+			deploy_manager._log_certificate_state("inst-1", "benchpress.cloud", pipeline)
+
+		self.assertEqual(
+			pipeline.logged,
+			["TLS ready for inst-1.benchpress.cloud on the *.benchpress.cloud wildcard"],
+		)
+
+	def test_a_certificate_problem_warns_and_does_not_raise(self):
+		"""The whole contract. A check that raised would turn a cosmetic problem into a
+		failed deploy, for a bench whose container is up and whose site exists."""
+		from benchpress import deploy_manager
+
+		pipeline = self._pipeline()
+		with patch.object(
+			deploy_manager,
+			"_certificate_error",
+			autospec=True,
+			return_value="certificate does not cover inst-1.benchpress.cloud (hostname mismatch)",
+		):
+			deploy_manager._log_certificate_state("inst-1", "benchpress.cloud", pipeline)
+
+		self.assertEqual(len(pipeline.logged), 1)
+		self.assertIn("WARNING: certificate does not cover inst-1.benchpress.cloud", pipeline.logged[0])
+		self.assertIn("the public URL will fail in a browser", pipeline.logged[0])
+
+	def test_only_the_site_hostname_is_checked(self):
+		"""The IDE hostname is one label under the same `base_domain`, so the same wildcard
+		covers it — a second handshake would only re-prove the first."""
+		from benchpress import deploy_manager
+
+		with patch.object(
+			deploy_manager, "_certificate_error", autospec=True, return_value=None
+		) as mock_check:
+			deploy_manager._log_certificate_state("inst-1", "benchpress.cloud", self._pipeline())
+
+		mock_check.assert_called_once_with("inst-1.benchpress.cloud")
+
+	def test_no_check_and_no_line_without_a_public_domain(self):
+		"""A dev checkout is byte-for-byte unaffected — no socket, no log line. Matches
+		`_write_instance_route` and `_ensure_wildcard_anchor`."""
+		from benchpress import deploy_manager
+
+		for base_domain in (None, "", "localhost"):
+			with self.subTest(base_domain=base_domain):
+				pipeline = self._pipeline()
+				with patch.object(deploy_manager, "_certificate_error", autospec=True) as mock_check:
+					deploy_manager._log_certificate_state("inst-1", base_domain, pipeline)
+
+				mock_check.assert_not_called()
+				self.assertEqual(pipeline.logged, [])
+
+	def test_an_unreachable_traefik_is_not_reported_as_a_bad_certificate(self):
+		"""The two causes call for different actions, so they must stay apart in a log
+		someone reads at 2am: one means fix the certificate, the other means Traefik is
+		down — or that there is no Traefik, which is the dev-checkout case."""
+		from benchpress import deploy_manager
+
+		with patch.object(
+			deploy_manager.socket, "create_connection", autospec=True, side_effect=OSError("refused")
+		):
+			error = deploy_manager._certificate_error("inst-1.benchpress.cloud")
+
+		self.assertIn("could not reach Traefik to check inst-1.benchpress.cloud", error)
+		self.assertNotIn("does not cover", error)
+
+	def test_a_hostname_the_certificate_misses_is_named(self):
+		"""The 526 this feature exists to prevent, caught at deploy time and named."""
+		from benchpress import deploy_manager
+
+		failure = ssl.SSLCertVerificationError("hostname mismatch")
+		failure.verify_message = "Hostname mismatch, certificate is not valid for 'nope.example.com'"
+
+		with patch.object(deploy_manager.socket, "create_connection", autospec=True, side_effect=failure):
+			error = deploy_manager._certificate_error("nope.example.com")
+
+		self.assertIn("certificate does not cover nope.example.com", error)
+		self.assertIn("Hostname mismatch", error)
+
+	def test_a_verification_error_without_a_verify_message_still_reports(self):
+		"""`verify_message` is set by the C module on a real handshake failure and is absent
+		otherwise, so reading it bare would raise out of the handler — reporting the
+		exception itself keeps the failure a warning."""
+		from benchpress import deploy_manager
+
+		with patch.object(
+			deploy_manager.socket,
+			"create_connection",
+			autospec=True,
+			side_effect=ssl.SSLCertVerificationError("no verify_message here"),
+		):
+			error = deploy_manager._certificate_error("nope.example.com")
+
+		self.assertIn("certificate does not cover nope.example.com", error)
+		self.assertIn("no verify_message here", error)
+
+	def test_a_usable_certificate_reports_nothing(self):
+		"""None is the healthy answer — the caller logs the success line off the absence.
+
+		The context is mocked alongside the socket because a real `SSLContext` handed a mock
+		socket fails on the mock, not on the certificate.
+		"""
+		from benchpress import deploy_manager
+
+		with (
+			patch.object(deploy_manager.socket, "create_connection", autospec=True),
+			patch.object(deploy_manager.ssl, "create_default_context", autospec=True),
+		):
+			self.assertIsNone(deploy_manager._certificate_error("inst-1.benchpress.cloud"))
+
+
+class TestReconcileInstanceRoutes(IntegrationTestCase):
+	"""`reconcile_instance_routes` — the route directory converges on the database.
+
+	See specs/completed/wildcard-cert-routing/phase-3-route-convergence.md.
+	"""
+
+	@classmethod
+	def setUpClass(cls):
+		super().setUpClass()
+		frappe.set_user("Administrator")
+		cls.lab = _make_lab("test-lab-reconcile-routes")
+		frappe.db.commit()
+
+	@classmethod
+	def tearDownClass(cls):
+		frappe.set_user("Administrator")
+		for name in frappe.get_all("Bench Instance", filters={"lab": cls.lab.name}, pluck="name"):
+			frappe.delete_doc("Bench Instance", name, force=True, ignore_permissions=True)
+		cls.lab.delete(ignore_permissions=True)
+		frappe.db.commit()
+		super().tearDownClass()
+
+	@contextmanager
+	def _route_dir(self, base_domain="benchpress.cloud"):
+		"""A tmp route directory, with `base_domain` supplied rather than read from live settings.
+
+		The settings doc is patched, never saved: saving it on a real host would re-anchor the
+		certificate for whatever value a test happened to pick.
+		"""
+		from benchpress import deploy_manager
+
+		with tempfile.TemporaryDirectory() as tmp:
+			target_dir = Path(tmp) / "dynamic"
+			target_dir.mkdir()
+			with (
+				patch.object(deploy_manager, "TRAEFIK_DYNAMIC_DIR", target_dir),
+				patch("frappe.get_cached_doc", return_value=frappe._dict(base_domain=base_domain)),
+			):
+				yield deploy_manager, target_dir
+
+	def _bench(self, status, container_ip):
+		bench = _fresh_bench(self, self.lab.name)
+		bench.status = status
+		bench.container_ip = container_ip
+		bench.save(ignore_permissions=True)
+		frappe.db.commit()
+		return bench
+
+	def _seed(self, target_dir, name, body="stale\n"):
+		path = target_dir / name
+		path.write_text(body)
+		return path
+
+	def _instance_files(self, target_dir):
+		from benchpress.deploy_manager import PROTECTED_ROUTE_FILES
+
+		return sorted(p.name for p in target_dir.glob("*.yml") if p.name not in PROTECTED_ROUTE_FILES)
+
+	def test_a_route_file_naming_no_bench_instance_is_deleted(self):
+		"""The orphan case: a hostname with no document behind it still resolves and still
+		routes, so it keeps serving whichever container inherited that IP."""
+		with self._route_dir() as (deploy_manager, target_dir):
+			orphan = self._seed(target_dir, "091131f54bcdfc7bc37cbc45763547fa.yml")
+
+			result = deploy_manager.reconcile_instance_routes()
+
+			self.assertFalse(orphan.exists())
+			self.assertGreaterEqual(result["deleted"], 1)
+
+	def test_a_bench_that_is_not_running_loses_its_route_file(self):
+		"""A stopped bench's recorded IP is an address Docker has already handed back, so the
+		file is not a dead link — it is the next bench's hostname collision."""
+		for status in ("Stopped", "Draft", "Error"):
+			with self.subTest(status=status):
+				bench = self._bench(status, "172.30.0.11")
+				with self._route_dir() as (deploy_manager, target_dir):
+					route_file = self._seed(target_dir, f"{bench.name}.yml")
+
+					deploy_manager.reconcile_instance_routes()
+
+					self.assertFalse(route_file.exists())
+
+	def test_a_running_bench_route_is_rewritten_with_its_current_ip(self):
+		"""Convergence, not merely reaping: a file that survives must also be right. Seeded with
+		the wrong backend so passing means it was rewritten, not left alone."""
+		bench = self._bench("Running", "172.30.0.12")
+
+		with self._route_dir() as (deploy_manager, target_dir):
+			self._seed(target_dir, f"{bench.name}.yml", "http://172.30.0.99:8000\n")
+
+			result = deploy_manager.reconcile_instance_routes()
+
+			config = yaml.safe_load((target_dir / f"{bench.name}.yml").read_text())
+			backends = [
+				server["url"]
+				for service in config["http"]["services"].values()
+				for server in service["loadBalancer"]["servers"]
+			]
+			self.assertIn("http://172.30.0.12:8000", backends)
+			self.assertNotIn("http://172.30.0.99:8000", str(backends))
+			self.assertGreaterEqual(result["written"], 1)
+
+	def test_the_control_plane_router_and_the_anchor_survive_a_full_sweep(self):
+		"""The guard that stops this pass taking the platform off the internet. `dynamic.yml` is
+		the control plane's own router and the anchor is every bench's certificate; a run that
+		deletes every instance file must still leave both."""
+		with self._route_dir() as (deploy_manager, target_dir):
+			control_plane = self._seed(target_dir, "dynamic.yml", "control plane\n")
+			deploy_manager._ensure_wildcard_anchor("benchpress.cloud")
+			anchor = target_dir / "wildcard-anchor.yml"
+			anchor_text = anchor.read_text()
+			self._seed(target_dir, "16b283bccf6560ab1aa5f078d492d005.yml")
+			self._seed(target_dir, "5dc12efd9c154796adae757adec1b2f3.yml")
+
+			result = deploy_manager.reconcile_instance_routes()
+
+			self.assertEqual(control_plane.read_text(), "control plane\n")
+			self.assertEqual(anchor.read_text(), anchor_text)
+			self.assertEqual(result["kept"], 2)
+
+	def test_a_run_always_leaves_the_certificate_anchored(self):
+		"""The anchor is what holds the wildcard the resolver-free bench routers serve, so the
+		pass writes it first rather than waiting for the next deploy."""
+		with self._route_dir() as (deploy_manager, target_dir):
+			result = deploy_manager.reconcile_instance_routes()
+
+			self.assertTrue(result["anchored"])
+			config = yaml.safe_load((target_dir / "wildcard-anchor.yml").read_text())
+			router = config["http"]["routers"]["benchpress-wildcard-anchor"]
+			self.assertEqual(router["rule"], "Host(`tls-anchor.benchpress.cloud`)")
+
+	def test_the_returned_counts_match_what_happened_on_disk(self):
+		"""A reaper that reports what it attempted rather than what converged is how a directory
+		drifts for weeks without anyone noticing."""
+		bench = self._bench("Running", "172.30.0.13")
+
+		with self._route_dir() as (deploy_manager, target_dir):
+			self._seed(target_dir, "dynamic.yml", "control plane\n")
+			self._seed(target_dir, f"{bench.name}.yml")
+			self._seed(target_dir, "091131f54bcdfc7bc37cbc45763547fa.yml")
+			self._seed(target_dir, "5dc12efd9c154796adae757adec1b2f3.yml")
+
+			result = deploy_manager.reconcile_instance_routes()
+
+			self.assertEqual(result["deleted"], 2)
+			self.assertEqual(result["kept"], 2)
+			self.assertEqual(result["written"], len(self._instance_files(target_dir)))
+			self.assertIn(f"{bench.name}.yml", self._instance_files(target_dir))
+
+	def test_a_second_run_deletes_nothing(self):
+		"""Idempotence is the read side agreeing with the write side. A pass that keeps finding
+		things to delete is one that disagrees with the files it just wrote."""
+		self._bench("Running", "172.30.0.14")
+
+		with self._route_dir() as (deploy_manager, target_dir):
+			self._seed(target_dir, "091131f54bcdfc7bc37cbc45763547fa.yml")
+			deploy_manager.reconcile_instance_routes()
+
+			result = deploy_manager.reconcile_instance_routes()
+
+			self.assertEqual(result["deleted"], 0)
+			self.assertFalse(result["anchored"])
+
+	def test_reconcile_writes_nothing_at_all_without_a_public_domain(self):
+		"""A dev checkout must be byte-for-byte unaffected — and must not reap either, since a
+		directory it never writes is not a directory it understands."""
+		for base_domain in (None, "", "localhost"):
+			with (
+				self.subTest(base_domain=base_domain),
+				self._route_dir(base_domain) as (
+					deploy_manager,
+					target_dir,
+				),
+			):
+				survivor = self._seed(target_dir, "091131f54bcdfc7bc37cbc45763547fa.yml")
+
+				result = deploy_manager.reconcile_instance_routes()
+
+				self.assertTrue(survivor.exists())
+				self.assertEqual(result, {"anchored": False, "written": 0, "deleted": 0, "kept": 0})
+
+
+class TestSettingsReAnchor(IntegrationTestCase):
+	"""`BenchPress Settings.on_update` hands the sweep to the worker that can do it.
+
+	`on_update` is called directly on an unsaved document. Saving the real Single would write
+	a domain to a live host, and the whole point of the controller is that it does not do the
+	work itself — what needs asserting is which queue it hands it to.
+	"""
+
+	def _settings(self, previous_domain):
+		settings = frappe.get_doc("BenchPress Settings")
+		settings._doc_before_save = frappe._dict(base_domain=previous_domain)
+		return settings
+
+	def test_a_changed_base_domain_enqueues_the_sweep_on_the_long_queue(self):
+		"""`queue-long` is the only worker that mounts the route directory. A sweep on any other
+		queue writes into that container's own filesystem, and Traefik never sees it."""
+		settings = self._settings("some-other-zone.example")
+
+		with patch("frappe.enqueue") as enqueue:
+			settings.on_update()
+
+		enqueue.assert_called_once()
+		args, kwargs = enqueue.call_args
+		self.assertEqual(args[0], "benchpress.deploy_manager.reconcile_instance_routes")
+		self.assertEqual(kwargs["queue"], "long")
+		# The job re-reads `base_domain`, so it must not start before the new value is committed.
+		self.assertTrue(kwargs["enqueue_after_commit"])
+
+	def test_an_unrelated_settings_save_enqueues_nothing(self):
+		"""A toggle or a timeout is not a reason to sweep the route directory."""
+		settings = self._settings(frappe.get_cached_doc("BenchPress Settings").base_domain)
+
+		with patch("frappe.enqueue") as enqueue:
+			settings.on_update()
+
+		enqueue.assert_not_called()
