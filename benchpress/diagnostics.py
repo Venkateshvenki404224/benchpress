@@ -10,12 +10,18 @@ each check catches its own exceptions and reports them as a fail row.
 
 import docker
 import frappe
+from frappe.query_builder.functions import Now
 
 from benchpress.docker_manager import CONTAINER_RUNTIMES, get_client, host_runtimes
 from benchpress.mariadb_manager import check_mariadb_health
 from benchpress.vpn_adapter import DEFAULT_INTERFACE
 
 REDIS_CONTAINER_NAME = "benchpress-redis"
+
+# Not an operator preference: past this, arithmetic on a stored deadline is wrong.
+# Two seconds absorbs MariaDB truncating NOW() to whole seconds; what it catches
+# is a timezone difference, which is hours, not drift.
+SKEW_TOLERANCE_SECONDS = 2
 
 
 def check_row(check: str, ok: bool, hint: str) -> dict:
@@ -42,6 +48,7 @@ def run_diagnostics() -> list[dict]:
 		_check_docker_socket(),
 		_check_docker_network(),
 		_check_mariadb(),
+		_check_clock_skew(),
 		_check_redis(),
 		_check_container_runtimes(),
 		check_vpn_server(),
@@ -94,6 +101,28 @@ def _check_mariadb() -> dict:
 		)
 	except Exception as e:
 		return check_row("mariadb", False, f"Could not check MariaDB: {e}")
+
+
+def _check_clock_skew() -> dict:
+	"""Frappe writes Datetimes naive in the site timezone; SQL NOW() answers in the database's.
+
+	A gap between the two silently lengthens every deadline comparison SQL evaluates.
+	"""
+	try:
+		app_clock = frappe.utils.now_datetime()
+		db_clock = frappe.qb.select(Now()).run()[0][0]
+		skew = abs((app_clock - db_clock).total_seconds())
+		if skew <= SKEW_TOLERANCE_SECONDS:
+			return check_row("clock_skew", True, f"App and database clocks agree to within {skew:.0f}s")
+		return check_row(
+			"clock_skew",
+			False,
+			f"App clock says {app_clock:%Y-%m-%d %H:%M:%S} and the database says "
+			f"{db_clock:%Y-%m-%d %H:%M:%S} — a gap of {skew:.0f}s. Compare stored deadlines "
+			"against an epoch integer bound in Python, never against SQL NOW()",
+		)
+	except Exception as e:
+		return check_row("clock_skew", False, f"Could not compare the app and database clocks: {e}")
 
 
 def _check_redis() -> dict:
