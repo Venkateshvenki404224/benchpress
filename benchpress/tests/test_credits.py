@@ -287,38 +287,37 @@ class TestCredits(IntegrationTestCase):
 
 	# --- The lifecycle wiring -------------------------------------------------
 
-	def test_a_running_instance_burns_at_its_size_rate(self):
+	def test_a_running_instance_buys_a_lease_and_starts_no_meter(self):
+		"""The hourly meter stopped in the lease phase. `test_lease` owns the pricing."""
 		self.enable_credits()
 		bench = self.running_bench()
 		metering.on_bench_running(bench)
-		self.assertEqual(self.burn_rate(), RATE)
-		self.assertTrue(frappe.db.get_value("Bench Instance", bench.name, "credit_burn_started"))
+		self.assertEqual(self.burn_rate(), 0.0)
+		self.assertFalse(frappe.db.get_value("Bench Instance", bench.name, "credit_burn_started"))
 
-	def test_starting_the_same_instance_twice_adds_the_rate_once(self):
-		"""A redeploy, or a restart that interrupted nothing, must not double the rate."""
+	def test_starting_the_same_instance_twice_charges_one_lease(self):
+		"""A redeploy, or a restart that interrupted nothing, buys no second window."""
 		self.enable_credits()
 		bench = self.running_bench()
 		metering.on_bench_running(bench)
+		charged = self.balance()
 		metering.on_bench_running(bench)
-		self.assertEqual(self.burn_rate(), RATE)
+		self.assertEqual(self.balance(), charged)
 
-	def test_stopping_an_instance_that_never_burnt_is_free(self):
+	def test_stopping_an_instance_that_never_ran_is_free(self):
 		self.enable_credits()
 		metering.on_bench_stopped(self.running_bench())
 		self.assertEqual(self.entry_count(), 0)
 
-	def test_a_failed_deploy_settles_the_time_it_ran_and_charges_nothing_further(self):
+	def test_a_failed_deploy_charges_nothing(self):
+		"""The invariant this module documents: a deploy that never reached `Running` is free."""
 		self.enable_credits()
 		bench = self.running_bench()
-		metering.on_bench_running(bench)
-		self.backdate_burn(hours=1)
 
 		metering.on_bench_stopped(bench)
-		settled = self.balance()
-		self.assertAlmostEqual(settled, GRANT - RATE, places=3)
-
 		metering.on_bench_stopped(bench)  # the cleanup path can fire twice
-		self.assertEqual(self.balance(), settled)
+
+		self.assertEqual(self.entry_count(), 0)
 		self.assertEqual(self.burn_rate(), 0.0)
 
 	def test_a_deploy_against_a_built_image_writes_no_usage_row(self):
@@ -350,7 +349,7 @@ class TestCredits(IntegrationTestCase):
 	def test_reconciliation_corrects_a_rate_no_running_instance_justifies(self):
 		self.enable_credits()
 		bench = self.running_bench()
-		metering.on_bench_running(bench)
+		self.start_legacy_burn(bench)
 		# A container that died without a stop_burn: the rate is now twice what runs.
 		frappe.db.set_value(ACCOUNT, self.user, "burn_rate", 2 * RATE, update_modified=False)
 		self.backdate_burn(hours=1)
@@ -363,12 +362,12 @@ class TestCredits(IntegrationTestCase):
 
 	def test_reconciliation_leaves_a_correct_account_alone(self):
 		self.enable_credits()
-		metering.on_bench_running(self.running_bench())
+		self.start_legacy_burn(self.running_bench())
 		self.assertEqual(reconcile.reconcile_burn_rates()["corrected"], [])
 
 	def test_reconciliation_never_calls_docker(self):
 		self.enable_credits()
-		metering.on_bench_running(self.running_bench())
+		self.start_legacy_burn(self.running_bench())
 		with patch("benchpress.docker_manager.get_client") as get_client:
 			reconcile.reconcile_burn_rates()
 		get_client.assert_not_called()
@@ -376,7 +375,7 @@ class TestCredits(IntegrationTestCase):
 	def test_reconciliation_clears_the_flag_on_an_instance_that_is_not_running(self):
 		self.enable_credits()
 		bench = self.running_bench()
-		metering.on_bench_running(bench)
+		self.start_legacy_burn(bench)
 		frappe.db.set_value("Bench Instance", bench.name, "status", "Stopped", update_modified=False)
 
 		reconcile.reconcile_burn_rates()
@@ -429,7 +428,27 @@ class TestCredits(IntegrationTestCase):
 		frappe.db.set_value(
 			"Bench Instance",
 			self.bench.name,
-			{"credit_burn_rate": 0.0, "credit_burn_started": None, "status": "Running"},
+			{
+				"credit_burn_rate": 0.0,
+				"credit_burn_started": None,
+				"status": "Running",
+				"expires_at_ts": 0,
+				"lease_state": "",
+			},
+			update_modified=False,
+		)
+
+	def start_legacy_burn(self, bench) -> None:
+		"""An hourly meter of the kind no lifecycle hook starts any more.
+
+		The reconciler exists to repair exactly these rows — an account still carrying a rate
+		after the code that raised it was unplugged — so its tests have to plant one by hand.
+		"""
+		account.start_burn(self.user, bench.name, RATE)
+		frappe.db.set_value(
+			"Bench Instance",
+			bench.name,
+			{"credit_burn_rate": RATE, "credit_burn_started": now_datetime()},
 			update_modified=False,
 		)
 
