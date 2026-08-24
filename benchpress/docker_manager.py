@@ -17,6 +17,23 @@ DEFAULT_PIDS_LIMIT = 500
 DEFAULT_IOPS = 1000
 DEFAULT_BPS = 40 * 1024 * 1024
 
+# Field value -> the runtime name registered with the Docker daemon. None means
+# "pass no runtime", which leaves the daemon's own default-runtime in charge.
+CONTAINER_RUNTIMES = {"runc": None, "sysbox": "sysbox-runc"}
+
+
+def resolve_runtime(bench_doc) -> str | None:
+	"""The daemon runtime name for a bench, or None to use the daemon default."""
+	name = getattr(bench_doc, "runtime", None) or "runc"
+	if name not in CONTAINER_RUNTIMES:
+		frappe.throw(
+			_("Unknown container runtime '{0}'. Allowed: {1}.").format(
+				name, ", ".join(sorted(CONTAINER_RUNTIMES))
+			)
+		)
+	return CONTAINER_RUNTIMES[name]
+
+
 LAB_ID_MAX_LENGTH = 64
 LAB_ID_RE = re.compile(r"^[a-z0-9]+([._-][a-z0-9]+)*$")
 
@@ -193,6 +210,9 @@ def create_bench_container(bench_doc, lab_doc) -> str:
 	iops = int(getattr(lab_doc, "iops_limit", None) or DEFAULT_IOPS)
 	bps = int(getattr(lab_doc, "bps_limit", None) or DEFAULT_BPS)
 
+	runtime = resolve_runtime(bench_doc)
+	runtime_kwargs = {"runtime": runtime} if runtime else {}
+
 	devices = _get_host_block_devices()
 	device_read_iops = [{"Path": dev, "Rate": iops} for dev in devices]
 	device_write_iops = [{"Path": dev, "Rate": iops} for dev in devices]
@@ -205,8 +225,9 @@ def create_bench_container(bench_doc, lab_doc) -> str:
 	# benchpress-mariadb mariadb -u root` reads EVERY tenant's database, defeating
 	# the per-site DB isolation (Press-style scoped grants in mariadb_manager).
 	# WireGuard (entry.sh `wg-quick up wg0`) needs only NET_ADMIN + /dev/net/tun,
-	# NOT full privilege. For defense-in-depth (container-root != host-root), enable
-	# Docker daemon userns-remap on the host (see docs/wireguard-setup.md).
+	# NOT full privilege. Defense-in-depth (container-root != host-root) comes from
+	# the sysbox runtime, which user-namespaces the container, not from daemon-wide
+	# userns-remap.
 	container = client.containers.create(
 		image=lab_doc.image_tag,
 		name=name,
@@ -225,6 +246,7 @@ def create_bench_container(bench_doc, lab_doc) -> str:
 		device_read_bps=device_read_bps or None,
 		device_write_bps=device_write_bps or None,
 		network="benchpress",
+		**runtime_kwargs,
 	)
 
 	return container.id

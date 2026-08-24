@@ -219,10 +219,10 @@ class TestDockerManagerBlockIO(IntegrationTestCase):
 		super().setUpClass()
 		frappe.set_user("Administrator")
 
-	def _container_create_kwargs(self, lab):
+	def _container_create_kwargs(self, lab, runtime="runc"):
 		"""Run create_bench_container with Docker mocked and return the
 		kwargs passed to client.containers.create."""
-		bench = types.SimpleNamespace(bench_name="blockio-test-bench")
+		bench = types.SimpleNamespace(bench_name="blockio-test-bench", runtime=runtime)
 		with (
 			patch("benchpress.docker_manager.get_client") as mock_client,
 			patch("benchpress.docker_manager.ensure_network"),
@@ -278,3 +278,27 @@ class TestDockerManagerBlockIO(IntegrationTestCase):
 		kwargs = self._container_create_kwargs(lab)
 
 		self.assertEqual(kwargs["pids_limit"], DEFAULT_PIDS_LIMIT)
+
+	def test_runc_passes_no_runtime_kwarg(self):
+		"""A runc bench must produce the call it produced before runtimes existed."""
+		lab = _make_lab("runtime-runc")
+		self.addCleanup(frappe.delete_doc, "Lab", lab.name, force=True, ignore_permissions=True)
+
+		kwargs = self._container_create_kwargs(lab, runtime="runc")
+
+		self.assertNotIn("runtime", kwargs)
+
+	def test_sysbox_passes_the_registered_runtime_name(self):
+		lab = _make_lab("runtime-sysbox")
+		self.addCleanup(frappe.delete_doc, "Lab", lab.name, force=True, ignore_permissions=True)
+
+		kwargs = self._container_create_kwargs(lab, runtime="sysbox")
+
+		self.assertEqual(kwargs["runtime"], "sysbox-runc")
+
+	def test_unknown_runtime_is_refused_before_docker(self):
+		lab = _make_lab("runtime-unknown")
+		self.addCleanup(frappe.delete_doc, "Lab", lab.name, force=True, ignore_permissions=True)
+
+		with self.assertRaises(frappe.ValidationError):
+			self._container_create_kwargs(lab, runtime="gvisor")

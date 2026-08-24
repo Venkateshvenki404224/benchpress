@@ -24,6 +24,7 @@
   "container_section",
   "container_id",
   "container_image",
+  "runtime",
   "column_break_container",
   "container_ip",
   "started_at",
@@ -143,6 +144,14 @@
    "fieldtype": "Data",
    "label": "Container Image",
    "read_only": 1
+  },
+  {
+   "default": "runc",
+   "description": "Container runtime. sysbox user-namespaces the container so container root is unprivileged on the host.",
+   "fieldname": "runtime",
+   "fieldtype": "Select",
+   "label": "Runtime",
+   "options": "runc\nsysbox"
   },
   {
    "fieldname": "column_break_container",
@@ -296,7 +305,7 @@
    "link_fieldname": "bench"
   }
  ],
- "modified": "2026-08-19 00:00:00.000000",
+ "modified": "2026-08-24 18:00:00.000000",
  "modified_by": "Administrator",
  "module": "Benchpress",
  "name": "Bench Instance",
