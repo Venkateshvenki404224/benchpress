@@ -21,6 +21,8 @@ import frappe
 from frappe.tests import IntegrationTestCase
 
 from benchpress import image_cache
+from benchpress.docker_manager import HOST_RUNTIMES_ATTRIBUTE
+from benchpress.request_cache import clear_local_cache
 
 BUILD_STREAM = [{"stream": "Successfully built abc123"}]
 
@@ -97,6 +99,10 @@ def _client_with_tags(*tags):
 	client = MagicMock()
 	client.images.list.return_value = [MagicMock(tags=list(tags))]
 	client.api.build.return_value = iter(BUILD_STREAM)
+	# This mock stands in for the whole daemon, and a deploy asks it twice more: for its
+	# runtimes before the image step, and for the runtime the new container got.
+	client.info.return_value = {"Runtimes": {"runc": {}, "sysbox-runc": {}}, "DefaultRuntime": "runc"}
+	client.containers.get.return_value.attrs = {"HostConfig": {"Runtime": "sysbox-runc"}}
 	return client
 
 
@@ -197,6 +203,8 @@ class TestDeployReusesTheSharedImage(IntegrationTestCase):
 		frappe.set_user("Administrator")
 		image_cache.clear_cached_tags()
 		self.addCleanup(image_cache.clear_cached_tags)
+		clear_local_cache(HOST_RUNTIMES_ATTRIBUTE)
+		self.addCleanup(clear_local_cache, HOST_RUNTIMES_ATTRIBUTE)
 
 	def _bench(self):
 		from benchpress.tests.test_deploy_manager import _fresh_bench

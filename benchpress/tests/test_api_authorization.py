@@ -168,6 +168,7 @@ class TestApiAuthorization(IntegrationTestCase):
 		self.assert_denied(lambda: api.build_lab_image(self.lab.name))
 		self.assert_denied(lambda: api.prewarm_catalog())
 		self.assert_denied(lambda: api.run_diagnostics())
+		self.assert_denied(lambda: api.preflight_runtime("sysbox"))
 
 	def test_guest_denied_from_overview_endpoints(self):
 		frappe.set_user("Guest")
@@ -228,6 +229,18 @@ class TestApiAuthorization(IntegrationTestCase):
 	def test_non_admin_denied_from_run_diagnostics(self):
 		frappe.set_user(self.user_a)
 		self.assert_denied(lambda: api.run_diagnostics())
+
+	def test_non_admin_denied_from_preflight_runtime(self):
+		"""It creates a container on the host — the guard is the only thing stopping a tenant."""
+		frappe.set_user(self.user_a)
+		self.assert_denied(lambda: api.preflight_runtime("sysbox"))
+
+	def test_an_admin_reaches_preflight_runtime(self):
+		"""The positive control: the guard must not be refusing everyone."""
+		frappe.set_user("Administrator")
+		with patch("benchpress.docker_manager.get_client") as mock_client:
+			self.assertTrue(api.preflight_runtime("sysbox")["ok"])
+		self.assertEqual(mock_client.return_value.containers.run.call_args.kwargs["runtime"], "sysbox-runc")
 
 	def test_owner_denied_from_deleting_own_bench(self):
 		# user_a passes require_bench_access on its own bench, but delete is admin-only.

@@ -31,6 +31,7 @@ BENCH_FIELDS = [
 	"memory_usage",
 	"container_id",
 	"container_ip",
+	"runtime",
 	"wg_ip",
 	"public_url",
 	"domain",

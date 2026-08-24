@@ -20,9 +20,12 @@ from benchpress.credits import metering
 from benchpress.deploy_pipeline import DeployLogWriter, DeployPipeline
 from benchpress.docker_manager import (
 	build_lab_image,
+	container_runtime,
 	create_bench_container,
 	exec_in_container,
+	host_runtimes,
 	remove_container,
+	resolve_runtime,
 	start_container,
 	stop_container,
 	wait_for_container_running,
@@ -35,6 +38,22 @@ from benchpress.mariadb_manager import (
 	wait_for_mariadb,
 )
 from benchpress.notifications import notify_owner
+
+
+def _assert_runtime_registered(bench) -> None:
+	"""Refuse a bench whose runtime the daemon does not have. No fallback to runc.
+
+	A bench that cannot be isolated must not silently run unisolated, so this
+	fails the deploy and leaves the choice to an admin.
+	"""
+	runtime = resolve_runtime(bench)
+	registered = host_runtimes()["names"]
+	if runtime and runtime not in registered:
+		frappe.throw(
+			_("Bench runtime '{0}' is not registered with the Docker daemon (it has: {1}).").format(
+				runtime, ", ".join(sorted(registered))
+			)
+		)
 
 
 def _remove_stale_container(bench) -> None:
@@ -571,6 +590,10 @@ def _deploy_bench(bench_name: str) -> None:
 		bench.save(ignore_permissions=True)
 		frappe.db.commit()
 
+		# Ahead of the image step on purpose: the build is where the minutes go,
+		# and a bench the host cannot isolate has no business paying for one.
+		_assert_runtime_registered(bench)
+
 		# One step whichever way it goes: the run either builds the image or
 		# adopts a cached one, and the detail line says which.
 		pipeline.step("image")
@@ -580,6 +603,9 @@ def _deploy_bench(bench_name: str) -> None:
 		pipeline.step("container")
 		container_id = create_bench_container(bench, lab)
 		created_container_id = container_id
+		# Read back rather than assumed: the stored log answers what a bench was
+		# isolated by long after the run.
+		pipeline.log(f"container runtime {container_runtime(container_id)}")
 		bench.container_id = container_id
 		bench.container_image = lab.image_tag
 		bench.save(ignore_permissions=True)

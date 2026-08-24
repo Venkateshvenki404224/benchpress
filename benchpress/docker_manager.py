@@ -12,6 +12,7 @@ import frappe
 from frappe import _
 
 from benchpress.image_cache import cache_tag, clear_cached_tags
+from benchpress.request_cache import local_cache
 
 DEFAULT_PIDS_LIMIT = 500
 DEFAULT_IOPS = 1000
@@ -21,10 +22,17 @@ DEFAULT_BPS = 40 * 1024 * 1024
 # "pass no runtime", which leaves the daemon's own default-runtime in charge.
 CONTAINER_RUNTIMES = {"runc": None, "sysbox": "sysbox-runc"}
 
+HOST_RUNTIMES_ATTRIBUTE = "benchpress_host_runtimes"
+PREFLIGHT_IMAGE = "alpine"
+
 
 def resolve_runtime(bench_doc) -> str | None:
 	"""The daemon runtime name for a bench, or None to use the daemon default."""
-	name = getattr(bench_doc, "runtime", None) or "runc"
+	return daemon_runtime(getattr(bench_doc, "runtime", None) or "runc")
+
+
+def daemon_runtime(name: str) -> str | None:
+	"""The runtime an allow-listed field value names, or None for the daemon default."""
 	if name not in CONTAINER_RUNTIMES:
 		frappe.throw(
 			_("Unknown container runtime '{0}'. Allowed: {1}.").format(
@@ -119,6 +127,32 @@ def _get_host_block_devices() -> list[str]:
 def get_client() -> docker.DockerClient:
 	settings = frappe.get_cached_doc("BenchPress Settings")
 	return docker.DockerClient(base_url=settings.docker_socket, timeout=600)
+
+
+def host_runtimes() -> dict:
+	"""The daemon's registered runtime names and its default, memoised per job."""
+	return local_cache(HOST_RUNTIMES_ATTRIBUTE, _read_host_runtimes)
+
+
+def _read_host_runtimes() -> dict:
+	info = get_client().info()
+	return {"names": set(info.get("Runtimes") or {}), "default": info.get("DefaultRuntime") or ""}
+
+
+def preflight_runtime(name: str) -> dict:
+	"""Prove a runtime works by running a throwaway container: {"ok": bool, "detail": str}.
+
+	The only check that answers "does it work" rather than "is it registered" — a
+	broken runtime stays listed in `docker info` with its unit active. Reports
+	instead of raising because a diagnostics screen is what reads it.
+	"""
+	runtime = daemon_runtime(name)
+	runtime_kwargs = {"runtime": runtime} if runtime else {}
+	try:
+		get_client().containers.run(PREFLIGHT_IMAGE, "echo ok", remove=True, **runtime_kwargs)
+	except Exception as e:
+		return {"ok": False, "detail": str(e)}
+	return {"ok": True, "detail": f"{runtime or host_runtimes()['default']} ran a container"}
 
 
 def get_lab_template_dir() -> str:
@@ -250,6 +284,11 @@ def create_bench_container(bench_doc, lab_doc) -> str:
 	)
 
 	return container.id
+
+
+def container_runtime(container_id: str) -> str:
+	"""The runtime the daemon actually created this container under."""
+	return get_client().containers.get(container_id).attrs["HostConfig"]["Runtime"]
 
 
 def get_container_ip(container_id: str) -> str:
