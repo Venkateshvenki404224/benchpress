@@ -222,9 +222,11 @@ def _delete_instance_route(instance_id: str) -> None:
 def reconcile_instance_routes() -> dict:
 	"""Make the Traefik route directory agree with the database.
 
-	Docker and the doctype are the truth; the directory follows. Returns counts rather
-	than a bare success: a reaper that reports "issued" instead of "converged" is how a
-	directory drifts for weeks without anyone noticing.
+	The Bench Instance table is the truth and the directory follows it. Containers are not
+	inspected — an orphaned container is a real problem, but it is todo item 8's, and a
+	pass that quietly took on two jobs would be harder to trust with either. Returns counts
+	rather than a bare success: a reaper that reports "issued" instead of "converged" is how
+	a directory drifts for weeks without anyone noticing.
 
 	Deleting is the load-bearing half. A torn-down container frees its IP back to
 	Docker, which hands it to the next bench, so a route file left behind keeps pointing
