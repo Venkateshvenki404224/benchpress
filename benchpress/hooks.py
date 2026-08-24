@@ -232,6 +232,10 @@ scheduler_events = {
 			# socket, and an enforcement decision queued behind Docker I/O arrives late. Five
 			# minutes is fine enough for a TTL measured in hours and for the 15-minute warning.
 			"benchpress.credits.sweep.enforce_limits",
+			# The enqueuer, never `reconcile_instance_routes` itself: scheduled jobs land on
+			# `default`, which `queue-short` also consumes, and that container has no route
+			# mount. Lifecycle triggers already converge in seconds — this is the net under them.
+			"benchpress.deploy_manager.enqueue_route_reconcile",
 		],
 		"0 2 * * *": [
 			"benchpress.mariadb_manager.scheduled_backup",

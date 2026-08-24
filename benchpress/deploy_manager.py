@@ -2,6 +2,7 @@
 # For license information, please see license.txt
 
 import json
+import os
 import secrets
 import shlex
 import socket
@@ -64,11 +65,9 @@ SITE_HTTP_PORT = 8000
 ADOPTED_MARKER = "already exists — adopting it"
 
 # Module constant, not inlined, so tests can monkeypatch it to a tmp path.
-# Flat, not a subdirectory: Traefik's file provider does not recurse, so this
-# must be the exact directory the `directory:` provider in traefik.yml.template
-# watches, and the exact host path bind-mounted read-write into queue-long /
-# read-only into traefik in docker-compose.prod.yml. dynamic.yml (the
-# control-plane router) lives in this same directory.
+# Flat, not a subdirectory: Traefik's file provider does not recurse, so this must be the
+# exact directory the `directory:` provider in traefik.yml.template watches. dynamic.yml
+# (the control-plane router) lives in this same directory.
 TRAEFIK_DYNAMIC_DIR = Path("/etc/traefik/dynamic")
 
 # One file, one router, one identity set — the only place in this app that names a
@@ -90,6 +89,15 @@ PROTECTED_ROUTE_FILES = frozenset({CONTROL_PLANE_ROUTE_FILE, WILDCARD_ANCHOR_FIL
 # this resolves; it is the same TLS endpoint the internet reaches, which is the point —
 # checking anything else would prove something else.
 TRAEFIK_HOST = "traefik"
+
+
+class TraefikRouteDirectoryMissing(Exception):
+	"""Raised when the Traefik route directory is not mounted in this container.
+
+	`queue-long` mounts it read-write and traefik read-only; `backend` and
+	`queue-short` mount neither, and both consume `default`. Every caller therefore
+	reaches routing through `enqueue_route_sync`, which pins `queue="long"`.
+	"""
 
 
 def _public_site_url(instance_id: str, base_domain: str | None) -> str | None:
@@ -142,11 +150,36 @@ def _wildcard_anchor_config(base_domain: str) -> dict:
 	}
 
 
-def _ensure_wildcard_anchor(base_domain: str | None) -> bool:
-	"""Put the bench-zone wildcard in Traefik's certificate store, once.
+def _atomic_write(path: Path, text: str) -> bool:
+	"""Replace `path` in one step if the content differs; returns True when it wrote.
 
-	Returns True when the file was written. Rewrites only on a real change: Traefik
-	reloads on mtime, and a deploy has no business making it reload to say nothing.
+	Traefik reloads on mtime, so an unchanged file is left alone — otherwise the
+	convergence cron would make the proxy reload every five minutes to say nothing.
+
+	Raises `TraefikRouteDirectoryMissing` rather than creating the directory: a bind mount
+	that is absent is a container that cannot reach Traefik, and creating it would turn
+	that into a file nobody reads.
+	"""
+	if not path.parent.is_dir():
+		raise TraefikRouteDirectoryMissing(
+			f"{path.parent} is not mounted in this container. It is a bind mount of "
+			"config/traefik/generated/dynamic, read-write only in queue-long, so the fix is "
+			"to reach routing through enqueue_route_sync — never to create the directory."
+		)
+
+	if path.exists() and path.read_text() == text:
+		return False
+
+	# Traefik's file provider parses only .yml, .yaml, .toml and .json, so the temp name is
+	# structurally invisible to the watcher rather than merely unlikely to be read.
+	tmp = path.with_name(f".{path.name}.tmp")
+	tmp.write_text(text)
+	os.replace(tmp, path)
+	return True
+
+
+def _ensure_wildcard_anchor(base_domain: str | None) -> bool:
+	"""Put the bench-zone wildcard in Traefik's certificate store, once; True when written.
 
 	Never deleted at teardown — it has to outlive every bench, because it is what keeps
 	the certificate renewing.
@@ -155,16 +188,10 @@ def _ensure_wildcard_anchor(base_domain: str | None) -> bool:
 		return False
 
 	wanted = yaml.safe_dump(_wildcard_anchor_config(base_domain))
-	path = TRAEFIK_DYNAMIC_DIR / WILDCARD_ANCHOR_FILE
-	if path.exists() and path.read_text() == wanted:
-		return False
-
-	TRAEFIK_DYNAMIC_DIR.mkdir(parents=True, exist_ok=True)
-	path.write_text(wanted)
-	return True
+	return _atomic_write(TRAEFIK_DYNAMIC_DIR / WILDCARD_ANCHOR_FILE, wanted)
 
 
-def _write_instance_route(instance_id: str, base_domain: str, container_ip: str) -> None:
+def _write_instance_route(instance_id: str, base_domain: str) -> None:
 	"""Write Traefik file-provider routes for this instance's site and its code-server IDE.
 
 	`tls: {}` turns TLS on and names no resolver, so these routers serve whatever
@@ -174,13 +201,14 @@ def _write_instance_route(instance_id: str, base_domain: str, container_ip: str)
 	`_ensure_wildcard_anchor` is what puts `*.{base_domain}` in the store, and it is the
 	only place in this app that names a resolver.
 
-	One file per instance, named by instance ID, so a redeploy naturally overwrites it
-	with the fresh `container_ip` — no dedup logic needed.
+	The file is a pure function of `(instance_id, base_domain)`: it names the container,
+	never an address, so no lifecycle transition can make it stale. The container name
+	*is* `instance_id` — `create_bench_container` names it `bench_doc.bench_name` and
+	`BenchInstance.autoname` sets `name = bench_name`.
 	"""
 	if not base_domain or base_domain == "localhost":
 		return
 
-	TRAEFIK_DYNAMIC_DIR.mkdir(parents=True, exist_ok=True)
 	config = {
 		"http": {
 			"routers": {
@@ -197,26 +225,72 @@ def _write_instance_route(instance_id: str, base_domain: str, container_ip: str)
 					"tls": {},
 				},
 			},
+			# Resolved by Docker's embedded DNS: traefik is on the `benchpress` network.
 			"services": {
 				f"site-{instance_id}": {
-					"loadBalancer": {"servers": [{"url": f"http://{container_ip}:{SITE_HTTP_PORT}"}]}
+					"loadBalancer": {"servers": [{"url": f"http://{instance_id}:{SITE_HTTP_PORT}"}]}
 				},
-				f"ide-{instance_id}": {"loadBalancer": {"servers": [{"url": f"http://{container_ip}:8080"}]}},
+				f"ide-{instance_id}": {"loadBalancer": {"servers": [{"url": f"http://{instance_id}:8080"}]}},
 			},
 		}
 	}
-	(TRAEFIK_DYNAMIC_DIR / f"{instance_id}.yml").write_text(yaml.safe_dump(config))
+	_atomic_write(TRAEFIK_DYNAMIC_DIR / f"{instance_id}.yml", yaml.safe_dump(config))
 
 
 def _delete_instance_route(instance_id: str) -> None:
 	"""Remove this instance's Traefik route file, if any.
 
-	Torn-down containers free their IP back to Docker, which can hand it to the next
-	deployed instance. A route file left behind after teardown is live routing state
-	that would keep pointing the old public hostname at whatever container ends up
-	with that IP next — so this has to run at teardown, not just redeploy.
+	The route names the container, so a file left behind after teardown resolves to
+	nothing and 502s rather than reaching another tenant. Still deleted at teardown:
+	a hostname that answers at all outlives the bench it was issued for.
 	"""
 	(TRAEFIK_DYNAMIC_DIR / f"{instance_id}.yml").unlink(missing_ok=True)
+
+
+def sync_instance_route(bench_name: str) -> str:
+	"""Make this bench's route file agree with its status; returns `written`, `deleted` or `skipped`.
+
+	The one decision point for whether a bench should own a route at all, so a lifecycle
+	transition has one thing to remember rather than a write call in the start path and a
+	delete call in the stop path. A bench that no longer exists reads as no status, which
+	deletes — the same answer as `Stopped`, and the reason this does not raise.
+
+	Reach it through `enqueue_route_sync`, never directly from a web request.
+	"""
+	base_domain = frappe.get_cached_doc("BenchPress Settings").base_domain
+	if not base_domain or base_domain == "localhost":
+		return "skipped"
+
+	if frappe.db.get_value("Bench Instance", bench_name, "status") == "Running":
+		_write_instance_route(bench_name, base_domain)
+		return "written"
+
+	_delete_instance_route(bench_name)
+	return "deleted"
+
+
+def enqueue_route_sync(bench_name: str) -> None:
+	"""Hand the route write to `queue-long` — see `TraefikRouteDirectoryMissing`."""
+	frappe.enqueue(
+		"benchpress.deploy_manager.sync_instance_route",
+		bench_name=bench_name,
+		queue="long",
+		job_id=f"route_sync:{bench_name}",
+		deduplicate=True,
+		enqueue_after_commit=True,  # the job re-reads `status`, so it must not start before the commit
+	)
+
+
+def enqueue_route_reconcile() -> None:
+	"""Convergence cron: hand the whole-directory pass to `queue-long`."""
+	# Scheduled jobs land on `default`, which `queue-short` also consumes — so the cron entry
+	# is this enqueuer and never the pass itself. See `TraefikRouteDirectoryMissing`.
+	frappe.enqueue(
+		"benchpress.deploy_manager.reconcile_instance_routes",
+		queue="long",
+		job_id="route_reconcile",
+		deduplicate=True,
+	)
 
 
 def reconcile_instance_routes() -> dict:
@@ -228,15 +302,13 @@ def reconcile_instance_routes() -> dict:
 	rather than a bare success: a reaper that reports "issued" instead of "converged" is how
 	a directory drifts for weeks without anyone noticing.
 
-	Deleting is the load-bearing half. A torn-down container frees its IP back to
-	Docker, which hands it to the next bench, so a route file left behind keeps pointing
-	an old public hostname at whatever container inherits that address — a live
-	cross-owner misroute, not merely a dead link.
+	Deleting is the load-bearing half. Routes name containers, so a file left behind is a
+	502 rather than another tenant's site — but it is still a public hostname answering
+	for a bench that no longer exists, and only this pass removes one nothing deleted.
 
-	Must run on `queue-long`: it is the only container that mounts the route directory
-	read-write. That is also what keeps this from racing a deploy — both are `long` jobs
-	on a single worker, so a bench part-way through `_deploy_bench` is never read here
-	between its container IP being known and its status reaching `Running`.
+	Running on `queue-long` is also what keeps this from racing a deploy — both are `long`
+	jobs on a single worker, so a bench part-way through `_deploy_bench` is never read here
+	between its container being created and its status reaching `Running`.
 
 	Run it by hand with:
 	    bench --site frontend execute benchpress.deploy_manager.reconcile_instance_routes
@@ -249,8 +321,8 @@ def reconcile_instance_routes() -> dict:
 		return {"anchored": anchored, "written": 0, "deleted": 0, "kept": 0}
 
 	routable = _routable_instance_ips()
-	for instance_id, container_ip in routable.items():
-		_write_instance_route(instance_id, base_domain, container_ip)
+	for instance_id in routable:
+		_write_instance_route(instance_id, base_domain)
 
 	deleted = kept = 0
 	for path in sorted(TRAEFIK_DYNAMIC_DIR.glob("*.yml")):
@@ -522,7 +594,7 @@ def _deploy_bench(bench_name: str) -> None:
 		frappe.db.commit()
 
 		bench.public_url = _public_site_url(bench.name, settings.base_domain)
-		_write_instance_route(bench.name, settings.base_domain, container_ip)
+		_write_instance_route(bench.name, settings.base_domain)
 		_log_certificate_state(bench.name, settings.base_domain, pipeline)
 
 		_setup_container_vpn(bench, container_id, pipeline)
@@ -782,6 +854,7 @@ def teardown_bench(bench) -> None:
 			pass  # best-effort
 
 	try:
+		# Direct, not enqueued: teardown must not leave live routing behind if a job is lost.
 		_delete_instance_route(bench.name)
 	except Exception:
 		pass  # best-effort
@@ -950,3 +1023,4 @@ def stop_bench(bench_name: str) -> None:
 	bench.save(ignore_permissions=True)
 	_deactivate_bench_sites(bench)
 	frappe.db.commit()  # nosemgrep -- intentional commit to persist status before response
+	enqueue_route_sync(bench.name)
