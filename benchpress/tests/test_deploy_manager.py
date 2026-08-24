@@ -1387,7 +1387,7 @@ class TestPublicSiteUrlHelpers(unittest.TestCase):
 class TestWildcardAnchor(unittest.TestCase):
 	"""`_ensure_wildcard_anchor` — the one place in this app that names a resolver.
 
-	See specs/in-progress/wildcard-cert-routing/phase-1-resolver-free-routers.md.
+	See specs/completed/wildcard-cert-routing/phase-1-resolver-free-routers.md.
 	"""
 
 	@contextmanager
@@ -1473,7 +1473,7 @@ class TestCertificateVerification(unittest.TestCase):
 	unit under test is the reporting, and a test that needed a running Traefik would fail
 	for reasons that have nothing to do with the code.
 
-	See specs/in-progress/wildcard-cert-routing/phase-2-certificate-verification.md.
+	See specs/completed/wildcard-cert-routing/phase-2-certificate-verification.md.
 	"""
 
 	def _pipeline(self):
@@ -1602,7 +1602,7 @@ class TestCertificateVerification(unittest.TestCase):
 class TestReconcileInstanceRoutes(IntegrationTestCase):
 	"""`reconcile_instance_routes` — the route directory converges on the database.
 
-	See specs/in-progress/wildcard-cert-routing/phase-3-route-convergence.md.
+	See specs/completed/wildcard-cert-routing/phase-3-route-convergence.md.
 	"""
 
 	@classmethod
