@@ -231,6 +231,42 @@ def _delete_instance_route(instance_id: str) -> None:
 	(TRAEFIK_DYNAMIC_DIR / f"{instance_id}.yml").unlink(missing_ok=True)
 
 
+def sync_instance_route(bench_name: str) -> str:
+	"""Make this bench's route file agree with its status; returns `written`, `deleted` or `skipped`.
+
+	The one decision point for whether a bench should own a route at all, so a lifecycle
+	transition has one thing to remember rather than a write call in the start path and a
+	delete call in the stop path. A bench that no longer exists reads as no status, which
+	deletes — the same answer as `Stopped`, and the reason this does not raise.
+
+	Reach it through `enqueue_route_sync`, never directly from a web request.
+	"""
+	base_domain = frappe.get_cached_doc("BenchPress Settings").base_domain
+	if not base_domain or base_domain == "localhost":
+		return "skipped"
+
+	if frappe.db.get_value("Bench Instance", bench_name, "status") == "Running":
+		_write_instance_route(bench_name, base_domain)
+		return "written"
+
+	_delete_instance_route(bench_name)
+	return "deleted"
+
+
+def enqueue_route_sync(bench_name: str) -> None:
+	"""Hand the route write to `queue-long`, the only worker that mounts the route directory."""
+	# `backend` has no mount at all and `default` is also consumed by `queue-short`, so a write
+	# from either lands in that container's filesystem and Traefik never sees it.
+	frappe.enqueue(
+		"benchpress.deploy_manager.sync_instance_route",
+		bench_name=bench_name,
+		queue="long",
+		job_id=f"route_sync:{bench_name}",
+		deduplicate=True,
+		enqueue_after_commit=True,  # the job re-reads `status`, so it must not start before the commit
+	)
+
+
 def reconcile_instance_routes() -> dict:
 	"""Make the Traefik route directory agree with the database.
 
@@ -793,6 +829,7 @@ def teardown_bench(bench) -> None:
 			pass  # best-effort
 
 	try:
+		# Direct, not enqueued: teardown must not leave live routing behind if a job is lost.
 		_delete_instance_route(bench.name)
 	except Exception:
 		pass  # best-effort
@@ -961,3 +998,4 @@ def stop_bench(bench_name: str) -> None:
 	bench.save(ignore_permissions=True)
 	_deactivate_bench_sites(bench)
 	frappe.db.commit()  # nosemgrep -- intentional commit to persist status before response
+	enqueue_route_sync(bench.name)

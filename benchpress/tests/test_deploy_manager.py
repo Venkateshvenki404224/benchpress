@@ -87,6 +87,25 @@ def _fresh_bench(case, lab_name):
 
 
 @contextmanager
+def _route_dir(base_domain="benchpress.cloud"):
+	"""A tmp route directory, with `base_domain` supplied rather than read from live settings.
+
+	The settings doc is patched, never saved: saving it on a real host would re-anchor the
+	certificate for whatever value a test happened to pick.
+	"""
+	from benchpress import deploy_manager
+
+	with tempfile.TemporaryDirectory() as tmp:
+		target_dir = Path(tmp) / "dynamic"
+		target_dir.mkdir()
+		with (
+			patch.object(deploy_manager, "TRAEFIK_DYNAMIC_DIR", target_dir),
+			patch("frappe.get_cached_doc", return_value=frappe._dict(base_domain=base_domain)),
+		):
+			yield deploy_manager, target_dir
+
+
+@contextmanager
 def _cached_image(lab_name):
 	"""Make `lab_name` deploy-ready: `Ready`, with an `image_tag` matching what resolve reports.
 
@@ -1667,24 +1686,6 @@ class TestReconcileInstanceRoutes(IntegrationTestCase):
 		frappe.db.commit()
 		super().tearDownClass()
 
-	@contextmanager
-	def _route_dir(self, base_domain="benchpress.cloud"):
-		"""A tmp route directory, with `base_domain` supplied rather than read from live settings.
-
-		The settings doc is patched, never saved: saving it on a real host would re-anchor the
-		certificate for whatever value a test happened to pick.
-		"""
-		from benchpress import deploy_manager
-
-		with tempfile.TemporaryDirectory() as tmp:
-			target_dir = Path(tmp) / "dynamic"
-			target_dir.mkdir()
-			with (
-				patch.object(deploy_manager, "TRAEFIK_DYNAMIC_DIR", target_dir),
-				patch("frappe.get_cached_doc", return_value=frappe._dict(base_domain=base_domain)),
-			):
-				yield deploy_manager, target_dir
-
 	def _bench(self, status, container_ip):
 		bench = _fresh_bench(self, self.lab.name)
 		bench.status = status
@@ -1706,7 +1707,7 @@ class TestReconcileInstanceRoutes(IntegrationTestCase):
 	def test_a_route_file_naming_no_bench_instance_is_deleted(self):
 		"""The orphan case: a hostname with no document behind it still resolves and still
 		routes, so it keeps serving whichever container inherited that IP."""
-		with self._route_dir() as (deploy_manager, target_dir):
+		with _route_dir() as (deploy_manager, target_dir):
 			orphan = self._seed(target_dir, "091131f54bcdfc7bc37cbc45763547fa.yml")
 
 			result = deploy_manager.reconcile_instance_routes()
@@ -1720,7 +1721,7 @@ class TestReconcileInstanceRoutes(IntegrationTestCase):
 		for status in ("Stopped", "Draft", "Error"):
 			with self.subTest(status=status):
 				bench = self._bench(status, "172.30.0.11")
-				with self._route_dir() as (deploy_manager, target_dir):
+				with _route_dir() as (deploy_manager, target_dir):
 					route_file = self._seed(target_dir, f"{bench.name}.yml")
 
 					deploy_manager.reconcile_instance_routes()
@@ -1732,7 +1733,7 @@ class TestReconcileInstanceRoutes(IntegrationTestCase):
 		an address backend so passing means the pass rewrote it to the container name."""
 		bench = self._bench("Running", "172.30.0.12")
 
-		with self._route_dir() as (deploy_manager, target_dir):
+		with _route_dir() as (deploy_manager, target_dir):
 			self._seed(target_dir, f"{bench.name}.yml", "http://172.30.0.99:8000\n")
 
 			result = deploy_manager.reconcile_instance_routes()
@@ -1752,7 +1753,7 @@ class TestReconcileInstanceRoutes(IntegrationTestCase):
 		"""The guard that stops this pass taking the platform off the internet. `dynamic.yml` is
 		the control plane's own router and the anchor is every bench's certificate; a run that
 		deletes every instance file must still leave both."""
-		with self._route_dir() as (deploy_manager, target_dir):
+		with _route_dir() as (deploy_manager, target_dir):
 			control_plane = self._seed(target_dir, "dynamic.yml", "control plane\n")
 			deploy_manager._ensure_wildcard_anchor("benchpress.cloud")
 			anchor = target_dir / "wildcard-anchor.yml"
@@ -1769,7 +1770,7 @@ class TestReconcileInstanceRoutes(IntegrationTestCase):
 	def test_a_run_always_leaves_the_certificate_anchored(self):
 		"""The anchor is what holds the wildcard the resolver-free bench routers serve, so the
 		pass writes it first rather than waiting for the next deploy."""
-		with self._route_dir() as (deploy_manager, target_dir):
+		with _route_dir() as (deploy_manager, target_dir):
 			result = deploy_manager.reconcile_instance_routes()
 
 			self.assertTrue(result["anchored"])
@@ -1782,7 +1783,7 @@ class TestReconcileInstanceRoutes(IntegrationTestCase):
 		drifts for weeks without anyone noticing."""
 		bench = self._bench("Running", "172.30.0.13")
 
-		with self._route_dir() as (deploy_manager, target_dir):
+		with _route_dir() as (deploy_manager, target_dir):
 			self._seed(target_dir, "dynamic.yml", "control plane\n")
 			self._seed(target_dir, f"{bench.name}.yml")
 			self._seed(target_dir, "091131f54bcdfc7bc37cbc45763547fa.yml")
@@ -1800,7 +1801,7 @@ class TestReconcileInstanceRoutes(IntegrationTestCase):
 		things to delete is one that disagrees with the files it just wrote."""
 		self._bench("Running", "172.30.0.14")
 
-		with self._route_dir() as (deploy_manager, target_dir):
+		with _route_dir() as (deploy_manager, target_dir):
 			self._seed(target_dir, "091131f54bcdfc7bc37cbc45763547fa.yml")
 			deploy_manager.reconcile_instance_routes()
 
@@ -1815,7 +1816,7 @@ class TestReconcileInstanceRoutes(IntegrationTestCase):
 		for base_domain in (None, "", "localhost"):
 			with (
 				self.subTest(base_domain=base_domain),
-				self._route_dir(base_domain) as (
+				_route_dir(base_domain) as (
 					deploy_manager,
 					target_dir,
 				),
@@ -1864,3 +1865,218 @@ class TestSettingsReAnchor(IntegrationTestCase):
 			settings.on_update()
 
 		enqueue.assert_not_called()
+
+
+class TestSyncInstanceRoute(IntegrationTestCase):
+	"""`sync_instance_route` — the route directory agrees with one bench's status.
+
+	See specs/in-progress/restart-free-dynamic-routing/phase-2-status-driven-route-sync.md.
+	"""
+
+	@classmethod
+	def setUpClass(cls):
+		super().setUpClass()
+		frappe.set_user("Administrator")
+		cls.lab = _make_lab("test-lab-sync-route")
+		frappe.db.commit()
+
+	@classmethod
+	def tearDownClass(cls):
+		frappe.set_user("Administrator")
+		for name in frappe.get_all("Bench Instance", filters={"lab": cls.lab.name}, pluck="name"):
+			frappe.delete_doc("Bench Instance", name, force=True, ignore_permissions=True)
+		cls.lab.delete(ignore_permissions=True)
+		frappe.db.commit()
+		super().tearDownClass()
+
+	def _bench(self, status):
+		bench = _fresh_bench(self, self.lab.name)
+		bench.status = status
+		bench.save(ignore_permissions=True)
+		frappe.db.commit()
+		return bench
+
+	def test_a_running_bench_gets_its_route_file(self):
+		bench = self._bench("Running")
+
+		with _route_dir() as (deploy_manager, target_dir):
+			result = deploy_manager.sync_instance_route(bench.name)
+
+			self.assertEqual(result, "written")
+			self.assertTrue((target_dir / f"{bench.name}.yml").exists())
+
+	def test_a_stopped_bench_loses_its_route_file(self):
+		"""The live misroute closes here: a stopped bench's hostname must stop answering."""
+		bench = self._bench("Stopped")
+
+		with _route_dir() as (deploy_manager, target_dir):
+			deploy_manager._write_instance_route(bench.name, "benchpress.cloud")
+			route_file = target_dir / f"{bench.name}.yml"
+			self.assertTrue(route_file.exists())
+
+			result = deploy_manager.sync_instance_route(bench.name)
+
+			self.assertEqual(result, "deleted")
+			self.assertFalse(route_file.exists())
+
+	def test_a_bench_that_no_longer_exists_is_deleted_rather_than_raised_on(self):
+		"""No status reads the same as `Stopped`. A sync that raised here would leave the
+		hostname of a deleted bench answering, which is the state this phase exists to remove."""
+		with _route_dir() as (deploy_manager, target_dir):
+			deploy_manager._write_instance_route("gone-for-good", "benchpress.cloud")
+
+			result = deploy_manager.sync_instance_route("gone-for-good")
+
+			self.assertEqual(result, "deleted")
+			self.assertFalse((target_dir / "gone-for-good.yml").exists())
+
+	def test_localhost_writes_nothing_and_deletes_nothing(self):
+		"""A dev checkout has no route directory and must stay byte-for-byte unaffected."""
+		bench = self._bench("Running")
+
+		with _route_dir(base_domain="localhost") as (deploy_manager, target_dir):
+			result = deploy_manager.sync_instance_route(bench.name)
+
+			self.assertEqual(result, "skipped")
+			self.assertEqual(list(target_dir.iterdir()), [])
+
+	def test_localhost_leaves_an_existing_file_alone(self):
+		bench = self._bench("Stopped")
+
+		with _route_dir(base_domain="localhost") as (deploy_manager, target_dir):
+			seeded = target_dir / f"{bench.name}.yml"
+			seeded.write_text("untouched\n")
+
+			self.assertEqual(deploy_manager.sync_instance_route(bench.name), "skipped")
+			self.assertEqual(seeded.read_text(), "untouched\n")
+
+	def test_the_written_route_names_the_container_and_no_address(self):
+		"""Phase 1's property has to survive this path too, since it is now the common one."""
+		bench = self._bench("Running")
+
+		with _route_dir() as (deploy_manager, target_dir):
+			deploy_manager.sync_instance_route(bench.name)
+			written = (target_dir / f"{bench.name}.yml").read_text()
+
+		self.assertIn(f"http://{bench.name}:8000", written)
+		self.assertNotRegex(written, IPV4_IN_TEXT)
+
+
+class TestRouteSyncTriggers(IntegrationTestCase):
+	"""Every status transition hands the route write to `queue-long`.
+
+	`queue-long` is the only worker that mounts the route directory. `backend` serves these
+	requests and mounts it not at all, and `default` is consumed by `queue-short`, which has no
+	mount either — so a sync on any other queue writes into that container's own filesystem and
+	Traefik never sees it, with every check green. The queue argument is the property under test.
+	"""
+
+	@classmethod
+	def setUpClass(cls):
+		super().setUpClass()
+		frappe.set_user("Administrator")
+		cls.lab = _make_lab("test-lab-route-sync-triggers")
+		frappe.db.commit()
+
+	@classmethod
+	def tearDownClass(cls):
+		frappe.set_user("Administrator")
+		for name in frappe.get_all("Bench Instance", filters={"lab": cls.lab.name}, pluck="name"):
+			frappe.delete_doc("Bench Instance", name, force=True, ignore_permissions=True)
+		cls.lab.delete(ignore_permissions=True)
+		frappe.db.commit()
+		super().tearDownClass()
+
+	def _bench(self, status="Running"):
+		bench = _fresh_bench(self, self.lab.name)
+		bench.status = status
+		bench.container_id = "container-route-sync"
+		bench.save(ignore_permissions=True)
+		frappe.db.commit()
+		return bench
+
+	def _assert_synced_on_long(self, enqueue, bench_name):
+		enqueue.assert_called_once()
+		args, kwargs = enqueue.call_args
+		self.assertEqual(args[0], "benchpress.deploy_manager.sync_instance_route")
+		self.assertEqual(kwargs["bench_name"], bench_name)
+		self.assertEqual(kwargs["queue"], "long")
+		# The job re-reads `status`, so it must not start before the new value is committed.
+		self.assertTrue(kwargs["enqueue_after_commit"])
+
+	@patch("benchpress.deploy_manager.stop_container")
+	def test_stop_enqueues_the_sync_on_the_long_queue(self, mock_stop):
+		from benchpress.deploy_manager import stop_bench
+
+		bench = self._bench()
+
+		with patch("frappe.enqueue") as enqueue:
+			stop_bench(bench.name)
+
+		self._assert_synced_on_long(enqueue, bench.name)
+
+	def test_start_enqueues_the_sync_on_the_long_queue(self):
+		from benchpress.api import bench_action
+
+		bench = self._bench("Stopped")
+
+		with patch("benchpress.docker_manager.start_container"), patch("frappe.enqueue") as enqueue:
+			bench_action(bench.name, "start")
+
+		self._assert_synced_on_long(enqueue, bench.name)
+
+	def test_restart_enqueues_the_sync_on_the_long_queue(self):
+		"""`docker restart` re-allocates the address, and the file may have been removed by a
+		previous stop — a restart that skipped the sync would come back unrouted."""
+		from benchpress.api import bench_action
+
+		bench = self._bench()
+
+		with patch("benchpress.docker_manager.restart_container"), patch("frappe.enqueue") as enqueue:
+			bench_action(bench.name, "restart")
+
+		self._assert_synced_on_long(enqueue, bench.name)
+
+	def test_desk_start_enqueues_the_sync_on_the_long_queue(self):
+		bench = self._bench("Stopped")
+
+		with (
+			patch("benchpress.docker_manager.start_container"),
+			patch("frappe.msgprint"),
+			patch("frappe.enqueue") as enqueue,
+		):
+			bench.enqueue_start()
+
+		self._assert_synced_on_long(enqueue, bench.name)
+
+	def test_two_transitions_in_quick_succession_deduplicate(self):
+		"""A stop followed straight away by a start must not queue two writes racing each other
+		for the same file — the job id is per bench and `deduplicate` collapses them."""
+		from benchpress.deploy_manager import enqueue_route_sync
+
+		with patch("frappe.enqueue") as enqueue:
+			enqueue_route_sync("inst-1")
+			enqueue_route_sync("inst-1")
+
+		job_ids = {call.kwargs["job_id"] for call in enqueue.call_args_list}
+		self.assertEqual(job_ids, {"route_sync:inst-1"})
+		self.assertTrue(all(call.kwargs["deduplicate"] for call in enqueue.call_args_list))
+
+	def test_teardown_deletes_directly_and_enqueues_nothing(self):
+		"""Teardown already runs on `queue-long`, and it must not depend on a second job
+		surviving to remove live routing state."""
+		from benchpress.deploy_manager import teardown_bench
+
+		bench = self._bench()
+		bench.container_id = None
+		bench.save(ignore_permissions=True)
+
+		with _route_dir() as (deploy_manager, target_dir):
+			deploy_manager._write_instance_route(bench.name, "benchpress.cloud")
+			route_file = target_dir / f"{bench.name}.yml"
+
+			with patch("frappe.enqueue") as enqueue:
+				teardown_bench(bench)
+
+			self.assertFalse(route_file.exists())
+			enqueue.assert_not_called()

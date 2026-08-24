@@ -93,6 +93,7 @@ class BenchInstance(Document):
 	@requires_credits(cost=instance_runway, caps=(cap_concurrent_instances,))
 	def enqueue_start(self):
 		from benchpress.credits import metering
+		from benchpress.deploy_manager import enqueue_route_sync
 		from benchpress.docker_manager import start_container
 
 		if not self.container_id:
@@ -103,4 +104,5 @@ class BenchInstance(Document):
 		metering.on_bench_running(self)
 		self.save()
 		frappe.db.commit()  # nosemgrep: intentional commit to persist status before response
+		enqueue_route_sync(self.name)
 		frappe.msgprint(_("Bench started."))

@@ -223,6 +223,7 @@ def _assert_site_name_changeable(doc) -> None:
 
 @frappe.whitelist()
 def bench_action(bench_name: str, action: str) -> dict:
+	from benchpress.deploy_manager import enqueue_route_sync
 	from benchpress.docker_manager import restart_container, start_container
 
 	require_bench_access(bench_name)
@@ -252,6 +253,9 @@ def bench_action(bench_name: str, action: str) -> dict:
 	metering.on_bench_running(bench)
 	bench.save()
 	frappe.db.commit()
+	# A restart re-allocates the container address, and a start may be following a stop that
+	# removed the file — both need the route re-established.
+	enqueue_route_sync(bench.name)
 	return {"name": bench.name, "status": bench.status}
 
 
