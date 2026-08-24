@@ -76,6 +76,16 @@ TRAEFIK_DYNAMIC_DIR = Path("/etc/traefik/dynamic")
 # collide with an instance file, which is always a 32-character hex id.
 WILDCARD_ANCHOR_FILE = "wildcard-anchor.yml"
 
+# The parent repo renders the control plane's own router into this same flat directory.
+# It is not this app's to write and not this app's to remove.
+CONTROL_PLANE_ROUTE_FILE = "dynamic.yml"
+
+# The two files `reconcile_instance_routes` must never delete, named one by one rather
+# than matched by shape. Deleting `dynamic.yml` takes the control plane off the internet;
+# deleting the anchor takes every bench's certificate with it. A filename pattern is a
+# guess about what future files will look like — a set is a decision about these two.
+PROTECTED_ROUTE_FILES = frozenset({CONTROL_PLANE_ROUTE_FILE, WILDCARD_ANCHOR_FILE})
+
 # Traefik's compose service name. queue-long and traefik both sit on frappe_network, so
 # this resolves; it is the same TLS endpoint the internet reaches, which is the point —
 # checking anything else would prove something else.
@@ -207,6 +217,67 @@ def _delete_instance_route(instance_id: str) -> None:
 	with that IP next — so this has to run at teardown, not just redeploy.
 	"""
 	(TRAEFIK_DYNAMIC_DIR / f"{instance_id}.yml").unlink(missing_ok=True)
+
+
+def reconcile_instance_routes() -> dict:
+	"""Make the Traefik route directory agree with the database.
+
+	Docker and the doctype are the truth; the directory follows. Returns counts rather
+	than a bare success: a reaper that reports "issued" instead of "converged" is how a
+	directory drifts for weeks without anyone noticing.
+
+	Deleting is the load-bearing half. A torn-down container frees its IP back to
+	Docker, which hands it to the next bench, so a route file left behind keeps pointing
+	an old public hostname at whatever container inherits that address — a live
+	cross-owner misroute, not merely a dead link.
+
+	Must run on `queue-long`: it is the only container that mounts the route directory
+	read-write. That is also what keeps this from racing a deploy — both are `long` jobs
+	on a single worker, so a bench part-way through `_deploy_bench` is never read here
+	between its container IP being known and its status reaching `Running`.
+
+	Run it by hand with:
+	    bench --site frontend execute benchpress.deploy_manager.reconcile_instance_routes
+	"""
+	base_domain = frappe.get_cached_doc("BenchPress Settings").base_domain
+	anchored = _ensure_wildcard_anchor(base_domain)
+	if not base_domain or base_domain == "localhost":
+		# A dev checkout has no route directory and must stay byte-for-byte unaffected —
+		# skipped silently, exactly as the writers skip it.
+		return {"anchored": anchored, "written": 0, "deleted": 0, "kept": 0}
+
+	routable = _routable_instance_ips()
+	for instance_id, container_ip in routable.items():
+		_write_instance_route(instance_id, base_domain, container_ip)
+
+	deleted = kept = 0
+	for path in sorted(TRAEFIK_DYNAMIC_DIR.glob("*.yml")):
+		if path.name in PROTECTED_ROUTE_FILES:
+			kept += 1
+			continue
+		if path.stem in routable:
+			continue
+		_delete_instance_route(path.stem)
+		deleted += 1
+
+	return {"anchored": anchored, "written": len(routable), "deleted": deleted, "kept": kept}
+
+
+def _routable_instance_ips() -> dict[str, str]:
+	"""Every bench that should own a route file, mapped to the address it should point at.
+
+	`Running` and nothing else. A `Stopped`, `Draft` or `Error` bench has no container
+	answering, and its recorded `container_ip` is a freed address Docker is free to hand
+	to somebody else's bench — which is the misroute, not a dead link. A row with no IP
+	at all is dropped for the same reason a route to nowhere is worse than no route.
+	"""
+	instance = frappe.qb.DocType("Bench Instance")
+	rows = (
+		frappe.qb.from_(instance)
+		.select(instance.name, instance.container_ip)
+		.where(instance.status == "Running")
+	).run(as_dict=True)
+	return {row.name: row.container_ip for row in rows if row.container_ip}
 
 
 def _log_certificate_state(instance_id: str, base_domain: str | None, pipeline) -> None:

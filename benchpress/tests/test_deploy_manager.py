@@ -1597,3 +1597,223 @@ class TestCertificateVerification(unittest.TestCase):
 			patch.object(deploy_manager.ssl, "create_default_context", autospec=True),
 		):
 			self.assertIsNone(deploy_manager._certificate_error("inst-1.benchpress.cloud"))
+
+
+class TestReconcileInstanceRoutes(IntegrationTestCase):
+	"""`reconcile_instance_routes` — the route directory converges on the database.
+
+	See specs/in-progress/wildcard-cert-routing/phase-3-route-convergence.md.
+	"""
+
+	@classmethod
+	def setUpClass(cls):
+		super().setUpClass()
+		frappe.set_user("Administrator")
+		cls.lab = _make_lab("test-lab-reconcile-routes")
+		frappe.db.commit()
+
+	@classmethod
+	def tearDownClass(cls):
+		frappe.set_user("Administrator")
+		for name in frappe.get_all("Bench Instance", filters={"lab": cls.lab.name}, pluck="name"):
+			frappe.delete_doc("Bench Instance", name, force=True, ignore_permissions=True)
+		cls.lab.delete(ignore_permissions=True)
+		frappe.db.commit()
+		super().tearDownClass()
+
+	@contextmanager
+	def _route_dir(self, base_domain="benchpress.cloud"):
+		"""A tmp route directory, with `base_domain` supplied rather than read from live settings.
+
+		The settings doc is patched, never saved: saving it on a real host would re-anchor the
+		certificate for whatever value a test happened to pick.
+		"""
+		from benchpress import deploy_manager
+
+		with tempfile.TemporaryDirectory() as tmp:
+			target_dir = Path(tmp) / "dynamic"
+			target_dir.mkdir()
+			with (
+				patch.object(deploy_manager, "TRAEFIK_DYNAMIC_DIR", target_dir),
+				patch("frappe.get_cached_doc", return_value=frappe._dict(base_domain=base_domain)),
+			):
+				yield deploy_manager, target_dir
+
+	def _bench(self, status, container_ip):
+		bench = _fresh_bench(self, self.lab.name)
+		bench.status = status
+		bench.container_ip = container_ip
+		bench.save(ignore_permissions=True)
+		frappe.db.commit()
+		return bench
+
+	def _seed(self, target_dir, name, body="stale\n"):
+		path = target_dir / name
+		path.write_text(body)
+		return path
+
+	def _instance_files(self, target_dir):
+		from benchpress.deploy_manager import PROTECTED_ROUTE_FILES
+
+		return sorted(p.name for p in target_dir.glob("*.yml") if p.name not in PROTECTED_ROUTE_FILES)
+
+	def test_a_route_file_naming_no_bench_instance_is_deleted(self):
+		"""The orphan case: a hostname with no document behind it still resolves and still
+		routes, so it keeps serving whichever container inherited that IP."""
+		with self._route_dir() as (deploy_manager, target_dir):
+			orphan = self._seed(target_dir, "091131f54bcdfc7bc37cbc45763547fa.yml")
+
+			result = deploy_manager.reconcile_instance_routes()
+
+			self.assertFalse(orphan.exists())
+			self.assertGreaterEqual(result["deleted"], 1)
+
+	def test_a_bench_that_is_not_running_loses_its_route_file(self):
+		"""A stopped bench's recorded IP is an address Docker has already handed back, so the
+		file is not a dead link — it is the next bench's hostname collision."""
+		for status in ("Stopped", "Draft", "Error"):
+			with self.subTest(status=status):
+				bench = self._bench(status, "172.30.0.11")
+				with self._route_dir() as (deploy_manager, target_dir):
+					route_file = self._seed(target_dir, f"{bench.name}.yml")
+
+					deploy_manager.reconcile_instance_routes()
+
+					self.assertFalse(route_file.exists())
+
+	def test_a_running_bench_route_is_rewritten_with_its_current_ip(self):
+		"""Convergence, not merely reaping: a file that survives must also be right. Seeded with
+		the wrong backend so passing means it was rewritten, not left alone."""
+		bench = self._bench("Running", "172.30.0.12")
+
+		with self._route_dir() as (deploy_manager, target_dir):
+			self._seed(target_dir, f"{bench.name}.yml", "http://172.30.0.99:8000\n")
+
+			result = deploy_manager.reconcile_instance_routes()
+
+			config = yaml.safe_load((target_dir / f"{bench.name}.yml").read_text())
+			backends = [
+				server["url"]
+				for service in config["http"]["services"].values()
+				for server in service["loadBalancer"]["servers"]
+			]
+			self.assertIn("http://172.30.0.12:8000", backends)
+			self.assertNotIn("http://172.30.0.99:8000", str(backends))
+			self.assertGreaterEqual(result["written"], 1)
+
+	def test_the_control_plane_router_and_the_anchor_survive_a_full_sweep(self):
+		"""The guard that stops this pass taking the platform off the internet. `dynamic.yml` is
+		the control plane's own router and the anchor is every bench's certificate; a run that
+		deletes every instance file must still leave both."""
+		with self._route_dir() as (deploy_manager, target_dir):
+			control_plane = self._seed(target_dir, "dynamic.yml", "control plane\n")
+			deploy_manager._ensure_wildcard_anchor("benchpress.cloud")
+			anchor = target_dir / "wildcard-anchor.yml"
+			anchor_text = anchor.read_text()
+			self._seed(target_dir, "16b283bccf6560ab1aa5f078d492d005.yml")
+			self._seed(target_dir, "5dc12efd9c154796adae757adec1b2f3.yml")
+
+			result = deploy_manager.reconcile_instance_routes()
+
+			self.assertEqual(control_plane.read_text(), "control plane\n")
+			self.assertEqual(anchor.read_text(), anchor_text)
+			self.assertEqual(result["kept"], 2)
+
+	def test_a_run_always_leaves_the_certificate_anchored(self):
+		"""The anchor is what holds the wildcard the resolver-free bench routers serve, so the
+		pass writes it first rather than waiting for the next deploy."""
+		with self._route_dir() as (deploy_manager, target_dir):
+			result = deploy_manager.reconcile_instance_routes()
+
+			self.assertTrue(result["anchored"])
+			config = yaml.safe_load((target_dir / "wildcard-anchor.yml").read_text())
+			router = config["http"]["routers"]["benchpress-wildcard-anchor"]
+			self.assertEqual(router["rule"], "Host(`tls-anchor.benchpress.cloud`)")
+
+	def test_the_returned_counts_match_what_happened_on_disk(self):
+		"""A reaper that reports what it attempted rather than what converged is how a directory
+		drifts for weeks without anyone noticing."""
+		bench = self._bench("Running", "172.30.0.13")
+
+		with self._route_dir() as (deploy_manager, target_dir):
+			self._seed(target_dir, "dynamic.yml", "control plane\n")
+			self._seed(target_dir, f"{bench.name}.yml")
+			self._seed(target_dir, "091131f54bcdfc7bc37cbc45763547fa.yml")
+			self._seed(target_dir, "5dc12efd9c154796adae757adec1b2f3.yml")
+
+			result = deploy_manager.reconcile_instance_routes()
+
+			self.assertEqual(result["deleted"], 2)
+			self.assertEqual(result["kept"], 2)
+			self.assertEqual(result["written"], len(self._instance_files(target_dir)))
+			self.assertIn(f"{bench.name}.yml", self._instance_files(target_dir))
+
+	def test_a_second_run_deletes_nothing(self):
+		"""Idempotence is the read side agreeing with the write side. A pass that keeps finding
+		things to delete is one that disagrees with the files it just wrote."""
+		self._bench("Running", "172.30.0.14")
+
+		with self._route_dir() as (deploy_manager, target_dir):
+			self._seed(target_dir, "091131f54bcdfc7bc37cbc45763547fa.yml")
+			deploy_manager.reconcile_instance_routes()
+
+			result = deploy_manager.reconcile_instance_routes()
+
+			self.assertEqual(result["deleted"], 0)
+			self.assertFalse(result["anchored"])
+
+	def test_reconcile_writes_nothing_at_all_without_a_public_domain(self):
+		"""A dev checkout must be byte-for-byte unaffected — and must not reap either, since a
+		directory it never writes is not a directory it understands."""
+		for base_domain in (None, "", "localhost"):
+			with (
+				self.subTest(base_domain=base_domain),
+				self._route_dir(base_domain) as (
+					deploy_manager,
+					target_dir,
+				),
+			):
+				survivor = self._seed(target_dir, "091131f54bcdfc7bc37cbc45763547fa.yml")
+
+				result = deploy_manager.reconcile_instance_routes()
+
+				self.assertTrue(survivor.exists())
+				self.assertEqual(result, {"anchored": False, "written": 0, "deleted": 0, "kept": 0})
+
+
+class TestSettingsReAnchor(IntegrationTestCase):
+	"""`BenchPress Settings.on_update` hands the sweep to the worker that can do it.
+
+	`on_update` is called directly on an unsaved document. Saving the real Single would write
+	a domain to a live host, and the whole point of the controller is that it does not do the
+	work itself — what needs asserting is which queue it hands it to.
+	"""
+
+	def _settings(self, previous_domain):
+		settings = frappe.get_doc("BenchPress Settings")
+		settings._doc_before_save = frappe._dict(base_domain=previous_domain)
+		return settings
+
+	def test_a_changed_base_domain_enqueues_the_sweep_on_the_long_queue(self):
+		"""`queue-long` is the only worker that mounts the route directory. A sweep on any other
+		queue writes into that container's own filesystem, and Traefik never sees it."""
+		settings = self._settings("some-other-zone.example")
+
+		with patch("frappe.enqueue") as enqueue:
+			settings.on_update()
+
+		enqueue.assert_called_once()
+		args, kwargs = enqueue.call_args
+		self.assertEqual(args[0], "benchpress.deploy_manager.reconcile_instance_routes")
+		self.assertEqual(kwargs["queue"], "long")
+		# The job re-reads `base_domain`, so it must not start before the new value is committed.
+		self.assertTrue(kwargs["enqueue_after_commit"])
+
+	def test_an_unrelated_settings_save_enqueues_nothing(self):
+		"""A toggle or a timeout is not a reason to sweep the route directory."""
+		settings = self._settings(frappe.get_cached_doc("BenchPress Settings").base_domain)
+
+		with patch("frappe.enqueue") as enqueue:
+			settings.on_update()
+
+		enqueue.assert_not_called()
