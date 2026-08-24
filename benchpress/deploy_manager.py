@@ -2,6 +2,7 @@
 # For license information, please see license.txt
 
 import json
+import os
 import secrets
 import shlex
 import socket
@@ -142,6 +143,15 @@ def _wildcard_anchor_config(base_domain: str) -> dict:
 	}
 
 
+def _atomic_write(path: Path, text: str) -> None:
+	"""Replace `path` in one step, so Traefik never reads a half-written file."""
+	# Traefik's file provider parses only .yml, .yaml, .toml and .json, so the temp name is
+	# structurally invisible to the watcher rather than merely unlikely to be read.
+	tmp = path.with_name(f".{path.name}.tmp")
+	tmp.write_text(text)
+	os.replace(tmp, path)
+
+
 def _ensure_wildcard_anchor(base_domain: str | None) -> bool:
 	"""Put the bench-zone wildcard in Traefik's certificate store, once.
 
@@ -160,11 +170,11 @@ def _ensure_wildcard_anchor(base_domain: str | None) -> bool:
 		return False
 
 	TRAEFIK_DYNAMIC_DIR.mkdir(parents=True, exist_ok=True)
-	path.write_text(wanted)
+	_atomic_write(path, wanted)
 	return True
 
 
-def _write_instance_route(instance_id: str, base_domain: str, container_ip: str) -> None:
+def _write_instance_route(instance_id: str, base_domain: str) -> None:
 	"""Write Traefik file-provider routes for this instance's site and its code-server IDE.
 
 	`tls: {}` turns TLS on and names no resolver, so these routers serve whatever
@@ -174,8 +184,10 @@ def _write_instance_route(instance_id: str, base_domain: str, container_ip: str)
 	`_ensure_wildcard_anchor` is what puts `*.{base_domain}` in the store, and it is the
 	only place in this app that names a resolver.
 
-	One file per instance, named by instance ID, so a redeploy naturally overwrites it
-	with the fresh `container_ip` — no dedup logic needed.
+	The file is a pure function of `(instance_id, base_domain)`: it names the container,
+	never an address, so no lifecycle transition can make it stale. The container name
+	*is* `instance_id` — `create_bench_container` names it `bench_doc.bench_name` and
+	`BenchInstance.autoname` sets `name = bench_name`.
 	"""
 	if not base_domain or base_domain == "localhost":
 		return
@@ -197,24 +209,24 @@ def _write_instance_route(instance_id: str, base_domain: str, container_ip: str)
 					"tls": {},
 				},
 			},
+			# Resolved by Docker's embedded DNS: traefik is on the `benchpress` network.
 			"services": {
 				f"site-{instance_id}": {
-					"loadBalancer": {"servers": [{"url": f"http://{container_ip}:{SITE_HTTP_PORT}"}]}
+					"loadBalancer": {"servers": [{"url": f"http://{instance_id}:{SITE_HTTP_PORT}"}]}
 				},
-				f"ide-{instance_id}": {"loadBalancer": {"servers": [{"url": f"http://{container_ip}:8080"}]}},
+				f"ide-{instance_id}": {"loadBalancer": {"servers": [{"url": f"http://{instance_id}:8080"}]}},
 			},
 		}
 	}
-	(TRAEFIK_DYNAMIC_DIR / f"{instance_id}.yml").write_text(yaml.safe_dump(config))
+	_atomic_write(TRAEFIK_DYNAMIC_DIR / f"{instance_id}.yml", yaml.safe_dump(config))
 
 
 def _delete_instance_route(instance_id: str) -> None:
 	"""Remove this instance's Traefik route file, if any.
 
-	Torn-down containers free their IP back to Docker, which can hand it to the next
-	deployed instance. A route file left behind after teardown is live routing state
-	that would keep pointing the old public hostname at whatever container ends up
-	with that IP next — so this has to run at teardown, not just redeploy.
+	The route names the container, so a file left behind after teardown resolves to
+	nothing and 502s rather than reaching another tenant. Still deleted at teardown:
+	a hostname that answers at all outlives the bench it was issued for.
 	"""
 	(TRAEFIK_DYNAMIC_DIR / f"{instance_id}.yml").unlink(missing_ok=True)
 
@@ -228,10 +240,9 @@ def reconcile_instance_routes() -> dict:
 	rather than a bare success: a reaper that reports "issued" instead of "converged" is how
 	a directory drifts for weeks without anyone noticing.
 
-	Deleting is the load-bearing half. A torn-down container frees its IP back to
-	Docker, which hands it to the next bench, so a route file left behind keeps pointing
-	an old public hostname at whatever container inherits that address — a live
-	cross-owner misroute, not merely a dead link.
+	Deleting is the load-bearing half. Routes name containers, so a file left behind is a
+	502 rather than another tenant's site — but it is still a public hostname answering
+	for a bench that no longer exists, and only this pass removes one nothing deleted.
 
 	Must run on `queue-long`: it is the only container that mounts the route directory
 	read-write. That is also what keeps this from racing a deploy — both are `long` jobs
@@ -249,8 +260,8 @@ def reconcile_instance_routes() -> dict:
 		return {"anchored": anchored, "written": 0, "deleted": 0, "kept": 0}
 
 	routable = _routable_instance_ips()
-	for instance_id, container_ip in routable.items():
-		_write_instance_route(instance_id, base_domain, container_ip)
+	for instance_id in routable:
+		_write_instance_route(instance_id, base_domain)
 
 	deleted = kept = 0
 	for path in sorted(TRAEFIK_DYNAMIC_DIR.glob("*.yml")):
@@ -522,7 +533,7 @@ def _deploy_bench(bench_name: str) -> None:
 		frappe.db.commit()
 
 		bench.public_url = _public_site_url(bench.name, settings.base_domain)
-		_write_instance_route(bench.name, settings.base_domain, container_ip)
+		_write_instance_route(bench.name, settings.base_domain)
 		_log_certificate_state(bench.name, settings.base_domain, pipeline)
 
 		_setup_container_vpn(bench, container_id, pipeline)

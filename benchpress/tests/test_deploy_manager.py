@@ -1,6 +1,7 @@
 # Copyright (c) 2026, Venkatesh and Contributors
 # See license.txt
 
+import re
 import ssl
 import tempfile
 import unittest
@@ -13,6 +14,10 @@ import yaml
 from frappe.tests import IntegrationTestCase
 
 from benchpress.benchpress.doctype.bench_instance import get_instance_id
+
+# Any dotted quad, anywhere in the rendered file. The property routes must hold is that no
+# address of any kind appears — asserting one known IP is absent would pass for the next one.
+IPV4_IN_TEXT = re.compile(r"\b\d{1,3}(?:\.\d{1,3}){3}\b")
 
 
 def _make_lab(lab_id="test-lab-deploy-mgr"):
@@ -1250,7 +1255,7 @@ class TestRecordPrimarySite(IntegrationTestCase):
 
 		with tempfile.TemporaryDirectory() as tmp:
 			with patch.object(deploy_manager, "TRAEFIK_DYNAMIC_DIR", Path(tmp) / "instances"):
-				deploy_manager._write_instance_route(bench.name, "benchpress.cloud", "172.30.0.11")
+				deploy_manager._write_instance_route(bench.name, "benchpress.cloud")
 				route_file = Path(tmp) / "instances" / f"{bench.name}.yml"
 				self.assertTrue(route_file.exists())
 
@@ -1269,7 +1274,7 @@ class TestRecordPrimarySite(IntegrationTestCase):
 		with tempfile.TemporaryDirectory() as tmp:
 			with patch.object(deploy_manager, "TRAEFIK_DYNAMIC_DIR", Path(tmp) / "instances"):
 				deploy_manager._ensure_wildcard_anchor("benchpress.cloud")
-				deploy_manager._write_instance_route(bench.name, "benchpress.cloud", "172.30.0.11")
+				deploy_manager._write_instance_route(bench.name, "benchpress.cloud")
 				anchor = Path(tmp) / "instances" / "wildcard-anchor.yml"
 
 				teardown_bench(bench)
@@ -1330,7 +1335,7 @@ class TestPublicSiteUrlHelpers(unittest.TestCase):
 
 		with tempfile.TemporaryDirectory() as tmp:
 			with patch.object(deploy_manager, "TRAEFIK_DYNAMIC_DIR", Path(tmp) / "instances"):
-				deploy_manager._write_instance_route("inst-1", "benchpress.cloud", "172.30.0.11")
+				deploy_manager._write_instance_route("inst-1", "benchpress.cloud")
 				config = yaml.safe_load((Path(tmp) / "instances" / "inst-1.yml").read_text())
 
 			# TLS on, no resolver — the certificate comes from the store, put there by
@@ -1343,7 +1348,7 @@ class TestPublicSiteUrlHelpers(unittest.TestCase):
 			self.assertEqual(router["tls"], expected_tls)
 
 			service = config["http"]["services"]["site-inst-1"]
-			self.assertEqual(service["loadBalancer"]["servers"], [{"url": "http://172.30.0.11:8000"}])
+			self.assertEqual(service["loadBalancer"]["servers"], [{"url": "http://inst-1:8000"}])
 
 			ide_router = config["http"]["routers"]["ide-inst-1"]
 			self.assertEqual(ide_router["rule"], "Host(`ide-inst-1.benchpress.cloud`)")
@@ -1351,7 +1356,7 @@ class TestPublicSiteUrlHelpers(unittest.TestCase):
 			self.assertEqual(ide_router["tls"], expected_tls)
 
 			ide_service = config["http"]["services"]["ide-inst-1"]
-			self.assertEqual(ide_service["loadBalancer"]["servers"], [{"url": "http://172.30.0.11:8080"}])
+			self.assertEqual(ide_service["loadBalancer"]["servers"], [{"url": "http://inst-1:8080"}])
 
 	def test_write_instance_route_no_ops_for_localhost(self):
 		from benchpress import deploy_manager
@@ -1359,7 +1364,7 @@ class TestPublicSiteUrlHelpers(unittest.TestCase):
 		with tempfile.TemporaryDirectory() as tmp:
 			target_dir = Path(tmp) / "instances"
 			with patch.object(deploy_manager, "TRAEFIK_DYNAMIC_DIR", target_dir):
-				deploy_manager._write_instance_route("inst-1", "localhost", "172.30.0.11")
+				deploy_manager._write_instance_route("inst-1", "localhost")
 
 			self.assertFalse(target_dir.exists())
 
@@ -1375,13 +1380,46 @@ class TestPublicSiteUrlHelpers(unittest.TestCase):
 
 		with tempfile.TemporaryDirectory() as tmp:
 			with patch.object(deploy_manager, "TRAEFIK_DYNAMIC_DIR", Path(tmp) / "instances"):
-				deploy_manager._write_instance_route("inst-1", "benchpress.cloud", "172.30.0.11")
+				deploy_manager._write_instance_route("inst-1", "benchpress.cloud")
 				written_text = (Path(tmp) / "instances" / "inst-1.yml").read_text()
 
 		self.assertNotIn("certResolver", written_text)
 		# Two separate `{}` literals, so PyYAML emits the mapping twice rather than an
 		# anchor/alias pair that Traefik would have to resolve.
 		self.assertEqual(written_text.count("tls: {}"), 2)
+
+	def test_instance_route_names_the_container_and_no_address(self):
+		"""The property this phase exists to create. Both services name the container, which
+		Docker's embedded DNS resolves, so no lifecycle transition can make the file stale."""
+		from benchpress import deploy_manager
+
+		with tempfile.TemporaryDirectory() as tmp:
+			with patch.object(deploy_manager, "TRAEFIK_DYNAMIC_DIR", Path(tmp) / "instances"):
+				deploy_manager._write_instance_route("inst-1", "benchpress.cloud")
+				written_text = (Path(tmp) / "instances" / "inst-1.yml").read_text()
+
+		config = yaml.safe_load(written_text)
+		backends = sorted(
+			server["url"]
+			for service in config["http"]["services"].values()
+			for server in service["loadBalancer"]["servers"]
+		)
+		self.assertEqual(backends, ["http://inst-1:8000", "http://inst-1:8080"])
+		self.assertNotRegex(written_text, IPV4_IN_TEXT)
+
+	def test_rewriting_a_route_leaves_one_file_and_no_temp(self):
+		"""The write is a rename, not a truncate: Traefik reads this directory live, so a
+		half-written file is a config-parse error on the one internet-facing container."""
+		from benchpress import deploy_manager
+
+		with tempfile.TemporaryDirectory() as tmp:
+			target_dir = Path(tmp) / "instances"
+			with patch.object(deploy_manager, "TRAEFIK_DYNAMIC_DIR", target_dir):
+				deploy_manager._write_instance_route("inst-1", "benchpress.cloud")
+				deploy_manager._write_instance_route("inst-1", "benchpress.cloud")
+
+			# iterdir, so a leftover dotfile temp counts against this.
+			self.assertEqual([p.name for p in target_dir.iterdir()], ["inst-1.yml"])
 
 
 class TestWildcardAnchor(unittest.TestCase):
@@ -1420,6 +1458,14 @@ class TestWildcardAnchor(unittest.TestCase):
 			self.assertEqual(router["priority"], 1)
 			self.assertEqual(router["service"], "benchpress-wildcard-anchor")
 			self.assertIn("benchpress-wildcard-anchor", config["http"]["services"])
+
+	def test_anchor_leaves_no_temp_file_behind(self):
+		"""The anchor is what keeps the certificate renewing, so a truncated read of it is
+		worse than a truncated read of any bench route."""
+		with self._anchor_dir() as (deploy_manager, target_dir):
+			deploy_manager._ensure_wildcard_anchor("benchpress.cloud")
+
+			self.assertEqual([p.name for p in target_dir.iterdir()], ["wildcard-anchor.yml"])
 
 	def test_anchor_is_not_rewritten_when_unchanged(self):
 		"""Traefik reloads on mtime, so a deploy that changes nothing must not touch it."""
@@ -1681,9 +1727,9 @@ class TestReconcileInstanceRoutes(IntegrationTestCase):
 
 					self.assertFalse(route_file.exists())
 
-	def test_a_running_bench_route_is_rewritten_with_its_current_ip(self):
+	def test_a_running_bench_route_is_rewritten_to_name_its_container(self):
 		"""Convergence, not merely reaping: a file that survives must also be right. Seeded with
-		the wrong backend so passing means it was rewritten, not left alone."""
+		an address backend so passing means the pass rewrote it to the container name."""
 		bench = self._bench("Running", "172.30.0.12")
 
 		with self._route_dir() as (deploy_manager, target_dir):
@@ -1691,14 +1737,15 @@ class TestReconcileInstanceRoutes(IntegrationTestCase):
 
 			result = deploy_manager.reconcile_instance_routes()
 
-			config = yaml.safe_load((target_dir / f"{bench.name}.yml").read_text())
+			written_text = (target_dir / f"{bench.name}.yml").read_text()
+			config = yaml.safe_load(written_text)
 			backends = [
 				server["url"]
 				for service in config["http"]["services"].values()
 				for server in service["loadBalancer"]["servers"]
 			]
-			self.assertIn("http://172.30.0.12:8000", backends)
-			self.assertNotIn("http://172.30.0.99:8000", str(backends))
+			self.assertIn(f"http://{bench.name}:8000", backends)
+			self.assertNotRegex(written_text, IPV4_IN_TEXT)
 			self.assertGreaterEqual(result["written"], 1)
 
 	def test_the_control_plane_router_and_the_anchor_survive_a_full_sweep(self):
