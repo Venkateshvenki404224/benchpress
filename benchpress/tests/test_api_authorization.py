@@ -16,6 +16,7 @@ import pkgutil
 from unittest.mock import MagicMock, patch
 
 import frappe
+import frappe.client
 from frappe.tests import IntegrationTestCase
 
 import benchpress
@@ -95,6 +96,7 @@ def _ensure_owned_bench(owner, lab):
 				"lab": lab.name,
 				"frappe_version": lab.frappe_version,
 				"status": "Running",
+				"runtime": "sysbox",
 				"container_id": "authz-container",
 				"code_server_url": "http://localhost:8443",
 				"code_server_password": "cs-secret",
@@ -233,6 +235,22 @@ class TestApiAuthorization(IntegrationTestCase):
 		self.assert_denied(lambda: api.bench_action(self.bench.name, "delete"))
 
 	# --- Cross-user isolation (user_b against user_a's bench) -----------------
+
+	def test_owner_denied_from_lowering_their_own_benchs_runtime(self):
+		"""`if_owner` write is granted on Bench Instance, so only permlevel stands between a
+		tenant and their own isolation."""
+		frappe.set_user(self.user_a)
+		self.assert_denied(
+			lambda: frappe.client.set_value("Bench Instance", self.bench.name, "runtime", "runc")
+		)
+		frappe.set_user("Administrator")
+		self.assertEqual(frappe.db.get_value("Bench Instance", self.bench.name, "runtime"), "sysbox")
+
+	def test_owner_can_still_see_their_benchs_runtime(self):
+		"""The positive control: read at permlevel 1 is granted on purpose."""
+		frappe.set_user(self.user_a)
+		mine = [b for b in api.get_benches() if b["name"] == self.bench.name]
+		self.assertEqual([b["runtime"] for b in mine], ["sysbox"])
 
 	def test_cross_user_denied_from_get_deploy_logs(self):
 		frappe.set_user(self.user_b)

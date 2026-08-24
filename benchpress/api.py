@@ -97,6 +97,7 @@ def get_benches() -> list[dict]:
 			"status",
 			"container_id",
 			"container_ip",
+			"runtime",
 			"wg_ip",
 			"cpu_usage",
 			"memory_usage",
