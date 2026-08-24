@@ -1,12 +1,7 @@
 # Copyright (c) 2026, Venkatesh and Contributors
 # See license.txt
 
-"""The stats poll is also the reconciler: Docker is the truth, status follows.
-
-A container that crashed while its bench still said Running burned credits
-for nothing — `container_health` was collected every minute and acted on by
-nothing. These tests pin the acting-on part.
-"""
+"""The stats poll must stop a Running bench whose container died — `status` drives billing."""
 
 import unittest
 from unittest.mock import patch
@@ -39,8 +34,6 @@ class TestStopIfDead(unittest.TestCase):
 		notify_mock.assert_not_called()
 
 	def test_unhealthy_container_stops_the_bench_and_tells_the_owner(self):
-		# Docker can see the container and reports it not running — a crash,
-		# an OOM kill, a stop behind our back. Status and billing must follow.
 		stop_mock, notify_mock, _ = self._run("Unhealthy")
 		stop_mock.assert_called_once_with(BENCH["name"])
 		notify_mock.assert_called_once()
@@ -51,15 +44,13 @@ class TestStopIfDead(unittest.TestCase):
 		stop_mock.assert_called_once_with(BENCH["name"])
 
 	def test_inspect_error_never_stops_a_bench(self):
-		# Unknown can also mean the Docker socket hiccuped. Only a positive
-		# "does not exist" may stop someone's bench.
+		# Unknown can mean a socket hiccup, not a missing container.
 		stop_mock, notify_mock, gone_mock = self._run("Unknown", gone=False)
 		gone_mock.assert_called_once_with(BENCH["container_id"])
 		stop_mock.assert_not_called()
 		notify_mock.assert_not_called()
 
 	def test_reconciliation_failure_does_not_kill_the_poll(self):
-		# One bench's failure must not starve the rest of the fleet of stats.
 		second = {"name": "bench-002", "container_id": "dec0de", "owner": "user@example.com"}
 		with (
 			patch("benchpress.stats_collector.frappe") as frappe_mock,

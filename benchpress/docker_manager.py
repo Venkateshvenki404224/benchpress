@@ -265,8 +265,7 @@ def wait_for_container_running(container_id: str, timeout: int = 60) -> str:
 
 
 def stop_container(container_id: str) -> None:
-	"""Stop a container. One that no longer exists is already stopped, not an error —
-	the stop path must still work on a bench whose container crashed and was reaped."""
+	"""Stop a container; one that no longer exists is already stopped, not an error."""
 	client = get_client()
 	try:
 		client.containers.get(container_id).stop(timeout=30)
@@ -332,8 +331,7 @@ def _decoded(output) -> str:
 def container_is_gone(container_id: str) -> bool:
 	"""True only when Docker positively reports the container does not exist.
 
-	A daemon error is not "gone" — a caller reconciling bench status must never
-	act on a socket hiccup.
+	A daemon error is not "gone": callers stop benches on this answer.
 	"""
 	try:
 		get_client().containers.get(container_id)

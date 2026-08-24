@@ -9,12 +9,10 @@ from benchpress.docker_manager import container_is_gone, get_container_health, g
 
 
 def collect_bench_stats() -> None:
-	"""Poll Docker for every Running bench: resource usage, health, and drift.
+	"""Poll Docker for every Running bench: resource usage, health, and reconciliation.
 
-	Health is not just a badge. `status` is what the page shows and what the
-	credit sweep bills, so a container that crashed while its bench still said
-	Running would burn the owner's credits for nothing. This poll is the
-	reconciler: Docker is the truth, the doctype follows.
+	`status` drives billing, so a bench whose container died must be stopped,
+	not just marked unhealthy.
 	"""
 	running_benches = frappe.get_all(
 		"Bench Instance",
@@ -68,12 +66,10 @@ def _update_bench_health(bench: dict) -> str:
 
 
 def _stop_if_dead(bench: dict, health: str) -> None:
-	"""Route a bench whose container died through the one stop path.
+	"""Stop a bench whose container died.
 
-	Unhealthy is a container Docker can see and reports as not running — a
-	crash, an OOM kill, a `docker stop` behind our back. Unknown is acted on
-	only when the container is positively gone: an inspect error must never
-	stop anyone's bench.
+	Unknown health is acted on only when the container is positively gone —
+	an inspect error must never stop a bench.
 	"""
 	if health == "Healthy":
 		return

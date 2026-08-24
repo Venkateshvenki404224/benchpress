@@ -191,9 +191,8 @@ def build_linkuser_args(bench, lab, settings, ssh_password: str) -> list[str]:
 def linkuser_command(script_args: list[str]) -> str:
 	"""The linkuser.sh invocation, with every argument shell-quoted.
 
-	This runs as root inside the container and the arguments carry free text (the
-	lab title, the owner's email). Naive single-quote wrapping let an apostrophe
-	break the deploy — and anything worse walk into a root shell.
+	Runs as root inside the container, and the arguments carry free text
+	(the lab title, the owner's email).
 	"""
 	return "bash /opt/benchpress/scripts/linkuser.sh " + " ".join(shlex.quote(a) for a in script_args)
 
