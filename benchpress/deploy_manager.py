@@ -188,14 +188,14 @@ def build_linkuser_args(bench, lab, settings, ssh_password: str) -> list[str]:
 	]
 
 
-def linkuser_command(args: list[str]) -> str:
+def linkuser_command(script_args: list[str]) -> str:
 	"""The linkuser.sh invocation, with every argument shell-quoted.
 
-	This runs as root inside the container and the args carry free text (the lab
-	title, the owner's email). Naive single-quote wrapping let an apostrophe break
-	the deploy — and anything worse walk into a root shell.
+	This runs as root inside the container and the arguments carry free text (the
+	lab title, the owner's email). Naive single-quote wrapping let an apostrophe
+	break the deploy — and anything worse walk into a root shell.
 	"""
-	return "bash /opt/benchpress/scripts/linkuser.sh " + " ".join(shlex.quote(a) for a in args)
+	return "bash /opt/benchpress/scripts/linkuser.sh " + " ".join(shlex.quote(a) for a in script_args)
 
 
 # The desk alert on a terminal deploy/build state. Shared with the enforcement sweep and the
