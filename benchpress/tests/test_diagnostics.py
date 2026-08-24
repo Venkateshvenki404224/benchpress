@@ -1,9 +1,11 @@
 # Copyright (c) 2026, Venkatesh and Contributors
 # See license.txt
 
-"""run_diagnostics contract: six rows, fixed order, never raises, never mutates."""
+"""run_diagnostics contract: seven rows, fixed order, never raises, never mutates."""
 
+import inspect
 import unittest
+from datetime import datetime, timedelta
 from unittest.mock import MagicMock, patch
 
 import docker
@@ -11,9 +13,22 @@ import frappe
 
 from benchpress.diagnostics import run_diagnostics
 
-CHECK_ORDER = ["docker_socket", "docker_network", "mariadb", "redis", "container_runtimes", "vpn_server"]
+CHECK_ORDER = [
+	"docker_socket",
+	"docker_network",
+	"mariadb",
+	"clock_skew",
+	"redis",
+	"container_runtimes",
+	"vpn_server",
+]
+COUNT_WORDS = {6: "six", 7: "seven", 8: "eight", 9: "nine", 10: "ten"}
 HOST_RUNTIMES = {"names": {"runc", "sysbox-runc"}, "default": "runc"}
 DB_ROW = frappe._dict(name="db-server-1", status="Running", container_name="benchpress-mariadb")
+
+# What this host really answers: MariaDB is UTC, Python is Asia/Calcutta.
+DB_CLOCK = datetime(2026, 8, 24, 23, 11, 53)
+IST_OFFSET = timedelta(hours=5, minutes=30)
 
 
 def _healthy_client():
@@ -33,6 +48,9 @@ class TestDiagnostics(unittest.TestCase):
 		installed_apps=None,
 		wg_exists=True,
 		wg_key="the-key",
+		app_clock=None,
+		db_clock=None,
+		db_clock_error=None,
 	):
 		"""Run run_diagnostics with everything healthy unless overridden.
 
@@ -58,6 +76,9 @@ class TestDiagnostics(unittest.TestCase):
 			]
 			frappe_mock.db.exists.return_value = wg_exists
 			frappe_mock.db.get_value.return_value = wg_key
+			frappe_mock.utils.now_datetime.return_value = app_clock or DB_CLOCK
+			frappe_mock.qb.select.side_effect = db_clock_error
+			frappe_mock.qb.select.return_value.run.return_value = ((db_clock or DB_CLOCK,),)
 			rows = run_diagnostics()
 		return {row["check"]: row for row in rows}, rows
 
@@ -71,7 +92,7 @@ class TestDiagnostics(unittest.TestCase):
 	def test_docker_down_marks_docker_checks_failed_without_raising(self):
 		# completing without an exception IS the core assertion
 		by_check, rows = self._run(client_error=Exception("socket unreachable"))
-		self.assertEqual(len(rows), 6)
+		self.assertEqual(len(rows), len(CHECK_ORDER))
 		for check in ("docker_socket", "docker_network", "redis"):
 			self.assertEqual(by_check[check]["status"], "fail")
 
@@ -124,8 +145,39 @@ class TestDiagnostics(unittest.TestCase):
 			mariadb_healthy=False,
 			db_rows=[],
 			installed_apps=["frappe"],
+			db_clock_error=Exception("down"),
 		)
-		self.assertEqual([row["status"] for row in rows], ["fail"] * 6)
+		self.assertEqual([row["status"] for row in rows], ["fail"] * len(CHECK_ORDER))
 		client.networks.create.assert_not_called()
 		client.containers.create.assert_not_called()
 		client.containers.run.assert_not_called()
+
+	def test_clock_skew_passes_when_the_clocks_agree(self):
+		by_check, _rows = self._run(app_clock=DB_CLOCK + timedelta(seconds=1))
+		self.assertEqual(by_check["clock_skew"]["status"], "pass")
+
+	def test_clock_skew_fails_beyond_the_tolerance(self):
+		"""The live condition on this host, and what silently buys 5h30m of free compute."""
+		app_clock = DB_CLOCK + IST_OFFSET
+		by_check, _rows = self._run(app_clock=app_clock)
+
+		hint = by_check["clock_skew"]["hint"]
+		self.assertEqual(by_check["clock_skew"]["status"], "fail")
+		self.assertIn("19800", hint)
+		self.assertIn(app_clock.strftime("%Y-%m-%d %H:%M:%S"), hint)
+		self.assertIn(DB_CLOCK.strftime("%Y-%m-%d %H:%M:%S"), hint)
+
+	def test_clock_skew_never_raises(self):
+		"""A database that refuses the query is a fail row, not an exception."""
+		by_check, rows = self._run(db_clock_error=Exception("db refuses the query"))
+		self.assertEqual(len(rows), len(CHECK_ORDER))
+		self.assertEqual(by_check["clock_skew"]["status"], "fail")
+		self.assertIn("db refuses the query", by_check["clock_skew"]["hint"])
+
+	def test_the_diagnostics_row_count_moved_in_both_places(self):
+		"""One count, stated twice: the test_api fixture and the overview docstring."""
+		from benchpress.overview import _infrastructure
+		from benchpress.tests.test_api import DIAGNOSTICS_ROWS
+
+		self.assertEqual([row["check"] for row in DIAGNOSTICS_ROWS], CHECK_ORDER)
+		self.assertIn(COUNT_WORDS[len(CHECK_ORDER)], inspect.getdoc(_infrastructure))
