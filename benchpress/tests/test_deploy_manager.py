@@ -1,6 +1,7 @@
 # Copyright (c) 2026, Venkatesh and Contributors
 # See license.txt
 
+import ssl
 import tempfile
 import unittest
 from contextlib import contextmanager, nullcontext
@@ -538,7 +539,13 @@ class TestDeployStepMarkers(IntegrationTestCase):
 		return bench
 
 	def _run_deploy(
-		self, bench, site_result=(0, "site created"), cache_hit=True, exec_failures=None, write_error=None
+		self,
+		bench,
+		site_result=(0, "site created"),
+		cache_hit=True,
+		exec_failures=None,
+		write_error=None,
+		cert_error=None,
 	):
 		"""A whole deploy with every side effect mocked but the log itself.
 
@@ -547,6 +554,8 @@ class TestDeployStepMarkers(IntegrationTestCase):
 		`exec_failures` maps a fragment of a container command to the result that command
 		returns, so one exec can fail while the rest of the run succeeds. `write_error` makes
 		every `write_file_to_container` raise, the way a read-only target path would.
+		`cert_error` is what the certificate check reports; only the socket is mocked, so the
+		line the log carries is still written by the real `_log_certificate_state`.
 		"""
 		from benchpress import deploy_manager
 
@@ -566,6 +575,11 @@ class TestDeployStepMarkers(IntegrationTestCase):
 			patch.object(deploy_manager, "create_bench_container", autospec=True) as mock_create,
 			patch.object(deploy_manager, "start_container", autospec=True),
 			patch.object(deploy_manager, "wait_for_container_running", autospec=True) as mock_wait,
+			# Only the socket is mocked, not the reporting around it: a unit test must not
+			# depend on a running Traefik, but the log line must still be the real one.
+			patch.object(
+				deploy_manager, "_certificate_error", autospec=True, return_value=cert_error
+			) as mock_cert,
 			patch.object(deploy_manager, "write_file_to_container", autospec=True) as mock_write,
 			patch.object(deploy_manager, "exec_in_container", autospec=True) as mock_exec,
 			patch.object(deploy_manager, "create_site_in_container", autospec=True) as mock_site,
@@ -575,6 +589,7 @@ class TestDeployStepMarkers(IntegrationTestCase):
 			patch("benchpress.vpn_adapter.configure_container", autospec=True),
 			patch("benchpress.vpn_adapter.create_container_peer", autospec=True) as mock_peer,
 		):
+			self.cert_check = mock_cert
 			mock_infra.return_value = self.db_server_name
 			mock_create.return_value = "cid-steps"
 			mock_wait.return_value = "172.30.0.11"
@@ -816,6 +831,47 @@ class TestDeployStepMarkers(IntegrationTestCase):
 		self.assertIn("Traefik wildcard anchor written for *.benchpress.cloud", self._log(bench.name))
 		self.assertNotIn("certResolver", (self.route_dir / f"{bench.name}.yml").read_text())
 
+	def test_a_public_deploy_states_which_certificate_serves_the_url(self):
+		"""Phase 2: the routers name no resolver, so the deploy has to say the store held a
+		certificate — otherwise the first evidence it did not is a user meeting a 526."""
+		bench = self._bench()
+		self._set_base_domain("benchpress.cloud")
+
+		self._run_deploy(bench)
+
+		self.cert_check.assert_called_once_with(f"{bench.name}.benchpress.cloud")
+		self.assertIn(
+			f"TLS ready for {bench.name}.benchpress.cloud on the *.benchpress.cloud wildcard",
+			self._log(bench.name),
+		)
+
+	def test_a_bad_certificate_warns_without_failing_the_deploy(self):
+		"""Non-fatal by design. The container is up and the site exists, so the owner can still
+		work over the VPN — turning a cosmetic problem into a failed deploy would cost more
+		than it reports."""
+		bench = self._bench()
+		self._set_base_domain("benchpress.cloud")
+
+		self._run_deploy(bench, cert_error=f"certificate does not cover {bench.name}.benchpress.cloud")
+
+		log = self._log(bench.name)
+		self.assertIn(f"WARNING: certificate does not cover {bench.name}.benchpress.cloud", log)
+		self.assertIn("the public URL will fail in a browser", log)
+		# The deploy still finished: eleven steps, and the bench is usable.
+		self.assertIn("Step 11/11", log)
+		self.assertEqual(self._bench_field(bench, "status"), "Running")
+
+	def test_a_localhost_deploy_opens_no_socket_and_logs_no_certificate_line(self):
+		"""A dev checkout has no Traefik, so checking would time out to say nothing. Matches
+		the anchor and route writers: skipped silently, not attempted and failed."""
+		bench = self._bench()
+		self._set_base_domain("localhost")
+
+		self._run_deploy(bench)
+
+		self.cert_check.assert_not_called()
+		self.assertNotIn("TLS ready", self._log(bench.name))
+
 	def test_a_failed_file_write_fails_the_deploy_at_the_step_that_wrote_it(self):
 		"""Hole 4: a silently unwritten `common_site_config.json` is a site that cannot find redis."""
 		bench = self._bench()
@@ -980,6 +1036,7 @@ class TestTerminalStateNotifications(IntegrationTestCase):
 			patch.object(deploy_manager, "wait_for_container_running", autospec=True) as mock_wait,
 			patch.object(deploy_manager, "_write_instance_route", autospec=True),
 			patch.object(deploy_manager, "_ensure_wildcard_anchor", autospec=True),
+			patch.object(deploy_manager, "_certificate_error", autospec=True, return_value=None),
 			patch.object(deploy_manager, "_setup_container_vpn", autospec=True),
 			patch.object(deploy_manager, "write_file_to_container", autospec=True),
 			patch.object(deploy_manager, "exec_in_container", autospec=True) as mock_exec,
@@ -1407,3 +1464,136 @@ class TestWildcardAnchor(unittest.TestCase):
 				self.assertFalse(deploy_manager._ensure_wildcard_anchor(base_domain))
 
 				self.assertFalse(target_dir.exists())
+
+
+class TestCertificateVerification(unittest.TestCase):
+	"""`_log_certificate_state` / `_certificate_error` — phase 2.
+
+	The check reports, it never acts and never raises. No test here opens a socket: the
+	unit under test is the reporting, and a test that needed a running Traefik would fail
+	for reasons that have nothing to do with the code.
+
+	See specs/in-progress/wildcard-cert-routing/phase-2-certificate-verification.md.
+	"""
+
+	def _pipeline(self):
+		pipeline = MagicMock()
+		pipeline.logged = []
+		pipeline.log.side_effect = lambda line, *args, **kwargs: pipeline.logged.append(line)
+		return pipeline
+
+	def test_a_healthy_certificate_is_stated_by_name(self):
+		"""Naming the wildcard is the point: it says the bench is served by the anchor's
+		certificate rather than by one of its own."""
+		from benchpress import deploy_manager
+
+		pipeline = self._pipeline()
+		with patch.object(deploy_manager, "_certificate_error", autospec=True, return_value=None):
+			deploy_manager._log_certificate_state("inst-1", "benchpress.cloud", pipeline)
+
+		self.assertEqual(
+			pipeline.logged,
+			["TLS ready for inst-1.benchpress.cloud on the *.benchpress.cloud wildcard"],
+		)
+
+	def test_a_certificate_problem_warns_and_does_not_raise(self):
+		"""The whole contract. A check that raised would turn a cosmetic problem into a
+		failed deploy, for a bench whose container is up and whose site exists."""
+		from benchpress import deploy_manager
+
+		pipeline = self._pipeline()
+		with patch.object(
+			deploy_manager,
+			"_certificate_error",
+			autospec=True,
+			return_value="certificate does not cover inst-1.benchpress.cloud (hostname mismatch)",
+		):
+			deploy_manager._log_certificate_state("inst-1", "benchpress.cloud", pipeline)
+
+		self.assertEqual(len(pipeline.logged), 1)
+		self.assertIn("WARNING: certificate does not cover inst-1.benchpress.cloud", pipeline.logged[0])
+		self.assertIn("the public URL will fail in a browser", pipeline.logged[0])
+
+	def test_only_the_site_hostname_is_checked(self):
+		"""The IDE hostname is one label under the same `base_domain`, so the same wildcard
+		covers it — a second handshake would only re-prove the first."""
+		from benchpress import deploy_manager
+
+		with patch.object(
+			deploy_manager, "_certificate_error", autospec=True, return_value=None
+		) as mock_check:
+			deploy_manager._log_certificate_state("inst-1", "benchpress.cloud", self._pipeline())
+
+		mock_check.assert_called_once_with("inst-1.benchpress.cloud")
+
+	def test_no_check_and_no_line_without_a_public_domain(self):
+		"""A dev checkout is byte-for-byte unaffected — no socket, no log line. Matches
+		`_write_instance_route` and `_ensure_wildcard_anchor`."""
+		from benchpress import deploy_manager
+
+		for base_domain in (None, "", "localhost"):
+			with self.subTest(base_domain=base_domain):
+				pipeline = self._pipeline()
+				with patch.object(deploy_manager, "_certificate_error", autospec=True) as mock_check:
+					deploy_manager._log_certificate_state("inst-1", base_domain, pipeline)
+
+				mock_check.assert_not_called()
+				self.assertEqual(pipeline.logged, [])
+
+	def test_an_unreachable_traefik_is_not_reported_as_a_bad_certificate(self):
+		"""The two causes call for different actions, so they must stay apart in a log
+		someone reads at 2am: one means fix the certificate, the other means Traefik is
+		down — or that there is no Traefik, which is the dev-checkout case."""
+		from benchpress import deploy_manager
+
+		with patch.object(
+			deploy_manager.socket, "create_connection", autospec=True, side_effect=OSError("refused")
+		):
+			error = deploy_manager._certificate_error("inst-1.benchpress.cloud")
+
+		self.assertIn("could not reach Traefik to check inst-1.benchpress.cloud", error)
+		self.assertNotIn("does not cover", error)
+
+	def test_a_hostname_the_certificate_misses_is_named(self):
+		"""The 526 this feature exists to prevent, caught at deploy time and named."""
+		from benchpress import deploy_manager
+
+		failure = ssl.SSLCertVerificationError("hostname mismatch")
+		failure.verify_message = "Hostname mismatch, certificate is not valid for 'nope.example.com'"
+
+		with patch.object(deploy_manager.socket, "create_connection", autospec=True, side_effect=failure):
+			error = deploy_manager._certificate_error("nope.example.com")
+
+		self.assertIn("certificate does not cover nope.example.com", error)
+		self.assertIn("Hostname mismatch", error)
+
+	def test_a_verification_error_without_a_verify_message_still_reports(self):
+		"""`verify_message` is set by the C module on a real handshake failure and is absent
+		otherwise, so reading it bare would raise out of the handler — reporting the
+		exception itself keeps the failure a warning."""
+		from benchpress import deploy_manager
+
+		with patch.object(
+			deploy_manager.socket,
+			"create_connection",
+			autospec=True,
+			side_effect=ssl.SSLCertVerificationError("no verify_message here"),
+		):
+			error = deploy_manager._certificate_error("nope.example.com")
+
+		self.assertIn("certificate does not cover nope.example.com", error)
+		self.assertIn("no verify_message here", error)
+
+	def test_a_usable_certificate_reports_nothing(self):
+		"""None is the healthy answer — the caller logs the success line off the absence.
+
+		The context is mocked alongside the socket because a real `SSLContext` handed a mock
+		socket fails on the mock, not on the certificate.
+		"""
+		from benchpress import deploy_manager
+
+		with (
+			patch.object(deploy_manager.socket, "create_connection", autospec=True),
+			patch.object(deploy_manager.ssl, "create_default_context", autospec=True),
+		):
+			self.assertIsNone(deploy_manager._certificate_error("inst-1.benchpress.cloud"))

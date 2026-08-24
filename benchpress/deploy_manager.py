@@ -4,6 +4,8 @@
 import json
 import secrets
 import shlex
+import socket
+import ssl
 from pathlib import Path
 
 import frappe
@@ -73,6 +75,11 @@ TRAEFIK_DYNAMIC_DIR = Path("/etc/traefik/dynamic")
 # certificate resolver. Fixed name so it is idempotently overwritten and can never
 # collide with an instance file, which is always a 32-character hex id.
 WILDCARD_ANCHOR_FILE = "wildcard-anchor.yml"
+
+# Traefik's compose service name. queue-long and traefik both sit on frappe_network, so
+# this resolves; it is the same TLS endpoint the internet reaches, which is the point —
+# checking anything else would prove something else.
+TRAEFIK_HOST = "traefik"
 
 
 def _public_site_url(instance_id: str, base_domain: str | None) -> str | None:
@@ -200,6 +207,58 @@ def _delete_instance_route(instance_id: str) -> None:
 	with that IP next — so this has to run at teardown, not just redeploy.
 	"""
 	(TRAEFIK_DYNAMIC_DIR / f"{instance_id}.yml").unlink(missing_ok=True)
+
+
+def _log_certificate_state(instance_id: str, base_domain: str | None, pipeline) -> None:
+	"""State in the deploy log which certificate this bench's URL will be served on.
+
+	The instance routers name no resolver, so they serve whatever the store already holds.
+	That reliance is otherwise invisible: if the store were ever wrong the first evidence
+	would be a user meeting Cloudflare's 526, which names neither TLS nor a certificate.
+
+	Only the site hostname is checked. The IDE hostname is one label under the same
+	`base_domain` and so is covered by the same wildcard — a second handshake would only
+	re-prove the first one.
+	"""
+	if not base_domain or base_domain == "localhost":
+		return
+
+	hostname = f"{instance_id}.{base_domain}"
+	error = _certificate_error(hostname)
+	if error:
+		pipeline.log(f"WARNING: {error} — the public URL will fail in a browser")
+		return
+
+	pipeline.log(f"TLS ready for {hostname} on the *.{base_domain} wildcard")
+
+
+def _certificate_error(hostname: str, timeout: int = 5) -> str | None:
+	"""Return why `hostname`'s certificate is unusable, or None when it is fine.
+
+	Verifies the way a browser does — full chain and hostname match — against the same TLS
+	endpoint the internet reaches. The store is matched by SNI independently of routing, so
+	this does not race Traefik's file watcher and needs no Traefik API, which this
+	deployment deliberately does not expose.
+
+	Reports rather than raises. A certificate problem must not fail a deploy whose container
+	is up and whose site exists; the owner can still work over the VPN, and the log is where
+	an operator looks.
+	"""
+	context = ssl.create_default_context()
+	try:
+		with socket.create_connection((TRAEFIK_HOST, 443), timeout=timeout) as raw:
+			with context.wrap_socket(raw, server_hostname=hostname):
+				return None
+	except ssl.SSLCertVerificationError as exc:
+		# `verify_message` is set by the C module on a real handshake failure but is absent
+		# on an exception built any other way, and a bare attribute read there would raise
+		# out of the handler — the one thing this function must never do.
+		return f"certificate does not cover {hostname} ({getattr(exc, 'verify_message', None) or exc})"
+	except OSError as exc:
+		# Timeout, refused connection and DNS failure all mean "could not check", not
+		# "certificate is bad". A dev checkout has no Traefik at all, so this is its
+		# normal path — the two causes call for different actions and must stay apart.
+		return f"could not reach Traefik to check {hostname} ({exc})"
 
 
 def _cleanup_failed_deploy(bench, container_id, append_log) -> None:
@@ -391,6 +450,7 @@ def _deploy_bench(bench_name: str) -> None:
 
 		bench.public_url = _public_site_url(bench.name, settings.base_domain)
 		_write_instance_route(bench.name, settings.base_domain, container_ip)
+		_log_certificate_state(bench.name, settings.base_domain, pipeline)
 
 		_setup_container_vpn(bench, container_id, pipeline)
 

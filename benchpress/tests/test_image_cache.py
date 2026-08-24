@@ -229,6 +229,9 @@ class TestDeployReusesTheSharedImage(IntegrationTestCase):
 			# its end — as the docstring above says it does.
 			patch.object(deploy_manager, "_ensure_wildcard_anchor", autospec=True),
 			patch.object(deploy_manager, "_write_instance_route", autospec=True),
+			# The certificate check opens a real TLS socket to Traefik; a unit test must
+			# not depend on one running.
+			patch.object(deploy_manager, "_certificate_error", autospec=True, return_value=None),
 		):
 			mock_infra.return_value = self.db_server_name
 			mock_create.return_value = "cid-image-cache"
