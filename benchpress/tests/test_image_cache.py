@@ -224,6 +224,11 @@ class TestDeployReusesTheSharedImage(IntegrationTestCase):
 			patch.object(deploy_manager, "exec_in_container", autospec=True) as mock_exec,
 			patch.object(deploy_manager, "create_site_in_container", autospec=True) as mock_site,
 			patch.object(deploy_manager, "_notify_owner", autospec=True),
+			# Traefik's route directory is mounted into queue-long, not into the container
+			# these tests run in, so both writers have to be mocked for the deploy to reach
+			# its end — as the docstring above says it does.
+			patch.object(deploy_manager, "_ensure_wildcard_anchor", autospec=True),
+			patch.object(deploy_manager, "_write_instance_route", autospec=True),
 		):
 			mock_infra.return_value = self.db_server_name
 			mock_create.return_value = "cid-image-cache"

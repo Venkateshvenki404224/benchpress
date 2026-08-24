@@ -359,6 +359,7 @@ class TestDeployManager(IntegrationTestCase):
 			_cached_image(self.lab.name),
 			patch.object(deploy_manager, "ensure_infrastructure", autospec=True) as mock_infra,
 			patch.object(deploy_manager, "wait_for_mariadb", autospec=True),
+			patch.object(deploy_manager, "_ensure_wildcard_anchor", autospec=True),
 			patch.object(deploy_manager, "_remove_stale_container", autospec=True),
 			patch.object(deploy_manager, "create_bench_container", autospec=True) as mock_create,
 			patch.object(deploy_manager, "start_container", autospec=True),
@@ -549,15 +550,22 @@ class TestDeployStepMarkers(IntegrationTestCase):
 		"""
 		from benchpress import deploy_manager
 
+		# Traefik's route directory is mounted into queue-long, not into the container the
+		# tests run in, so it is redirected rather than mocked — the real anchor and route
+		# writers run, and `self.route_dir` is what they wrote.
+		route_dir = tempfile.TemporaryDirectory()
+		self.addCleanup(route_dir.cleanup)
+		self.route_dir = Path(route_dir.name) / "dynamic"
+
 		with (
 			_cached_image(self.lab.name) if cache_hit else nullcontext(),
+			patch.object(deploy_manager, "TRAEFIK_DYNAMIC_DIR", self.route_dir),
 			patch.object(deploy_manager, "ensure_infrastructure", autospec=True) as mock_infra,
 			patch.object(deploy_manager, "wait_for_mariadb", autospec=True),
 			patch.object(deploy_manager, "_remove_stale_container", autospec=True),
 			patch.object(deploy_manager, "create_bench_container", autospec=True) as mock_create,
 			patch.object(deploy_manager, "start_container", autospec=True),
 			patch.object(deploy_manager, "wait_for_container_running", autospec=True) as mock_wait,
-			patch.object(deploy_manager, "_write_instance_route", autospec=True),
 			patch.object(deploy_manager, "write_file_to_container", autospec=True) as mock_write,
 			patch.object(deploy_manager, "exec_in_container", autospec=True) as mock_exec,
 			patch.object(deploy_manager, "create_site_in_container", autospec=True) as mock_site,
@@ -783,6 +791,31 @@ class TestDeployStepMarkers(IntegrationTestCase):
 
 		self.assertFalse(self._bench_field(bench, "public_url"))
 
+	def test_a_localhost_deploy_writes_no_traefik_config_at_all(self):
+		"""A dev checkout has no Traefik: the deploy completes and the route directory is
+		never even created — skipped silently, not attempted and failed."""
+		bench = self._bench()
+		self._set_base_domain("localhost")
+
+		self._run_deploy(bench)
+
+		self.assertIn("Step 11/11", self._log(bench.name))
+		self.assertFalse(self.route_dir.exists())
+
+	def test_a_public_deploy_writes_the_anchor_beside_the_instance_route(self):
+		"""The two halves ship together: without the anchor the instance routers name no
+		resolver and nothing has asked for the wildcard, which is the 526 that reverted
+		this shape once already."""
+		bench = self._bench()
+		self._set_base_domain("benchpress.cloud")
+
+		self._run_deploy(bench)
+
+		written = sorted(p.name for p in self.route_dir.iterdir())
+		self.assertEqual(written, sorted(["wildcard-anchor.yml", f"{bench.name}.yml"]))
+		self.assertIn("Traefik wildcard anchor written for *.benchpress.cloud", self._log(bench.name))
+		self.assertNotIn("certResolver", (self.route_dir / f"{bench.name}.yml").read_text())
+
 	def test_a_failed_file_write_fails_the_deploy_at_the_step_that_wrote_it(self):
 		"""Hole 4: a silently unwritten `common_site_config.json` is a site that cannot find redis."""
 		bench = self._bench()
@@ -946,6 +979,7 @@ class TestTerminalStateNotifications(IntegrationTestCase):
 			patch.object(deploy_manager, "start_container", autospec=True),
 			patch.object(deploy_manager, "wait_for_container_running", autospec=True) as mock_wait,
 			patch.object(deploy_manager, "_write_instance_route", autospec=True),
+			patch.object(deploy_manager, "_ensure_wildcard_anchor", autospec=True),
 			patch.object(deploy_manager, "_setup_container_vpn", autospec=True),
 			patch.object(deploy_manager, "write_file_to_container", autospec=True),
 			patch.object(deploy_manager, "exec_in_container", autospec=True) as mock_exec,
@@ -1167,6 +1201,25 @@ class TestRecordPrimarySite(IntegrationTestCase):
 
 				self.assertFalse(route_file.exists())
 
+	def test_teardown_keeps_the_wildcard_anchor(self):
+		"""The anchor outlives every bench — it is what keeps the certificate renewing,
+		so a reaper that tidies it away would silently stop renewal."""
+		from benchpress import deploy_manager
+		from benchpress.deploy_manager import teardown_bench
+
+		bench = self._bench()
+
+		with tempfile.TemporaryDirectory() as tmp:
+			with patch.object(deploy_manager, "TRAEFIK_DYNAMIC_DIR", Path(tmp) / "instances"):
+				deploy_manager._ensure_wildcard_anchor("benchpress.cloud")
+				deploy_manager._write_instance_route(bench.name, "benchpress.cloud", "172.30.0.11")
+				anchor = Path(tmp) / "instances" / "wildcard-anchor.yml"
+
+				teardown_bench(bench)
+
+				self.assertFalse((Path(tmp) / "instances" / f"{bench.name}.yml").exists())
+				self.assertTrue(anchor.exists())
+
 	def test_teardown_does_not_raise_when_no_route_file_exists(self):
 		"""The `base_domain = localhost` case: phase 1 never wrote a route file, so teardown
 		must no-op cleanly rather than raising on a missing path."""
@@ -1223,10 +1276,9 @@ class TestPublicSiteUrlHelpers(unittest.TestCase):
 				deploy_manager._write_instance_route("inst-1", "benchpress.cloud", "172.30.0.11")
 				config = yaml.safe_load((Path(tmp) / "instances" / "inst-1.yml").read_text())
 
-			expected_tls = {
-				"certResolver": "letsencrypt",
-				"domains": [{"main": "benchpress.cloud", "sans": ["*.benchpress.cloud"]}],
-			}
+			# TLS on, no resolver — the certificate comes from the store, put there by
+			# `wildcard-anchor.yml`. See test_instance_route_names_no_certificate_resolver.
+			expected_tls = {}
 
 			router = config["http"]["routers"]["site-inst-1"]
 			self.assertEqual(router["rule"], "Host(`inst-1.benchpress.cloud`)")
@@ -1253,3 +1305,105 @@ class TestPublicSiteUrlHelpers(unittest.TestCase):
 				deploy_manager._write_instance_route("inst-1", "localhost", "172.30.0.11")
 
 			self.assertFalse(target_dir.exists())
+
+	def test_instance_route_names_no_certificate_resolver(self):
+		"""A resolver here would cost an ACME call per bench spawn.
+
+		Let's Encrypt allows five certificates per identifier set per seven days, so a
+		per-bench resolver caps the platform at about five benches a week. The wildcard is
+		held by `wildcard-anchor.yml` instead. Asserted against the rendered text because
+		the regression is a resolver at *any* depth, not one known key.
+		"""
+		from benchpress import deploy_manager
+
+		with tempfile.TemporaryDirectory() as tmp:
+			with patch.object(deploy_manager, "TRAEFIK_DYNAMIC_DIR", Path(tmp) / "instances"):
+				deploy_manager._write_instance_route("inst-1", "benchpress.cloud", "172.30.0.11")
+				written_text = (Path(tmp) / "instances" / "inst-1.yml").read_text()
+
+		self.assertNotIn("certResolver", written_text)
+		# Two separate `{}` literals, so PyYAML emits the mapping twice rather than an
+		# anchor/alias pair that Traefik would have to resolve.
+		self.assertEqual(written_text.count("tls: {}"), 2)
+
+
+class TestWildcardAnchor(unittest.TestCase):
+	"""`_ensure_wildcard_anchor` — the one place in this app that names a resolver.
+
+	See specs/in-progress/wildcard-cert-routing/phase-1-resolver-free-routers.md.
+	"""
+
+	@contextmanager
+	def _anchor_dir(self):
+		from benchpress import deploy_manager
+
+		with tempfile.TemporaryDirectory() as tmp:
+			target_dir = Path(tmp) / "instances"
+			with patch.object(deploy_manager, "TRAEFIK_DYNAMIC_DIR", target_dir):
+				yield deploy_manager, target_dir
+
+	def test_anchor_names_one_identity_set(self):
+		"""`domains` is fixed, so the resolver is asked for exactly one identity set no
+		matter which SNI arrives — a resolver without it issues per-SNI on demand."""
+		with self._anchor_dir() as (deploy_manager, target_dir):
+			self.assertTrue(deploy_manager._ensure_wildcard_anchor("benchpress.cloud"))
+
+			files = sorted(p.name for p in target_dir.iterdir())
+			self.assertEqual(files, ["wildcard-anchor.yml"])
+
+			config = yaml.safe_load((target_dir / "wildcard-anchor.yml").read_text())
+			router = config["http"]["routers"]["benchpress-wildcard-anchor"]
+			self.assertEqual(router["tls"]["certResolver"], "letsencrypt")
+			self.assertEqual(
+				router["tls"]["domains"],
+				[{"main": "benchpress.cloud", "sans": ["*.benchpress.cloud"]}],
+			)
+			# 0 is ignored by Traefik, so 1 is the floor — and every instance rule is
+			# 40+ characters, so the anchor can never win a tie on rule length.
+			self.assertEqual(router["priority"], 1)
+			self.assertEqual(router["service"], "benchpress-wildcard-anchor")
+			self.assertIn("benchpress-wildcard-anchor", config["http"]["services"])
+
+	def test_anchor_is_not_rewritten_when_unchanged(self):
+		"""Traefik reloads on mtime, so a deploy that changes nothing must not touch it."""
+		with self._anchor_dir() as (deploy_manager, target_dir):
+			deploy_manager._ensure_wildcard_anchor("benchpress.cloud")
+			anchor = target_dir / "wildcard-anchor.yml"
+			mtime = anchor.stat().st_mtime_ns
+
+			self.assertFalse(deploy_manager._ensure_wildcard_anchor("benchpress.cloud"))
+
+			self.assertEqual(anchor.stat().st_mtime_ns, mtime)
+
+	def test_anchor_is_rewritten_in_place_for_a_new_domain(self):
+		"""A changed `base_domain` replaces the anchor rather than adding a second one —
+		two anchors would be two identity sets against the weekly budget."""
+		with self._anchor_dir() as (deploy_manager, target_dir):
+			deploy_manager._ensure_wildcard_anchor("benchpress.cloud")
+
+			self.assertTrue(deploy_manager._ensure_wildcard_anchor("example.com"))
+
+			files = sorted(p.name for p in target_dir.iterdir())
+			self.assertEqual(files, ["wildcard-anchor.yml"])
+			config = yaml.safe_load((target_dir / "wildcard-anchor.yml").read_text())
+			router = config["http"]["routers"]["benchpress-wildcard-anchor"]
+			self.assertEqual(router["rule"], "Host(`tls-anchor.example.com`)")
+			self.assertEqual(
+				router["tls"]["domains"],
+				[{"main": "example.com", "sans": ["*.example.com"]}],
+			)
+
+	def test_anchor_no_ops_without_a_public_domain(self):
+		"""A dev checkout is byte-for-byte unaffected: skipped silently, not attempted
+		and failed. Matches `_write_instance_route`'s existing behaviour."""
+		for base_domain in (None, "", "localhost"):
+			with (
+				self.subTest(base_domain=base_domain),
+				self._anchor_dir() as (
+					deploy_manager,
+					target_dir,
+				),
+			):
+				self.assertFalse(deploy_manager._ensure_wildcard_anchor(base_domain))
+
+				self.assertFalse(target_dir.exists())

@@ -69,6 +69,11 @@ ADOPTED_MARKER = "already exists — adopting it"
 # control-plane router) lives in this same directory.
 TRAEFIK_DYNAMIC_DIR = Path("/etc/traefik/dynamic")
 
+# One file, one router, one identity set — the only place in this app that names a
+# certificate resolver. Fixed name so it is idempotently overwritten and can never
+# collide with an instance file, which is always a 32-character hex id.
+WILDCARD_ANCHOR_FILE = "wildcard-anchor.yml"
+
 
 def _public_site_url(instance_id: str, base_domain: str | None) -> str | None:
 	if not base_domain or base_domain == "localhost":
@@ -82,24 +87,81 @@ def _public_ide_url(instance_id: str, base_domain: str | None) -> str | None:
 	return f"https://ide-{instance_id}.{base_domain}"
 
 
+def _wildcard_anchor_config(base_domain: str) -> dict:
+	"""The router whose only job is to hold `*.{base_domain}` in Traefik's store.
+
+	`domains` is a fixed list, so the resolver is asked for exactly one identity set no
+	matter what arrives. That is the whole safety property: a router that names a
+	resolver and *omits* `domains` makes Traefik issue per-SNI on demand, which is how a
+	stranger pointing DNS at this host burns the weekly certificate budget.
+
+	The router is inert by construction. Traefik's default priority is the rule length
+	and every instance rule is 40+ characters, so `priority: 1` can never win a tie (0 is
+	ignored, so 1 is the floor). The backend is a dead address on purpose:
+	`*.{base_domain}` is wildcard-resolved, so `tls-anchor.{base_domain}` does answer, and
+	pointing it at the control plane would publish an unadvertised way in. A 502 is the
+	honest reply for a name that exists only to own a certificate. The service is still
+	*defined*, because Traefik drops a router naming an undefined service — and a dropped
+	router would take the certificate request with it.
+	"""
+	return {
+		"http": {
+			"routers": {
+				"benchpress-wildcard-anchor": {
+					"rule": f"Host(`tls-anchor.{base_domain}`)",
+					"entryPoints": ["websecure"],
+					"priority": 1,
+					"service": "benchpress-wildcard-anchor",
+					"tls": {
+						"certResolver": "letsencrypt",
+						"domains": [{"main": base_domain, "sans": [f"*.{base_domain}"]}],
+					},
+				}
+			},
+			"services": {
+				"benchpress-wildcard-anchor": {"loadBalancer": {"servers": [{"url": "http://127.0.0.1:1"}]}}
+			},
+		}
+	}
+
+
+def _ensure_wildcard_anchor(base_domain: str | None) -> bool:
+	"""Put the bench-zone wildcard in Traefik's certificate store, once.
+
+	Returns True when the file was written. Rewrites only on a real change: Traefik
+	reloads on mtime, and a deploy has no business making it reload to say nothing.
+
+	Never deleted at teardown — it has to outlive every bench, because it is what keeps
+	the certificate renewing.
+	"""
+	if not base_domain or base_domain == "localhost":
+		return False
+
+	wanted = yaml.safe_dump(_wildcard_anchor_config(base_domain))
+	path = TRAEFIK_DYNAMIC_DIR / WILDCARD_ANCHOR_FILE
+	if path.exists() and path.read_text() == wanted:
+		return False
+
+	TRAEFIK_DYNAMIC_DIR.mkdir(parents=True, exist_ok=True)
+	path.write_text(wanted)
+	return True
+
+
 def _write_instance_route(instance_id: str, base_domain: str, container_ip: str) -> None:
 	"""Write Traefik file-provider routes for this instance's site and its code-server IDE.
 
-	The routers name their certificate explicitly: every instance shares one
-	`*.{base_domain}` wildcard, issued once by the resolver. A bare `tls: {}` would
-	serve Traefik's self-signed default whenever the store holds no covering cert.
+	`tls: {}` turns TLS on and names no resolver, so these routers serve whatever
+	certificate the store already holds for the requested SNI. Deliberate, and the point
+	of the whole design: Let's Encrypt allows five certificates per identifier set per
+	seven days, so a router that asked for one would cap bench churn at five a week.
+	`_ensure_wildcard_anchor` is what puts `*.{base_domain}` in the store, and it is the
+	only place in this app that names a resolver.
 
 	One file per instance, named by instance ID, so a redeploy naturally overwrites it
 	with the fresh `container_ip` — no dedup logic needed.
 	"""
 	if not base_domain or base_domain == "localhost":
 		return
-
-	def tls():
-		return {
-			"certResolver": "letsencrypt",
-			"domains": [{"main": base_domain, "sans": [f"*.{base_domain}"]}],
-		}
 
 	TRAEFIK_DYNAMIC_DIR.mkdir(parents=True, exist_ok=True)
 	config = {
@@ -109,13 +171,13 @@ def _write_instance_route(instance_id: str, base_domain: str, container_ip: str)
 					"rule": f"Host(`{instance_id}.{base_domain}`)",
 					"entryPoints": ["websecure"],
 					"service": f"site-{instance_id}",
-					"tls": tls(),
+					"tls": {},
 				},
 				f"ide-{instance_id}": {
 					"rule": f"Host(`ide-{instance_id}.{base_domain}`)",
 					"entryPoints": ["websecure"],
 					"service": f"ide-{instance_id}",
-					"tls": tls(),
+					"tls": {},
 				},
 			},
 			"services": {
@@ -294,6 +356,13 @@ def _deploy_bench(bench_name: str) -> None:
 		wait_for_mariadb(db_server_name, timeout=60)
 		pipeline.log(f"MariaDB reachable at {db_server.container_name}:{db_server.port or 3306}")
 
+		# First step of the deploy, so this runs minutes ahead of the image build —
+		# headroom a fresh install needs, because DNS-01 has to finish issuing before
+		# the bench route goes live.
+		settings = frappe.get_cached_doc("BenchPress Settings")
+		if _ensure_wildcard_anchor(settings.base_domain):
+			pipeline.log(f"Traefik wildcard anchor written for *.{settings.base_domain}")
+
 		bench.database_server = db_server_name
 		bench.save(ignore_permissions=True)
 		frappe.db.commit()
@@ -320,7 +389,6 @@ def _deploy_bench(bench_name: str) -> None:
 		bench.save(ignore_permissions=True)
 		frappe.db.commit()
 
-		settings = frappe.get_cached_doc("BenchPress Settings")
 		bench.public_url = _public_site_url(bench.name, settings.base_domain)
 		_write_instance_route(bench.name, settings.base_domain, container_ip)
 
