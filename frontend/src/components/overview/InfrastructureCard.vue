@@ -8,7 +8,7 @@
 import CheckList from "@/components/CheckList.vue";
 import SectionCard from "@/components/SectionCard.vue";
 
-// The five real checks from benchpress.diagnostics — never a placeholder list.
+// The six real checks from benchpress.diagnostics — never a placeholder list.
 defineProps({
 	checks: { type: Array, default: () => [] },
 });

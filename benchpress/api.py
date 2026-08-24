@@ -97,6 +97,7 @@ def get_benches() -> list[dict]:
 			"status",
 			"container_id",
 			"container_ip",
+			"runtime",
 			"wg_ip",
 			"cpu_usage",
 			"memory_usage",
@@ -524,3 +525,12 @@ def run_diagnostics() -> list[dict]:
 	from benchpress.diagnostics import run_diagnostics as _run_diagnostics
 
 	return _run_diagnostics()
+
+
+@frappe.whitelist()
+def preflight_runtime(runtime: str) -> dict:
+	"""Prove a runtime works, which `run_diagnostics` cannot: this one creates a container."""
+	require_admin()
+	from benchpress.docker_manager import preflight_runtime as _preflight_runtime
+
+	return _preflight_runtime(runtime)

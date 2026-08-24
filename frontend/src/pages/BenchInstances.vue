@@ -56,6 +56,15 @@
 					:status="row.container_health"
 				/>
 
+				<!-- Read-only everywhere: only an admin can change a runtime, and
+				     only while the bench is still Draft. -->
+				<span
+					v-else-if="column.key === 'runtime'"
+					class="block truncate font-mono text-2xs text-ink-gray-6"
+				>
+					{{ row.runtime || "—" }}
+				</span>
+
 				<UsageBar v-else-if="column.key === 'usage'" :usage="usageOf(row)" />
 
 				<!-- `truncate` only earns its ellipsis on a block: an inline span
@@ -114,6 +123,7 @@ const COLUMNS = [
 	{ label: "Bench", key: "bench", width: "240px" },
 	{ label: "Status", key: "status", width: "110px" },
 	{ label: "Health", key: "container_health", width: "104px" },
+	{ label: "Runtime", key: "runtime", width: "96px" },
 	{ label: "CPU / memory", key: "usage", width: "150px" },
 	{ label: "Site", key: "site", width: "170px" },
 	{ label: "Owner", key: "owner", width: "100px" },

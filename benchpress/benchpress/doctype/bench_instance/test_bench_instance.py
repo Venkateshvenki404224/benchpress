@@ -2,6 +2,7 @@
 # See license.txt
 
 import hashlib
+from contextlib import contextmanager
 from unittest.mock import MagicMock, patch
 
 import frappe
@@ -11,6 +12,20 @@ from benchpress.benchpress.doctype.bench_instance import get_instance_id
 
 EXTRA_TEST_RECORD_DEPENDENCIES = []
 IGNORE_TEST_RECORD_DEPENDENCIES = []
+
+
+def _make_tenant(email="bench-instance-tenant@example.com"):
+	if not frappe.db.exists("User", email):
+		frappe.get_doc(
+			{
+				"doctype": "User",
+				"email": email,
+				"first_name": "BenchInstance Tenant",
+				"send_welcome_email": 0,
+				"roles": [{"role": "BenchPress User"}],
+			}
+		).insert(ignore_permissions=True)
+	return email
 
 
 def _make_lab(lab_id="test-lab-bench-instance"):
@@ -33,6 +48,7 @@ class IntegrationTestBenchInstance(IntegrationTestCase):
 		frappe.set_user("Administrator")
 		cls.lab = _make_lab()
 		cls.lab_name = cls.lab.name
+		cls.tenant = _make_tenant()
 
 	@classmethod
 	def tearDownClass(cls):
@@ -40,8 +56,13 @@ class IntegrationTestBenchInstance(IntegrationTestCase):
 		for name in frappe.get_all("Bench Instance", filters={"lab": cls.lab_name}, pluck="name"):
 			frappe.delete_doc("Bench Instance", name, force=True, ignore_permissions=True)
 		cls.lab.delete(ignore_permissions=True)
+		if frappe.db.exists("User", cls.tenant):
+			frappe.delete_doc("User", cls.tenant, force=True, ignore_permissions=True)
 		frappe.db.commit()
 		super().tearDownClass()
+
+	def tearDown(self):
+		frappe.set_user("Administrator")
 
 	def _insert_bench(self, **extra):
 		frappe.set_user("Administrator")
@@ -103,6 +124,67 @@ class IntegrationTestBenchInstance(IntegrationTestCase):
 		with patch.object(frappe, "session", MagicMock(user=long_email)):
 			result = bench._derive_username()
 		self.assertLessEqual(len(result), 32)
+
+	@contextmanager
+	def _default_runtime(self, value):
+		"""Set the Settings default for one test, without saving the whole Single.
+
+		`change_settings` saves the document, which validates every mandatory field.
+		`base_domain` is unset on a fresh CI site, so the save raises MandatoryError —
+		a ValidationError, which any test asserting ValidationError swallows as a pass.
+		"""
+		field = "default_bench_runtime"
+		previous = frappe.db.get_single_value("BenchPress Settings", field)
+		frappe.db.set_single_value("BenchPress Settings", field, value)
+		try:
+			yield
+		finally:
+			frappe.db.set_single_value("BenchPress Settings", field, previous)
+
+	def test_a_new_bench_takes_the_runtime_from_settings(self):
+		with self._default_runtime("sysbox"):
+			bench = self._insert_bench()
+		self.assertEqual(bench.runtime, "sysbox")
+
+	def test_a_new_bench_falls_back_to_runc_when_settings_names_nothing(self):
+		with self._default_runtime(""):
+			bench = self._insert_bench()
+		self.assertEqual(bench.runtime, "runc")
+
+	def test_an_admin_can_change_the_runtime_of_a_draft_bench(self):
+		with self._default_runtime("sysbox"):
+			bench = self._insert_bench()
+		bench.runtime = "runc"
+		bench.save(ignore_permissions=True)
+		self.assertEqual(frappe.db.get_value("Bench Instance", bench.name, "runtime"), "runc")
+
+	def test_a_non_admin_cannot_change_the_runtime(self):
+		"""The controller's own guard, reached with permlevel bypassed — it may not rely on it."""
+		with self._default_runtime("sysbox"):
+			bench = self._insert_bench()
+		frappe.set_user(self.tenant)
+		bench.runtime = "runc"
+		with self.assertRaises(frappe.PermissionError):
+			bench.save(ignore_permissions=True)
+
+	def test_changing_the_runtime_of_a_running_bench_is_refused(self):
+		# Matched on the message, not the class: MandatoryError is a ValidationError too,
+		# and a bare assertRaises here passed for months on the wrong exception.
+		with self.assertRaisesRegex(frappe.ValidationError, "already deployed"):
+			self._change_runtime_at_status("Running")
+
+	def test_changing_the_runtime_of_a_stopped_bench_is_refused(self):
+		"""A stopped bench still owns a container built under the old runtime."""
+		with self.assertRaisesRegex(frappe.ValidationError, "already deployed"):
+			self._change_runtime_at_status("Stopped")
+
+	def _change_runtime_at_status(self, status):
+		with self._default_runtime("sysbox"):
+			bench = self._insert_bench()
+		bench.status = status
+		bench.save(ignore_permissions=True)
+		bench.runtime = "runc"
+		bench.save(ignore_permissions=True)
 
 	def test_enqueue_start_throws_when_no_container_id(self):
 		bench = self._insert_bench()

@@ -11,7 +11,7 @@ each check catches its own exceptions and reports them as a fail row.
 import docker
 import frappe
 
-from benchpress.docker_manager import get_client
+from benchpress.docker_manager import CONTAINER_RUNTIMES, get_client, host_runtimes
 from benchpress.mariadb_manager import check_mariadb_health
 from benchpress.vpn_adapter import DEFAULT_INTERFACE
 
@@ -43,6 +43,7 @@ def run_diagnostics() -> list[dict]:
 		_check_docker_network(),
 		_check_mariadb(),
 		_check_redis(),
+		_check_container_runtimes(),
 		check_vpn_server(),
 	]
 
@@ -109,6 +110,22 @@ def _check_redis() -> dict:
 		)
 	except Exception as e:
 		return check_row("redis", False, f"Could not check Redis: {e}")
+
+
+def _check_container_runtimes() -> dict:
+	"""Registered, not working — proving one runs takes `preflight_runtime`."""
+	required = sorted(name for name in CONTAINER_RUNTIMES.values() if name)
+	try:
+		missing = [name for name in required if name not in host_runtimes()["names"]]
+		if missing:
+			return check_row(
+				"container_runtimes",
+				False,
+				f"Docker has no {', '.join(missing)} — benches on that runtime cannot deploy",
+			)
+		return check_row("container_runtimes", True, f"Docker has {', '.join(required)} registered")
+	except Exception as e:
+		return check_row("container_runtimes", False, f"Could not read Docker runtimes: {e}")
 
 
 def check_vpn_server() -> dict:

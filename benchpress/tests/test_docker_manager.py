@@ -14,9 +14,14 @@ from benchpress.docker_manager import (
 	DEFAULT_BPS,
 	DEFAULT_IOPS,
 	DEFAULT_PIDS_LIMIT,
+	HOST_RUNTIMES_ATTRIBUTE,
+	container_runtime,
 	get_container_health,
+	host_runtimes,
+	preflight_runtime,
 	wait_for_container_running,
 )
+from benchpress.request_cache import clear_local_cache
 
 
 def _client_returning(status):
@@ -219,10 +224,10 @@ class TestDockerManagerBlockIO(IntegrationTestCase):
 		super().setUpClass()
 		frappe.set_user("Administrator")
 
-	def _container_create_kwargs(self, lab):
+	def _container_create_kwargs(self, lab, runtime="runc"):
 		"""Run create_bench_container with Docker mocked and return the
 		kwargs passed to client.containers.create."""
-		bench = types.SimpleNamespace(bench_name="blockio-test-bench")
+		bench = types.SimpleNamespace(bench_name="blockio-test-bench", runtime=runtime)
 		with (
 			patch("benchpress.docker_manager.get_client") as mock_client,
 			patch("benchpress.docker_manager.ensure_network"),
@@ -278,3 +283,118 @@ class TestDockerManagerBlockIO(IntegrationTestCase):
 		kwargs = self._container_create_kwargs(lab)
 
 		self.assertEqual(kwargs["pids_limit"], DEFAULT_PIDS_LIMIT)
+
+	def test_runc_passes_no_runtime_kwarg(self):
+		"""A runc bench must produce the call it produced before runtimes existed."""
+		lab = _make_lab("runtime-runc")
+		self.addCleanup(frappe.delete_doc, "Lab", lab.name, force=True, ignore_permissions=True)
+
+		kwargs = self._container_create_kwargs(lab, runtime="runc")
+
+		self.assertNotIn("runtime", kwargs)
+
+	def test_sysbox_passes_the_registered_runtime_name(self):
+		lab = _make_lab("runtime-sysbox")
+		self.addCleanup(frappe.delete_doc, "Lab", lab.name, force=True, ignore_permissions=True)
+
+		kwargs = self._container_create_kwargs(lab, runtime="sysbox")
+
+		self.assertEqual(kwargs["runtime"], "sysbox-runc")
+
+	def test_unknown_runtime_is_refused_before_docker(self):
+		lab = _make_lab("runtime-unknown")
+		self.addCleanup(frappe.delete_doc, "Lab", lab.name, force=True, ignore_permissions=True)
+
+		with self.assertRaises(frappe.ValidationError):
+			self._container_create_kwargs(lab, runtime="gvisor")
+
+
+class TestHostRuntimes(unittest.TestCase):
+	def setUp(self):
+		self.addCleanup(clear_local_cache, HOST_RUNTIMES_ATTRIBUTE)
+		clear_local_cache(HOST_RUNTIMES_ATTRIBUTE)
+
+	@staticmethod
+	def _client(**info):
+		client = MagicMock()
+		client.info.return_value = {
+			"Runtimes": {"runc": {}, "sysbox-runc": {}},
+			"DefaultRuntime": "runc",
+			**info,
+		}
+		return client
+
+	@patch("benchpress.docker_manager.get_client")
+	def test_reports_the_names_and_the_default(self, get_client):
+		get_client.return_value = self._client()
+
+		self.assertEqual(host_runtimes(), {"names": {"runc", "sysbox-runc"}, "default": "runc"})
+
+	@patch("benchpress.docker_manager.get_client")
+	def test_asked_twice_costs_one_round_trip(self, get_client):
+		"""The deploy gate reads this per bench; a job must not pay `docker info` each time."""
+		client = self._client()
+		get_client.return_value = client
+
+		host_runtimes()
+		host_runtimes()
+
+		client.info.assert_called_once()
+
+
+class TestPreflightRuntime(unittest.TestCase):
+	@patch("benchpress.docker_manager.get_client")
+	def test_a_working_runtime_reports_ok(self, get_client):
+		client = MagicMock()
+		get_client.return_value = client
+
+		result = preflight_runtime("sysbox")
+
+		self.assertTrue(result["ok"])
+		self.assertEqual(client.containers.run.call_args.kwargs["runtime"], "sysbox-runc")
+		self.assertTrue(client.containers.run.call_args.kwargs["remove"])
+
+	@patch("benchpress.docker_manager.get_client")
+	def test_a_registered_but_broken_runtime_reports_dockers_own_message(self, get_client):
+		"""The trap this exists for: `docker info` lists it, and it still cannot start."""
+		client = MagicMock()
+		client.containers.run.side_effect = docker.errors.APIError("failed to create shim task")
+		get_client.return_value = client
+
+		result = preflight_runtime("sysbox")
+
+		self.assertFalse(result["ok"])
+		self.assertIn("failed to create shim task", result["detail"])
+
+	@patch("benchpress.docker_manager.get_client")
+	def test_runc_runs_under_the_daemon_default(self, get_client):
+		client = MagicMock()
+		client.info.return_value = {"Runtimes": {"runc": {}}, "DefaultRuntime": "runc"}
+		get_client.return_value = client
+		self.addCleanup(clear_local_cache, HOST_RUNTIMES_ATTRIBUTE)
+		clear_local_cache(HOST_RUNTIMES_ATTRIBUTE)
+
+		result = preflight_runtime("runc")
+
+		self.assertTrue(result["ok"])
+		self.assertNotIn("runtime", client.containers.run.call_args.kwargs)
+
+	@patch("benchpress.docker_manager.get_client")
+	def test_a_runtime_outside_the_allow_list_never_reaches_docker(self, get_client):
+		client = MagicMock()
+		get_client.return_value = client
+
+		with self.assertRaises(frappe.ValidationError):
+			preflight_runtime("gvisor")
+
+		client.containers.run.assert_not_called()
+
+
+class TestContainerRuntime(unittest.TestCase):
+	@patch("benchpress.docker_manager.get_client")
+	def test_reads_the_runtime_the_daemon_recorded(self, get_client):
+		client = MagicMock()
+		client.containers.get.return_value.attrs = {"HostConfig": {"Runtime": "sysbox-runc"}}
+		get_client.return_value = client
+
+		self.assertEqual(container_runtime("cid"), "sysbox-runc")

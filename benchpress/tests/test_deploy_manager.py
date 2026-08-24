@@ -397,6 +397,8 @@ class TestDeployManager(IntegrationTestCase):
 			patch.object(deploy_manager, "wait_for_mariadb", autospec=True),
 			patch.object(deploy_manager, "_ensure_wildcard_anchor", autospec=True),
 			patch.object(deploy_manager, "_remove_stale_container", autospec=True),
+			patch.object(deploy_manager, "host_runtimes", autospec=True) as mock_runtimes,
+			patch.object(deploy_manager, "container_runtime", autospec=True) as mock_runtime_of,
 			patch.object(deploy_manager, "create_bench_container", autospec=True) as mock_create,
 			patch.object(deploy_manager, "start_container", autospec=True),
 			patch.object(deploy_manager, "wait_for_container_running", autospec=True) as mock_wait,
@@ -405,6 +407,8 @@ class TestDeployManager(IntegrationTestCase):
 			patch("benchpress.vpn_adapter.remove_bench_peer", autospec=True) as mock_remove_peer,
 		):
 			mock_infra.return_value = self.db_server_name
+			mock_runtimes.return_value = {"names": {"runc", "sysbox-runc"}, "default": "runc"}
+			mock_runtime_of.return_value = "sysbox-runc"
 			mock_create.return_value = "cid-cleanup"
 			mock_wait.side_effect = Exception("container did not report running")
 
@@ -581,6 +585,7 @@ class TestDeployStepMarkers(IntegrationTestCase):
 		exec_failures=None,
 		write_error=None,
 		cert_error=None,
+		registered_runtimes=("runc", "sysbox-runc"),
 	):
 		"""A whole deploy with every side effect mocked but the log itself.
 
@@ -591,6 +596,8 @@ class TestDeployStepMarkers(IntegrationTestCase):
 		every `write_file_to_container` raise, the way a read-only target path would.
 		`cert_error` is what the certificate check reports; only the socket is mocked, so the
 		line the log carries is still written by the real `_log_certificate_state`.
+		`registered_runtimes` is what the daemon claims to have, so a test can starve the
+		pre-build gate without depending on what this host happens to run.
 		"""
 		from benchpress import deploy_manager
 
@@ -608,6 +615,8 @@ class TestDeployStepMarkers(IntegrationTestCase):
 			patch.object(deploy_manager, "ensure_infrastructure", autospec=True) as mock_infra,
 			patch.object(deploy_manager, "wait_for_mariadb", autospec=True),
 			patch.object(deploy_manager, "_remove_stale_container", autospec=True),
+			patch.object(deploy_manager, "host_runtimes", autospec=True) as mock_runtimes,
+			patch.object(deploy_manager, "container_runtime", autospec=True) as mock_runtime_of,
 			patch.object(deploy_manager, "create_bench_container", autospec=True) as mock_create,
 			patch.object(deploy_manager, "start_container", autospec=True),
 			patch.object(deploy_manager, "wait_for_container_running", autospec=True) as mock_wait,
@@ -627,6 +636,8 @@ class TestDeployStepMarkers(IntegrationTestCase):
 		):
 			self.cert_check = mock_cert
 			mock_infra.return_value = self.db_server_name
+			mock_runtimes.return_value = {"names": set(registered_runtimes), "default": "runc"}
+			mock_runtime_of.return_value = "sysbox-runc"
 			mock_create.return_value = "cid-steps"
 			mock_wait.return_value = "172.30.0.11"
 			mock_exec.side_effect = _exec_results(exec_failures)
@@ -712,6 +723,41 @@ class TestDeployStepMarkers(IntegrationTestCase):
 		log = self._log(bench.name)
 		self.assertIn("Step 10/11", log)
 		self.assertIn("Code server is disabled for this lab", log)
+
+	def test_an_unregistered_runtime_fails_before_the_image_step(self):
+		"""The image build is where the minutes go; a doomed deploy must not pay for one."""
+		bench = self._bench()
+		frappe.db.set_value("Bench Instance", bench.name, "runtime", "sysbox")
+		frappe.db.commit()
+
+		self._run_deploy(bench, registered_runtimes=("runc",))
+
+		log = self._log(bench.name)
+		keys = [step["step_key"] for step in self._emitted_steps(bench.name)]
+		self.assertEqual(keys, ["infrastructure"])
+		self.assertNotIn("Step 2/11", log)
+		self.assertIn("sysbox-runc", log)
+		self.assertIn("runc", log)
+		self.assertEqual(frappe.db.get_value("Bench Instance", bench.name, "status"), "Error")
+
+	def test_a_registered_runtime_passes_the_gate(self):
+		"""The negative control: a gate that only ever sees failing input is not a gate."""
+		bench = self._bench()
+		frappe.db.set_value("Bench Instance", bench.name, "runtime", "sysbox")
+		frappe.db.commit()
+
+		self._run_deploy(bench)
+
+		keys = [step["step_key"] for step in self._emitted_steps(bench.name)]
+		self.assertEqual(keys[-1], "complete")
+
+	def test_the_log_records_the_runtime_the_container_actually_ran_under(self):
+		"""Read back off the container, so a bench's isolation is answerable from the log."""
+		bench = self._bench()
+
+		self._run_deploy(bench)
+
+		self.assertIn("container runtime sysbox-runc", self._log(bench.name))
 
 	def _deploy_messages(self, publish):
 		"""Only our own events: a deploy also saves docs, and every save publishes."""
@@ -1067,6 +1113,8 @@ class TestTerminalStateNotifications(IntegrationTestCase):
 			patch.object(deploy_manager, "ensure_infrastructure", autospec=True) as mock_infra,
 			patch.object(deploy_manager, "wait_for_mariadb", autospec=True),
 			patch.object(deploy_manager, "_remove_stale_container", autospec=True),
+			patch.object(deploy_manager, "host_runtimes", autospec=True) as mock_runtimes,
+			patch.object(deploy_manager, "container_runtime", autospec=True) as mock_runtime_of,
 			patch.object(deploy_manager, "create_bench_container", autospec=True) as mock_create,
 			patch.object(deploy_manager, "start_container", autospec=True),
 			patch.object(deploy_manager, "wait_for_container_running", autospec=True) as mock_wait,
@@ -1079,6 +1127,8 @@ class TestTerminalStateNotifications(IntegrationTestCase):
 			patch.object(deploy_manager, "create_site_in_container", autospec=True) as mock_site,
 		):
 			mock_infra.return_value = self.db_server_name
+			mock_runtimes.return_value = {"names": {"runc", "sysbox-runc"}, "default": "runc"}
+			mock_runtime_of.return_value = "sysbox-runc"
 			mock_create.return_value = "cid-notify"
 			mock_wait.return_value = "172.30.0.9"
 			mock_exec.return_value = (0, "")

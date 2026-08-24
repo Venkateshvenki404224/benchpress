@@ -10,6 +10,7 @@ from frappe.utils.background_jobs import is_job_enqueued
 
 from benchpress.benchpress.doctype.bench_instance import get_instance_id
 from benchpress.credits.guard import cap_concurrent_instances, instance_runway, requires_credits
+from benchpress.permissions import is_admin
 
 DEPLOY_JOB_TIMEOUT = 7200
 
@@ -23,6 +24,40 @@ class BenchInstance(Document):
 			suffix = base_domain if base_domain and base_domain != "localhost" else "localhost"
 			self.site_name = f"{instance_id}.{suffix}"
 		self.ssh_username = self._derive_username()
+
+	def validate(self):
+		if self.is_new():
+			# Not in `before_insert`: `runtime` is permlevel 1, and Frappe resets a permlevel field
+			# to its new-doc value in between the two, discarding whatever was chosen there. That
+			# value is the Select's empty first option, which is why it carries one.
+			if not self.runtime:
+				self.runtime = self._default_runtime()
+			return
+		if not self.has_value_changed("runtime"):
+			return
+		if not is_admin():
+			frappe.throw(_("Only an administrator can change a bench's runtime."), frappe.PermissionError)
+		if self.status != "Draft":
+			frappe.throw(
+				_(
+					"'{0}' is already deployed. A container's runtime is fixed when it is created — "
+					"delete this instance and deploy again to change it."
+				).format(self.name)
+			)
+
+	def validate_higher_perm_levels(self):
+		"""Refuse a runtime the caller may not set, where Frappe would silently drop it.
+
+		The base method resets a permlevel field the caller cannot write back to its stored value
+		and says nothing, so a tenant lowering their own isolation would read as success.
+		"""
+		requested = self.runtime
+		super().validate_higher_perm_levels()
+		if not self.is_new() and self.runtime != requested:
+			frappe.throw(_("Only an administrator can change a bench's runtime."), frappe.PermissionError)
+
+	def _default_runtime(self) -> str:
+		return frappe.get_cached_doc("BenchPress Settings").default_bench_runtime or "runc"
 
 	def autoname(self):
 		self.name = self.bench_name

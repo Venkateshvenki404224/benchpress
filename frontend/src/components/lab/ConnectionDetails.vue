@@ -111,6 +111,7 @@ const rows = computed(() =>
 		{ key: "public-url", label: "Public URL", value: props.bench.public_url },
 		{ key: "private-url", label: "Private URL (VPN)", value: privateSiteUrl(props.bench) },
 		{ key: "wg-ip", label: "WireGuard IP", value: props.bench.wg_ip },
+		{ key: "runtime", label: "Runtime", value: props.bench.runtime },
 		codeServerRow(),
 		sshRow(),
 		{

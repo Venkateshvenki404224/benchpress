@@ -21,6 +21,7 @@ export const benchesResource = createListResource({
 		"site_name",
 		"status",
 		"container_ip",
+		"runtime",
 		"wg_ip",
 		"cpu_usage",
 		"memory_usage",

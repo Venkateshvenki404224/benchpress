@@ -9,6 +9,7 @@
   "docker_section",
   "docker_socket",
   "default_image",
+  "default_bench_runtime",
   "column_break_docker",
   "base_domain",
   "traefik_network",
@@ -37,6 +38,14 @@
    "fieldname": "default_image",
    "fieldtype": "Data",
    "label": "Default Image"
+  },
+  {
+   "default": "sysbox",
+   "description": "Runtime new benches are created with. sysbox user-namespaces the container so container root is unprivileged on the host; runc does not.",
+   "fieldname": "default_bench_runtime",
+   "fieldtype": "Select",
+   "label": "Default Bench Runtime",
+   "options": "runc\nsysbox"
   },
   {
    "fieldname": "column_break_docker",
@@ -101,7 +110,7 @@
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2026-08-17 08:13:00.000000",
+ "modified": "2026-08-24 19:00:00.000000",
  "modified_by": "Administrator",
  "module": "Benchpress",
  "name": "BenchPress Settings",
