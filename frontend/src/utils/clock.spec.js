@@ -63,6 +63,18 @@ describe("the shared tick", () => {
 		expect(seen).toEqual([START + SECOND + 10 * SECOND, START + 2 * SECOND + 10 * SECOND]);
 	});
 
+	// A tick aligned to the browser's second lands a few milliseconds before the server's, and
+	// `leaseFor` rounds up — so a fraction of a second of skew costs a whole second on screen.
+	it("aligns the tick on the server's second, not the browser's", () => {
+		recordSkew(START, START - 400, START);
+		const seen = [];
+		subscribe((now) => seen.push(now), SECOND);
+
+		vi.advanceTimersByTime(2 * SECOND);
+
+		expect(seen.map((now) => now % SECOND)).toEqual([0, 0]);
+	});
+
 	it("recomputes after a suspended tab rather than decrementing", () => {
 		// Chrome fires no timer at all in a suspended tab, so a decrementing
 		// counter wakes an hour stale. Recomputation is simply right.
