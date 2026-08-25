@@ -24,11 +24,12 @@ Nothing here commits. `claim_due` does, once per claim, so every test that reach
 """
 
 import inspect
+from contextlib import contextmanager
 from unittest.mock import patch
 
 import frappe
 from frappe.tests import IntegrationTestCase
-from frappe.utils import flt
+from frappe.utils import add_days, flt, now_datetime
 
 from benchpress import api, deploy_manager, lab_detail
 from benchpress.benchpress.doctype.bench_instance import get_instance_id
@@ -268,9 +269,55 @@ class TestLease(IntegrationTestCase):
 		frappe.db.commit()  # nosemgrep -- the code under test commits, so the restore must too
 		frappe.clear_cache(doctype=CREDIT_SETTINGS)
 
-	def lease_events(self, publish) -> list:
+	def lease_events(self, publish, event: str | None = None) -> list:
 		"""Only this feature's pushes. Every `save` also emits Frappe's own `doc_update`."""
-		return [call for call in publish.call_args_list if call.args[0] == lease.EXPIRED_EVENT]
+		wanted = event or lease.EXPIRED_EVENT
+		return [call for call in publish.call_args_list if call.args[0] == wanted]
+
+	@contextmanager
+	def renewing(self):
+		"""Renew with Docker, the route job and the commit stood down, so the rollback still holds."""
+		with (
+			patch("benchpress.docker_manager.start_container") as start,
+			patch("benchpress.deploy_manager.enqueue_route_sync") as route,
+			patch("frappe.publish_realtime") as publish,
+			patch.object(frappe.db, "commit"),
+		):
+			yield frappe._dict(start=start, route=route, publish=publish)
+
+	def fund(self, credits: float = 1000.0) -> None:
+		account.grant(self.user, credits, "Lease renewal test float")
+
+	def claim(self) -> None:
+		with patch.object(frappe.db, "commit"), patch("frappe.enqueue"):
+			lease.claim_due(50)
+
+	def stop_the_bench(self) -> None:
+		with (
+			patch.object(deploy_manager, "stop_container"),
+			patch.object(frappe.db, "commit"),
+			patch("frappe.publish_realtime"),
+		):
+			deploy_manager.stop_bench(self.bench.name)
+
+	def age_the_bench(self, days: int) -> None:
+		"""Backdate `modified`, which is what the reaper measures a stopped bench against."""
+		frappe.db.set_value(
+			BENCH, self.bench.name, "modified", add_days(now_datetime(), -days), update_modified=False
+		)
+
+	def bench_row(self):
+		return frappe.db.get_value(BENCH, self.bench.name, ["name", "modified", "status"], as_dict=True)
+
+	def set_lab_ceiling(self, minutes: int) -> None:
+		frappe.db.set_value("Lab", self.lab.name, "max_lease_minutes", minutes)
+		frappe.clear_document_cache("Lab", self.lab.name)
+
+	def statements(self, sql) -> list[str]:
+		return [str(call.args[0]) for call in sql.call_args_list if call.args]
+
+	def locks_the_bench(self, statement: str) -> bool:
+		return "FOR UPDATE" in statement and "tabBench Instance" in statement
 
 	def running_bench(self):
 		return frappe.get_doc(BENCH, self.bench.name)
@@ -688,6 +735,264 @@ class TestLease(IntegrationTestCase):
 		with patch("time.time", return_value=1787622936.472), patch("frappe.publish_realtime") as publish:
 			lease.announce_expired(self.running_bench())
 		self.assertEqual(self.lease_events(publish)[0].args[1]["server_now_ms"], 1787622936472)
+
+	# --- Renew: the arithmetic -------------------------------------------------
+
+	def test_a_renewal_extends_from_the_deadline_not_from_now(self):
+		"""Extending from now silently burns whatever time was left, which is a refund."""
+		self.enable_credits()
+		metering.on_bench_running(self.running_bench())
+		bought = self.deadline()
+
+		with self.renewing():
+			api.renew_bench(self.bench.name, self.short_plan, "req-extend")
+
+		self.assertEqual(self.deadline(), bought + HALF_HOUR * 60)
+		self.assertEqual(self.balance(), GRANT - 2 * HALF_HOUR_CREDITS)
+		self.assertEqual(len(self.usage_rows()), 2)
+
+	def test_a_renewal_of_a_bench_stopped_in_grace_extends_from_now(self):
+		"""There is no remaining time to preserve, and a past deadline would buy time already gone."""
+		self.enable_credits()
+		self.set_credit_setting("reap_after_days", 7)
+		self.stop_the_bench()
+		self.assertEqual(self.deadline(), 0)
+
+		with self.renewing():
+			api.renew_bench(self.bench.name, self.short_plan, "req-grace-extend")
+
+		self.assertAlmostEqual(self.deadline(), lease.now_ts() + HALF_HOUR * 60, delta=5)
+
+	def test_a_renewal_past_the_labs_ceiling_is_refused_and_costs_nothing(self):
+		"""The reference platform's `renewal_max`, which they had to add after `periods=1000`."""
+		self.enable_credits()
+		self.fund()
+		metering.on_bench_running(self.running_bench())
+		self.set_lab_ceiling(60)
+		before = self.balance()
+
+		with self.renewing(), self.assertRaises(frappe.ValidationError) as refused:
+			api.renew_bench(self.bench.name, self.long_plan, "req-ceiling")
+
+		self.assertIn("60", str(refused.exception))
+		self.assertEqual(self.balance(), before)
+		self.assertEqual(len(self.usage_rows()), 1)
+
+	def test_a_ceiling_of_zero_lets_a_renewal_run_as_long_as_the_plan(self):
+		self.enable_credits()
+		self.fund()
+		metering.on_bench_running(self.running_bench())
+		self.set_lab_ceiling(0)
+		bought = self.deadline()
+
+		with self.renewing():
+			api.renew_bench(self.bench.name, self.long_plan, "req-unlimited")
+
+		self.assertEqual(self.deadline(), bought + WEEK * 60)
+
+	def test_a_renewal_nobody_can_afford_names_the_shortfall_and_costs_nothing(self):
+		self.enable_credits()
+		metering.on_bench_running(self.running_bench())
+		before = self.balance()
+
+		with self.renewing(), self.assertRaises(frappe.ValidationError) as refused:
+			api.renew_bench(self.bench.name, self.long_plan, "req-broke")
+
+		message = str(refused.exception)
+		self.assertIn(str(WEEK_CREDITS), message)
+		self.assertEqual(self.balance(), before)
+		self.assertEqual(len(self.usage_rows()), 1)
+
+	# --- Renew: the race that protects money -----------------------------------
+
+	def test_a_renewal_locks_the_row_the_stop_job_locks(self):
+		"""Renew and the stop serialise on the row itself. Asserting the SQL asserts the contract."""
+		self.enable_credits()
+		metering.on_bench_running(self.running_bench())
+
+		with self.renewing(), patch.object(frappe.db, "sql", wraps=frappe.db.sql) as sql:
+			api.renew_bench(self.bench.name, self.short_plan, "req-lock")
+
+		self.assertTrue(
+			[statement for statement in self.statements(sql) if self.locks_the_bench(statement)],
+			"the bench row was read without the lock `confirm_expiry` takes",
+		)
+
+	def test_a_renewal_that_commits_first_makes_the_stop_a_no_op(self):
+		"""The sweep's read was true when it ran and stale when it acted."""
+		self.enable_credits()
+		metering.on_bench_running(self.running_bench())
+		self.expire()
+		self.claim()
+		lease.release(self.bench.name)
+
+		with self.renewing():
+			api.renew_bench(self.bench.name, self.short_plan, "req-wins")
+		with patch.object(deploy_manager, "stop_container") as stop, patch.object(frappe.db, "commit"):
+			deploy_manager.stop_bench(self.bench.name)
+
+		stop.assert_not_called()
+		self.assertEqual(frappe.db.get_value(BENCH, self.bench.name, "status"), "Running")
+		self.assertEqual(self.lease_state(), lease.ACTIVE)
+
+	def test_a_renewal_that_arrives_after_the_claim_is_refused_by_name(self):
+		"""The sweep won. The user gets a sentence about starting it again, not a traceback."""
+		self.enable_credits()
+		metering.on_bench_running(self.running_bench())
+		self.expire()
+		self.claim()
+		before = self.balance()
+
+		with self.renewing(), self.assertRaises(frappe.ValidationError) as refused:
+			api.renew_bench(self.bench.name, self.short_plan, "req-loses")
+
+		self.assertIn("start", str(refused.exception).lower())
+		self.assertEqual(self.balance(), before)
+		self.assertEqual(len(self.usage_rows()), 1)
+
+	def test_a_refused_renewal_never_reaches_the_charge(self):
+		"""The charge sits inside the lock and after every guard, so a refusal cannot debit."""
+		self.enable_credits()
+		metering.on_bench_running(self.running_bench())
+		self.expire()
+		self.claim()
+
+		with self.renewing(), patch.object(account, "charge") as charge:
+			with self.assertRaises(frappe.ValidationError):
+				api.renew_bench(self.bench.name, self.short_plan, "req-guarded")
+
+		charge.assert_not_called()
+
+	# --- Renew: idempotency ----------------------------------------------------
+
+	def test_three_clicks_carrying_one_request_id_charge_once(self):
+		"""Three tabs of impatient clicking is the ordinary case, not the exotic one."""
+		self.enable_credits()
+		metering.on_bench_running(self.running_bench())
+		bought = self.deadline()
+
+		with self.renewing():
+			for _ in range(3):
+				api.renew_bench(self.bench.name, self.short_plan, "req-same")
+
+		self.assertEqual(len(self.usage_rows()), 2)
+		self.assertEqual(self.deadline(), bought + HALF_HOUR * 60)
+		self.assertEqual(self.balance(), GRANT - 2 * HALF_HOUR_CREDITS)
+
+	def test_two_request_ids_charge_twice(self):
+		"""Idempotency must not swallow a genuine second purchase."""
+		self.enable_credits()
+		metering.on_bench_running(self.running_bench())
+		bought = self.deadline()
+
+		with self.renewing():
+			api.renew_bench(self.bench.name, self.short_plan, "req-first")
+			api.renew_bench(self.bench.name, self.short_plan, "req-second")
+
+		self.assertEqual(len(self.usage_rows()), 3)
+		self.assertEqual(self.deadline(), bought + 2 * HALF_HOUR * 60)
+
+	def test_the_replay_guard_reads_under_the_lock(self):
+		"""This session is REPEATABLE READ, so a plain read answers from the snapshot the
+		transaction opened — before the racing click committed — and charges the same click twice."""
+		self.enable_credits()
+		with patch.object(frappe.db, "sql", wraps=frappe.db.sql) as sql:
+			account.request_posted("req-never-seen")
+		self.assertTrue(
+			[statement for statement in self.statements(sql) if "FOR UPDATE" in statement],
+			"the replay guard read the ledger without a locking read",
+		)
+
+	def test_request_id_has_no_default(self):
+		"""A key the server invents for a caller who sent none is not an idempotency key."""
+		parameter = inspect.signature(api.renew_bench).parameters["request_id"]
+		self.assertIs(parameter.default, inspect.Parameter.empty)
+
+	# --- Renew: the grace window -----------------------------------------------
+
+	def test_grace_ends_when_the_reaper_would_take_the_bench(self):
+		self.enable_credits()
+		self.set_credit_setting("reap_after_days", 3)
+		self.stop_the_bench()
+		self.assertAlmostEqual(lease.grace_ends_at(self.bench_row()), lease.now_ts() + 3 * 86400, delta=60)
+
+	def test_nothing_reaps_the_bench_when_the_window_is_zero(self):
+		"""`0` is unlimited, here as everywhere — so renew never stops being the answer."""
+		self.enable_credits()
+		self.set_credit_setting("reap_after_days", 0)
+		self.stop_the_bench()
+		self.assertIsNone(lease.grace_ends_at(self.bench_row()))
+
+	def test_a_renewal_inside_grace_starts_the_container_it_already_has(self):
+		"""The container still exists — expiry only stopped it — so this is a start, not a rebuild."""
+		self.enable_credits()
+		self.set_credit_setting("reap_after_days", 7)
+		self.stop_the_bench()
+
+		with self.renewing() as docker:
+			api.renew_bench(self.bench.name, self.short_plan, "req-restore")
+
+		docker.start.assert_called_once_with("lease-container")
+		self.assertEqual(frappe.db.get_value(BENCH, self.bench.name, "status"), "Running")
+		self.assertEqual(self.lease_state(), lease.ACTIVE)
+
+	def test_a_renewal_after_grace_has_lapsed_says_redeploy(self):
+		"""A button that fails is worse than one that changed."""
+		self.enable_credits()
+		self.set_credit_setting("reap_after_days", 1)
+		self.stop_the_bench()
+		self.age_the_bench(days=3)
+		before = self.balance()
+
+		with self.renewing(), self.assertRaises(frappe.ValidationError) as refused:
+			api.renew_bench(self.bench.name, self.short_plan, "req-too-late")
+
+		self.assertIn("redeploy", str(refused.exception).lower())
+		self.assertEqual(self.balance(), before)
+
+	# --- Renew: the push -------------------------------------------------------
+
+	def test_a_renewal_pushes_the_new_deadline_to_the_owner_alone(self):
+		self.enable_credits()
+		metering.on_bench_running(self.running_bench())
+
+		with self.renewing() as docker:
+			api.renew_bench(self.bench.name, self.short_plan, "req-push")
+
+		events = self.lease_events(docker.publish, lease.RENEWED_EVENT)
+		self.assertEqual(len(events), 1)
+		payload = events[0].args[1]
+		self.assertEqual(events[0].kwargs["user"], self.user)
+		self.assertTrue(events[0].kwargs["after_commit"])
+		self.assertEqual(payload["bench"], self.bench.name)
+		self.assertEqual(payload["expires_at_ts"], self.deadline())
+		self.assertGreaterEqual(payload["revision"], payload["server_now_ms"] - 1000)
+		self.assertNotIn("ssh_password", payload)
+
+	# --- The free reset, refused explicitly ------------------------------------
+
+	def test_a_redeploy_charges_a_full_lease_and_starts_a_fresh_clock(self):
+		"""The reference platform reset the clock free, so their own renew dialog told users to
+		redeploy instead and the paid button was pointless."""
+		self.enable_credits()
+		metering.on_bench_running(self.running_bench())
+
+		with (
+			patch.object(deploy_manager, "stop_container"),
+			patch.object(deploy_manager, "remove_container"),
+			patch.object(deploy_manager, "_delete_instance_route"),
+			patch.object(deploy_manager, "_drop_site_database"),
+			patch.object(frappe.db, "commit"),
+		):
+			deploy_manager.teardown_bench(frappe.get_doc(BENCH, self.bench.name))
+		self.assertEqual(self.deadline(), 0)
+
+		frappe.db.set_value(BENCH, self.bench.name, "status", "Running", update_modified=False)
+		metering.on_bench_running(self.running_bench())
+
+		self.assertEqual(len(self.usage_rows()), 2)
+		self.assertEqual(self.balance(), GRANT - 2 * HALF_HOUR_CREDITS)
+		self.assertAlmostEqual(self.deadline(), lease.now_ts() + HALF_HOUR * 60, delta=5)
 
 	# --- The deadline is not a client claim ------------------------------------
 
