@@ -14,9 +14,11 @@ inside the published container image, and JavaScript packages carry theirs in
 `node_modules/*/LICENSE`. To produce a single bundle of the full texts, run
 `pip-licenses --format=markdown --with-license-file` in the bench virtualenv.
 
-Frappe apps BenchPress integrates with — razorpay_frappe, vpn_management — are not dependency
-metadata and are documented by hand in
-[docs/integration-notices.md](docs/integration-notices.md).
+Two things this file cannot see are documented by hand in
+[docs/integration-notices.md](docs/integration-notices.md): the Frappe apps BenchPress integrates
+with (razorpay_frappe, vpn_management), and the web fonts vendored under
+`benchpress/public/fonts/` and `docs/fonts/`. Neither is dependency metadata, so neither appears
+in the tables below.
 
 ## Python dependencies
 
