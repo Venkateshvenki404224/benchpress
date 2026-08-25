@@ -25,6 +25,7 @@ from benchpress.credits import account, config, metering, reconcile
 from benchpress.credits.seed import seed_defaults
 
 ACCOUNT = "Credit Account"
+ACCOUNT_TABLE = "tabCredit Account"
 LEDGER = "Credit Ledger Entry"
 BENCHPRESS_SETTINGS = "BenchPress Settings"
 
@@ -221,13 +222,24 @@ class TestCredits(IntegrationTestCase):
 		self.assertEqual(self.burn_rate(), 2 * RATE)
 
 	def test_the_account_row_is_read_for_update(self):
-		"""The double-spend guard: two parallel deploys must not read the same balance."""
+		"""The double-spend guard: two parallel deploys must not read the same balance.
+
+		Against the emitted SQL rather than a kwarg, because the lock and the document load are
+		now one statement — see `_locked` for why a plain read after the lock is not the same row.
+		"""
 		self.enable_credits()
 		account.ensure_account(self.user)
-		with patch("frappe.db.get_value", wraps=frappe.db.get_value) as get_value:
+		with patch.object(frappe.db, "sql", wraps=frappe.db.sql) as sql:
 			account.start_burn(self.user, self.bench.name, RATE)
-		locking = [call for call in get_value.call_args_list if call.kwargs.get("for_update")]
-		self.assertTrue(locking, "the account was read without FOR UPDATE")
+		statements = [str(call.args[0]) for call in sql.call_args_list if call.args]
+		self.assertTrue(
+			[
+				statement
+				for statement in statements
+				if ACCOUNT_TABLE in statement and "FOR UPDATE" in statement
+			],
+			"the account was read without FOR UPDATE",
+		)
 
 	def test_an_account_is_never_opened_by_a_read(self):
 		self.enable_credits()
