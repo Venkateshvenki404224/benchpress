@@ -34,7 +34,7 @@ from frappe.utils import add_days, flt, now_datetime
 from benchpress import api, deploy_manager, lab_detail
 from benchpress.benchpress.doctype.bench_instance import get_instance_id
 from benchpress.credits import account, config, lease, metering
-from benchpress.credits.seed import seed_default_lease_plan, seed_defaults
+from benchpress.credits.seed import ensure_ledger_index, seed_default_lease_plan, seed_defaults
 
 ACCOUNT = "Credit Account"
 BENCH = "Bench Instance"
@@ -42,6 +42,8 @@ BENCHPRESS_SETTINGS = "BenchPress Settings"
 CREDIT_SETTINGS = "Credit Settings"
 LEDGER = "Credit Ledger Entry"
 PLAN = "Lease Plan"
+
+ACCOUNT_REQUEST_INDEX = "account_request_id_index"
 
 GRANT = 40.0
 HALF_HOUR = 30
@@ -944,7 +946,7 @@ class TestLease(IntegrationTestCase):
 		transaction opened — before the racing click committed — and charges the same click twice."""
 		self.enable_credits()
 		with patch.object(frappe.db, "sql", wraps=frappe.db.sql) as sql:
-			account.request_posted("req-never-seen")
+			account.request_posted(self.user, "req-never-seen")
 		self.assertTrue(
 			[statement for statement in self.statements(sql) if "FOR UPDATE" in statement],
 			"the replay guard read the ledger without a locking read",
@@ -969,6 +971,71 @@ class TestLease(IntegrationTestCase):
 			and "FOR UPDATE" not in statement.upper()
 		]
 		self.assertEqual(unlocked, [], "the account document was loaded outside the lock that guards it")
+
+	# --- Renew: the locks two renewals meet each other at -----------------------
+
+	def test_the_account_is_locked_before_the_replay_guard(self):
+		"""Two benches of one owner renewed together deadlocked, and one click got `(1213)`.
+
+		The replay guard reads an absent `request_id` under a lock, which gap-locks the range the
+		ledger row is then inserted into. With the account row locked between the two, a second
+		renewal closes a cycle: it holds the gap and waits for the account while the first holds
+		the account and waits for the gap. Taking the account lock first serialises the pair
+		before either reaches the gap.
+		"""
+		self.enable_credits()
+		metering.on_bench_running(self.running_bench())
+
+		with self.renewing(), patch.object(frappe.db, "sql", wraps=frappe.db.sql) as sql:
+			api.renew_bench(self.bench.name, self.short_plan, "req-order")
+
+		locks = [
+			ACCOUNT if ACCOUNT in statement else LEDGER
+			for statement in self.statements(sql)
+			if "FOR UPDATE" in statement.upper() and (ACCOUNT in statement or LEDGER in statement)
+		]
+		self.assertTrue(locks, "the renew path locked neither the account nor the ledger")
+		self.assertEqual(locks[0], ACCOUNT, "the ledger gap was locked before the account row")
+
+	def test_the_balance_guard_reads_the_account_under_its_lock(self):
+		"""The guard decides whether to charge, so it reads the row the charge is about to write."""
+		self.enable_credits()
+		metering.on_bench_running(self.running_bench())
+
+		with self.renewing(), patch.object(frappe.db, "sql", wraps=frappe.db.sql) as sql:
+			api.renew_bench(self.bench.name, self.short_plan, "req-guard-lock")
+
+		unlocked = [
+			statement
+			for statement in self.statements(sql)
+			if ACCOUNT in statement
+			and statement.lstrip().upper().startswith("SELECT")
+			and "`balance`" in statement
+			and "FOR UPDATE" not in statement.upper()
+		]
+		self.assertEqual(unlocked, [], "the balance guard read the account outside the lock that guards it")
+
+	def test_the_replay_guard_is_scoped_to_one_account(self):
+		"""A request id is one client's key for its own purchase.
+
+		Matched across the whole ledger it is a shared namespace: a neighbour's id turns this
+		renewal into a replay that charges nothing and buys no time, and says it succeeded.
+		"""
+		self.enable_credits()
+		metering.on_bench_running(self.running_bench())
+		account.charge(self.other_user, 1.0, "A neighbour's purchase", request_id="req-shared")
+		before = self.deadline()
+
+		with self.renewing():
+			renewed = api.renew_bench(self.bench.name, self.short_plan, "req-shared")
+
+		self.assertEqual(renewed["charged"], HALF_HOUR_CREDITS)
+		self.assertGreater(self.deadline(), before)
+
+	def test_the_ledger_indexes_a_request_id_inside_its_account(self):
+		"""`(account, request_id)` confines the guard's gap lock to one account's range."""
+		ensure_ledger_index()
+		self.assertTrue(frappe.db.has_index(f"tab{LEDGER}", ACCOUNT_REQUEST_INDEX))
 
 	def test_request_id_has_no_default(self):
 		"""A key the server invents for a caller who sent none is not an idempotency key."""
