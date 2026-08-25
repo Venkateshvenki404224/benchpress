@@ -367,15 +367,15 @@ def _create_account(user: str) -> str:
 
 
 def _locked(user: str):
-	"""The account row, locked for the rest of this transaction.
+	"""The account row, locked and loaded in one `SELECT ... FOR UPDATE`.
 
-	`for_update=True` issues `SELECT ... FOR UPDATE`, so a second worker settling the same account
-	waits here instead of reading a balance that is about to change. No raw SQL: the ORM does row
-	locking natively.
+	A second worker touching the same account waits here instead of reading a balance that is
+	about to change. Loading the document *is* the lock rather than following it: this session is
+	REPEATABLE READ, where a plain read answers from the snapshot the transaction opened — so a
+	load after the lock returns the row as it was before the other worker committed, and saving
+	that stale `modified` raises `TimestampMismatchError` at whoever asked second.
 	"""
-	name = ensure_account(user)
-	frappe.db.get_value(ACCOUNT, name, "name", for_update=True)
-	return frappe.get_doc(ACCOUNT, name)
+	return frappe.get_doc(ACCOUNT, ensure_account(user), for_update=True)
 
 
 def _save(account) -> None:
