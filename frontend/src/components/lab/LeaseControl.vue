@@ -2,7 +2,9 @@
 	<div class="flex flex-wrap items-center gap-2">
 		<LeaseCountdown v-if="!stopped" :expires-at-ts="bench.expires_at_ts" />
 		<span v-else class="text-2xs text-ink-gray-5" data-test="grace-countdown">
-			<template v-if="grace.action === REDEPLOY">Torn down — redeploy to start again</template>
+			<template v-if="grace.action === REDEPLOY"
+				>Torn down — redeploy to start again</template
+			>
 			<template v-else-if="grace.label">Can be restored for {{ grace.label }}</template>
 			<template v-else>Can be restored</template>
 		</span>

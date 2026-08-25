@@ -1,5 +1,9 @@
 <template>
-	<Dialog v-model="isOpen" :options="{ title: 'Renew lease', size: 'sm' }" data-test="renew-dialog">
+	<Dialog
+		v-model="isOpen"
+		:options="{ title: 'Renew lease', size: 'sm' }"
+		data-test="renew-dialog"
+	>
 		<template #body-content>
 			<p class="text-body text-ink-gray-6">
 				{{ prompt }}
@@ -18,7 +22,12 @@
 					:data-test="`renew-plan-${plan.name}`"
 				>
 					<span class="flex items-center gap-2">
-						<input v-model="chosen" type="radio" :value="plan.name" name="lease-plan" />
+						<input
+							v-model="chosen"
+							type="radio"
+							:value="plan.name"
+							name="lease-plan"
+						/>
 						<span class="text-sm text-ink-gray-8">{{ plan.plan_label }}</span>
 					</span>
 					<span class="text-2xs text-ink-gray-5">{{ plan.credits }} credits</span>
@@ -94,10 +103,14 @@ async function confirm() {
 	busy.value = true;
 	error.value = "";
 	try {
-		emit("renewed", await renewBench({ benchName: props.benchName, plan: chosen.value, requestId }));
+		emit(
+			"renewed",
+			await renewBench({ benchName: props.benchName, plan: chosen.value, requestId })
+		);
 		isOpen.value = false;
 	} catch (failure) {
-		error.value = failure?.messages?.[0] || failure?.message || "That renewal did not go through.";
+		error.value =
+			failure?.messages?.[0] || failure?.message || "That renewal did not go through.";
 	} finally {
 		busy.value = false;
 	}
