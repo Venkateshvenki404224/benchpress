@@ -146,8 +146,8 @@ def _record_overflow(due: int, cap: int) -> int:
 def _stalled(limit: int) -> list[dict]:
 	"""Claims older than the reclaim window, oldest first.
 
-	A `Stopping` row with no stamp is included. Nothing writes one, so a row that has none is
-	stranded for good rather than merely late.
+	Every claim writes a stamp, so a `Stopping` row without one cannot be accounted for — and
+	nothing else will ever look at it again. Included deliberately, rather than left stranded.
 	"""
 	cutoff = add_to_date(now_datetime(), seconds=-reclaim_seconds())
 	instance = frappe.qb.DocType(lease.BENCH)
