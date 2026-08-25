@@ -12,6 +12,7 @@ must never discover that credits exist — no account row, no ledger row, no ext
 whole rest of the suite runs with the switch in exactly that position.
 """
 
+import inspect
 from unittest.mock import MagicMock, patch
 
 import frappe
@@ -32,6 +33,8 @@ RATE = 1.0
 GRANT = 40.0
 BUILD_CREDITS = 40.0
 USER = "credits-owner@example.com"
+# A tenant this suite did not create: the global sweep must not reach it.
+BYSTANDER = "credits-bystander@example.com"
 
 
 def _ensure_user(email: str) -> str:
@@ -382,6 +385,43 @@ class TestCredits(IntegrationTestCase):
 
 		self.assertIsNone(frappe.db.get_value("Bench Instance", bench.name, "credit_burn_started"))
 		self.assertEqual(self.burn_rate(), 0.0)
+
+	def test_reconciliation_does_not_bill_an_account_this_suite_did_not_create(self):
+		"""The sweep is global, and on a live site the fleet it sees belongs to tenants.
+
+		It derives a rate from their running benches, settles the drift and charges it, and
+		`write_credits_switch` commits — so a test run rewrites somebody's billing and the
+		damage outlives the suite. Everything outside this fixture is restored the moment the
+		sweep returns; this is the test that proves it.
+		"""
+		self.enable_credits()
+		bystander = _ensure_user(BYSTANDER)
+		lab = _ensure_lab("credits-lab-bystander", bystander)
+		bench = _ensure_bench(lab, bystander)
+		self.addCleanup(self.wipe_account, bystander)
+		self.addCleanup(self.delete_docs, "Lab", [lab.name])
+		self.addCleanup(self.delete_docs, "Bench Instance", [bench.name])
+		account.ensure_account(bystander)
+		frappe.db.commit()  # nosemgrep -- the sweep must see a committed bystander, as it would live
+
+		self.reconcile()
+
+		row = frappe.db.get_value(ACCOUNT, bystander, ["burn_rate", "balance"], as_dict=True)
+		self.assertEqual(flt(row.burn_rate), 0.0)
+		self.assertEqual(flt(row.balance), flt(GRANT))
+		self.assertIsNone(frappe.db.get_value("Bench Instance", bench.name, "credit_burn_started"))
+		self.assertEqual(frappe.db.count(LEDGER, {"account": bystander}), 1)
+
+	def test_no_reconciler_test_runs_the_global_sweep_unscoped(self):
+		"""One call site, so the restore cannot be forgotten by the next test added here."""
+		offenders = [
+			name
+			for name in dir(TestCredits)
+			if name.startswith("test_")
+			and name != self._testMethodName
+			and "reconcile.reconcile_burn_rates(" in inspect.getsource(getattr(TestCredits, name))
+		]
+		self.assertEqual(offenders, [])
 
 	def test_expected_rates_do_not_scale_in_query_count(self):
 		"""The sweep is two plucks and a dict, never a `get_doc` per instance."""
