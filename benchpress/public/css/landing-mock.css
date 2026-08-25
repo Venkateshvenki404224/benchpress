@@ -5,6 +5,36 @@
  * 7px controls, the app's own status pills. Nothing here may reference a marketing token, and
  * nothing in landing.css may style inside a mock. A mock that drifts from the product is a lie. */
 
+/* Inter, self-hosted — see the note above the Poppins faces in landing.css for why.
+ *
+ * One file per subset, not one per weight: Inter is a variable font, so `font-weight: 100 900`
+ * on a single face covers every cut the mocks ask for and any cut they grow into. The mocks
+ * currently use 400, 500 and 600.
+ *
+ * latin-ext is here because the mock text is not all hand-written — pack names and size labels
+ * come from the database, so an operator can type an accented character into one. */
+
+@font-face {
+	font-family: "Inter";
+	font-style: normal;
+	font-weight: 100 900;
+	font-display: swap;
+	src: url("/assets/benchpress/fonts/Inter-var-latin.woff2") format("woff2");
+	unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308,
+		U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+	font-family: "Inter";
+	font-style: normal;
+	font-weight: 100 900;
+	font-display: swap;
+	src: url("/assets/benchpress/fonts/Inter-var-latin-ext.woff2") format("woff2");
+	unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308,
+		U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113,
+		U+2C60-2C7F, U+A720-A7FF;
+}
+
 .ui-mock {
 	font-family: Inter, -apple-system, system-ui, sans-serif;
 	border: 1px solid #ededed;

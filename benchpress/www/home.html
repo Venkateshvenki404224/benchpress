@@ -25,9 +25,17 @@
   <link rel="icon" type="image/png" sizes="96x96" href="/assets/benchpress/images/logo/favicon-96x96.png?v={{ asset_version | e }}">
   <link rel="apple-touch-icon" href="/assets/benchpress/images/logo/apple-touch-icon.png?v={{ asset_version | e }}">
   <link rel="manifest" href="/assets/benchpress/manifest.json?v={{ asset_version | e }}">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;600&family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <!--
+    Fonts are self-hosted (see the @font-face notes in landing.css). Preloaded rather than left to
+    the stylesheet because a font referenced from CSS is not discovered until the CSS has parsed,
+    which is one round trip of fallback text on the largest type on the page. Only the three cuts
+    above the fold are preloaded — 800 headline, 600 buttons and pills, 400 body; the rest arrive
+    with the stylesheet. The hrefs carry no `?v=` so they match the @font-face `src` exactly and
+    the browser reuses one fetch instead of making two. `crossorigin` is required even same-origin.
+  -->
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="/assets/benchpress/fonts/Poppins-800-latin.woff2">
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="/assets/benchpress/fonts/Poppins-600-latin.woff2">
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="/assets/benchpress/fonts/Poppins-400-latin.woff2">
   <link rel="stylesheet" href="/assets/benchpress/css/landing.css?v={{ asset_version | e }}">
   <link rel="stylesheet" href="/assets/benchpress/css/landing-mock.css?v={{ asset_version | e }}">
 </head>

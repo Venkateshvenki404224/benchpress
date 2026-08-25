@@ -10,8 +10,36 @@
   <link rel="icon" type="image/png" sizes="96x96" href="images-assets/logo/favicon-96x96.png" />
   <link rel="apple-touch-icon" href="images-assets/logo/apple-touch-icon.png" />
   <link rel="manifest" href="manifest.json" />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <!--
+    Self-hosted fonts. This page is a standalone static file, so it carries its own copy under
+    docs/fonts/ rather than sharing the app's /assets/benchpress/fonts/ — nothing serves Frappe
+    assets next to it. Both faces are preloaded: they are the page's entire type.
+  -->
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="fonts/Inter-var-latin.woff2">
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="fonts/JetBrainsMono-var-latin.woff2">
   <style>
+    /* Inter and JetBrains Mono, both variable: one file each spans every weight the page uses
+       (Inter 400-900, mono 400-500). Only the latin subset is bundled — this page is hand-written
+       English with no database content, so latin-ext would ship bytes nothing can ever request. */
+    @font-face {
+      font-family: 'Inter';
+      font-style: normal;
+      font-weight: 100 900;
+      font-display: swap;
+      src: url('fonts/Inter-var-latin.woff2') format('woff2');
+      unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304,
+        U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+    }
+    @font-face {
+      font-family: 'JetBrains Mono';
+      font-style: normal;
+      font-weight: 100 800;
+      font-display: swap;
+      src: url('fonts/JetBrainsMono-var-latin.woff2') format('woff2');
+      unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304,
+        U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+    }
+
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
