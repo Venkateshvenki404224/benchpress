@@ -78,8 +78,9 @@ function schedule() {
 	stop();
 	if (!subscribers.size) return;
 	const period = Math.min(...[...subscribers].map((entry) => entry.period));
-	// Aligned to the wall-clock boundary, so the label changes when the second does.
-	const delay = period - (Date.now() % period);
+	// Aligned to the *corrected* boundary. On the browser's own, a tick lands a few
+	// milliseconds before the server's second and `leaseFor` rounds that up to a whole one.
+	const delay = period - (serverNow() % period);
 	expectedAt = Date.now() + delay;
 	timer = setTimeout(fire, delay);
 }
