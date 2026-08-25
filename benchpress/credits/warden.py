@@ -42,11 +42,25 @@ def run() -> None:
 
 def tick() -> int:
 	"""One pass over the fleet. Returns how long it is safe to sleep afterwards."""
-	frappe.db.rollback()  # a long-lived connection would otherwise sweep one frozen snapshot
+	_start_fresh()
 	if not config.credits_enabled():
 		return POLL_CEILING
 	drain.sweep_expired_leases()
 	return sleep_for(next_deadline(), lease.now_ts())
+
+
+def _start_fresh() -> None:
+	"""Drop everything a request would have dropped between one request and the next.
+
+	`frappe.local` never resets here, and `frappe.cache.get_value` reads `frappe.local.cache`
+	before Redis — so a warden started while credits were off would read `enable_credits` once
+	and never again, and sleep its ceiling while leases fell due. The rollback is the same
+	problem one layer down: without it the connection keeps sweeping its first snapshot.
+	"""
+	frappe.db.rollback()
+	frappe.local.cache.clear()
+	frappe.db.value_cache.clear()  # cleared, never replaced: it is a defaultdict
+	config.clear_size_index()
 
 
 def sleep_for(deadline: int | None, now: int) -> int:
