@@ -36,6 +36,11 @@ HOLDING_STATUSES = ("Deploying", "Running")
 # whose bench is still `Deploying` belongs to a job that no longer exists.
 STALE_DEPLOY_HOURS = 3
 
+# A claim is taken in the request; the bench only leaves `Draft` when a worker picks the deploy
+# up. Releasing on status alone would take the slot back from a deploy that is merely queued,
+# which is exactly what happens whenever `queue-long` is behind.
+CLAIM_GRACE_MINUTES = 15
+
 
 def reconcile_admissions() -> dict:
 	"""Expire stranded claims, adopt orphaned instances, then heal the counters."""
@@ -55,22 +60,24 @@ def _release_stranded() -> list[str]:
 	if not claims:
 		return []
 	statuses = _bench_statuses([claim.bench for claim in claims])
-	cutoff = add_to_date(now_datetime(), hours=-STALE_DEPLOY_HOURS)
+	now = now_datetime()
+	settled = add_to_date(now, minutes=-CLAIM_GRACE_MINUTES)
+	abandoned = add_to_date(now, hours=-STALE_DEPLOY_HOURS)
 	released = []
 	for claim in claims:
 		status = statuses.get(claim.bench)
-		if status in HOLDING_STATUSES and not _deploy_abandoned(status, claim.claimed_at, cutoff):
-			continue
-		if status == "Deploying":
+		if status == "Deploying" and _older_than(claim.claimed_at, abandoned):
 			# A bench nobody is deploying is not deploying.
 			frappe.db.set_value(BENCH, claim.bench, "status", "Error")
+		elif status in HOLDING_STATUSES or not _older_than(claim.claimed_at, settled):
+			continue
 		admission.release(claim.bench)
 		released.append(claim.bench)
 	return released
 
 
-def _deploy_abandoned(status: str, claimed_at, cutoff) -> bool:
-	return status == "Deploying" and bool(claimed_at) and claimed_at < cutoff
+def _older_than(claimed_at, cutoff) -> bool:
+	return bool(claimed_at) and claimed_at < cutoff
 
 
 def _adopt_orphans() -> list[str]:

@@ -73,6 +73,51 @@ def report() -> dict:
 	}
 
 
+def stage_real_lab(image_tag: str, size: str = "Small") -> str:
+	"""A drill lab whose image already exists, for the runs that need a container to appear.
+
+	It carries the `drill-` prefix like every other drill lab, so `cleanup` tears down whatever
+	it deployed rather than leaving a container behind.
+	"""
+	lab_id = f"{LAB_PREFIX}real"
+	if not frappe.db.exists("Lab", lab_id):
+		frappe.get_doc(
+			{
+				"doctype": "Lab",
+				"lab_id": lab_id,
+				"title": "Admission drill (real image)",
+				"frappe_version": "version-15",
+				"image_tag": image_tag,
+				"instance_size": size,
+				"enable_code_server": 0,
+			}
+		).insert(ignore_permissions=True)
+	frappe.db.commit()
+	return lab_id
+
+
+def purge_deploy_jobs() -> dict:
+	"""Cancel the deploy jobs the drill's own requests queued. Call before any worker restarts.
+
+	`enqueue_after_commit=True` pushes to Redis when the request commits, so stopping the worker
+	delays a deploy rather than preventing it. Restarting one at the end of a run would deploy
+	every bench the drill just admitted, on a host with 18 GB free.
+	"""
+	from frappe.utils.background_jobs import get_job
+
+	cancelled = []
+	for bench in _drill_benches():
+		job = get_job(f"deploy_bench:{bench}")
+		if not job:
+			continue
+		try:
+			job.cancel()
+		except Exception:
+			continue  # already running or already gone; either way it is not ours to stop
+		cancelled.append(bench)
+	return {"cancelled": len(cancelled)}
+
+
 def cleanup() -> dict:
 	"""Remove everything the drill made, filtered by the drill user and the `drill-` labs.
 
@@ -80,13 +125,9 @@ def cleanup() -> dict:
 	filter that reads "everything this user owns" is one typo away from being everything.
 	"""
 	labs = frappe.get_all("Lab", filters={"lab_id": ("like", f"{LAB_PREFIX}%")}, pluck="name")
-	benches = (
-		frappe.get_all(BENCH, filters={"owner": DRILL_USER, "lab": ("in", labs)}, fields=["name"])
-		if labs
-		else []
-	)
+	benches = _drill_benches()
 	for bench in benches:
-		_delete_bench(bench.name)
+		_delete_bench(bench)
 	frappe.db.delete(ADMISSION, {"account": DRILL_USER})
 	for lab in labs:
 		frappe.delete_doc("Lab", lab, force=True, ignore_permissions=True)
@@ -101,13 +142,22 @@ def cleanup() -> dict:
 	}
 
 
+def _drill_benches() -> list[str]:
+	labs = frappe.get_all("Lab", filters={"lab_id": ("like", f"{LAB_PREFIX}%")}, pluck="name")
+	if not labs:
+		return []
+	return frappe.get_all(BENCH, filters={"owner": DRILL_USER, "lab": ("in", labs)}, pluck="name")
+
+
 def _delete_bench(bench_name: str) -> None:
 	from benchpress.deploy_manager import teardown_bench
+	from benchpress.vpn_adapter import remove_bench_peer
 
 	bench = frappe.get_doc(BENCH, bench_name)
 	if bench.container_id:
 		try:
 			teardown_bench(bench)
+			remove_bench_peer(bench)
 		except Exception:
 			# Best-effort, and named rather than swallowed: a drill container the harness cannot
 			# reach is an operator's problem, not a silent leak.

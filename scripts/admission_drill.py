@@ -7,6 +7,9 @@ them came back admitted.
 
 Three properties make it safe to run against a host that is serving real tenants:
 
+- **It goes to the host's own nginx, not through the CDN.** The public name is behind
+  Cloudflare, which answers a dozen simultaneous machine clients with `1010` rather than with
+  the endpoint - so the drill would measure the CDN. `BENCHPRESS_URL` overrides it.
 - **`queue-long` is stopped for the run** unless `--allow-deploys`. Every deploy is enqueued
   with `enqueue_after_commit=True`, so nothing reaches Redis until the request commits and the
   whole admission decision is still measurable with no worker running. A broken gate then
@@ -34,7 +37,10 @@ import urllib.request
 
 SITE = os.environ.get("BENCHPRESS_SITE", "frontend")
 COMPOSE_DIR = os.environ.get("BENCHPRESS_COMPOSE_DIR", "/home/ubuntu/benchpress_devops")
-BASE_URL = os.environ.get("BENCHPRESS_URL", "https://staging.benchpress.cloud")
+BASE_URL = os.environ.get("BENCHPRESS_URL", "http://127.0.0.1:8080")
+# nginx routes by `FRAPPE_SITE_NAME_HEADER`, not by this, but a request that names the site it
+# means is the one worth measuring.
+HOST_HEADER = os.environ.get("BENCHPRESS_HOST", "staging.benchpress.cloud")
 DEPLOY_QUEUE = "queue-long"
 
 CREATE_BENCH = "/api/method/benchpress.api.create_bench"
@@ -69,11 +75,14 @@ def _run(args, setup) -> int:
 	stopped = _stop_deploy_queue(args.allow_deploys)
 	try:
 		results = _fire_all(setup)
+		# Both before the worker comes back: the counter is what the run produced, and the
+		# queued deploys are what the run must not let loose on the host.
+		report = _bench_execute("report")
+		if stopped:
+			print("purged:", json.dumps(_bench_execute("purge_deploy_jobs")))
 	finally:
 		if stopped:
 			_start_deploy_queue()
-
-	report = _bench_execute("report")
 	return _verdict(args, setup, results, report)
 
 
@@ -87,10 +96,7 @@ def _fire_all(setup) -> list[dict]:
 	context = multiprocessing.get_context("fork")
 	barrier = context.Barrier(len(setup["labs"]))
 	results = context.Queue()
-	headers = {
-		"Authorization": f"token {setup['api_key']}:{setup['api_secret']}",
-		"Content-Type": "application/json",
-	}
+	headers = {**_auth(setup), "Content-Type": "application/json"}
 	workers = [
 		context.Process(target=_fire, args=(index, lab, headers, barrier, results))
 		for index, lab in enumerate(setup["labs"])
@@ -116,7 +122,7 @@ def _fire(index: int, lab: str, headers: dict, barrier, results) -> None:
 			results.put(_outcome(index, lab, response.status, response.read()))
 	except urllib.error.HTTPError as refusal:
 		results.put(_outcome(index, lab, refusal.code, refusal.read()))
-	except Exception as failure:  # noqa: BLE001 - a transport failure is a drill result too
+	except Exception as failure:  # a transport failure is a drill result too
 		results.put({"index": index, "lab": lab, "verdict": "error", "detail": repr(failure)})
 
 
@@ -142,6 +148,7 @@ def _verdict(args, setup, results, report) -> int:
 	print(f"account: active_instances={report['active_instances']} rows={report['admission_rows']}")
 
 	broken = _broken(counts, expected, report)
+	sys.stdout.flush()
 	for line in broken:
 		print(f"FAIL: {line}", file=sys.stderr)
 	for result in results:
@@ -161,9 +168,7 @@ def _broken(counts: dict, expected: int, report: dict) -> list[str]:
 	if report["admission_rows"] != counts["admitted"]:
 		broken.append(f"{report['admission_rows']} admission rows for {counts['admitted']} admitted")
 	if report["active_instances"] != report["admission_rows"]:
-		broken.append(
-			f"counter says {report['active_instances']}, rows say {report['admission_rows']}"
-		)
+		broken.append(f"counter says {report['active_instances']}, rows say {report['admission_rows']}")
 	return broken
 
 
@@ -176,15 +181,19 @@ def _assert_right_site(claimed: str, setup: dict) -> None:
 
 
 def _logged_user(setup: dict) -> str | None:
-	request = urllib.request.Request(
-		BASE_URL + LOGGED_USER,
-		headers={"Authorization": f"token {setup['api_key']}:{setup['api_secret']}"},
-	)
+	request = urllib.request.Request(BASE_URL + LOGGED_USER, headers=_auth(setup))
 	try:
 		with urllib.request.urlopen(request, timeout=30) as response:
 			return json.loads(response.read()).get("message")
-	except Exception as failure:  # noqa: BLE001
+	except Exception as failure:
 		_refuse(f"{BASE_URL} would not authenticate the drill token: {failure!r}")
+
+
+def _auth(setup: dict) -> dict:
+	return {
+		"Authorization": f"token {setup['api_key']}:{setup['api_secret']}",
+		"Host": HOST_HEADER,
+	}
 
 
 def _refuse(reason: str) -> None:

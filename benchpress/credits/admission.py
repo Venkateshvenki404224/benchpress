@@ -69,7 +69,6 @@ def release(bench_name: str | None) -> None:
 	account.save_account(acct)
 
 
-
 def _insert(account_name: str, bench_name: str) -> bool:
 	row = frappe.new_doc(ADMISSION)
 	row.bench = bench_name

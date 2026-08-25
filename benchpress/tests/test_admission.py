@@ -191,8 +191,10 @@ class TestAdmission(IntegrationTestCase):
 
 		bench = self.running_bench(self.benches[0])
 		admission.claim(USER, bench.name, 1)
-		with patch("benchpress.deploy_manager.stop_container"), patch("frappe.enqueue"), patch(
-			"frappe.db.commit"
+		with (
+			patch("benchpress.deploy_manager.stop_container"),
+			patch("frappe.enqueue"),
+			patch("frappe.db.commit"),
 		):
 			stop_bench(bench.name)
 		self.assertEqual(self.counter(), 0)
@@ -252,9 +254,16 @@ class TestAdmission(IntegrationTestCase):
 	def test_the_reconciler_releases_a_claim_whose_bench_is_not_live(self):
 		admission.claim(USER, self.benches[0].name, 0)
 		frappe.db.set_value(BENCH, self.benches[0].name, "status", "Stopped", update_modified=False)
+		self.backdate(self.benches[0].name, minutes=admission_repair.CLAIM_GRACE_MINUTES + 1)
 		admission_repair.reconcile_admissions()
 		self.assertEqual(self.rows(), [])
 		self.assertEqual(self.counter(), 0)
+
+	def test_the_reconciler_leaves_a_claim_whose_deploy_is_only_queued(self):
+		"""A bench is `Draft` until a worker picks its deploy up, which is not the same as idle."""
+		admission.claim(USER, self.benches[0].name, 0)
+		admission_repair.reconcile_admissions()
+		self.assertEqual(self.rows(), [self.benches[0].name])
 
 	def test_the_reconciler_keeps_a_claim_whose_bench_is_still_deploying(self):
 		admission.claim(USER, self.benches[0].name, 0)
@@ -266,13 +275,7 @@ class TestAdmission(IntegrationTestCase):
 		"""A worker killed mid-deploy leaves a claim no `except` block will ever reach."""
 		admission.claim(USER, self.benches[0].name, 0)
 		frappe.db.set_value(BENCH, self.benches[0].name, "status", "Deploying", update_modified=False)
-		frappe.db.set_value(
-			ADMISSION,
-			self.benches[0].name,
-			"claimed_at",
-			add_to_date(now_datetime(), hours=-(admission_repair.STALE_DEPLOY_HOURS + 1)),
-			update_modified=False,
-		)
+		self.backdate(self.benches[0].name, hours=admission_repair.STALE_DEPLOY_HOURS + 1)
 		admission_repair.reconcile_admissions()
 		self.assertEqual(frappe.db.get_value(BENCH, self.benches[0].name, "status"), "Error")
 		self.assertEqual(self.rows(), [])
@@ -292,19 +295,33 @@ class TestAdmission(IntegrationTestCase):
 
 	# --- Helpers --------------------------------------------------------------
 
+	def backdate(self, bench_name: str, **age) -> None:
+		frappe.db.set_value(
+			ADMISSION,
+			bench_name,
+			"claimed_at",
+			add_to_date(now_datetime(), **{unit: -value for unit, value in age.items()}),
+			update_modified=False,
+		)
+
 	def teardown(self, bench, **kwargs) -> None:
 		from benchpress.deploy_manager import teardown_bench
 
-		with patch("benchpress.deploy_manager.stop_container"), patch(
-			"benchpress.deploy_manager.remove_container"
-		), patch("benchpress.deploy_manager._drop_site_database"), patch(
-			"benchpress.deploy_manager._delete_instance_route"
-		), patch("frappe.db.commit"):
+		with (
+			patch("benchpress.deploy_manager.stop_container"),
+			patch("benchpress.deploy_manager.remove_container"),
+			patch("benchpress.deploy_manager._drop_site_database"),
+			patch("benchpress.deploy_manager._delete_instance_route"),
+			patch("frappe.db.commit"),
+		):
 			teardown_bench(frappe.get_doc(BENCH, bench.name), **kwargs)
 
 	def running_bench(self, bench):
 		frappe.db.set_value(
-			BENCH, bench.name, {"status": "Running", "container_id": "admission-container"}, update_modified=False
+			BENCH,
+			bench.name,
+			{"status": "Running", "container_id": "admission-container"},
+			update_modified=False,
 		)
 		return frappe.get_doc(BENCH, bench.name)
 
