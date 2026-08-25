@@ -1,0 +1,318 @@
+#!/usr/bin/env bash
+# ralph.sh — Ralph loop for the {{SPEC_SLUG}} spec.
+#
+# TEMPLATE. Every {{PLACEHOLDER}} must be replaced, and every block marked
+# "ADAPT:" rewritten for this spec. A loop whose smoke_check does not actually
+# test this feature is worse than no loop: it grants an agent permission to
+# believe it succeeded.
+#
+# Each iteration is a FRESH headless Claude session (`claude -p`); state persists
+# only in files. Phases run strictly in order; phase N+1 starts only after phase
+# N's agent has verified its spec's "Done when", the loop's own independent smoke
+# check has passed, and a marker has been dropped.
+#
+# Usage:   ./ralph.sh            # runs phases 1→{{PHASE_COUNT}}
+#          ./ralph.sh 2          # start at phase 2 (1 already done)
+# Watch:   tail -f {{WORKDIR}}/.ralph/{{RALPH_NS}}/logs/<latest>.log
+# Abort:   Ctrl-C, or `touch {{WORKDIR}}/.ralph/{{RALPH_NS}}/STOP`
+#
+# Runs with --dangerously-skip-permissions: only run on a box you can break.
+
+set -euo pipefail
+
+MODEL="claude-opus-5"
+EFFORT="xhigh"
+MAX_ITER=5                 # per phase — safety guard against spinning forever
+ITER_TIMEOUT={{ITER_TIMEOUT}}        # seconds per session
+
+APP_DIR="{{APP_DIR}}"
+DEVOPS_DIR="{{DEVOPS_DIR}}"
+WORKDIR="{{WORKDIR}}"
+SPEC_SLUG="{{SPEC_SLUG}}"
+SPEC_REL="specs"           # the folder moves between buckets; find it each run
+RALPH_DIR="$WORKDIR/.ralph/{{RALPH_NS}}"
+LOG_DIR="$RALPH_DIR/logs"
+NOTES_DIR="$WORKDIR/notes"
+SNAP_DIR="$RALPH_DIR/preflight"
+NOTES_PREFIX="{{NOTES_PREFIX}}"      # keeps notes from colliding with other loops
+
+BRANCH="{{BRANCH}}"
+BASE_BRANCH="{{BASE_BRANCH}}"
+
+# The running UI, for the browser checks. Leave empty on a spec with no UI surface.
+APP_URL="{{APP_URL}}"
+
+PROMOTE="$APP_DIR/.claude/skills/issue-to-phases/scripts/promote_spec.py"
+
+PHASE_FILES=(
+{{PHASE_FILES}}
+)
+PHASE_COUNT=${#PHASE_FILES[@]}
+
+mkdir -p "$LOG_DIR" "$NOTES_DIR" "$SNAP_DIR"
+
+spec_dir() {
+  local d
+  for d in in-progress not-completed completed; do
+    if [ -d "$APP_DIR/$SPEC_REL/$d/$SPEC_SLUG" ]; then
+      echo "$APP_DIR/$SPEC_REL/$d/$SPEC_SLUG"
+      return
+    fi
+  done
+  echo "ERROR: $SPEC_SLUG spec folder not found under $APP_DIR/$SPEC_REL" >&2
+  exit 1
+}
+
+spec_bucket() {
+  basename "$(dirname "$(spec_dir)")"
+}
+
+# ─── Live-state helpers ──────────────────────────────────────────────────────
+# ADAPT: one helper per thing smoke_check needs to observe.
+#
+# Two rules that are not negotiable, both learned the hard way:
+#
+#  1. Every helper returns 0 even when it finds nothing. Under `set -euo pipefail`
+#     an unguarded grep miss aborts the whole loop instead of reporting the
+#     failure the gate exists to catch.
+#  2. Observe the real thing through the real path. A status code, an exit code,
+#     or a log line saying "done" is not evidence — six separate incidents in the
+#     source material were tools reporting success while doing nothing.
+
+# Built assets older than the source: the failure that hides a correct UI change
+# completely, fails no test, and reads to the operator as "the feature is missing".
+# ADAPT the two paths; delete this helper on a spec with no built frontend.
+assets_stale() {
+  local src
+  src="$(find {{SRC_GLOB}} -type f -newer {{BUILT_MARKER}} 2>/dev/null | head -1 || true)"
+  [ -n "$src" ]
+}
+
+browser_ready() {
+  [ -n "$APP_URL" ] || return 0          # no UI surface on this spec
+  command -v agent-browser >/dev/null 2>&1
+}
+
+{{HELPERS}}
+
+preflight() {
+  [ -f "$SNAP_DIR/.taken" ] && return 0
+  echo "[ralph] preflight: snapshotting state before anything changes"
+  if ! browser_ready; then
+    echo "[ralph] ERROR: APP_URL is set but agent-browser is not installed."
+    echo "[ralph] Install it before starting: npm i -g agent-browser && agent-browser install"
+    echo "[ralph] A phase that has to prove its UI cannot do it without a browser."
+    exit 1
+  fi
+  # ADAPT: snapshot whatever rollback needs, and whatever smoke_check compares
+  # against. Rollback should be a file copy, not an act of memory.
+{{PREFLIGHT}}
+  ( cd "$APP_DIR" && git rev-parse HEAD ) > "$SNAP_DIR/head.before" 2>/dev/null || true
+  touch "$SNAP_DIR/.taken"
+}
+
+# The independent gate. Non-zero means no phase may be declared complete.
+#
+# This is the part that makes a Ralph loop trustworthy: the agent does not get to
+# be the only judge of its own work. Write gates that would FAIL today, before the
+# feature exists — a gate that passes on an unmodified tree is testing nothing.
+smoke_check() {
+  local phase="$1" failed=0
+
+  # ADAPT: the feature's own correctness gates.
+{{SMOKE_CHECKS}}
+
+  # Ships-but-invisible. A correct component behind a stale bundle passes every
+  # test and shows the user nothing, so the loop checks it rather than trusting
+  # that someone remembered to rebuild. Delete this block on a spec with no
+  # built frontend.
+  if [ "$phase" -ge 1 ] && [ -n "$APP_URL" ]; then
+    if assets_stale; then
+      echo "[ralph]   FAIL source is newer than the built assets — the UI serves the old bundle"
+      failed=1
+    else
+      echo "[ralph]   ok   built assets are at least as new as the source"
+    fi
+  fi
+
+  # Status lockstep. The bucket, the README banner and STATUS.md must agree, and
+  # this is reliably the step an agent skips while concentrating on code — which
+  # leaves a shipped feature filed under "not started".
+  if [ "$phase" -ge 1 ]; then
+    if ( cd "$APP_DIR" && python3 "$PROMOTE" "$SPEC_SLUG" --check >/dev/null 2>&1 ); then
+      echo "[ralph]   ok   spec status trackers are in lockstep"
+    else
+      echo "[ralph]   FAIL spec status is out of sync:"
+      ( cd "$APP_DIR" && python3 "$PROMOTE" "$SPEC_SLUG" --check 2>&1 | sed 's/^/[ralph]        /' ) || true
+      failed=1
+    fi
+
+    local bucket; bucket="$(spec_bucket)"
+    if [ "$phase" -lt "$PHASE_COUNT" ] && [ "$bucket" != "in-progress" ]; then
+      echo "[ralph]   FAIL phase $phase is done but the spec sits in $bucket/ (expected in-progress/)"
+      failed=1
+    fi
+    if [ "$phase" -ge "$PHASE_COUNT" ] && [ "$bucket" != "completed" ]; then
+      echo "[ralph]   FAIL the final phase is done but the spec sits in $bucket/ (expected completed/)"
+      failed=1
+    fi
+  fi
+
+  return "$failed"
+}
+
+# ─── Prompt ──────────────────────────────────────────────────────────────────
+# The prompt lives in prompt.md beside this script, so it can be edited between
+# runs without touching bash and without re-reading 200 lines of heredoc.
+#
+# Substitution is bash parameter expansion, not eval and not sed: the prompt is
+# markdown full of backticks, quotes and $ signs, and both of those would either
+# execute it or mangle it. An unknown {{PLACEHOLDER}} is left in place so a typo
+# shows up in the log instead of silently becoming an empty string.
+
+phase_prompt() {
+  local n="$1" spec="$2" done_marker="$3" blocked_marker="$4"
+  local file="$spec/prompt.md"
+  [ -f "$file" ] || { echo "ERROR: $file not found — the prompt lives there" >&2; exit 1; }
+
+  local ordinal shared block text
+  ordinal=$(sed -n "${n}p" <<< $'one\ntwo\nthree\nfour\nfive\nsix\nseven\neight')
+
+  # Everything before the first phase marker is sent for every phase; then only
+  # the block for this phase.
+  shared="$(sed '/^<!-- PHASE [0-9][0-9]* -->$/,$d' "$file")"
+  block="$(awk -v n="$n" '
+    $0 == "<!-- PHASE " n " -->" { grab = 1; next }
+    /^<!-- PHASE [0-9]+ -->$/    { grab = 0 }
+    grab                          { print }
+  ' "$file")"
+  text="$shared"$'\n'"$block"
+
+  # HTML comments in prompt.md are notes to whoever edits it; the agent pays for
+  # them in tokens and gains nothing.
+  #
+  # A block comment is delimited by lines that are ONLY `<!--` and `-->`. Matching
+  # those tokens anywhere on a line looks simpler and is wrong: the notes describe
+  # the `<!-- PHASE n -->` markers, and that inline `-->` ended the strip early,
+  # leaking the rest of the notes into the prompt.
+  text="$(awk '
+    !c && /^[[:space:]]*<!--[[:space:]]*$/ { c = 1; next }
+    c  && /^[[:space:]]*-->[[:space:]]*$/  { c = 0; next }
+    c { next }
+    /^[[:space:]]*<!--.*-->[[:space:]]*$/  { next }
+    { print }
+  ' <<< "$text")"
+
+  text="${text//\{\{PHASE_NUMBER\}\}/$n}"
+  text="${text//\{\{PHASE_ORDINAL\}\}/$ordinal}"
+  text="${text//\{\{PHASE_COUNT\}\}/$PHASE_COUNT}"
+  text="${text//\{\{PHASE_FILE\}\}/${PHASE_FILES[$((n-1))]}}"
+  text="${text//\{\{SPEC_SLUG\}\}/$SPEC_SLUG}"
+  text="${text//\{\{SPEC_DIR\}\}/$spec}"
+  text="${text//\{\{NOTES_FILE\}\}/$NOTES_DIR/$NOTES_PREFIX-phase-$n.md}"
+  text="${text//\{\{NOTES_GLOB\}\}/$NOTES_DIR/$NOTES_PREFIX-phase-*.md}"
+  text="${text//\{\{DONE_MARKER\}\}/$done_marker}"
+  text="${text//\{\{BLOCKED_MARKER\}\}/$blocked_marker}"
+  text="${text//\{\{APP_DIR\}\}/$APP_DIR}"
+  text="${text//\{\{DEVOPS_DIR\}\}/$DEVOPS_DIR}"
+  text="${text//\{\{PROMOTE\}\}/$PROMOTE}"
+  text="${text//\{\{SNAP_DIR\}\}/$SNAP_DIR}"
+  text="${text//\{\{BRANCH\}\}/$BRANCH}"
+  text="${text//\{\{BASE_BRANCH\}\}/$BASE_BRANCH}"
+  text="${text//\{\{APP_URL\}\}/$APP_URL}"
+  text="${text//\{\{NOTES_DIR\}\}/$NOTES_DIR}"
+
+  printf '%s\n' "$text"
+}
+
+# ─── Loop ────────────────────────────────────────────────────────────────────
+
+run_phase() {
+  local n="$1"
+  local done_marker="$RALPH_DIR/phase-$n.done"
+  local blocked_marker="$RALPH_DIR/phase-$n.blocked"
+
+  if [ -f "$done_marker" ]; then
+    echo "[ralph] phase $n already done: $(cat "$done_marker")"
+    return 0
+  fi
+  rm -f "$blocked_marker"
+
+  local iter=1
+  while [ "$iter" -le "$MAX_ITER" ]; do
+    [ -f "$RALPH_DIR/STOP" ] && { echo "[ralph] STOP file found, exiting."; exit 130; }
+
+    local spec log ts
+    spec="$(spec_dir)"
+    ts="$(date +%Y%m%d-%H%M%S)"
+    log="$LOG_DIR/phase-$n-iter-$iter-$ts.log"
+    echo "[ralph] phase $n, iteration $iter/$MAX_ITER — fresh session ($MODEL, effort=$EFFORT)"
+    echo "[ralph] log: $log"
+
+    ( cd "$APP_DIR" && timeout "$ITER_TIMEOUT" claude -p "$(phase_prompt "$n" "$spec" "$done_marker" "$blocked_marker")" \
+        --model "$MODEL" \
+        --effort "$EFFORT" \
+        --dangerously-skip-permissions \
+        --add-dir "$DEVOPS_DIR" \
+        --add-dir "$WORKDIR" \
+      ) 2>&1 | tee "$log" || echo "[ralph] iteration exited non-zero (timeout or error) — looping"
+
+    if [ -f "$blocked_marker" ]; then
+      echo "[ralph] phase $n BLOCKED — needs you:"
+      cat "$blocked_marker"
+      exit 2
+    fi
+
+    if [ -f "$done_marker" ]; then
+      echo "[ralph] agent claims phase $n complete — verifying independently:"
+      if smoke_check "$n"; then
+        echo "[ralph] phase $n COMPLETE: $(cat "$done_marker")"
+        return 0
+      fi
+      echo "[ralph] smoke check FAILED — retracting the done marker and continuing phase $n"
+      {
+        echo "## Iteration $iter — done marker RETRACTED by the loop"
+        echo "The agent wrote a done marker but the loop's independent smoke check failed."
+        echo "Re-read the failures above. The system must be correct in reality, not only"
+        echo "in the tests."
+      } >> "$NOTES_DIR/$NOTES_PREFIX-phase-$n.md"
+      rm -f "$done_marker"
+    fi
+
+    iter=$((iter+1))
+    sleep 5
+  done
+
+  echo "[ralph] phase $n did not complete in $MAX_ITER iterations — stopping so phase $((n+1)) never starts on a bad base."
+  echo "[ralph] read $NOTES_DIR/$NOTES_PREFIX-phase-$n.md and the logs, then re-run: ./ralph.sh $n"
+  exit 1
+}
+
+START_PHASE="${1:-1}"
+echo "[ralph] $SPEC_SLUG Ralph loop — phases $START_PHASE..$PHASE_COUNT, model=$MODEL, effort=$EFFORT"
+echo "[ralph] code lands in $APP_DIR on $BRANCH (base $BASE_BRANCH)"
+
+[ -d "$APP_DIR/.git" ] || { echo "[ralph] ERROR: $APP_DIR is not a git checkout." >&2; exit 1; }
+[ -f "$PROMOTE" ] || { echo "[ralph] ERROR: $PROMOTE not found." >&2; exit 1; }
+
+preflight
+
+echo "[ralph] baseline check before starting:"
+if ! smoke_check 0; then
+  echo "[ralph] ERROR: already unhealthy before this loop has changed anything."
+  echo "[ralph] Fix that first — a loop that starts from a broken baseline cannot tell its"
+  echo "[ralph] own damage apart from what it inherited."
+  exit 1
+fi
+
+echo "[ralph] NOTE: {{RISK_LINE}}"
+echo "[ralph]       Rollback snapshot is in $SNAP_DIR. Ctrl-C now if this is a bad moment."
+sleep 5
+
+for phase in $(seq "$START_PHASE" "$PHASE_COUNT"); do
+  run_phase "$phase"
+done
+
+echo "[ralph] all phases complete."
+( cd "$APP_DIR" && python3 "$PROMOTE" "$SPEC_SLUG" --check ) || true
+echo "[ralph] PR: $(cd "$APP_DIR" && gh pr view "$BRANCH" --json url -q .url 2>/dev/null || echo '(none found)')"
