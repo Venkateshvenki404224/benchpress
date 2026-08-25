@@ -179,40 +179,20 @@ def create_bench(data: str) -> dict:
 	lab = frappe.get_cached_doc("Lab", lab_name)
 	requested_site_name = data.get("site_name") or data.get("site")
 
+	site_name = resolve_site_name(requested_site_name)
 	instance_id = get_instance_id(frappe.session.user, lab_name)
 	if frappe.db.exists("Bench Instance", instance_id):
-		doc = frappe.get_doc("Bench Instance", instance_id)
-		site_name = resolve_site_name(requested_site_name, exclude_bench=doc.name)
-		if site_name and site_name != doc.site_name:
-			_assert_site_name_changeable(doc)
-			doc.site_name = site_name
-		doc.status = "Deploying"
-		doc.save()
+		doc = _redeploy_instance(instance_id, site_name)
 	else:
-		doc = frappe.get_doc(
-			{
-				"doctype": "Bench Instance",
-				"bench_name": data.get("bench_name"),
-				"lab": lab_name,
-				"frappe_version": lab.frappe_version,
-				"domain": data.get("domain"),
-				"site_name": resolve_site_name(requested_site_name),
-				"status": "Draft",
-			}
-		)
+		try:
+			doc = _new_instance(lab, data, site_name)
+		except frappe.DuplicateEntryError:
+			# A call for the same (user, lab) that arrived first already named this bench.
+			# `get_instance_id` is deterministic, so the branch was always meant to be idempotent.
+			frappe.clear_last_message()
+			doc = _redeploy_instance(instance_id, site_name)
 
-		for app in lab.apps:
-			doc.append(
-				"apps",
-				{
-					"app_name": app.app_name,
-					"app_label": app.app_label,
-					"git_url": app.git_url,
-					"branch": app.branch,
-				},
-			)
-
-		doc.insert()
+	_claim_site_name(doc)
 
 	frappe.enqueue(
 		"benchpress.deploy_manager.deploy_bench",
@@ -225,6 +205,77 @@ def create_bench(data: str) -> dict:
 	)
 
 	return {"name": doc.name, "status": "Deploying"}
+
+
+def _redeploy_instance(instance_id: str, site_name: str | None):
+	doc = frappe.get_doc("Bench Instance", instance_id)
+	if site_name and site_name != doc.site_name:
+		_assert_site_name_changeable(doc)
+		doc.site_name = site_name
+	doc.status = "Deploying"
+	doc.save()
+	return doc
+
+
+def _new_instance(lab, data: dict, site_name: str | None):
+	doc = frappe.get_doc(
+		{
+			"doctype": "Bench Instance",
+			"bench_name": data.get("bench_name"),
+			"lab": lab.name,
+			"frappe_version": lab.frappe_version,
+			"domain": data.get("domain"),
+			"site_name": site_name,
+			"status": "Draft",
+		}
+	)
+	for app in lab.apps:
+		doc.append(
+			"apps",
+			{
+				"app_name": app.app_name,
+				"app_label": app.app_label,
+				"git_url": app.git_url,
+				"branch": app.branch,
+			},
+		)
+	return doc.insert()
+
+
+def _claim_site_name(bench) -> None:
+	"""Claim the site name by insert. The primary key is the check, and nothing else is.
+
+	The name is held for exactly as long as the row: `teardown_bench` keeps it so a redeploy
+	still owns its own name, and only `_delete_bench` frees it - which is when the database
+	behind it actually stops existing.
+	"""
+	try:
+		site = frappe.get_doc(
+			{
+				"doctype": "Bench Site",
+				"site_name": bench.site_name,
+				"bench": bench.name,
+				"status": "Creating",
+			}
+		).insert(ignore_permissions=True)
+	except frappe.DuplicateEntryError:
+		_refuse_taken_site_name(bench)
+		return
+	# After the insert, which stamps the session user over any owner handed to it. `Bench Site`
+	# is read `if_owner`, so an admin deploying somebody else's instance would otherwise take the
+	# row over and empty that tenant's Sites tab.
+	frappe.db.set_value("Bench Site", site.name, "owner", bench.owner, update_modified=False)
+
+
+def _refuse_taken_site_name(bench) -> None:
+	# First, and on both paths: the framework msgprints "Bench Site X already exists" before it
+	# raises, so a redeploy would carry that internal sentence on an otherwise successful reply.
+	frappe.clear_last_message()
+	# A locking read, because this session is REPEATABLE READ: a plain one answers from a
+	# snapshot taken before the winner committed, and would refuse this caller their own name.
+	if frappe.db.get_value("Bench Site", bench.site_name, "bench", for_update=True) == bench.name:
+		return
+	frappe.throw(_("Site name '{0}' is already in use. Choose a different name.").format(bench.site_name))
 
 
 def _assert_site_name_changeable(doc) -> None:

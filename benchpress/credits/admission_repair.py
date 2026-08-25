@@ -13,10 +13,10 @@ be killed between them. A worker killed mid-deploy leaks a slot and the credits 
 forever, and a caller with a cap of two is then locked out until somebody notices - so this runs
 on the `*/5` cron beside the balance sweep, not on the daily list.
 
-It is pure database work: three grouped reads, no Docker call anywhere, which is why it is safe
+It is pure database work: a handful of grouped reads, no Docker call anywhere, which is why it is safe
 on `queue-short` for exactly the reason `sweep.enforce_limits` is.
 
-Three rules, in order. Expiring first and healing last is what makes a double release harmless:
+Four rules, in order. Expiring first and healing last is what makes a double release harmless:
 the counter follows the rows, so it cannot be driven negative by a release that ran twice.
 """
 
@@ -30,6 +30,7 @@ from benchpress.credits import account, admission
 ACCOUNT = "Credit Account"
 ADMISSION = "Bench Admission"
 BENCH = "Bench Instance"
+SITE = "Bench Site"
 
 HOLDING_STATUSES = ("Deploying", "Running")
 
@@ -48,15 +49,35 @@ CLAIM_GRACE_MINUTES = 15
 
 
 def reconcile_admissions() -> dict:
-	"""Expire stranded claims, adopt orphaned instances, then heal the counters."""
+	"""Expire stranded claims, retire stranded sites, adopt orphaned instances, heal the counters."""
 	released = _release_stranded()
+	retired = _retire_stranded_sites()
 	adopted = _adopt_orphans()
 	healed = _heal_counters()
-	if released or adopted or healed:
+	if released or retired or adopted or healed:
 		frappe.logger("benchpress").warning(
-			f"admission drift: released {len(released)}, adopted {len(adopted)}, healed {len(healed)}"
+			f"admission drift: released {len(released)}, retired {len(retired)}, "
+			f"adopted {len(adopted)}, healed {len(healed)}"
 		)
-	return {"released": released, "adopted": adopted, "healed": healed}
+	return {"released": released, "retired": retired, "adopted": adopted, "healed": healed}
+
+
+def _retire_stranded_sites() -> list[str]:
+	"""Deactivate every site name claimed for a deploy that never arrived.
+
+	`api.create_bench` claims the name as `Creating` and a worker sets it `Active`, so a claim
+	still `Creating` after the deploy window belongs to a job that no longer exists. Deactivated
+	and never deleted: an `Inactive` row can still own a live database, and the bench that
+	claimed the name keeps it - a redeploy reactivates the same row.
+
+	`patches.retire_orphaned_creating_sites` did this once for a removed endpoint; a claim in
+	the request makes `Creating` a state a dead worker can reach again, so it is a standing rule.
+	"""
+	cutoff = add_to_date(now_datetime(), hours=-STALE_DEPLOY_HOURS)
+	stranded = frappe.get_all(SITE, filters={"status": "Creating", "modified": ("<", cutoff)}, pluck="name")
+	for name in stranded:
+		frappe.db.set_value(SITE, name, "status", "Inactive", update_modified=False)
+	return stranded
 
 
 def _release_stranded() -> list[str]:

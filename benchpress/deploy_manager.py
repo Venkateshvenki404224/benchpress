@@ -800,7 +800,7 @@ def _checked_exec(container_id: str, command: str, what: str) -> None:
 
 
 def _record_primary_site(bench, lab, admin_password: str) -> None:
-	"""Record the deploy's site as a `Bench Site`, which is what every site list reads.
+	"""Activate the `Bench Site` this deploy was admitted against, which every site list reads.
 
 	Idempotent: a deploy re-runs, so an existing row is refreshed rather than duplicated.
 
@@ -808,10 +808,7 @@ def _record_primary_site(bench, lab, admin_password: str) -> None:
 	`BenchPress User` read `if_owner`, so an admin redeploying somebody else's instance would
 	take the row over and empty that tenant's Sites tab.
 	"""
-	existing = frappe.db.get_value("Bench Site", {"bench": bench.name, "site_name": bench.site_name})
-	site = frappe.get_doc("Bench Site", existing) if existing else frappe.new_doc("Bench Site")
-	site.bench = bench.name
-	site.site_name = bench.site_name
+	site = _claimed_site(bench)
 	site.status = "Active"
 	site.admin_password = admin_password
 	site.owner = bench.owner
@@ -821,6 +818,24 @@ def _record_primary_site(bench, lab, admin_password: str) -> None:
 	site.save(ignore_permissions=True)
 	# No commit: the next log line commits, and committing here outlives a test rollback
 	# that discards the parent instance.
+
+
+def _claimed_site(bench):
+	"""The row `api.create_bench` claimed for this name, claiming it here if nothing did.
+
+	Raises when the name belongs to another bench. This is the last line of defence rather than
+	the constraint - the primary key is that - and a deploy that would write over somebody
+	else's site must fail loudly instead.
+	"""
+	if not frappe.db.exists("Bench Site", bench.site_name):
+		# A Desk deploy never went through `create_bench`, so nothing claimed the name for it.
+		from benchpress.api import _claim_site_name
+
+		_claim_site_name(bench)
+	site = frappe.get_doc("Bench Site", bench.site_name)
+	if site.bench != bench.name:
+		raise Exception(f"Site {bench.site_name} belongs to {site.bench}")
+	return site
 
 
 def _site_app_names(lab) -> list[str]:

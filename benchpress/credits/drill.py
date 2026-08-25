@@ -12,9 +12,10 @@ N calls naming one lab all name the same bench - a same-lab drill would hold at 
 there was only ever one thing to admit, and would report a pass against a gate that does
 nothing. Distinct labs are the whole point.
 
-There are two modes. `cap` moves the concurrency limit and funds the account past anything it
-could be refused for; `credits` lifts the limit and funds it with exactly three leases. Each one
-has to be able to fail for its own reason and no other.
+There are three modes. `cap` moves the concurrency limit and funds the account past anything it
+could be refused for; `credits` lifts the limit and funds it with exactly three leases;
+`site-name` lifts the limit, funds it the same way as `cap`, and points every request at one
+site name. Each one has to be able to fail for its own reason and no other.
 """
 
 import frappe
@@ -26,10 +27,19 @@ ACCOUNT = "Credit Account"
 ADMISSION = "Bench Admission"
 BENCH = "Bench Instance"
 LEDGER = "Credit Ledger Entry"
+SITE = "Bench Site"
 
 DRILL_USER = "admission-drill@example.com"
 DRILL_ROLE = "BenchPress User"
 LAB_PREFIX = "drill-"
+
+# The one name `site-name` mode makes every request ask for. A bare label, because
+# `docker_manager.resolve_site_name` adds the domain and rejects anything carrying its own.
+SITE_LABEL = "drill-site"
+
+# A mode that measures anything other than the count has to lift the count, or it would pass by
+# refusing on the cap instead of on what it came to measure.
+UNCAPPED_MODES = ("credits", "site-name")
 
 # Every drill lab prices its own lease, so what a drill admission costs does not depend on which
 # plan the site happens to default to. `credits` mode divides a balance by this and expects the
@@ -49,24 +59,26 @@ def setup(workers: int = 12, cap: int = 1, mode: str = "cap") -> dict:
 	the site's own cap back: which field the limit comes from depends on whether credits are on,
 	and the drill must not assume.
 
-	`credits` mode lifts the cap to unlimited, because a run that measures the hold must not be
-	able to pass by refusing on the count instead.
+	`credits` and `site-name` modes lift the cap to unlimited, because a run that measures
+	anything else must not be able to pass by refusing on the count instead.
 	"""
 	workers = cint(workers)
-	credits_mode = mode == "credits"
 	user = _ensure_user()
 	labs = [_ensure_lab(index) for index in range(workers)]
-	balance = CREDIT_MODE_BALANCE if credits_mode else CAP_MODE_BALANCE
+	balance = CREDIT_MODE_BALANCE if mode == "credits" else CAP_MODE_BALANCE
 	_fund(user, balance)
-	cap = 0 if credits_mode else cint(cap)
+	cap = 0 if mode in UNCAPPED_MODES else cint(cap)
 	cap_field, cap_before = _set_cap(cap)
+	base_domain = frappe.db.get_single_value("BenchPress Settings", "base_domain")
 	frappe.db.commit()
 	return {
 		"user": user,
 		"api_key": frappe.db.get_value("User", user, "api_key"),
 		"api_secret": _api_secret(user),
 		"labs": labs,
-		"base_domain": frappe.db.get_single_value("BenchPress Settings", "base_domain"),
+		"base_domain": base_domain,
+		"site_label": SITE_LABEL if mode == "site-name" else None,
+		"site_name": f"{SITE_LABEL}.{base_domain}" if mode == "site-name" else None,
 		"credits_enabled": bool(config.credits_enabled()),
 		"cap_field": cap_field,
 		"cap_before": cap_before,
@@ -95,13 +107,19 @@ def restore(cap_field: str, cap_before) -> dict:
 	return {cap_field: cint(cap_before)}
 
 
-def report() -> dict:
-	"""What the drill asserts on: the counter, and the rows the counter is meant to count."""
+def report(site_name: str | None = None) -> dict:
+	"""What the drill asserts on: the counter, and the rows the counter is meant to count.
+
+	`site_name` is the contended name in `site-name` mode, and the two counts it adds are how
+	many rows and how many instances believe they own it. Both must read 1.
+	"""
 	row = frappe.db.get_value(
 		ACCOUNT, DRILL_USER, ["active_instances", "reserved_credits", "balance"], as_dict=True
 	)
 	return {
 		"user": DRILL_USER,
+		"named_sites": frappe.db.count(SITE, {"site_name": site_name}) if site_name else 0,
+		"named_benches": frappe.db.count(BENCH, {"site_name": site_name}) if site_name else 0,
 		"active_instances": cint(row.active_instances) if row else 0,
 		"reserved_credits": flt(row.reserved_credits) if row else 0.0,
 		"balance": flt(row.balance) if row else 0.0,
@@ -205,8 +223,8 @@ def _delete_bench(bench_name: str) -> None:
 			# Best-effort, and named rather than swallowed: a drill container the harness cannot
 			# reach is an operator's problem, not a silent leak.
 			frappe.logger("benchpress").warning(f"drill: could not tear down {bench_name}")
-	for site in frappe.get_all("Bench Site", filters={"bench": bench_name}, pluck="name"):
-		frappe.delete_doc("Bench Site", site, force=True, ignore_permissions=True)
+	for site in frappe.get_all(SITE, filters={"bench": bench_name}, pluck="name"):
+		frappe.delete_doc(SITE, site, force=True, ignore_permissions=True)
 	frappe.delete_doc(BENCH, bench_name, force=True, ignore_permissions=True)
 
 

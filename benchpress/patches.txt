@@ -24,3 +24,4 @@ benchpress.patches.backfill_bench_runtime
 benchpress.patches.seed_lease_plans
 benchpress.patches.index_ledger_request_id
 benchpress.patches.drop_burn_fields
+benchpress.patches.name_bench_sites_by_site_name
