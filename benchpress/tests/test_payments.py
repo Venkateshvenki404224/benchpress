@@ -23,7 +23,7 @@ from unittest.mock import patch
 
 import frappe
 from frappe.tests import IntegrationTestCase
-from frappe.utils import add_days, add_to_date, flt, getdate, now_datetime, today
+from frappe.utils import add_days, flt, getdate, today
 
 from benchpress import api
 from benchpress.benchpress.doctype.bench_instance import get_instance_id
@@ -36,7 +36,6 @@ BENCHPRESS_SETTINGS = "BenchPress Settings"
 PASS = "Always On Pass"
 
 # The seeded "Small" size and "Starter" pack.
-RATE = 1.0
 GRANT = 40.0
 PACK = "Starter"
 PACK_PRICE = 499
@@ -139,7 +138,13 @@ class PaymentsFixture(IntegrationTestCase):
 		frappe.db.set_value(
 			"Bench Instance",
 			self.bench.name,
-			{"credit_burn_rate": 0.0, "credit_burn_started": None, "status": "Running"},
+			{
+				"credit_burn_rate": 0.0,
+				"credit_burn_started": None,
+				"status": "Running",
+				"expires_at_ts": 0,
+				"lease_state": "",
+			},
 			update_modified=False,
 		)
 
@@ -349,27 +354,19 @@ class TestOrderSettlement(PaymentsFixture):
 
 	# --- Mid-burn ---------------------------------------------------------------
 
-	def test_a_purchase_mid_burn_keeps_the_hours_already_run(self):
-		"""A payment landing during a session must add credits without erasing the accrual."""
+	def test_a_purchase_inside_a_lease_adds_credits_and_leaves_the_deadline_alone(self):
+		"""A payment landing during a window must not shorten, extend or re-charge it."""
 		bench = frappe.get_doc("Bench Instance", self.bench.name)
 		metering.on_bench_running(bench)
-		self.backdate_burn(hours=2)
+		charged = self.balance()
+		deadline = frappe.db.get_value("Bench Instance", self.bench.name, "expires_at_ts")
+		self.assertTrue(deadline, "the lease never armed, so this proves nothing")
 
 		self.pay(self.pack_order())
-		self.assertAlmostEqual(self.available(), GRANT - 2 * RATE + PACK_CREDITS, places=4)
 
-		metering.on_bench_stopped(frappe.get_doc("Bench Instance", self.bench.name))
-		self.assertAlmostEqual(self.balance(), GRANT - 2 * RATE + PACK_CREDITS, places=4)
+		self.assertAlmostEqual(self.available(), charged + PACK_CREDITS, places=4)
+		self.assertEqual(frappe.db.get_value("Bench Instance", self.bench.name, "expires_at_ts"), deadline)
 		self.assertAlmostEqual(self.ledger_sum(), self.balance(), places=4)
-
-	def backdate_burn(self, hours: int) -> None:
-		frappe.db.set_value(
-			ACCOUNT,
-			self.user,
-			"burn_since",
-			add_to_date(now_datetime(), hours=-hours),
-			update_modified=False,
-		)
 
 	# --- The always-on pass -----------------------------------------------------
 
@@ -381,15 +378,16 @@ class TestOrderSettlement(PaymentsFixture):
 		granted = frappe.get_all(PASS, filters={"bench_instance": self.bench.name}, fields=["valid_until"])
 		self.assertEqual(getdate(granted[0].valid_until), getdate(add_days(today(), config.PASS_DAYS)))
 
-	def test_a_pass_stops_the_hourly_meter(self):
-		"""Prepaid time and hourly time are the same time; charging both sells it twice."""
+	def test_a_pass_clears_the_lease_clock(self):
+		"""Prepaid time and leased time are the same time; selling both sells it twice."""
 		self.set_pass_price(PASS_PRICE)
 		metering.on_bench_running(frappe.get_doc("Bench Instance", self.bench.name))
-		self.assertEqual(flt(frappe.db.get_value(ACCOUNT, self.user, "burn_rate")), RATE)
+		self.assertTrue(frappe.db.get_value("Bench Instance", self.bench.name, "expires_at_ts"))
 
 		self.pay(self.pass_order())
-		self.assertEqual(flt(frappe.db.get_value(ACCOUNT, self.user, "burn_rate")), 0.0)
-		self.assertFalse(frappe.db.get_value("Bench Instance", self.bench.name, "credit_burn_started"))
+
+		self.assertFalse(frappe.db.get_value("Bench Instance", self.bench.name, "expires_at_ts"))
+		self.assertFalse(frappe.db.get_value("Bench Instance", self.bench.name, "lease_state"))
 
 	def test_replaying_a_pass_webhook_grants_one_month(self):
 		self.set_pass_price(PASS_PRICE)

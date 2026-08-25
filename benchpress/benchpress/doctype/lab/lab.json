@@ -29,6 +29,10 @@
   "shell",
   "image_section",
   "image_tag",
+  "lease_section",
+  "default_lease_plan",
+  "max_lease_minutes",
+  "deploy_credits",
   "build_log_section",
   "build_log_html",
   "build_log"
@@ -193,6 +197,33 @@
    "fieldname": "enable_code_server",
    "fieldtype": "Check",
    "label": "Enable Code Server"
+  },
+  {
+   "description": "The duration a deploy of this lab buys. Falls back to the instance size, then to Credit Settings.",
+   "fieldname": "default_lease_plan",
+   "fieldtype": "Link",
+   "label": "Default Lease Plan",
+   "options": "Lease Plan"
+  },
+  {
+   "default": "0",
+   "description": "Longest lease this lab may hold, in minutes. 0 = unlimited.",
+   "fieldname": "max_lease_minutes",
+   "fieldtype": "Int",
+   "label": "Max Lease Minutes"
+  },
+  {
+   "default": "0",
+   "description": "Fixed price for a deploy of this lab, overriding the plan and the size multiplier. 0 = use the catalog price.",
+   "fieldname": "deploy_credits",
+   "fieldtype": "Float",
+   "label": "Deploy Credits",
+   "precision": "2"
+  },
+  {
+   "fieldname": "lease_section",
+   "fieldtype": "Section Break",
+   "label": "Lease"
   }
  ],
  "grid_page_length": 50,

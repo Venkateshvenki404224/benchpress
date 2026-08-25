@@ -120,6 +120,7 @@ import { userContext } from "@/data/userContext";
 import { reloadVpnStatus, vpnStatus } from "@/data/vpnStatus";
 import { ideUrl, siteUrl } from "@/utils/labActions";
 import { useSocket } from "@/socket";
+import { recordSkew } from "@/utils/clock";
 import { ErrorMessage, Tabs, createListResource, createResource, dayjsLocal } from "frappe-ui";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
@@ -348,9 +349,19 @@ function endRun(liveRun, liveLog) {
 	liveLog.value = "";
 }
 
+// The push carries full reconcilable state, but this page shows a dozen derived
+// facts about the bench — sites, actions, the failure banner — so it reloads
+// rather than patching one field and leaving the rest describing a running bench.
+function onLeaseExpired(data) {
+	if (!bench.value || data.bench !== bench.value.name) return;
+	recordSkew(Date.now(), data.server_now_ts * 1000);
+	refresh();
+}
+
 onMounted(() => {
 	socket?.on("bench_deploy_log", onDeployLog);
 	socket?.on("lab_build_log", onBuildLog);
+	socket?.on("benchpress:lease_expired", onLeaseExpired);
 	// Every open button on this page is gated on the tunnel, and the tunnel is
 	// brought up outside the app — so ask again on arrival rather than trusting
 	// whatever the SPA read at boot.
@@ -360,5 +371,6 @@ onMounted(() => {
 onUnmounted(() => {
 	socket?.off("bench_deploy_log", onDeployLog);
 	socket?.off("lab_build_log", onBuildLog);
+	socket?.off("benchpress:lease_expired", onLeaseExpired);
 });
 </script>

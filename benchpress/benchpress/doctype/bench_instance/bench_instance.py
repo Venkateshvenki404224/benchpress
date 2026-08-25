@@ -136,6 +136,8 @@ class BenchInstance(Document):
 		start_container(self.container_id)
 		self.status = "Running"
 		self.started_at = frappe.utils.now_datetime()
+		# Buys a fresh window before the save writes `Running`. A start that left the old,
+		# passed deadline on the row would be claimed by the next sweep and stopped again.
 		metering.on_bench_running(self)
 		self.save()
 		frappe.db.commit()  # nosemgrep: intentional commit to persist status before response

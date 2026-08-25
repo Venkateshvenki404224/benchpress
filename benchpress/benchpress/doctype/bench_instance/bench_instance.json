@@ -40,9 +40,13 @@
   "vpn_peer",
   "credits_section",
   "credit_burn_rate",
+  "expires_at_ts",
+  "lease_state",
   "ttl_warned_at",
   "column_break_credits",
   "credit_burn_started",
+  "stop_claimed_at",
+  "expiry_attempts",
   "reap_warned_at",
   "apps_section",
   "apps"
@@ -290,6 +294,40 @@
    "fieldname": "code_server_url",
    "fieldtype": "Data",
    "label": "Code Server URL",
+   "read_only": 1
+  },
+  {
+   "description": "Epoch seconds. Not a Datetime: the app clock and the database clock can differ, and a naive string cannot be parsed safely in a browser.",
+   "fieldname": "expires_at_ts",
+   "fieldtype": "Long Int",
+   "label": "Lease Expires At (epoch)",
+   "permlevel": 1,
+   "read_only": 1
+  },
+  {
+   "description": "Active means a deadline is running. Stopping means the sweep has claimed this row and a stop job owns it.",
+   "fieldname": "lease_state",
+   "fieldtype": "Select",
+   "label": "Lease State",
+   "options": "\nActive\nStopping",
+   "permlevel": 1,
+   "read_only": 1
+  },
+  {
+   "description": "When the sweep claimed this row, so a worker that died mid-stop is reclaimable.",
+   "fieldname": "stop_claimed_at",
+   "fieldtype": "Datetime",
+   "label": "Stop Claimed At",
+   "permlevel": 1,
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "description": "Failed expiry stops. A stop that keeps failing parks instead of taking a sweep slot every tick.",
+   "fieldname": "expiry_attempts",
+   "fieldtype": "Int",
+   "label": "Expiry Attempts",
+   "permlevel": 1,
    "read_only": 1
   }
  ],

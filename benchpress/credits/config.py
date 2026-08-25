@@ -129,6 +129,8 @@ def build_size_index() -> dict:
 			"memory_limit",
 			"cpu_cores",
 			"credits_per_hour",
+			"price_multiplier",
+			"default_lease_plan",
 			"max_sites",
 			"is_default",
 			"sort_order",

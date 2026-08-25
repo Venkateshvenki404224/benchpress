@@ -33,7 +33,7 @@ from frappe.utils import flt
 from benchpress import api, deploy_manager
 from benchpress.benchpress.doctype.bench_instance import get_instance_id
 from benchpress.credits import account, config, lease, metering
-from benchpress.credits.seed import seed_defaults
+from benchpress.credits.seed import seed_default_lease_plan, seed_defaults
 
 ACCOUNT = "Credit Account"
 BENCH = "Bench Instance"
@@ -71,16 +71,20 @@ def _ensure_plan(label: str, minutes: int, credits: float) -> str:
 	if frappe.db.exists(PLAN, label):
 		frappe.db.set_value(PLAN, label, {"minutes": minutes, "credits": credits, "is_active": 1})
 		return label
-	return frappe.get_doc(
-		{
-			"doctype": PLAN,
-			"plan_label": label,
-			"minutes": minutes,
-			"credits": credits,
-			"is_active": 1,
-			"sort_order": minutes,
-		}
-	).insert(ignore_permissions=True).name
+	return (
+		frappe.get_doc(
+			{
+				"doctype": PLAN,
+				"plan_label": label,
+				"minutes": minutes,
+				"credits": credits,
+				"is_active": 1,
+				"sort_order": minutes,
+			}
+		)
+		.insert(ignore_permissions=True)
+		.name
+	)
 
 
 def _ensure_lab(lab_id: str, owner: str):
@@ -129,6 +133,7 @@ class TestLease(IntegrationTestCase):
 		frappe.set_user("Administrator")
 		seed_defaults()
 		cls.switch_at_start = frappe.db.get_single_value(BENCHPRESS_SETTINGS, "enable_credits")
+		cls.default_plan_at_start = frappe.db.get_single_value(CREDIT_SETTINGS, "default_lease_plan")
 		cls.user = _ensure_user(USER, "Lease Owner")
 		cls.other_user = _ensure_user(OTHER_USER, "Lease Neighbour")
 		cls.short_plan = _ensure_plan("Lease Test 30 Minutes", HALF_HOUR, HALF_HOUR_CREDITS)
@@ -148,8 +153,17 @@ class TestLease(IntegrationTestCase):
 		for lab in (cls.lab, cls.other_lab):
 			frappe.delete_doc("Lab", lab.name, force=True, ignore_permissions=True)
 		cls.wipe_credits()
-		for plan in (cls.short_plan, cls.long_plan, cls.free_plan):
+		# Before the plans go: this module commits, so a Single still naming a fixture would
+		# break every later `Credit Settings` save in the suite with a broken link. A recorded
+		# value that is itself a fixture means an earlier run died here — fall back to the seed
+		# rather than restoring the leak.
+		fixtures = (cls.short_plan, cls.long_plan, cls.free_plan)
+		restore = None if cls.default_plan_at_start in fixtures else cls.default_plan_at_start
+		frappe.db.set_single_value(CREDIT_SETTINGS, "default_lease_plan", restore)
+		for plan in fixtures:
 			frappe.delete_doc(PLAN, plan, force=True, ignore_permissions=True)
+		seed_default_lease_plan()
+		frappe.clear_cache(doctype=CREDIT_SETTINGS)
 		for user in (cls.user, cls.other_user):
 			if frappe.db.exists("User", user):
 				frappe.delete_doc("User", user, force=True, ignore_permissions=True)
@@ -170,8 +184,7 @@ class TestLease(IntegrationTestCase):
 		self.wipe_credits()
 		self.reset_labs()
 		self.reset_benches()
-		frappe.db.set_single_value(CREDIT_SETTINGS, "default_lease_plan", self.short_plan)
-		frappe.clear_document_cache(CREDIT_SETTINGS, CREDIT_SETTINGS)
+		self.set_credit_setting("default_lease_plan", self.short_plan)
 
 	def tearDown(self):
 		frappe.set_user("Administrator")
@@ -211,8 +224,37 @@ class TestLease(IntegrationTestCase):
 		self.set_credits_enabled(1)
 
 	def set_credits_enabled(self, value: int) -> None:
+		"""One cleanup, not two: `addCleanup` runs LIFO, so a separate cache clear would fire
+		before the value was restored and leave the switch stuck on for every later test."""
+		original = frappe.db.get_single_value(BENCHPRESS_SETTINGS, "enable_credits")
+		self.addCleanup(self.write_credits_switch, original)
+		self.write_credits_switch(value)
+
+	def write_credits_switch(self, value) -> None:
+		"""Committed, because the code under test commits.
+
+		`claim_due` commits per claim, which makes this test's pending switch value durable. A
+		restore riding on the per-test rollback would be thrown away, and the site would be left
+		with credits armed.
+		"""
 		frappe.db.set_single_value(BENCHPRESS_SETTINGS, "enable_credits", value)
-		frappe.clear_document_cache(BENCHPRESS_SETTINGS, BENCHPRESS_SETTINGS)
+		frappe.db.commit()  # nosemgrep -- see above: the restore must outlive the rollback
+		frappe.clear_cache(doctype=BENCHPRESS_SETTINGS)
+
+	def set_credit_setting(self, field: str, value) -> None:
+		"""Retune one number durably, and put it back the same way. See `write_credits_switch`."""
+		original = frappe.db.get_single_value(CREDIT_SETTINGS, field)
+		self.addCleanup(self.write_credit_setting, field, original)
+		self.write_credit_setting(field, value)
+
+	def write_credit_setting(self, field: str, value) -> None:
+		frappe.db.set_single_value(CREDIT_SETTINGS, field, value)
+		frappe.db.commit()  # nosemgrep -- the code under test commits, so the restore must too
+		frappe.clear_cache(doctype=CREDIT_SETTINGS)
+
+	def lease_events(self, publish) -> list:
+		"""Only this feature's pushes. Every `save` also emits Frappe's own `doc_update`."""
+		return [call for call in publish.call_args_list if call.args[0] == lease.EXPIRED_EVENT]
 
 	def running_bench(self):
 		return frappe.get_doc(BENCH, self.bench.name)
@@ -378,17 +420,24 @@ class TestLease(IntegrationTestCase):
 		on the row, and the next sweep stops the bench seconds after the user started it.
 		"""
 		self.enable_credits()
+		# The concurrency cap is not what this test is about, and the fixture user owns benches
+		# left running by the rest of the module.
+		self.set_credit_setting("max_concurrent_free", 0)
 		metering.on_bench_running(self.running_bench())
 		self.expire()
-		with patch.object(deploy_manager, "stop_container"), patch.object(frappe.db, "commit"), patch(
-			"frappe.publish_realtime"
+		with (
+			patch.object(deploy_manager, "stop_container"),
+			patch.object(frappe.db, "commit"),
+			patch("frappe.publish_realtime"),
 		):
 			deploy_manager.stop_bench(self.bench.name)
 		self.assertEqual(self.deadline(), 0)
 
-		with patch("benchpress.docker_manager.start_container"), patch.object(
-			deploy_manager, "enqueue_route_sync"
-		), patch.object(frappe.db, "commit"):
+		with (
+			patch("benchpress.docker_manager.start_container"),
+			patch.object(deploy_manager, "enqueue_route_sync"),
+			patch.object(frappe.db, "commit"),
+		):
 			frappe.get_doc(BENCH, self.bench.name).enqueue_start()
 
 		self.assertEqual(frappe.db.get_value(BENCH, self.bench.name, "status"), "Running")
@@ -464,9 +513,11 @@ class TestLease(IntegrationTestCase):
 		"""It runs wherever the scheduler puts it, and `queue-short` has no socket mounted."""
 		self.enable_credits()
 		self.expire()
-		with patch.object(frappe.db, "commit"), patch("frappe.enqueue"), patch(
-			"benchpress.docker_manager.get_client"
-		) as client:
+		with (
+			patch.object(frappe.db, "commit"),
+			patch("frappe.enqueue"),
+			patch("benchpress.docker_manager.get_client") as client,
+		):
 			lease.sweep_expired_leases()
 		client.assert_not_called()
 
@@ -548,16 +599,18 @@ class TestLease(IntegrationTestCase):
 		with patch.object(frappe.db, "commit"), patch("frappe.enqueue"):
 			lease.claim_due(50)
 
-		with patch.object(deploy_manager, "stop_container"), patch.object(frappe.db, "commit"), patch(
-			"frappe.publish_realtime"
-		) as publish:
+		with (
+			patch.object(deploy_manager, "stop_container"),
+			patch.object(frappe.db, "commit"),
+			patch("frappe.publish_realtime") as publish,
+		):
 			deploy_manager.stop_bench(self.bench.name)
 
-		publish.assert_called_once()
-		event, payload = publish.call_args.args
-		self.assertEqual(event, lease.EXPIRED_EVENT)
-		self.assertEqual(publish.call_args.kwargs["user"], self.user)
-		self.assertTrue(publish.call_args.kwargs["after_commit"])
+		events = self.lease_events(publish)
+		self.assertEqual(len(events), 1)
+		payload = events[0].args[1]
+		self.assertEqual(events[0].kwargs["user"], self.user)
+		self.assertTrue(events[0].kwargs["after_commit"])
 		self.assertEqual(payload["bench"], self.bench.name)
 		self.assertEqual(payload["state"], "Stopped")
 		self.assertIn("lab_id", payload)
@@ -575,22 +628,27 @@ class TestLease(IntegrationTestCase):
 		with patch.object(frappe.db, "commit"), patch("frappe.enqueue"):
 			lease.claim_due(50)
 
-		with patch.object(deploy_manager, "stop_container"), patch.object(frappe.db, "commit"), patch(
-			"frappe.publish_realtime"
-		) as publish:
+		with (
+			patch.object(deploy_manager, "stop_container"),
+			patch.object(frappe.db, "commit"),
+			patch("frappe.publish_realtime") as publish,
+		):
 			deploy_manager.stop_bench(self.other_bench.name)
 
-		self.assertEqual(publish.call_args.kwargs["user"], self.other_user)
-		self.assertNotEqual(publish.call_args.kwargs["user"], self.user)
+		events = self.lease_events(publish)
+		self.assertEqual(len(events), 1)
+		self.assertEqual(events[0].kwargs["user"], self.other_user)
 
 	def test_a_plain_stop_announces_nothing(self):
 		"""Only an expiry is news the tab did not ask for; a user pressing Stop already knows."""
 		self.enable_credits()
-		with patch.object(deploy_manager, "stop_container"), patch.object(frappe.db, "commit"), patch(
-			"frappe.publish_realtime"
-		) as publish:
+		with (
+			patch.object(deploy_manager, "stop_container"),
+			patch.object(frappe.db, "commit"),
+			patch("frappe.publish_realtime") as publish,
+		):
 			deploy_manager.stop_bench(self.bench.name)
-		publish.assert_not_called()
+		self.assertEqual(self.lease_events(publish), [])
 
 	# --- The deadline is not a client claim ------------------------------------
 

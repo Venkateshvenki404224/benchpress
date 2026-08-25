@@ -38,6 +38,7 @@ declare module 'vue' {
     LabAppsTable: typeof import('./src/components/lab/LabAppsTable.vue')['default']
     LabErrorBanner: typeof import('./src/components/lab/LabErrorBanner.vue')['default']
     LabHeader: typeof import('./src/components/lab/LabHeader.vue')['default']
+    LeaseCountdown: typeof import('./src/components/lab/LeaseCountdown.vue')['default']
     LogStep: typeof import('./src/components/LogStep.vue')['default']
     LogViewer: typeof import('./src/components/LogViewer.vue')['default']
     NewLabSummary: typeof import('./src/components/lab/NewLabSummary.vue')['default']

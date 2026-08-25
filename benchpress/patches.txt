@@ -20,3 +20,4 @@ benchpress.patches.seed_lab_templates
 benchpress.patches.seed_v16_lab_templates
 benchpress.patches.seed_remaining_v16_lab_templates
 benchpress.patches.backfill_bench_runtime
+benchpress.patches.seed_lease_plans

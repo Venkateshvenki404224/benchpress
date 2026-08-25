@@ -18,7 +18,7 @@ output — still only have `=== … ===` markers, so both are read.
 
 import frappe
 
-from benchpress.credits import config, passes
+from benchpress.credits import config, lease, passes
 from benchpress.deploy_pipeline import scan_log
 
 BENCH_FIELDS = [
@@ -39,6 +39,7 @@ BENCH_FIELDS = [
 	"ssh_username",
 	"code_server_url",
 	"started_at",
+	"expires_at_ts",
 	"owner",
 ]
 
@@ -64,6 +65,9 @@ def get_lab(name: str) -> dict:
 		"enable_ssh": lab.enable_ssh,
 		"enable_code_server": lab.enable_code_server,
 		"credits_per_hour": _rate(lab),
+		# The anchor for the browser's countdown clock. Sent with every payload that carries a
+		# deadline, so a tab that has been asleep re-anchors on its next fetch.
+		"server_now_ts": lease.now_ts(),
 		"apps": [_app_row(app) for app in lab.apps],
 		"bench": bench,
 		"sites": _sites(bench),

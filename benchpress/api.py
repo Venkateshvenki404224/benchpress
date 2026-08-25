@@ -8,7 +8,7 @@ from frappe.query_builder.functions import Count
 
 from benchpress import image_cache, lab_detail, lab_templates, labs
 from benchpress.benchpress.doctype.bench_instance.bench_instance import DEPLOY_JOB_TIMEOUT
-from benchpress.credits import account, metering, payments
+from benchpress.credits import account, lease, metering, payments
 from benchpress.credits.guard import (
 	build_charge,
 	cap_builds_per_day,
@@ -36,6 +36,17 @@ def get_labs() -> list[dict]:
 def get_lab(name: str) -> dict:
 	require_app_user()
 	return lab_detail.get_lab(name)
+
+
+@frappe.whitelist()
+def server_time() -> dict:
+	"""The clock every countdown in the SPA corrects against.
+
+	Epoch seconds, so nothing has to parse a naive datetime string — `new Date("2026-08-25
+	03:10:17")` reads as browser-local in V8 and has historically been `Invalid Date` in Safari.
+	"""
+	require_app_user()
+	return {"server_now_ts": lease.now_ts()}
 
 
 @frappe.whitelist()
@@ -249,8 +260,9 @@ def bench_action(bench_name: str, action: str) -> dict:
 		restart_container(bench.container_id)
 
 	bench.status = "Running"
-	# A restart does not interrupt the session — the instance was billable before and is
-	# billable after — so this only starts a meter that was not already running.
+	# A restart does not interrupt the window the user already bought, so this only buys one
+	# for a bench that had none — and it runs before the save so the deadline and the status
+	# it belongs to are written together.
 	metering.on_bench_running(bench)
 	bench.save()
 	frappe.db.commit()

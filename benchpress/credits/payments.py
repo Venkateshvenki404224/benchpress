@@ -42,7 +42,7 @@ BENCH = "Bench Instance"
 CURRENCY = "INR"
 PASS_DAYS = config.PASS_DAYS
 
-BENCH_FIELDS = ["name", "owner", "lab", "credit_burn_rate", "credit_burn_started"]
+BENCH_FIELDS = ["name", "owner", "lab", "lease_state", "expires_at_ts"]
 PACK_FIELDS = ["name", "pack_label", "inr_price", "credits"]
 
 
@@ -179,7 +179,7 @@ def _settle_pack(order) -> None:
 
 
 def _settle_pass(order) -> None:
-	"""Grant the pass, and stop the hourly meter the pass replaces.
+	"""Grant the pass, and clear the lease clock the pass replaces.
 
 	The ledger row carries **zero credits**: a pass buys hours, not credits. It is written anyway,
 	because the ledger is the record that money moved and because it is the replay guard both
@@ -201,7 +201,7 @@ def _settle_pass(order) -> None:
 
 
 def _grant_pass(bench, order) -> None:
-	"""The pass row, then the meter it makes unnecessary."""
+	"""The pass row, then the deadline it makes unnecessary."""
 	pass_doc = frappe.new_doc(passes.PASS)
 	pass_doc.bench_instance = bench.name
 	pass_doc.valid_until = add_days(today(), PASS_DAYS)

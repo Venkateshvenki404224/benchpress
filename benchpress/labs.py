@@ -38,6 +38,7 @@ BENCH_FIELDS = [
 	"domain",
 	"site_name",
 	"started_at",
+	"expires_at_ts",
 ]
 
 # The fields the New lab form starts from, so their defaults are declared once —
@@ -164,6 +165,7 @@ def _deployed_as(benches: list[dict]) -> dict | None:
 		"bench": bench.name,
 		"status": bench.status,
 		"site": bench.domain or bench.site_name or "",
+		"expires_at_ts": bench.expires_at_ts,
 	}
 
 

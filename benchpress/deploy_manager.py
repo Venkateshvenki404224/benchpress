@@ -16,7 +16,7 @@ from frappe.utils.file_lock import LockTimeoutError
 from frappe.utils.synchronization import filelock
 
 from benchpress import image_cache
-from benchpress.credits import metering
+from benchpress.credits import lease, metering
 from benchpress.deploy_pipeline import DeployLogWriter, DeployPipeline
 from benchpress.docker_manager import (
 	build_lab_image,
@@ -705,10 +705,11 @@ def _deploy_bench(bench_name: str) -> None:
 
 		bench.status = "Running"
 		bench.started_at = frappe.utils.now_datetime()
-		bench.save(ignore_permissions=True)
-		# Metering starts where the clock does: an instance is billable once it is actually
-		# up, so everything above this line is free however long it took to get there.
+		# Before the save, not after: the lease charge and the deadline it writes belong in the
+		# same transaction as the status they pay for. Everything above this line is free
+		# however long it took, because a deploy that never gets here never reaches `Running`.
 		metering.on_bench_running(bench)
+		bench.save(ignore_permissions=True)
 		frappe.db.commit()
 		# The eleventh step and the run's success line are one line: it carries
 		# the total elapsed time, and "Deploy complete" is still in its text for
@@ -1038,15 +1039,30 @@ def stop_bench(bench_name: str) -> None:
 	container, so a row left `Active` is the page telling the user to open an address that has
 	gone quiet. This is the one stop path — `api.bench_action("stop")` routes here too — so the
 	deactivation cannot be missed by a second caller.
-	"""
-	bench = frappe.get_doc("Bench Instance", bench_name)
 
-	if bench.container_id:
-		stop_container(bench.container_id)
+	It is also where an expired lease lands, which is why it starts by confirming the claim
+	under a row lock. A user pressing Stop carries no claim and always goes ahead.
+	"""
+	if not lease.confirm_expiry(bench_name):
+		return
+
+	bench = frappe.get_doc("Bench Instance", bench_name)
+	expired = bench.lease_state == lease.STOPPING
+
+	try:
+		if bench.container_id:
+			stop_container(bench.container_id)
+	except Exception:
+		if expired:
+			lease.release(bench_name, failed=True)
+			frappe.db.commit()  # nosemgrep -- the retry has to survive the failure that caused it
+		raise
 
 	bench.status = "Stopped"
 	metering.on_bench_stopped(bench)
 	bench.save(ignore_permissions=True)
 	_deactivate_bench_sites(bench)
+	if expired:
+		lease.announce_expired(bench)
 	frappe.db.commit()  # nosemgrep -- intentional commit to persist status before response
 	enqueue_route_sync(bench.name)

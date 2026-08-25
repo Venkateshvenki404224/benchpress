@@ -36,6 +36,7 @@ GLOBAL_BY_DESIGN = {
 	"Lab": "admin-authored recipes; BenchPress User has no create",
 	"Lab Template": "the ready-made catalog; BenchPress User has no create",
 	"Credit Pack": "the price list",
+	"Lease Plan": "the duration catalog",
 	"Instance Size": "the size list",
 	"Always On Pass": "read through owner-scoped endpoints; rows name their own bench",
 }

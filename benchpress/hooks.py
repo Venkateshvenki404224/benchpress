@@ -237,6 +237,14 @@ scheduler_events = {
 			# mount. Lifecycle triggers already converge in seconds — this is the net under them.
 			"benchpress.deploy_manager.enqueue_route_reconcile",
 		],
+		# Its own entry, never folded into the `*/1` stats cron or the `*/5` enforcement one:
+		# both of those already spend their window elsewhere, and a lease that expires late is
+		# compute nobody paid for. It makes no Docker calls, so it is safe on either worker.
+		# The cadence is a floor, not a promise — `DEFAULT_SCHEDULER_TICK` is four minutes on
+		# this deployment, and phase 4 replaces this entry with a warden that does not wait.
+		"*/2 * * * *": [
+			"benchpress.credits.lease.sweep_expired_leases",
+		],
 		"0 2 * * *": [
 			"benchpress.mariadb_manager.scheduled_backup",
 		],

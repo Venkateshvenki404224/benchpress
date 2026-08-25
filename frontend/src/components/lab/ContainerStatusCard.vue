@@ -26,9 +26,15 @@
 			</div>
 		</div>
 
-		<p v-if="startedLabel" class="mt-3 text-2xs text-ink-gray-5" data-test="container-started">
-			Started {{ startedLabel }}
-		</p>
+		<div class="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1">
+			<p v-if="startedLabel" class="text-2xs text-ink-gray-5" data-test="container-started">
+				Started {{ startedLabel }}
+			</p>
+			<span v-if="startedLabel && bench.expires_at_ts" class="text-2xs text-ink-gray-4"
+				>·</span
+			>
+			<LeaseCountdown :expires-at-ts="bench.expires_at_ts" />
+		</div>
 
 		<AlwaysOnUpsell :bench="bench" :label="lab.title || lab.lab_id" @bought="emit('bought')" />
 	</SectionCard>
@@ -39,6 +45,7 @@ import SectionCard from "@/components/SectionCard.vue";
 import StatusBadge from "@/components/StatusBadge.vue";
 import UsageBar from "@/components/UsageBar.vue";
 import AlwaysOnUpsell from "@/components/credit/AlwaysOnUpsell.vue";
+import LeaseCountdown from "@/components/lab/LeaseCountdown.vue";
 import { cpuMeter, healthCaption, memoryMeter } from "@/utils/containerStats";
 import { dayjsLocal } from "frappe-ui";
 import { computed } from "vue";
