@@ -32,7 +32,7 @@ from frappe.tests import IntegrationTestCase
 from frappe.utils import add_to_date, now_datetime
 
 from benchpress import deploy_manager, docker_manager, hooks
-from benchpress.credits import lease, warden
+from benchpress.credits import drain, lease, warden
 from benchpress.credits.seed import seed_defaults
 from benchpress.tests.test_lease import _ensure_bench, _ensure_lab, _ensure_plan, _ensure_user
 
@@ -81,7 +81,7 @@ class TestLeaseDrain(IntegrationTestCase):
 		frappe.set_user("Administrator")
 		self.reset_benches()
 		self.set_credits_enabled(1)
-		frappe.cache().delete_value(lease.OVERFLOW_STREAK_KEY)
+		frappe.cache().delete_value(drain.OVERFLOW_STREAK_KEY)
 
 	# --- Fixtures -------------------------------------------------------------
 
@@ -141,7 +141,7 @@ class TestLeaseDrain(IntegrationTestCase):
 
 	def sweep(self) -> dict:
 		with patch.object(frappe.db, "commit"), patch("frappe.enqueue"):
-			return lease.sweep_expired_leases()
+			return drain.sweep_expired_leases()
 
 	def row(self, bench_name: str, field: str):
 		return frappe.db.get_value(BENCH, bench_name, field)
@@ -211,7 +211,7 @@ class TestLeaseDrain(IntegrationTestCase):
 	def test_the_gauge_counts_the_fleet_not_the_batch(self):
 		"""`due` is measured before the claim, or a full batch always reports a clear backlog."""
 		self.expire_all()
-		self.assertEqual(lease.backlog(), 3)
+		self.assertEqual(drain.backlog(), 3)
 
 	# --- Reclaim --------------------------------------------------------------
 
@@ -223,7 +223,7 @@ class TestLeaseDrain(IntegrationTestCase):
 		self.age_the_claim(self.bench.name, 600)
 
 		with patch.object(frappe.db, "commit"), patch("frappe.enqueue") as enqueue:
-			reclaimed = lease.reclaim_stalled()
+			reclaimed = drain.reclaim_stalled()
 
 		self.assertEqual(reclaimed, [self.bench.name])
 		self.assertEqual(enqueue.call_args.kwargs["bench_name"], self.bench.name)
@@ -237,7 +237,7 @@ class TestLeaseDrain(IntegrationTestCase):
 		self.age_the_claim(self.bench.name, 600)
 
 		with patch.object(frappe.db, "commit"), patch("frappe.enqueue"):
-			lease.reclaim_stalled()
+			drain.reclaim_stalled()
 
 		self.assertEqual(self.row(self.bench.name, "expiry_attempts"), 1)
 
@@ -249,8 +249,8 @@ class TestLeaseDrain(IntegrationTestCase):
 		self.age_the_claim(self.bench.name, 600)
 
 		with patch.object(frappe.db, "commit"), patch("frappe.enqueue"):
-			lease.reclaim_stalled()
-			self.assertEqual(lease.reclaim_stalled(), [])
+			drain.reclaim_stalled()
+			self.assertEqual(drain.reclaim_stalled(), [])
 
 	def test_a_fresh_claim_is_left_alone(self):
 		"""A stop can sit behind a two-hour deploy. Reclaiming it early is a second stop job."""
@@ -259,7 +259,7 @@ class TestLeaseDrain(IntegrationTestCase):
 		self.set_credit_setting("lease_reclaim_seconds", 300)
 
 		with patch.object(frappe.db, "commit"), patch("frappe.enqueue") as enqueue:
-			self.assertEqual(lease.reclaim_stalled(), [])
+			self.assertEqual(drain.reclaim_stalled(), [])
 		enqueue.assert_not_called()
 
 	def test_a_claim_with_no_stamp_is_reclaimable(self):
@@ -269,7 +269,7 @@ class TestLeaseDrain(IntegrationTestCase):
 		frappe.db.set_value(BENCH, self.bench.name, "stop_claimed_at", None, update_modified=False)
 
 		with patch.object(frappe.db, "commit"), patch("frappe.enqueue"):
-			self.assertEqual(lease.reclaim_stalled(), [self.bench.name])
+			self.assertEqual(drain.reclaim_stalled(), [self.bench.name])
 
 	def test_the_reclaim_interval_is_configuration(self):
 		self.expire(self.bench.name)
@@ -278,7 +278,7 @@ class TestLeaseDrain(IntegrationTestCase):
 		self.set_credit_setting("lease_reclaim_seconds", 60)
 
 		with patch.object(frappe.db, "commit"), patch("frappe.enqueue"):
-			self.assertEqual(lease.reclaim_stalled(), [self.bench.name])
+			self.assertEqual(drain.reclaim_stalled(), [self.bench.name])
 
 	def test_the_sweep_reclaims_as_well_as_claims(self):
 		self.expire(self.bench.name)
@@ -318,13 +318,13 @@ class TestLeaseDrain(IntegrationTestCase):
 			update_modified=False,
 		)
 		with patch.object(frappe.db, "commit"), patch("frappe.enqueue"):
-			self.assertEqual(lease.reclaim_stalled(), [])
+			self.assertEqual(drain.reclaim_stalled(), [])
 
 	def test_a_parked_row_does_not_count_as_backlog(self):
 		"""It is not going to be claimed, so counting it would leave the alarm on forever."""
 		self.expire_all()
 		frappe.db.set_value(BENCH, self.bench.name, "lease_state", lease.FAILED, update_modified=False)
-		self.assertEqual(lease.backlog(), 2)
+		self.assertEqual(drain.backlog(), 2)
 
 	def test_a_reclaim_at_the_attempt_limit_parks_instead_of_re_enqueueing(self):
 		self.set_credit_setting("lease_max_attempts", 1)
@@ -333,7 +333,7 @@ class TestLeaseDrain(IntegrationTestCase):
 		self.age_the_claim(self.bench.name, 9999)
 
 		with patch.object(frappe.db, "commit"), patch("frappe.enqueue") as enqueue:
-			self.assertEqual(lease.reclaim_stalled(), [])
+			self.assertEqual(drain.reclaim_stalled(), [])
 		enqueue.assert_not_called()
 		self.assertEqual(self.row(self.bench.name, "lease_state"), lease.FAILED)
 
@@ -421,8 +421,8 @@ class TestLeaseDrain(IntegrationTestCase):
 
 	def test_a_deploy_stamps_the_node_beside_the_container_id(self):
 		"""Backfilling this later means inspecting Docker across live hosts while benches run."""
-		source = inspect.getsource(deploy_manager.deploy_bench)
-		self.assertIn("bench.node = ", source)
+		source = inspect.getsource(deploy_manager._deploy_bench)
+		self.assertIn("bench.node = lease.local_node()", source)
 
 	# --- The warden -----------------------------------------------------------
 
@@ -430,11 +430,11 @@ class TestLeaseDrain(IntegrationTestCase):
 		"""One claim, two callers. A second protocol is a second set of races to get right."""
 		with (
 			patch.object(lease, "claim_due", return_value=[]) as claim_due,
-			patch.object(lease, "reclaim_stalled", return_value=[]),
+			patch.object(drain, "reclaim_stalled", return_value=[]),
 		):
 			warden.tick()
 			self.assertEqual(claim_due.call_count, 1)
-			lease.sweep_expired_leases()
+			drain.sweep_expired_leases()
 			self.assertEqual(claim_due.call_count, 2)
 
 	def test_the_warden_sleeps_until_the_next_deadline(self):
@@ -471,7 +471,7 @@ class TestLeaseDrain(IntegrationTestCase):
 		"""The warden is an accelerator. Deleting the cron because it is faster removes the net
 		that makes restarting the warden safe."""
 		self.assertIn(
-			"benchpress.credits.lease.sweep_expired_leases",
+			"benchpress.credits.drain.sweep_expired_leases",
 			[job for jobs in hooks.scheduler_events["cron"].values() for job in jobs],
 		)
 		self.expire(self.bench.name)
@@ -533,14 +533,14 @@ class TestLeaseDrain(IntegrationTestCase):
 		):
 			deploy_manager.stop_bench(self.bench.name, from_claim=True)
 
-		report = lease.stop_slo()
+		report = drain.stop_slo()
 		self.assertGreaterEqual(report["count"], 1)
 		self.assertGreaterEqual(report["max"], 90)
 		self.assertGreaterEqual(report["p50"], 0)
 		self.assertEqual(sum(report["buckets"].values()), report["count"])
 
 	def test_an_empty_window_reports_zeroes_rather_than_failing(self):
-		report = lease.stop_slo(hours=0)
+		report = drain.stop_slo(hours=0)
 		self.assertEqual(report["count"], 0)
 		self.assertEqual(report["max"], 0)
 

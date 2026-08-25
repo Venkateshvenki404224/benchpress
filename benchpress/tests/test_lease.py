@@ -33,7 +33,7 @@ from frappe.utils import add_days, flt, now_datetime
 
 from benchpress import api, deploy_manager, lab_detail
 from benchpress.benchpress.doctype.bench_instance import get_instance_id
-from benchpress.credits import account, config, lease, metering
+from benchpress.credits import account, config, drain, lease, metering
 from benchpress.credits.seed import ensure_ledger_index, seed_default_lease_plan, seed_defaults
 
 ACCOUNT = "Credit Account"
@@ -587,7 +587,7 @@ class TestLease(IntegrationTestCase):
 			patch("frappe.enqueue"),
 			patch("benchpress.docker_manager.get_client") as client,
 		):
-			lease.sweep_expired_leases()
+			drain.sweep_expired_leases()
 		client.assert_not_called()
 
 	def test_the_stop_job_locks_the_row_before_it_acts(self):
@@ -655,7 +655,7 @@ class TestLease(IntegrationTestCase):
 		self.set_credits_enabled(0)
 		self.expire()
 		with patch.object(frappe.db, "commit"), patch("frappe.enqueue") as enqueue:
-			self.assertEqual(lease.sweep_expired_leases()["claimed"], [])
+			self.assertEqual(drain.sweep_expired_leases()["claimed"], [])
 		enqueue.assert_not_called()
 
 	# --- The push --------------------------------------------------------------
@@ -832,7 +832,7 @@ class TestLease(IntegrationTestCase):
 		self.enable_credits()
 		metering.on_bench_running(self.running_bench())
 		self.expire()
-		self.assertIn(self.bench.name, lease._due(lease.now_ts(), 50))
+		self.assertIn(self.bench.name, [row.name for row in lease._due(lease.now_ts(), 50)])
 
 		with self.renewing():
 			api.renew_bench(self.bench.name, self.short_plan, "req-wins")

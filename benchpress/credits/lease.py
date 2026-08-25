@@ -12,11 +12,12 @@ Datetime naive in the site timezone while the database session may be in another
 deployment the two are 5h30m apart, so `expires_at <= NOW()` in SQL is five and a half hours of
 free compute per lease. `now_ts` is the only clock this module reads.
 
-**The claim protocol is the part that must not go wrong.** The sweep moves a due row to
-`Stopping` with a conditional update, commits, and hands the stop to `queue-long`. The job then
-re-reads under `SELECT ... FOR UPDATE` before it touches Docker, because the sweep's read was
-true when it ran and a renew may have committed since. Deciding from an unlocked read stops a
-bench somebody has paid for, and every ambiguity here resolves toward never stopping early.
+**The claim protocol is the part that must not go wrong.** A sweep — the cron's or the
+warden's — moves a due row to `Stopping` with a conditional update, commits, and hands the stop
+to the stop queue. The job then re-reads under `SELECT ... FOR UPDATE` before it touches Docker,
+because the sweep's read was true when it ran and a renew may have committed since. Deciding
+from an unlocked read stops a bench somebody has paid for, and every ambiguity here resolves
+toward never stopping early.
 
 The commit is per claim rather than per batch: one transaction around the whole sweep holds
 every claimed row's lock for its duration, and a renew touching one of them fails on the
@@ -26,7 +27,8 @@ every claimed row's lock for its duration, and a renew touching one of them fail
 import time
 
 import frappe
-from frappe.utils import cint, flt, get_datetime, now_datetime, time_diff_in_seconds
+from frappe import _
+from frappe.utils import cint, cstr, flt, get_datetime, now_datetime, time_diff_in_seconds
 
 from benchpress.credits import account, config
 
@@ -36,6 +38,7 @@ PLAN = "Lease Plan"
 
 ACTIVE = "Active"
 STOPPING = "Stopping"
+FAILED = "Failed"
 
 EXPIRED_EVENT = "benchpress:lease_expired"
 RENEWED_EVENT = "benchpress:lease_renewed"
@@ -43,10 +46,11 @@ SWEEP_INDEX = "lease_state_expires_at_ts_index"
 
 STOP_TIMEOUT = 600
 DEFAULT_SWEEP_BATCH = 200
+DEFAULT_MAX_ATTEMPTS = 5
 
-# Failed stops park the row instead of taking a sweep slot every tick. Docker being down is not
-# a reason to keep re-queueing the same job for a week.
-MAX_EXPIRY_ATTEMPTS = 5
+# Its own queue, never `long`: that one carries `deploy_bench` with a two-hour timeout and a
+# single worker, so a stop behind a cold build waits for the build.
+STOP_QUEUE = "stops"
 
 PLAN_FIELDS = ["name", "plan_label", "minutes", "credits"]
 LEASE_FIELDS = ["lease_state", "expires_at_ts"]
@@ -101,6 +105,16 @@ def cost_of(lab, plan) -> float:
 	size = config.size_for_lab(lab)
 	multiplier = flt(size.price_multiplier) if size else 1.0
 	return flt(flt(plan.get("credits")) * multiplier, account.PRECISION)
+
+
+def batch_cap() -> int:
+	"""Most expired leases one sweep may claim. The stop queue, not the SQL, is what this caps."""
+	return cint(config.settings().lease_sweep_batch) or DEFAULT_SWEEP_BATCH
+
+
+def max_attempts() -> int:
+	"""Failed stops before a lease parks. Docker being down must not re-queue a job for a week."""
+	return cint(config.settings().lease_max_attempts) or DEFAULT_MAX_ATTEMPTS
 
 
 def active_plans() -> list[dict]:
@@ -198,44 +212,40 @@ def _write(bench, values: dict) -> None:
 		setattr(bench, field, value)  # a Document or the dict an indexed read returns
 
 
-# --- The sweep -----------------------------------------------------------------
-
-
-def sweep_expired_leases() -> dict:
-	"""The cron entry. Decides only — the stop itself goes to `queue-long`."""
-	if not config.credits_enabled():
-		return {"claimed": []}
-	return {"claimed": claim_due()}
+# --- The claim ----------------------------------------------------------------
 
 
 def claim_due(limit: int | None = None) -> list[str]:
 	"""Claim up to `limit` expired leases, committing each. Returns what was claimed."""
 	cutoff = now_ts()
 	claimed = []
-	for name in _due(cutoff, limit or cint(config.settings().lease_sweep_batch) or DEFAULT_SWEEP_BATCH):
-		if not _claim(name, cutoff):
+	for row in _due(cutoff, limit or batch_cap()):
+		if not _claim(row.name, cutoff):
 			continue
 		# Registered before the commit, not after: `enqueue_after_commit` hangs the job off the
 		# next commit, and that commit is also what releases the claimed row's lock.
-		_enqueue_stop(name)
+		enqueue_stop(row.name, row.node)
 		frappe.db.commit()  # nosemgrep -- per claim, so no renew waits behind the whole sweep
-		claimed.append(name)
+		claimed.append(row.name)
 	return claimed
 
 
-def _due(cutoff: int, limit: int) -> list[str]:
-	"""Due rows, oldest deadline first, on the `(lease_state, expires_at_ts)` index."""
+def _due(cutoff: int, limit: int) -> list[dict]:
+	"""Due rows, oldest deadline first, on the `(lease_state, expires_at_ts)` index.
+
+	`node` rides along so the hand-off needs no second read per row, and parked rows are out of
+	the range entirely rather than filtered out of it.
+	"""
 	instance = frappe.qb.DocType(BENCH)
 	return (
 		frappe.qb.from_(instance)
-		.select(instance.name)
+		.select(instance.name, instance.node)
 		.where(instance.lease_state == ACTIVE)
 		.where(instance.expires_at_ts > 0)
 		.where(instance.expires_at_ts <= cutoff)
-		.where(instance.expiry_attempts < MAX_EXPIRY_ATTEMPTS)
 		.orderby(instance.expires_at_ts)
 		.limit(limit)
-	).run(pluck=True)
+	).run(as_dict=True)
 
 
 def _claim(bench_name: str, cutoff: int) -> bool:
@@ -252,17 +262,49 @@ def _claim(bench_name: str, cutoff: int) -> bool:
 	return frappe.db._cursor.rowcount == 1
 
 
-def _enqueue_stop(bench_name: str) -> None:
+def enqueue_stop(bench_name: str, node: str | None = None) -> None:
 	frappe.enqueue(
 		"benchpress.deploy_manager.stop_bench",
 		bench_name=bench_name,
-		queue="long",
+		queue=stop_queue_for(node),
 		timeout=STOP_TIMEOUT,
 		job_id=f"stop_bench:{bench_name}",
 		deduplicate=True,
 		from_claim=True,
 		enqueue_after_commit=True,  # the job re-reads the claim, so it must not start before it commits
 	)
+
+
+def local_node() -> str:
+	"""Which host's Docker daemon this process can reach. Empty means there is only one."""
+	return cstr(frappe.conf.get("benchpress_node"))
+
+
+def stop_queue_for(node: str | None) -> str:
+	"""The stop queue whose worker holds this bench's daemon.
+
+	Empty — every row until there is a second host — is the local queue, so routing changes
+	nothing today. A named node that is not this one gets its own queue rather than a shared
+	one, because a stop run against the wrong daemon reports success: see `assert_local`.
+	"""
+	node = cstr(node)
+	return f"{STOP_QUEUE}_{node}" if node and node != local_node() else STOP_QUEUE
+
+
+def assert_local(bench) -> None:
+	"""Refuse a stop for a container this daemon does not hold.
+
+	`docker_manager.stop_container` swallows `NotFound` as success, so a stop that reaches the
+	wrong node marks the row `Stopped` while the container keeps running elsewhere — compute
+	nobody is billed for, recorded as billed and stopped, and invisible in every log.
+	"""
+	node = cstr(bench.get("node"))
+	if node and node != local_node():
+		frappe.throw(
+			_("Bench {0} runs on node {1}, not on {2}.").format(
+				bench.name, node, local_node() or _("this one")
+			)
+		)
 
 
 # --- The stop job's half of the protocol ---------------------------------------
@@ -276,9 +318,8 @@ def confirm_expiry(bench_name: str, from_claim: bool = False) -> bool:
 
 	`from_claim` is what tells the two callers apart on a row carrying no claim, because they
 	look identical from the row alone. A user pressing Stop always goes ahead. A queued expiry
-	whose claim has gone does not: `queue-long` is one worker, so that job can sit behind a
-	two-hour deploy, and by the time it runs the bench may have been stopped, started and paid
-	for again.
+	whose claim has gone does not: a queued stop can sit for as long as the stop queue is busy,
+	and by the time it runs the bench may have been stopped, started and paid for again.
 
 	The lock is released before the caller returns: a container stop can take thirty seconds,
 	and holding a row lock across it would make a renew wait for the bench it is trying to save.
@@ -294,11 +335,42 @@ def confirm_expiry(bench_name: str, from_claim: bool = False) -> bool:
 
 
 def release(bench_name: str, failed: bool = False) -> None:
-	"""Hand a claim back — the deadline moved, or the stop failed and should be retried."""
+	"""Hand a claim back — the deadline moved, or the stop failed and should be retried.
+
+	A stop that has failed `max_attempts` times parks instead of returning to the sweep, so it
+	stops taking a batch slot from the leases queued behind it.
+	"""
 	values = {"lease_state": ACTIVE, "stop_claimed_at": None}
 	if failed:
 		values["expiry_attempts"] = cint(frappe.db.get_value(BENCH, bench_name, "expiry_attempts")) + 1
+		if values["expiry_attempts"] >= max_attempts():
+			values["lease_state"] = FAILED
 	frappe.db.set_value(BENCH, bench_name, values, update_modified=False)
+
+
+def park(bench_name: str) -> None:
+	"""Take a lease out of the sweep for good. An error state, deliberately, rather than a skip."""
+	frappe.db.set_value(
+		BENCH, bench_name, {"lease_state": FAILED, "stop_claimed_at": None}, update_modified=False
+	)
+
+
+def record_stop_started(bench_name: str) -> None:
+	"""Stamp when the job picked the stop up, so queue time and Docker time can be told apart."""
+	frappe.db.set_value(BENCH, bench_name, "stop_started_at", now_datetime(), update_modified=False)
+
+
+def record_stopped(bench, expired: bool) -> None:
+	"""Stamp when the container stopped, and for an expiry how late that was.
+
+	`container_stopped_at - expires_at_ts` is the SLO for this whole feature. Clamped at zero:
+	the platform does not stop a lease early, and a clock that moved must not be able to report
+	that it did.
+	"""
+	values = {"container_stopped_at": now_datetime()}
+	if expired:
+		values["expiry_lateness"] = max(now_ts() - cint(bench.get("expires_at_ts")), 0)
+	_write(bench, values)
 
 
 def announce_expired(bench) -> None:

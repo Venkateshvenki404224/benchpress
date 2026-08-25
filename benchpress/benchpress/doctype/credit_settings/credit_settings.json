@@ -18,6 +18,8 @@
   "default_lease_plan",
   "column_break_lease",
   "lease_sweep_batch",
+  "lease_reclaim_seconds",
+  "lease_max_attempts",
   "caps_section",
   "max_concurrent_free",
   "max_concurrent_paid",
@@ -150,7 +152,7 @@
    "fieldtype": "Column Break"
   },
   {
-   "description": "One domain per line. An email signup from any of these is refused. OAuth signups are not checked — the provider has already vouched for the account.",
+   "description": "One domain per line. An email signup from any of these is refused. OAuth signups are not checked \u2014 the provider has already vouched for the account.",
    "fieldname": "blocked_email_domains",
    "fieldtype": "Small Text",
    "label": "Blocked Email Domains"
@@ -177,6 +179,20 @@
    "fieldname": "lease_sweep_batch",
    "fieldtype": "Int",
    "label": "Lease Sweep Batch"
+  },
+  {
+   "default": "300",
+   "description": "How long a claimed stop may sit before another sweep re-queues it. A worker killed mid-batch strands its claims otherwise.",
+   "fieldname": "lease_reclaim_seconds",
+   "fieldtype": "Int",
+   "label": "Lease Reclaim Seconds"
+  },
+  {
+   "default": "5",
+   "description": "Failed expiry stops before the lease is parked. A parked row is an error state, not a silence.",
+   "fieldname": "lease_max_attempts",
+   "fieldtype": "Int",
+   "label": "Lease Max Attempts"
   }
  ],
  "grid_page_length": 50,

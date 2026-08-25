@@ -236,14 +236,12 @@ scheduler_events = {
 			# `default`, which `queue-short` also consumes, and that container has no route
 			# mount. Lifecycle triggers already converge in seconds — this is the net under them.
 			"benchpress.deploy_manager.enqueue_route_reconcile",
-		],
-		# Its own entry, never folded into the `*/1` stats cron or the `*/5` enforcement one:
-		# both of those already spend their window elsewhere, and a lease that expires late is
-		# compute nobody paid for. It makes no Docker calls, so it is safe on either worker.
-		# The cadence is a floor, not a promise — `DEFAULT_SCHEDULER_TICK` is four minutes on
-		# this deployment, and phase 4 replaces this entry with a warden that does not wait.
-		"*/2 * * * *": [
-			"benchpress.credits.lease.sweep_expired_leases",
+			# The net under the lease warden, not the primary path: `DEFAULT_SCHEDULER_TICK` is
+			# four minutes here, so no cron entry can promise better than that. The warden claims
+			# within seconds; this catches whatever it misses while the warden is restarting.
+			# Both use the same conditional claim, so running together cannot double-stop a
+			# bench. It makes no Docker calls, so it is safe on either worker.
+			"benchpress.credits.drain.sweep_expired_leases",
 		],
 		"0 2 * * *": [
 			"benchpress.mariadb_manager.scheduled_backup",

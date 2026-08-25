@@ -607,6 +607,7 @@ def _deploy_bench(bench_name: str) -> None:
 		# isolated by long after the run.
 		pipeline.log(f"container runtime {container_runtime(container_id)}")
 		bench.container_id = container_id
+		bench.node = lease.local_node()
 		bench.container_image = lab.image_tag
 		bench.save(ignore_permissions=True)
 		frappe.db.commit()
@@ -1047,7 +1048,9 @@ def stop_bench(bench_name: str, from_claim: bool = False) -> None:
 	if not lease.confirm_expiry(bench_name, from_claim=from_claim):
 		return
 
+	lease.record_stop_started(bench_name)
 	bench = frappe.get_doc("Bench Instance", bench_name)
+	lease.assert_local(bench)
 	expired = bench.lease_state == lease.STOPPING
 
 	try:
@@ -1059,6 +1062,7 @@ def stop_bench(bench_name: str, from_claim: bool = False) -> None:
 			frappe.db.commit()  # nosemgrep -- the retry has to survive the failure that caused it
 		raise
 
+	lease.record_stopped(bench, expired)
 	bench.status = "Stopped"
 	metering.on_bench_stopped(bench)
 	bench.save(ignore_permissions=True)

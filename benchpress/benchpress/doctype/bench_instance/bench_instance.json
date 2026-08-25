@@ -23,6 +23,7 @@
   "public_url",
   "container_section",
   "container_id",
+  "node",
   "container_image",
   "runtime",
   "column_break_container",
@@ -47,6 +48,9 @@
   "credit_burn_started",
   "stop_claimed_at",
   "expiry_attempts",
+  "stop_started_at",
+  "container_stopped_at",
+  "expiry_lateness",
   "reap_warned_at",
   "apps_section",
   "apps"
@@ -141,6 +145,14 @@
    "fieldname": "container_id",
    "fieldtype": "Data",
    "label": "Container ID",
+   "read_only": 1
+  },
+  {
+   "description": "The host whose Docker daemon holds this container. Empty means the only node.",
+   "fieldname": "node",
+   "fieldtype": "Data",
+   "label": "Node",
+   "permlevel": 1,
    "read_only": 1
   },
   {
@@ -305,11 +317,11 @@
    "read_only": 1
   },
   {
-   "description": "Active means a deadline is running. Stopping means the sweep has claimed this row and a stop job owns it.",
+   "description": "Active means a deadline is running. Stopping means the sweep has claimed this row and a stop job owns it. Failed means the stop kept failing and the row was parked.",
    "fieldname": "lease_state",
    "fieldtype": "Select",
    "label": "Lease State",
-   "options": "\nActive\nStopping",
+   "options": "\nActive\nStopping\nFailed",
    "permlevel": 1,
    "read_only": 1
   },
@@ -327,6 +339,30 @@
    "fieldname": "expiry_attempts",
    "fieldtype": "Int",
    "label": "Expiry Attempts",
+   "permlevel": 1,
+   "read_only": 1
+  },
+  {
+   "description": "When the stop job began, so queue time and Docker time can be told apart.",
+   "fieldname": "stop_started_at",
+   "fieldtype": "Datetime",
+   "label": "Stop Started At",
+   "permlevel": 1,
+   "read_only": 1
+  },
+  {
+   "description": "When the container actually stopped.",
+   "fieldname": "container_stopped_at",
+   "fieldtype": "Datetime",
+   "label": "Container Stopped At",
+   "permlevel": 1,
+   "read_only": 1
+  },
+  {
+   "description": "Seconds between the deadline and the container stopping. The lease SLO. Empty on a stop nothing was due for, which is why this is a Long Int: a Frappe Int is NOT NULL.",
+   "fieldname": "expiry_lateness",
+   "fieldtype": "Long Int",
+   "label": "Expiry Lateness (s)",
    "permlevel": 1,
    "read_only": 1
   }

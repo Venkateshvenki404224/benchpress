@@ -10,11 +10,13 @@ import time
 import docker
 import frappe
 from frappe import _
+from frappe.utils import cint
 
 from benchpress.image_cache import cache_tag, clear_cached_tags
 from benchpress.request_cache import local_cache
 
 DEFAULT_PIDS_LIMIT = 500
+DEFAULT_STOP_GRACE = 5
 DEFAULT_IOPS = 1000
 DEFAULT_BPS = 40 * 1024 * 1024
 
@@ -325,11 +327,23 @@ def wait_for_container_running(container_id: str, timeout: int = 60) -> str:
 	raise Exception(f"Container {container_id[:12]} not running with an IP after {timeout}s")
 
 
+def stop_grace_seconds() -> int:
+	"""How long a container gets to exit on SIGTERM before Docker kills it.
+
+	Measured on this image: PID 1 is `tail`, which installs no handler, so the kernel discards
+	the signal and every stop waits the grace period out in full and then SIGKILLs — exit 137,
+	eighteen trials out of eighteen. The grace period is therefore the drain rate, and today it
+	buys nothing. Configurable rather than constant so an image that does handle SIGTERM can
+	have its shutdown back.
+	"""
+	return cint(frappe.get_cached_doc("BenchPress Settings").stop_grace_seconds) or DEFAULT_STOP_GRACE
+
+
 def stop_container(container_id: str) -> None:
 	"""Stop a container; one that no longer exists is already stopped, not an error."""
 	client = get_client()
 	try:
-		client.containers.get(container_id).stop(timeout=30)
+		client.containers.get(container_id).stop(timeout=stop_grace_seconds())
 	except docker.errors.NotFound:
 		pass
 
