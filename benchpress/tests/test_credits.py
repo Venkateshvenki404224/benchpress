@@ -357,7 +357,7 @@ class TestCredits(IntegrationTestCase):
 		frappe.db.set_value(ACCOUNT, self.user, "burn_rate", 2 * RATE, update_modified=False)
 		self.backdate_burn(hours=1)
 
-		result = reconcile.reconcile_burn_rates()
+		result = self.reconcile()
 
 		self.assertIn(self.user, result["corrected"])
 		self.assertEqual(self.burn_rate(), RATE)
@@ -366,13 +366,13 @@ class TestCredits(IntegrationTestCase):
 	def test_reconciliation_leaves_a_correct_account_alone(self):
 		self.enable_credits()
 		self.start_legacy_burn(self.running_bench())
-		self.assertEqual(reconcile.reconcile_burn_rates()["corrected"], [])
+		self.assertNotIn(self.user, self.reconcile()["corrected"])
 
 	def test_reconciliation_never_calls_docker(self):
 		self.enable_credits()
 		self.start_legacy_burn(self.running_bench())
 		with patch("benchpress.docker_manager.get_client") as get_client:
-			reconcile.reconcile_burn_rates()
+			self.reconcile()
 		get_client.assert_not_called()
 
 	def test_reconciliation_clears_the_flag_on_an_instance_that_is_not_running(self):
@@ -381,7 +381,7 @@ class TestCredits(IntegrationTestCase):
 		self.start_legacy_burn(bench)
 		frappe.db.set_value("Bench Instance", bench.name, "status", "Stopped", update_modified=False)
 
-		reconcile.reconcile_burn_rates()
+		self.reconcile()
 
 		self.assertIsNone(frappe.db.get_value("Bench Instance", bench.name, "credit_burn_started"))
 		self.assertEqual(self.burn_rate(), 0.0)
@@ -460,6 +460,51 @@ class TestCredits(IntegrationTestCase):
 		frappe.db.set_single_value(BENCHPRESS_SETTINGS, "enable_credits", value)
 		frappe.db.commit()  # nosemgrep -- see above: the restore must outlive the rollback
 		frappe.clear_cache(doctype=BENCHPRESS_SETTINGS)
+
+	def reconcile(self) -> dict:
+		"""The global sweep, with every row outside this fixture put back afterwards.
+
+		`reconcile_burn_rates` scans all accounts and every `Running` instance on the site. On a
+		live deployment those belong to tenants: the sweep derives a rate from their benches,
+		settles the drift against their balance and writes the ledger row — and
+		`write_credits_switch` commits, so a test run rewrites somebody's billing for good.
+		"""
+		accounts = frappe.get_all(
+			ACCOUNT,
+			filters={"name": ("!=", self.user)},
+			fields=["name", "balance", "burn_rate", "burn_since", "lifetime_spent"],
+		)
+		benches = frappe.get_all(
+			"Bench Instance",
+			filters={"owner": ("!=", self.user)},
+			fields=["name", "credit_burn_rate", "credit_burn_started"],
+		)
+		entries = set(frappe.get_all(LEDGER, filters={"account": ("!=", self.user)}, pluck="name"))
+		try:
+			return reconcile.reconcile_burn_rates()
+		finally:
+			self.restore_rows(accounts, benches, entries)
+
+	@staticmethod
+	def restore_rows(accounts: list, benches: list, entries: set) -> None:
+		for doctype, rows in ((ACCOUNT, accounts), ("Bench Instance", benches)):
+			for row in rows:
+				values = {field: value for field, value in row.items() if field != "name"}
+				frappe.db.set_value(doctype, row.name, values, update_modified=False)
+		strays = [
+			name
+			for name in frappe.get_all(LEDGER, filters={"account": ("!=", USER)}, pluck="name")
+			if name not in entries
+		]
+		if strays:
+			frappe.db.delete(LEDGER, {"name": ("in", strays)})
+
+	def wipe_account(self, user: str) -> None:
+		frappe.db.delete(LEDGER, {"account": user})
+		frappe.db.delete(ACCOUNT, {"user": user})
+		if frappe.db.exists("User", user):
+			frappe.delete_doc("User", user, force=True, ignore_permissions=True)
+		frappe.db.commit()  # nosemgrep -- the sweep saw a committed row, so the cleanup must be too
 
 	def running_bench(self):
 		return frappe.get_doc("Bench Instance", self.bench.name)
