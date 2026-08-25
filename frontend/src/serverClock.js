@@ -10,9 +10,8 @@ import { call } from "frappe-ui";
 
 export async function anchorClock() {
 	const sentAt = Date.now();
-	const { server_now_ts } = await call("benchpress.api.server_time");
-	// Seconds on the wire, milliseconds everywhere in the browser.
-	recordSkew(sentAt, server_now_ts * 1000);
+	const { server_now_ms } = await call("benchpress.api.server_time");
+	recordSkew(sentAt, server_now_ms);
 }
 
 /** Anchor now, and re-anchor on request. Failures are ignored: an unanchored clock still counts. */

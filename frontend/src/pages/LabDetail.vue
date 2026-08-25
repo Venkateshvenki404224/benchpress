@@ -354,7 +354,7 @@ function endRun(liveRun, liveLog) {
 // rather than patching one field and leaving the rest describing a running bench.
 function onLeaseExpired(data) {
 	if (!bench.value || data.bench !== bench.value.name) return;
-	recordSkew(Date.now(), data.server_now_ts * 1000);
+	recordSkew(Date.now(), data.server_now_ms);
 	refresh();
 }
 

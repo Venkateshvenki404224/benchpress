@@ -65,9 +65,8 @@ def get_lab(name: str) -> dict:
 		"enable_ssh": lab.enable_ssh,
 		"enable_code_server": lab.enable_code_server,
 		"credits_per_hour": _rate(lab),
-		# The anchor for the browser's countdown clock. Sent with every payload that carries a
-		# deadline, so a tab that has been asleep re-anchors on its next fetch.
-		"server_now_ts": lease.now_ts(),
+		# Sent beside the deadline so nothing renders a countdown against the browser's own clock.
+		"server_now_ms": lease.now_ms(),
 		"apps": [_app_row(app) for app in lab.apps],
 		"bench": bench,
 		"sites": _sites(bench),

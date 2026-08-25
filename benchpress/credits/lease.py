@@ -56,6 +56,15 @@ def now_ts() -> int:
 	return int(time.time())
 
 
+def now_ms() -> int:
+	"""The same clock at the resolution a countdown anchors on.
+
+	Deadlines are whole seconds; the anchor is not. Rounding the sample down puts the browser
+	up to a second behind the server, and `leaseFor` rounds the remainder up again.
+	"""
+	return int(time.time() * 1000)
+
+
 # --- Pricing and configuration -------------------------------------------------
 
 
@@ -259,8 +268,8 @@ def announce_expired(bench) -> None:
 			"lab_id": frappe.db.get_value(LAB, bench.lab, "lab_id"),
 			"state": bench.status,
 			"expires_at_ts": cint(bench.get("expires_at_ts")),
-			"server_now_ts": now_ts(),
-			"revision": int(time.time() * 1000),
+			"server_now_ms": now_ms(),
+			"revision": now_ms(),
 			"reason": "lease_expired",
 		},
 		user=bench.owner,

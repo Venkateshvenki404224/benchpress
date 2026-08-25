@@ -42,11 +42,11 @@ def get_lab(name: str) -> dict:
 def server_time() -> dict:
 	"""The clock every countdown in the SPA corrects against.
 
-	Epoch seconds, so nothing has to parse a naive datetime string — `new Date("2026-08-25
+	Epoch milliseconds, so nothing has to parse a naive datetime string — `new Date("2026-08-25
 	03:10:17")` reads as browser-local in V8 and has historically been `Invalid Date` in Safari.
 	"""
 	require_app_user()
-	return {"server_now_ts": lease.now_ts()}
+	return {"server_now_ms": lease.now_ms()}
 
 
 @frappe.whitelist()
