@@ -26,7 +26,7 @@ every claimed row's lock for its duration, and a renew touching one of them fail
 import time
 
 import frappe
-from frappe.utils import cint, flt, now_datetime
+from frappe.utils import cint, flt, get_datetime, now_datetime, time_diff_in_seconds
 
 from benchpress.credits import account, config
 
@@ -38,6 +38,7 @@ ACTIVE = "Active"
 STOPPING = "Stopping"
 
 EXPIRED_EVENT = "benchpress:lease_expired"
+RENEWED_EVENT = "benchpress:lease_renewed"
 SWEEP_INDEX = "lease_state_expires_at_ts_index"
 
 STOP_TIMEOUT = 600
@@ -122,7 +123,21 @@ def arm(bench, lab, plan) -> int:
 	row carrying a deadline that has already passed is the resurrection bug: the next sweep
 	claims it and the bench dies seconds after the user started it.
 	"""
-	deadline = now_ts() + minutes_for(lab, plan) * 60
+	return _arm_at(bench, now_ts() + minutes_for(lab, plan) * 60)
+
+
+def extend(bench, plan) -> int:
+	"""Push the deadline out by the plan's minutes, from the later of now and the deadline.
+
+	Extending from now would silently burn whatever time was left, which is a refund
+	conversation. A bench stopped in its grace window has no time to preserve — `disarm` cleared
+	the deadline when it stopped — so `now` is what it extends from.
+	"""
+	base = max(now_ts(), cint(bench.get("expires_at_ts")))
+	return _arm_at(bench, base + cint(plan.get("minutes")) * 60)
+
+
+def _arm_at(bench, deadline: int) -> int:
 	_write(
 		bench,
 		{
@@ -133,6 +148,31 @@ def arm(bench, lab, plan) -> int:
 		},
 	)
 	return deadline
+
+
+def remaining(bench) -> int:
+	"""Seconds still on the clock, never negative."""
+	return max(cint(bench.get("expires_at_ts")) - now_ts(), 0)
+
+
+def ceiling_seconds(lab) -> int:
+	"""How long one lease on this lab may run in total. `0` is unlimited, here as everywhere."""
+	return cint(lab.get("max_lease_minutes")) * 60
+
+
+def grace_ends_at(bench) -> int | None:
+	"""When the reaper will take this stopped bench, or `None` when nothing reaps it.
+
+	The last moment a renew can still bring the container back rather than rebuild it. The reaper
+	measures from `modified`, which the stop wrote, so the elapsed part is a difference between
+	two site-local datetimes and the result is anchored on `now_ts` — no timezone reaches the
+	arithmetic. See the module docstring for why that matters here.
+	"""
+	days = cint(config.settings().reap_after_days)
+	if not days:
+		return None
+	stopped_for = time_diff_in_seconds(now_datetime(), get_datetime(bench.get("modified")))
+	return now_ts() + days * 86400 - int(stopped_for)
 
 
 def disarm(bench) -> None:
@@ -255,14 +295,24 @@ def release(bench_name: str, failed: bool = False) -> None:
 
 
 def announce_expired(bench) -> None:
-	"""Tell this owner's open tabs that the window closed, and only this owner's.
+	"""Tell this owner's open tabs that the window closed, and only this owner's."""
+	_announce(EXPIRED_EVENT, bench, "lease_expired")
 
-	Full reconcilable state rather than a delta, and never `bench.as_dict()` — this doctype
-	holds three passwords. `revision` is a millisecond stamp so a tab that receives two events
-	out of order can keep the later one.
+
+def announce_renewed(bench) -> None:
+	"""Tell this owner's open tabs that the deadline moved."""
+	_announce(RENEWED_EVENT, bench, "lease_renewed")
+
+
+def _announce(event: str, bench, reason: str) -> None:
+	"""Push reconcilable state to one owner.
+
+	Full state rather than a delta, and never `bench.as_dict()` — this doctype holds three
+	passwords. `revision` is a millisecond stamp so a tab that receives two events out of order
+	can keep the later one.
 	"""
 	frappe.publish_realtime(
-		EXPIRED_EVENT,
+		event,
 		{
 			"bench": bench.name,
 			"lab_id": frappe.db.get_value(LAB, bench.lab, "lab_id"),
@@ -270,7 +320,7 @@ def announce_expired(bench) -> None:
 			"expires_at_ts": cint(bench.get("expires_at_ts")),
 			"server_now_ms": now_ms(),
 			"revision": now_ms(),
-			"reason": "lease_expired",
+			"reason": reason,
 		},
 		user=bench.owner,
 		after_commit=True,

@@ -40,6 +40,8 @@
 								:lab="lab.data"
 								:health-age-seconds="healthAgeSeconds"
 								@bought="refresh"
+								@renewed="onRenewed"
+								@redeploy="deployLab"
 							/>
 							<SectionCard v-else :padded="false">
 								<EmptyState
@@ -121,7 +123,15 @@ import { reloadVpnStatus, vpnStatus } from "@/data/vpnStatus";
 import { ideUrl, siteUrl } from "@/utils/labActions";
 import { useSocket } from "@/socket";
 import { recordSkew } from "@/utils/clock";
-import { ErrorMessage, Tabs, createListResource, createResource, dayjsLocal } from "frappe-ui";
+import { applyPush } from "@/utils/lease";
+import {
+	ErrorMessage,
+	Tabs,
+	createListResource,
+	createResource,
+	dayjsLocal,
+	toast,
+} from "frappe-ui";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 
@@ -175,6 +185,8 @@ const deployAction = createResource({ url: "benchpress.api.create_bench", onSucc
 const benchAction = createResource({ url: "benchpress.api.bench_action", onSuccess: refresh });
 
 const bench = computed(() => lab.data?.bench ?? null);
+// The newest lease push this tab has applied, so an older one arriving late is dropped.
+const held = ref(null);
 const sites = computed(() => lab.data?.sites ?? []);
 const siteAddress = computed(() => siteUrl(bench.value));
 const busy = computed(
@@ -353,15 +365,43 @@ function endRun(liveRun, liveLog) {
 // facts about the bench — sites, actions, the failure banner — so it reloads
 // rather than patching one field and leaving the rest describing a running bench.
 function onLeaseExpired(data) {
-	if (!bench.value || data.bench !== bench.value.name) return;
+	if (!ours(data)) return;
 	recordSkew(Date.now(), data.server_now_ms);
+	// Sticky, with auto-dismiss disabled. A five-second toast missed while the
+	// user was in another window is the same as no notification at all.
+	toast.error("The lease ended and the bench was stopped. Renew to start it again.", {
+		duration: Infinity,
+	});
 	refresh();
+}
+
+// A renewal moves one field, so it is written rather than reloaded: the
+// countdown is derived from the deadline, so no timer restarts and nothing
+// remounts. A push older than the one already held is dropped.
+function onLeaseRenewed(data) {
+	if (!ours(data)) return;
+	recordSkew(Date.now(), data.server_now_ms);
+	held.value = applyPush(held.value, data);
+	if (held.value?.revision !== data.revision) return;
+	lab.data.bench.expires_at_ts = held.value.expiresAtTs;
+	lab.data.bench.status = data.state;
+	lab.data.bench.grace_ends_at_ts = data.grace_ends_at_ts ?? null;
+}
+
+/** The response to a renewal the user made in this tab, applied the same way. */
+function onRenewed(renewed) {
+	onLeaseRenewed({ ...renewed, bench: renewed.name, state: renewed.status });
+}
+
+function ours(data) {
+	return !!bench.value && data.bench === bench.value.name;
 }
 
 onMounted(() => {
 	socket?.on("bench_deploy_log", onDeployLog);
 	socket?.on("lab_build_log", onBuildLog);
 	socket?.on("benchpress:lease_expired", onLeaseExpired);
+	socket?.on("benchpress:lease_renewed", onLeaseRenewed);
 	// Every open button on this page is gated on the tunnel, and the tunnel is
 	// brought up outside the app — so ask again on arrival rather than trusting
 	// whatever the SPA read at boot.
@@ -372,5 +412,6 @@ onUnmounted(() => {
 	socket?.off("bench_deploy_log", onDeployLog);
 	socket?.off("lab_build_log", onBuildLog);
 	socket?.off("benchpress:lease_expired", onLeaseExpired);
+	socket?.off("benchpress:lease_renewed", onLeaseRenewed);
 });
 </script>

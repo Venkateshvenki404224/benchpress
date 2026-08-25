@@ -33,7 +33,11 @@
 			<span v-if="startedLabel && bench.expires_at_ts" class="text-2xs text-ink-gray-4"
 				>·</span
 			>
-			<LeaseCountdown :expires-at-ts="bench.expires_at_ts" />
+			<LeaseControl
+				:bench="bench"
+				@renewed="emit('renewed', $event)"
+				@redeploy="emit('redeploy')"
+			/>
 		</div>
 
 		<AlwaysOnUpsell :bench="bench" :label="lab.title || lab.lab_id" @bought="emit('bought')" />
@@ -45,7 +49,7 @@ import SectionCard from "@/components/SectionCard.vue";
 import StatusBadge from "@/components/StatusBadge.vue";
 import UsageBar from "@/components/UsageBar.vue";
 import AlwaysOnUpsell from "@/components/credit/AlwaysOnUpsell.vue";
-import LeaseCountdown from "@/components/lab/LeaseCountdown.vue";
+import LeaseControl from "@/components/lab/LeaseControl.vue";
 import { cpuMeter, healthCaption, memoryMeter } from "@/utils/containerStats";
 import { dayjsLocal } from "frappe-ui";
 import { computed } from "vue";
@@ -57,7 +61,7 @@ const props = defineProps({
 	healthAgeSeconds: { type: Number, default: null },
 });
 
-const emit = defineEmits(["bought"]);
+const emit = defineEmits(["bought", "renewed", "redeploy"]);
 
 const cpu = computed(() => cpuMeter(props.bench, props.lab));
 const memory = computed(() => memoryMeter(props.bench, props.lab));

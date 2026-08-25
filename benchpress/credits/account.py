@@ -224,7 +224,7 @@ def correct_burn_rate(user: str, rate_per_hour) -> float:
 # --- Balance changes that leave the burn rate alone --------------------------
 
 
-def charge(user: str, credits, description: str, reference=None) -> None:
+def charge(user: str, credits, description: str, reference=None, request_id: str | None = None) -> None:
 	"""Debit a one-off event — a custom image build. One row, no settle.
 
 	The accrual term is untouched by this, so there is nothing to settle: subtracting from
@@ -240,7 +240,7 @@ def charge(user: str, credits, description: str, reference=None) -> None:
 	account.balance = flt(flt(account.balance) - flt(credits), PRECISION)
 	account.lifetime_spent = flt(flt(account.lifetime_spent) + flt(credits), PRECISION)
 	_save(account)
-	_write_entry(account, USAGE, -flt(credits), description, reference)
+	_write_entry(account, USAGE, -flt(credits), description, reference, request_id)
 
 
 def grant(user: str, credits, description: str) -> None:
@@ -316,6 +316,19 @@ def adjust(user: str, credits, reason: str) -> None:
 	_write_entry(account, ADJUSTMENT, flt(credits), reason)
 
 
+def request_posted(request_id: str) -> bool:
+	"""Whether this client request id has already written a row. A **locking** read.
+
+	`reference_posted` can be a plain lookup because the reference it guards is created by an
+	outside system. A request id is created by a browser that may be firing three of them at
+	once, and this session is REPEATABLE READ — a plain read would answer from the snapshot the
+	transaction opened, which predates the racing click, and charge it twice. A locking read sees
+	the latest commit. `reference_name` cannot carry the key instead: it is a Dynamic Link, and a
+	synthetic name fails validation.
+	"""
+	return bool(frappe.db.get_value(LEDGER, {"request_id": request_id}, "name", for_update=True))
+
+
 def reference_posted(reference) -> bool:
 	"""Whether this reference has already been written to the ledger. One indexed lookup.
 
@@ -369,7 +382,9 @@ def _save(account) -> None:
 	account.save(ignore_permissions=True)
 
 
-def _write_entry(account, entry_type: str, credits, description: str, reference=None) -> None:
+def _write_entry(
+	account, entry_type: str, credits, description: str, reference=None, request_id: str | None = None
+) -> None:
 	"""Append one audit row. `balance_after` is stored so no screen ever sums this table."""
 	entry = frappe.new_doc(LEDGER)
 	# The document refuses rows nobody's accounting produced; this is what marks ours. See
@@ -382,4 +397,5 @@ def _write_entry(account, entry_type: str, credits, description: str, reference=
 	entry.description = description
 	if reference:
 		entry.reference_doctype, entry.reference_name = reference
+	entry.request_id = request_id
 	entry.insert(ignore_permissions=True)

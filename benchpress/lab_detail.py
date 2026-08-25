@@ -40,6 +40,7 @@ BENCH_FIELDS = [
 	"code_server_url",
 	"started_at",
 	"expires_at_ts",
+	"modified",
 	"owner",
 ]
 
@@ -110,6 +111,9 @@ def _caller_bench(lab_name: str) -> dict | None:
 	# Whether this instance is prepaid, and until when. One indexed read, and only when credits
 	# exist at all — the card that offers the pass is the same card that must not offer a second.
 	bench["always_on_until"] = passes.active_pass_until(bench["name"]) if config.credits_enabled() else None
+	# The last moment a renew still restores this container instead of rebuilding it, so the
+	# screen knows whether its call to action is Renew or Redeploy.
+	bench["grace_ends_at_ts"] = lease.grace_ends_at(bench) if bench["status"] == "Stopped" else None
 	return bench
 
 

@@ -120,7 +120,7 @@ def ensure_ledger_index() -> None:
 	grows forever — without the index it is a full scan, and it is on the path money takes.
 
 	DocType JSON declares only single-column `search_index` entries, so both are added by hand.
-	`add_index` is idempotent.
+	`request_id` is one column and declares its own. `add_index` is idempotent.
 	"""
 	frappe.db.add_index("Credit Ledger Entry", ["account", "creation"])
 	frappe.db.add_index("Credit Ledger Entry", ["reference_doctype", "reference_name"])

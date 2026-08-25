@@ -17,6 +17,12 @@ export const DAY = 24 * HOUR;
 export const NONE = "none";
 export const ACTIVE = "active";
 export const EXPIRING = "expiring";
+export const GRACE = "grace";
+
+// What the button offers while a stopped bench still has its container, and
+// after the reaper has taken it.
+export const RENEW = "renew";
+export const REDEPLOY = "redeploy";
 
 // Below this the countdown turns amber. Long enough to save work and renew.
 export const WARN_SECONDS = 5 * 60;
@@ -60,4 +66,43 @@ function labelFor(seconds) {
 
 function pad(value) {
 	return String(value).padStart(2, "0");
+}
+
+/**
+ * Apply a lease push, or refuse it.
+ *
+ * One field, because the countdown is derived from the deadline rather than
+ * counted down from it — so a renewal needs no timer restart and no remount.
+ * The revision orders pushes that arrive out of order; a lower one is the
+ * older news and is dropped.
+ *
+ * @param {{expiresAtTs: number|null, revision: number}|null} held
+ * @param {{expires_at_ts: number, revision: number}|null} push
+ * @returns {{expiresAtTs: number|null, revision: number}} `held` itself when
+ *   the push is stale, so a caller can compare by identity.
+ */
+export function applyPush(held, push) {
+	if (!push?.revision) return held;
+	if (held?.revision && push.revision <= held.revision) return held;
+	return { expiresAtTs: push.expires_at_ts || null, revision: push.revision };
+}
+
+/**
+ * The grace window a stopped bench still has, and what to offer inside it.
+ *
+ * @param {number|null} graceEndsAtMs When the reaper takes the container, or
+ *   null when nothing reaps it — an operator can switch reaping off entirely.
+ * @param {number} nowMs The corrected current time, from `clock.serverNow()`.
+ * @returns {{state: string, label: string, action: string, tickPeriod: number}}
+ */
+export function graceFor(graceEndsAtMs, nowMs) {
+	if (!graceEndsAtMs) return { state: GRACE, label: "", action: RENEW, tickPeriod: 0 };
+	const seconds = Math.ceil((graceEndsAtMs - nowMs) / SECOND);
+	if (seconds <= 0) return { state: NONE, label: "", action: REDEPLOY, tickPeriod: 0 };
+	return {
+		state: GRACE,
+		label: labelFor(seconds),
+		action: RENEW,
+		tickPeriod: seconds > HOUR / SECOND ? MINUTE : SECOND,
+	};
 }

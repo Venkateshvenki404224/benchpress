@@ -231,9 +231,13 @@ def _site_limit(bench_name) -> int:
 # --- The balance check -------------------------------------------------------
 
 
-def _require_runway(needed) -> None:
-	"""Refuse by name, naming the shortfall and the route out of it."""
-	row = _account_row()
+def require_balance(user: str, needed) -> None:
+	"""Refuse by name, naming the shortfall and the route out of it.
+
+	Takes the user rather than reading the session: a renewal is charged to the bench's owner,
+	who is not always whoever pressed the button.
+	"""
+	row = _account_row(user)
 	if row.is_suspended:
 		frappe.throw(_("This account is suspended, so nothing new can be started."))
 	available = account.available(row)
@@ -241,13 +245,17 @@ def _require_runway(needed) -> None:
 		frappe.throw(_shortfall_message(flt(needed), available))
 
 
-def _account_row():
-	"""The caller's balance fields, opening the account first.
+def _require_runway(needed) -> None:
+	require_balance(frappe.session.user, needed)
+
+
+def _account_row(user: str):
+	"""One user's balance fields, opening the account first.
 
 	`ensure_account` posts the signup grant, and a brand-new user whose grant has not landed yet
 	would otherwise be refused the very first deploy they ever ask for.
 	"""
-	name = account.ensure_account(frappe.session.user)
+	name = account.ensure_account(user)
 	return frappe.db.get_value(ACCOUNT, name, account.BALANCE_FIELDS, as_dict=True)
 
 
