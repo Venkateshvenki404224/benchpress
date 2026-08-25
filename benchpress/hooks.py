@@ -204,10 +204,10 @@ scheduler_events = {
 	# "all": [
 	# 	"benchpress.tasks.all"
 	# ],
-	# Its own job, never folded into the `*/1` stats cron: that one already spends ~2s per
-	# container and blows its window past ~25 benches. This one makes no Docker calls at all.
 	"daily": [
-		"benchpress.credits.reconcile.reconcile_burn_rates",
+		# `reconcile_burn_rates` is deliberately absent. It re-derives an hourly rate from the
+		# running fleet, and nothing raises one any more, so scheduling it rebuilds a second
+		# billing system beside the lease. Phase 5 deletes the fields it repairs.
 		"benchpress.credits.reaper.reap_stopped_instances",
 	],
 	# "hourly": [

@@ -1,5 +1,10 @@
 <template>
-	<span v-if="lease.state !== NONE" class="text-2xs" :class="TONES[lease.tone].text" data-test="lease-countdown">
+	<span
+		v-if="lease.state !== NONE"
+		class="text-2xs"
+		:class="TONES[lease.tone].text"
+		data-test="lease-countdown"
+	>
 		<template v-if="lease.state === EXPIRING">Lease ended — stopping…</template>
 		<template v-else>Lease ends in {{ lease.label }}</template>
 	</span>
