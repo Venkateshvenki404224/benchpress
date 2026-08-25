@@ -16,7 +16,7 @@ from frappe.utils.file_lock import LockTimeoutError
 from frappe.utils.synchronization import filelock
 
 from benchpress import image_cache
-from benchpress.credits import lease, metering
+from benchpress.credits import admission, lease, metering
 from benchpress.deploy_pipeline import DeployLogWriter, DeployPipeline
 from benchpress.docker_manager import (
 	build_lab_image,
@@ -733,6 +733,9 @@ def _deploy_bench(bench_name: str) -> None:
 		# Settle whatever did run and charge nothing further: a failed deploy is free, and a
 		# failed *re*deploy of an instance that was already burning must not keep burning.
 		metering.on_bench_stopped(bench)
+		# Beside the settle, not behind it: `on_bench_stopped` is free on a bench that never
+		# held a lease, which is every deploy that fails before Running.
+		admission.release(bench.name)
 		frappe.db.commit()
 		append_log(f"=== Deploy failed: {e!s} ===", "error")
 		frappe.db.set_value("Deploy Log", deploy_log_name, "log_type", "error")
@@ -857,11 +860,13 @@ def redeploy_bench(bench_name: str) -> None:
 
 
 def _redeploy_bench(bench_name: str) -> None:
-	teardown_bench(frappe.get_doc("Bench Instance", bench_name))
+	# The slot is held across the whole redeploy: releasing between the two halves would hand it
+	# to somebody else and leave this caller one over their limit when their own deploy lands.
+	teardown_bench(frappe.get_doc("Bench Instance", bench_name), release_admission=False)
 	_deploy_bench(bench_name)
 
 
-def teardown_bench(bench) -> None:
+def teardown_bench(bench, *, release_admission: bool = True) -> None:
 	"""Return an instance to `Draft`: container, volume and site database all gone.
 
 	The one teardown path in the app. A redeploy runs it before building the instance again, and
@@ -870,6 +875,9 @@ def teardown_bench(bench) -> None:
 
 	Every removal is best-effort. A volume that was already gone, or a database that never
 	existed, must not leave the instance stuck describing resources it no longer has.
+
+	`release_admission=False` keeps the concurrency slot, and only `_redeploy_bench` passes it:
+	a redeploy is this plus a deploy, and the caller must not lose their own slot in between.
 	"""
 	if bench.container_id:
 		try:
@@ -896,6 +904,9 @@ def teardown_bench(bench) -> None:
 	# this the burning flag would survive the teardown and the fresh container — which
 	# `_deploy_bench` bills through the same idempotence guard — would run unmetered.
 	metering.on_bench_stopped(bench)
+
+	if release_admission:
+		admission.release(bench.name)
 
 	bench.container_id = None
 	bench.container_image = None
@@ -1065,6 +1076,9 @@ def stop_bench(bench_name: str, from_claim: bool = False) -> None:
 	lease.record_stopped(bench, expired)
 	bench.status = "Stopped"
 	metering.on_bench_stopped(bench)
+	# Stopped is free, so it must stop holding a slot too: a caller at their cap who stops
+	# everything they own would otherwise never start anything again.
+	admission.release(bench.name)
 	bench.save(ignore_permissions=True)
 	_deactivate_bench_sites(bench)
 	if expired:

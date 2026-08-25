@@ -14,6 +14,9 @@ Two properties are asserted repeatedly because both are easy to lose in a refact
 
 The gate must also never be the first thing an unauthorised caller meets. `test_api_authorization`
 owns who may call what; this module only proves the gate does not get in front of that answer.
+
+The concurrency cap is not here either. It is a claim rather than a count now, and
+`test_admission` owns it.
 """
 
 import json
@@ -29,6 +32,7 @@ from benchpress.credits import account, config, guard
 from benchpress.credits.seed import seed_defaults
 
 ACCOUNT = "Credit Account"
+ADMISSION = "Bench Admission"
 BENCH = "Bench Instance"
 BENCHPRESS_SETTINGS = "BenchPress Settings"
 CREDIT_SETTINGS = "Credit Settings"
@@ -184,13 +188,18 @@ class TestCreditGuard(IntegrationTestCase):
 			self.switch_at_start,
 		)
 
-	def test_nothing_is_refused_and_no_account_opened_when_credits_are_off(self):
+	def test_nothing_is_refused_and_nothing_is_charged_when_credits_are_off(self):
+		"""The account row is opened by the slot claim, which runs whatever the switch says.
+
+		What must not exist with the switch off is money: no grant, no charge, no ledger at all.
+		`test_admission` owns the claim itself.
+		"""
 		self.set_credits_enabled(0)
 		frappe.set_user(self.user)
 		with patch("frappe.enqueue"):
 			self.assertEqual(api.create_bench(json.dumps({"lab": self.lab.name}))["status"], "Deploying")
 		frappe.set_user("Administrator")
-		self.assertFalse(frappe.db.exists(ACCOUNT, self.user))
+		self.assertEqual(frappe.db.count(LEDGER, {"account": self.user}), 0)
 
 	# --- Money: the shortfall, and its positive control ----------------------
 
@@ -246,50 +255,6 @@ class TestCreditGuard(IntegrationTestCase):
 			self.bench_document().enqueue_deploy()
 		frappe.set_user("Administrator")
 		self.assertEqual(account.summary(self.user)["balance"], GRANT)
-
-	# --- The concurrency cap --------------------------------------------------
-
-	def test_the_concurrency_cap_refuses_one_over(self):
-		self.enable_credits()
-		self.set_setting("max_concurrent_free", 1)
-		self.set_running(self.other_bench.name)
-		frappe.set_user(self.user)
-		with self.assertRaises(frappe.ValidationError) as refusal:
-			self.bench_document().enqueue_start()
-		self.assertIn("instances running", str(refusal.exception))
-
-	def test_the_concurrency_cap_allows_one_under(self):
-		self.enable_credits()
-		self.set_setting("max_concurrent_free", 2)
-		self.set_running(self.other_bench.name)
-		frappe.set_user(self.user)
-		guard.cap_concurrent_instances(self=self.bench_document())
-
-	def test_zero_means_unlimited_concurrency(self):
-		self.enable_credits()
-		self.set_setting("max_concurrent_free", 0)
-		self.set_running(self.other_bench.name)
-		self.set_running(self.bench.name)
-		frappe.set_user(self.user)
-		guard.cap_concurrent_instances(self=self.bench_document())
-
-	def test_the_concurrency_cap_does_not_count_the_instance_being_redeployed(self):
-		"""Otherwise the cap forbids exactly the people holding it from touching what they have."""
-		self.enable_credits()
-		self.set_setting("max_concurrent_free", 1)
-		self.set_running(self.bench.name)
-		frappe.set_user(self.user)
-		guard.cap_concurrent_instances(self=self.bench_document())
-
-	def test_a_purchase_raises_the_concurrency_cap(self):
-		"""Having paid is a Purchase row, not a balance: a refund leaves the row and clears the float."""
-		self.enable_credits()
-		self.set_setting("max_concurrent_free", 1)
-		self.set_setting("max_concurrent_paid", 3)
-		self.set_running(self.other_bench.name)
-		account.purchase(self.user, 200.0, "a credit pack", ("Lab", self.lab.name))
-		frappe.set_user(self.user)
-		guard.cap_concurrent_instances(self=self.bench_document())
 
 	# --- The sites-per-instance cap ------------------------------------------
 
@@ -423,6 +388,7 @@ class TestCreditGuard(IntegrationTestCase):
 
 	def reset_benches(self) -> None:
 		names = [self.bench.name, self.other_bench.name]
+		frappe.db.delete(ADMISSION, {"bench": ("in", names)})
 		for name in names:
 			frappe.db.set_value(
 				BENCH,
@@ -462,5 +428,6 @@ class TestCreditGuard(IntegrationTestCase):
 	def wipe_credits(cls) -> None:
 		"""The ledger blocks updates, not deletes — the suite still has to clean up after itself."""
 		for email in (USER, ADMIN):
+			frappe.db.delete(ADMISSION, {"account": email})
 			frappe.db.delete(LEDGER, {"account": email})
 			frappe.db.delete(ACCOUNT, {"user": email})

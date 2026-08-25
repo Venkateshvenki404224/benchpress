@@ -39,6 +39,8 @@ STATEMENT_FIELDS = ["name", "entry_type", "credits", "balance_after", "descripti
 DEFAULT_PAGE_LENGTH = 20
 MAX_PAGE_LENGTH = 100
 
+SIGNUP_REFERENCE = "User"
+
 USAGE = "Usage"
 GRANT = "Grant"
 PURCHASE = "Purchase"
@@ -124,23 +126,30 @@ def charge(user: str, credits, description: str, reference=None, request_id: str
 	"""
 	if not config.credits_enabled():
 		return
-	account = _locked(user)
+	account = locked(user)
 	account.balance = flt(flt(account.balance) - flt(credits), PRECISION)
 	account.lifetime_spent = flt(flt(account.lifetime_spent) + flt(credits), PRECISION)
-	_save(account)
+	save_account(account)
 	_write_entry(account, USAGE, -flt(credits), description, reference, request_id)
 
 
-def grant(user: str, credits, description: str) -> None:
-	"""Credit an account without a payment — the signup grant, or an operator's goodwill."""
+def grant(user: str, credits, description: str, reference=None) -> None:
+	"""Credit an account without a payment: the signup grant, or an operator's goodwill.
+
+	`reference` is what makes a grant postable exactly once. `_post_signup_grant` passes the
+	user, so the ledger itself remembers that the joining credits have landed.
+	"""
 	if not config.credits_enabled() or not flt(credits):
 		return
-	account = _locked(user)
+	_apply_grant(locked(user), credits, description, reference)
+
+
+def _apply_grant(account, credits, description: str, reference) -> None:
 	account.balance = flt(flt(account.balance) + flt(credits), PRECISION)
 	# The balance just rose, so the next depletion deserves its own warning.
 	account.low_balance_warned = 0
-	_save(account)
-	_write_entry(account, GRANT, flt(credits), description)
+	save_account(account)
+	_write_entry(account, GRANT, flt(credits), description, reference)
 
 
 def purchase(user: str, credits, description: str, reference) -> bool:
@@ -148,7 +157,7 @@ def purchase(user: str, credits, description: str, reference) -> bool:
 
 	Webhooks retry, `on_update` fires on every save of an order, and an operator pressing *Sync
 	Status* is a third delivery of the same payment — so the reference, not the caller, decides
-	whether money has already been applied. The check runs *after* `_locked`, under the same row
+	whether money has already been applied. The check runs *after* `locked`, under the same row
 	lock that applies it: two deliveries racing each other serialise there instead of both reading
 	an empty ledger and both crediting.
 
@@ -157,14 +166,14 @@ def purchase(user: str, credits, description: str, reference) -> bool:
 	"""
 	if not config.credits_enabled():
 		return False
-	account = _locked(user)
+	account = locked(user)
 	if reference_posted(reference):
 		return False
 	amount = flt(credits)
 	account.balance = flt(flt(account.balance) + amount, PRECISION)
 	account.lifetime_purchased = flt(flt(account.lifetime_purchased) + amount, PRECISION)
 	account.low_balance_warned = 0
-	_save(account)
+	save_account(account)
 	_write_entry(account, PURCHASE, amount, description, reference)
 	return True
 
@@ -180,10 +189,10 @@ def refund(user: str, credits, description: str, reference=None) -> None:
 	if not config.credits_enabled():
 		return
 	amount = abs(flt(credits))
-	account = _locked(user)
+	account = locked(user)
 	account.balance = flt(flt(account.balance) - amount, PRECISION)
 	account.lifetime_purchased = max(flt(flt(account.lifetime_purchased) - amount, PRECISION), 0.0)
-	_save(account)
+	save_account(account)
 	_write_entry(account, REFUND, -amount, description, reference)
 
 
@@ -197,10 +206,10 @@ def adjust(user: str, credits, reason: str) -> None:
 		frappe.throw(_("Credits are switched off on this site."))
 	if not cstr(reason).strip():
 		frappe.throw(_("An adjustment needs a reason."))
-	account = _locked(user)
+	account = locked(user)
 	account.balance = flt(flt(account.balance) + flt(credits), PRECISION)
 	account.low_balance_warned = 0
-	_save(account)
+	save_account(account)
 	_write_entry(account, ADJUSTMENT, flt(credits), reason)
 
 
@@ -253,14 +262,34 @@ def reference_posted(reference) -> bool:
 
 
 def ensure_account(user: str) -> str:
-	"""The account name for a user — the email itself — created on first use.
+	"""The account name for a user, the email itself, created on first use.
 
 	The signup grant is posted here rather than on user creation so it lands however the user
-	arrived: waitlist invite, Desk, or a phase-7 social login.
+	arrived: waitlist invite, Desk, or a social login. It is posted on every call rather than
+	only on the create, because admission opens accounts on a site with credits switched off and
+	those rows would otherwise never be granted when an operator flips the switch.
 	"""
-	if frappe.db.exists(ACCOUNT, user):
-		return user
-	return _create_account(user)
+	if not frappe.db.exists(ACCOUNT, user):
+		_create_account(user)
+	_post_signup_grant(user)
+	return user
+
+
+def _post_signup_grant(user: str) -> None:
+	"""Post the joining credits once ever, keyed by the user in the ledger.
+
+	An account opened before this reference existed carries its grant as an unreferenced row, so
+	any ledger row at all counts as onboarded: without that, flipping the switch would grant a
+	second time to everybody who was already trading.
+	"""
+	if not config.credits_enabled() or reference_posted((SIGNUP_REFERENCE, user)):
+		return
+	credits = flt(config.settings().signup_grant_credits)
+	if not credits or frappe.db.exists(LEDGER, {"account": user}):
+		return
+	# Not through `grant`: that would re-enter `ensure_account`, which is what called this.
+	account = frappe.get_doc(ACCOUNT, user, for_update=True)
+	_apply_grant(account, credits, "Signup grant", (SIGNUP_REFERENCE, user))
 
 
 def _create_account(user: str) -> str:
@@ -269,12 +298,11 @@ def _create_account(user: str) -> str:
 	try:
 		account.insert(ignore_permissions=True)
 	except frappe.DuplicateEntryError:
-		return user  # two parallel first deploys; the other one won
-	grant(user, config.settings().signup_grant_credits, "Signup grant")
-	return account.name
+		frappe.clear_last_message()  # two parallel first deploys; the other one won
+	return user
 
 
-def _locked(user: str):
+def locked(user: str):
 	"""The account row, locked and loaded in one `SELECT ... FOR UPDATE`.
 
 	A second worker touching the same account waits here instead of reading a balance that is
@@ -286,7 +314,7 @@ def _locked(user: str):
 	return frappe.get_doc(ACCOUNT, ensure_account(user), for_update=True)
 
 
-def _save(account) -> None:
+def save_account(account) -> None:
 	account.save(ignore_permissions=True)
 
 

@@ -422,7 +422,7 @@ class TestApiAuthorization(IntegrationTestCase):
 	def test_the_credit_gate_never_precedes_an_endpoints_own_guard(self):
 		"""With credits armed, a role-less caller must still meet `PermissionError` — not a price.
 
-		`requires_credits` wraps these endpoints, so it runs before their `require_app_user()`. It
+		`requires_admission` wraps these endpoints, so it runs before their `require_app_user()`. It
 		passes a caller without an app role straight through for exactly this reason: a stranger
 		must not be answered with an accounting sentence, and must not have a `Credit Account`
 		opened in their name on the way to being refused.

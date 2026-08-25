@@ -239,6 +239,9 @@ scheduler_events = {
 			# Both use the same conditional claim, so running together cannot double-stop a
 			# bench. It makes no Docker calls, so it is safe on either worker.
 			"benchpress.credits.drain.sweep_expired_leases",
+			# Not the daily list: a slot leaked by a killed worker is a lockout for a caller at
+			# their cap, and it costs three grouped reads and no Docker call to find.
+			"benchpress.credits.admission_repair.reconcile_admissions",
 		],
 		"0 2 * * *": [
 			"benchpress.mariadb_manager.scheduled_backup",

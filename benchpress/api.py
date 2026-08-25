@@ -24,11 +24,10 @@ from benchpress.credits import account, config, lease, metering, payments
 from benchpress.credits.guard import (
 	build_charge,
 	cap_builds_per_day,
-	cap_concurrent_instances,
 	cap_devices,
 	payload_lease_cost,
 	require_balance,
-	requires_credits,
+	requires_admission,
 )
 from benchpress.permissions import (
 	get_bench_owner_filter,
@@ -83,7 +82,7 @@ def create_lab_from_template(template: str, lab_id: str | None = None, title: st
 
 
 @frappe.whitelist()
-@requires_credits(cost=build_charge, caps=(cap_builds_per_day,))
+@requires_admission(cost=build_charge, caps=(cap_builds_per_day,))
 def build_lab_image(lab_name: str) -> dict:
 	require_admin()
 	frappe.enqueue(
@@ -164,7 +163,7 @@ def _counts_by_bench(doctype: str, column: str, bench_names: list[str]) -> dict[
 
 
 @frappe.whitelist()
-@requires_credits(cost=payload_lease_cost, caps=(cap_concurrent_instances,))
+@requires_admission(cost=payload_lease_cost)
 def create_bench(data: str) -> dict:
 	require_app_user()
 	from benchpress.benchpress.doctype.bench_instance import get_instance_id
@@ -380,7 +379,7 @@ def get_deploy_history() -> dict:
 
 
 @frappe.whitelist()
-@requires_credits(caps=(cap_devices,))
+@requires_admission(caps=(cap_devices,))
 def add_device(device_name: str, device_type: str, public_key: str | None = None) -> dict:
 	require_app_user()
 	from benchpress.vpn_adapter import register_device

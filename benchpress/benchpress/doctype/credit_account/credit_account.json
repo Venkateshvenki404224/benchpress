@@ -16,7 +16,8 @@
   "lifetime_spent",
   "state_section",
   "is_suspended",
-  "low_balance_warned"
+  "low_balance_warned",
+  "active_instances"
  ],
  "fields": [
   {
@@ -82,6 +83,15 @@
    "fieldname": "low_balance_warned",
    "fieldtype": "Check",
    "label": "Low Balance Warned",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "description": "Bench Admission rows this account holds: one per instance deploying or running. Denormalised so admission decides from the row it already locked; benchpress.credits.admission_repair heals it.",
+   "fieldname": "active_instances",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Active Instances",
    "read_only": 1
   }
  ],

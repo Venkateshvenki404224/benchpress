@@ -9,7 +9,7 @@ from frappe.model.document import Document
 from frappe.utils.background_jobs import is_job_enqueued
 
 from benchpress.benchpress.doctype.bench_instance import get_instance_id
-from benchpress.credits.guard import cap_concurrent_instances, instance_lease_cost, requires_credits
+from benchpress.credits.guard import instance_lease_cost, requires_admission
 from benchpress.permissions import is_admin
 
 DEPLOY_JOB_TIMEOUT = 7200
@@ -57,6 +57,15 @@ class BenchInstance(Document):
 
 		lease.refresh_into(self)
 
+	def on_trash(self):
+		"""Give the concurrency slot back. `api._delete_bench` deletes with `force=True`, which
+		skips the link check, and `Bench Admission.bench` is `Data` - so nothing else would ever
+		notice the orphan.
+		"""
+		from benchpress.credits import admission
+
+		admission.release(self.name)
+
 	def validate_higher_perm_levels(self):
 		"""Refuse a runtime the caller may not set, where Frappe would silently drop it.
 
@@ -93,7 +102,7 @@ class BenchInstance(Document):
 		return username
 
 	@frappe.whitelist()
-	@requires_credits(cost=instance_lease_cost, caps=(cap_concurrent_instances,))
+	@requires_admission(cost=instance_lease_cost)
 	def enqueue_deploy(self):
 		if is_job_enqueued(self._deploy_job_id()):
 			frappe.msgprint(_("A deploy is already in progress for this bench."))
@@ -117,7 +126,7 @@ class BenchInstance(Document):
 		frappe.msgprint(_("Bench stopped."))
 
 	@frappe.whitelist()
-	@requires_credits(cost=instance_lease_cost, caps=(cap_concurrent_instances,))
+	@requires_admission(cost=instance_lease_cost)
 	def enqueue_redeploy(self):
 		if is_job_enqueued(self._deploy_job_id()):
 			frappe.msgprint(_("A deploy is already in progress for this bench."))
@@ -137,7 +146,7 @@ class BenchInstance(Document):
 		return f"deploy_bench:{self.name}"
 
 	@frappe.whitelist()
-	@requires_credits(cost=instance_lease_cost, caps=(cap_concurrent_instances,))
+	@requires_admission(cost=instance_lease_cost)
 	def enqueue_start(self):
 		from benchpress.credits import metering
 		from benchpress.deploy_manager import enqueue_route_sync

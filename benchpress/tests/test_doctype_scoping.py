@@ -24,6 +24,7 @@ from benchpress.permissions import ADMIN_ROLES
 # Rows belong to one tenant. Both paths must be scoped: a list rule AND a document rule.
 TENANT_SCOPED = {
 	"Bench Instance",  # the deployment itself
+	"Bench Admission",  # the concurrency slot one deployment holds
 	"Bench Site",  # a site on somebody's deployment
 	"Credit Account",  # a balance
 	"Credit Ledger Entry",  # what that balance is made of
