@@ -20,7 +20,9 @@ RETIRED = {
 
 def execute() -> list[str]:
 	"""Returns the columns this run removed, so a second run says nothing."""
-	dropped = [f"{doctype}.{field}" for doctype, fields in RETIRED.items() for field in _present(doctype, fields)]
+	dropped = [
+		f"{doctype}.{field}" for doctype, fields in RETIRED.items() for field in _present(doctype, fields)
+	]
 	delete_fields(RETIRED, delete=1)
 	for doctype in RETIRED:
 		frappe.clear_cache(doctype=doctype)
