@@ -950,6 +950,26 @@ class TestLease(IntegrationTestCase):
 			"the replay guard read the ledger without a locking read",
 		)
 
+	def test_the_account_is_read_under_its_lock_not_after_it(self):
+		"""A locking read followed by a plain read returns two different rows here.
+
+		The session is REPEATABLE READ: `SELECT ... FOR UPDATE` sees the latest commit, and the
+		plain read that loaded the document afterwards answered from the snapshot the
+		transaction opened. Saving that stale document raises `TimestampMismatchError` — which
+		is what a second tab renewing at the same moment was told.
+		"""
+		self.enable_credits()
+		with patch.object(frappe.db, "sql", wraps=frappe.db.sql) as sql:
+			account.charge(self.user, 1.0, "Lock probe")
+		unlocked = [
+			statement
+			for statement in self.statements(sql)
+			if "tabCredit Account" in statement
+			and "SELECT *" in statement.upper()
+			and "FOR UPDATE" not in statement.upper()
+		]
+		self.assertEqual(unlocked, [], "the account document was loaded outside the lock that guards it")
+
 	def test_request_id_has_no_default(self):
 		"""A key the server invents for a caller who sent none is not an idempotency key."""
 		parameter = inspect.signature(api.renew_bench).parameters["request_id"]
