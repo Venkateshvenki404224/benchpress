@@ -9,6 +9,10 @@ import { LabsPage } from "./pages/LabsPage";
  * under test is the rendering of a deadline and not how the deadline was bought. The epoch
  * integer is the contract: a datetime string would parse as browser-local in V8 and has
  * historically been `Invalid Date` in Safari.
+ *
+ * `lease_state` is deliberately left unset. The countdown reads only the deadline, and an
+ * `Active` row with a past deadline is exactly what the live warden claims — it would chase a
+ * container these fixtures never create.
  */
 
 let labName: string;
@@ -21,10 +25,18 @@ function inSeconds(seconds: number): number {
   return Math.floor(Date.now() / 1000) + seconds;
 }
 
+/** Filter the table down to one lab, so a countdown on somebody else's row cannot answer for it. */
+async function showOnly(labsPage: LabsPage, labId: string) {
+  await labsPage.goto();
+  await labsPage.search(labId);
+  await expect(labsPage.table.locator('[data-test^="lab-"]')).toHaveCount(1);
+}
+
 async function labWithBench(page, benchOverrides: Record<string, unknown>) {
+  const labId = `e2e-lease-${Date.now().toString(36)}`;
   const lab = await createTestLab(page, {
     title: "E2E Lease Lab",
-    lab_id: `e2e-lease-${Date.now().toString(36)}`,
+    lab_id: labId,
     frappe_version: "version-16",
     status: "Ready",
   });
@@ -34,7 +46,7 @@ async function labWithBench(page, benchOverrides: Record<string, unknown>) {
     ...benchOverrides,
   });
   benchName = bench.name;
-  return { lab, bench };
+  return { lab, bench, labId };
 }
 
 test.describe("Lease countdown", () => {
@@ -49,10 +61,10 @@ test.describe("Lease countdown", () => {
   });
 
   test("shows the time left on a bench that holds a lease", async ({ page }) => {
-    await labWithBench(page, { expires_at_ts: inSeconds(25 * 60), lease_state: "Active" });
+    const { labId } = await labWithBench(page, { expires_at_ts: inSeconds(25 * 60) });
 
     const labsPage = new LabsPage(page);
-    await labsPage.goto();
+    await showOnly(labsPage, labId);
 
     const countdown = page.locator(COUNTDOWN).first();
     await expect(countdown).toBeVisible();
@@ -60,10 +72,10 @@ test.describe("Lease countdown", () => {
   });
 
   test("counts down rather than holding a stale first paint", async ({ page }) => {
-    await labWithBench(page, { expires_at_ts: inSeconds(120), lease_state: "Active" });
+    const { labId } = await labWithBench(page, { expires_at_ts: inSeconds(120) });
 
     const labsPage = new LabsPage(page);
-    await labsPage.goto();
+    await showOnly(labsPage, labId);
 
     const countdown = page.locator(COUNTDOWN).first();
     await expect(countdown).toBeVisible();
@@ -74,10 +86,10 @@ test.describe("Lease countdown", () => {
   });
 
   test("a bench with no lease renders no countdown at all", async ({ page }) => {
-    await labWithBench(page, { expires_at_ts: 0 });
+    const { labId } = await labWithBench(page, { expires_at_ts: 0 });
 
     const labsPage = new LabsPage(page);
-    await labsPage.goto();
+    await showOnly(labsPage, labId);
 
     await expect(page.locator(COUNTDOWN)).toHaveCount(0);
   });
@@ -85,10 +97,10 @@ test.describe("Lease countdown", () => {
   test("client zero says stopping and does not claim the bench stopped", async ({ page }) => {
     // Already past. The browser reaching zero is a rendering event with no authority: the row
     // still says Running, and only the server may say otherwise.
-    await labWithBench(page, { expires_at_ts: inSeconds(-30), lease_state: "Active" });
+    const { labId } = await labWithBench(page, { expires_at_ts: inSeconds(-30) });
 
     const labsPage = new LabsPage(page);
-    await labsPage.goto();
+    await showOnly(labsPage, labId);
 
     const countdown = page.locator(COUNTDOWN).first();
     await expect(countdown).toBeVisible();
