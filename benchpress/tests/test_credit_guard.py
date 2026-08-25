@@ -34,8 +34,11 @@ BENCHPRESS_SETTINGS = "BenchPress Settings"
 CREDIT_SETTINGS = "Credit Settings"
 LEDGER = "Credit Ledger Entry"
 
-# The seeded "Small" size (1g / 1 core / 3 sites) on the seeded default plan, 30 minutes for 5.
+# The seeded "Small" size (1g / 1 core / 3 sites) on a plan this module pins, 30 minutes for 5.
+# Pinned rather than inherited: `default_lease_plan` is admin-editable, and reading the site's
+# choice made every shortfall assertion here a function of whatever price that plan carries today.
 LEASE_COST = 5.0
+GUARD_PLAN = "Guard 30 Minutes"
 GRANT = 40.0
 MAX_SITES = 3
 USER = "guard-user@example.com"
@@ -50,7 +53,29 @@ TUNED_SETTINGS = (
 	"max_devices",
 	"max_builds_per_day",
 	"custom_build_credits",
+	"default_lease_plan",
 )
+
+
+def _ensure_guard_plan() -> str:
+	"""A plan whose price is `LEASE_COST` by construction."""
+	if frappe.db.exists("Lease Plan", GUARD_PLAN):
+		frappe.db.set_value("Lease Plan", GUARD_PLAN, {"minutes": 30, "credits": LEASE_COST, "is_active": 1})
+		return GUARD_PLAN
+	return (
+		frappe.get_doc(
+			{
+				"doctype": "Lease Plan",
+				"plan_label": GUARD_PLAN,
+				"minutes": 30,
+				"credits": LEASE_COST,
+				"is_active": 1,
+				"sort_order": 30,
+			}
+		)
+		.insert(ignore_permissions=True)
+		.name
+	)
 
 
 def _ensure_user(email: str, role: str | None = None) -> str:
@@ -145,6 +170,7 @@ class TestCreditGuard(IntegrationTestCase):
 		self.set_credits_enabled(self.switch_at_start)
 		for field, value in self.settings_at_start.items():
 			self.set_setting(field, value)
+		self.set_setting("default_lease_plan", _ensure_guard_plan())
 		self.set_size_field("max_sites", self.max_sites_at_start)
 
 	def tearDown(self):
