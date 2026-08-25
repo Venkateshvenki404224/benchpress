@@ -46,12 +46,13 @@ BUDGETS_MS = {
 	"get_deploy_history": 600,
 }
 
-# The six rows benchpress.diagnostics always returns; the real checks talk to
+# The seven rows benchpress.diagnostics always returns; the real checks talk to
 # Docker and MariaDB, so the Overview timing test never runs them.
 DIAGNOSTICS_ROWS = [
 	{"check": "docker_socket", "status": "pass", "hint": "Docker daemon reachable"},
 	{"check": "docker_network", "status": "pass", "hint": "benchpress network exists"},
 	{"check": "mariadb", "status": "pass", "hint": "MariaDB responding"},
+	{"check": "clock_skew", "status": "pass", "hint": "App and database clocks agree"},
 	{"check": "redis", "status": "fail", "hint": "benchpress-redis container not found"},
 	{"check": "container_runtimes", "status": "pass", "hint": "Docker has sysbox-runc registered"},
 	{"check": "vpn_server", "status": "pass", "hint": "WireGuard server 'wg0' configured"},
@@ -396,10 +397,12 @@ class TestApi(IntegrationTestCase):
 		with patch("benchpress.diagnostics.run_diagnostics", return_value=DIAGNOSTICS_ROWS):
 			infrastructure = api.get_overview()["infrastructure"]
 
+		by_check = {row["check"]: row for row in infrastructure}
 		self.assertEqual([row["check"] for row in infrastructure], [r["check"] for r in DIAGNOSTICS_ROWS])
-		self.assertEqual(infrastructure[0]["status"], "Active")
-		self.assertEqual(infrastructure[3]["status"], "Error")
-		self.assertEqual(infrastructure[2]["label"], "MariaDB")
+		self.assertEqual(by_check["docker_socket"]["status"], "Active")
+		self.assertEqual(by_check["redis"]["status"], "Error")
+		self.assertEqual(by_check["mariadb"]["label"], "MariaDB")
+		self.assertEqual(by_check["clock_skew"]["label"], "Clock skew")
 
 	def test_get_vpn_status_shape_and_timing(self):
 		status, elapsed_ms = _timed(api.get_vpn_status)

@@ -18,6 +18,7 @@
   "column_break_resource",
   "container_cpu_quota",
   "code_server_version",
+  "stop_grace_seconds",
   "credits_section",
   "enable_credits"
  ],
@@ -92,6 +93,13 @@
    "fieldname": "code_server_version",
    "fieldtype": "Data",
    "label": "Code Server Version"
+  },
+  {
+   "default": "5",
+   "description": "Seconds a container gets to exit on SIGTERM before it is killed. Measured: bench containers never exit on SIGTERM, so this is waited out in full on every stop and is the drain rate.",
+   "fieldname": "stop_grace_seconds",
+   "fieldtype": "Int",
+   "label": "Stop Grace Seconds"
   },
   {
    "fieldname": "credits_section",

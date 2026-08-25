@@ -33,20 +33,16 @@ export function signedCreditLabel(credits) {
 	return creditLabel(0);
 }
 
-/** What one hour of this instance size costs. */
-export function rateLabel(creditsPerHour) {
-	return `${creditLabel(creditsPerHour)} credits/hr`;
-}
-
 /**
- * What the balance is doing right now, or `""` when nothing is running.
+ * What one lease costs, and how long it buys: `"5 credits / 30 minutes"`.
  *
- * The burn rate is the sum over a user's running instances, so this is the one
- * number that explains a balance falling while nobody touches anything.
+ * The duration is half the price, so the two travel together. Empty when there is
+ * no price to quote — a self-hoster with credits off, or a size no plan reaches.
  */
-export function burnLabel(burnRate) {
-	const rate = Number(burnRate ?? 0);
-	return rate > 0 ? `Burning ${rateLabel(rate)}` : "";
+export function leasePriceLabel(credits, planLabel = "") {
+	if (credits === null || credits === undefined) return "";
+	const price = `${creditLabel(credits)} credits`;
+	return planLabel ? `${price} / ${planLabel}` : price;
 }
 
 // Under this share of the allocation the meter stops being informational and starts being a

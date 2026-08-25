@@ -364,7 +364,7 @@ Modal dialog to configure Docker (socket path, base domain, default image, Traef
 
 ## Data Model (DocTypes)
 
-BenchPress uses 10 DocTypes to model the complete bench lifecycle (VPN DocTypes live in the vpn_management app). A further 7 DocTypes (Credit Account, Credit Ledger Entry, Credit Pack, Credit Settings, Instance Size, Always On Pass, Waitlist Entry) back the optional metering layer described in [Credits & Shared Deployments](#credits--shared-deployments-optional) and are omitted below since they do not apply to a plain self-hosted install:
+BenchPress uses 10 DocTypes to model the complete bench lifecycle (VPN DocTypes live in the vpn_management app). A further 7 DocTypes (Credit Account, Credit Ledger Entry, Credit Pack, Credit Settings, Instance Size, Lease Plan, Waitlist Entry) back the optional metering layer described in [Credits & Shared Deployments](#credits--shared-deployments-optional) and are omitted below since they do not apply to a plain self-hosted install:
 
 | DocType | Type | Purpose | Key Fields |
 |---------|------|---------|------------|
@@ -924,12 +924,12 @@ site, and every check in `benchpress.credits.guard.requires_credits` short-circu
 while it is off. Turning it on unlocks the following, all configured in the **Credit Settings** singleton:
 
 - **Signup grants** -- new accounts start with a configurable number of free credits
-- **Metered runtime** -- each **Instance Size** has a credits-per-hour rate. BenchPress refuses
-  deploys without at least an hour of runway
+- **Leased runtime** -- a deploy spends credits and buys a fixed window from the **Lease Plan**
+  catalog, 30 minutes to a week. The bench stops when the window closes and Renew buys more.
+  BenchPress refuses a deploy the balance cannot pay for
 - **Concurrency and build caps** -- separate limits for free vs. paid accounts, plus a daily build
   cap and a max-devices cap (`0` means unlimited on any of these)
 - **Auto-reap** -- idle instances past `Reap After Days` are cleaned up automatically
-- **Always On Pass** -- a paid, fixed-price monthly exemption from reaping for one instance
 - **Credit Packs** -- purchasable top-ups (label, price, credit amount)
 - **Waitlist-gated signup** -- optionally require an invite before self-serve signup opens
 

@@ -21,6 +21,7 @@ import frappe
 INSTANCE_SIZES = [
 	{
 		"size_label": "Small",
+		"price_multiplier": 1.0,
 		"memory_limit": "1g",
 		"cpu_cores": 1,
 		"credits_per_hour": 1.0,
@@ -30,6 +31,7 @@ INSTANCE_SIZES = [
 	},
 	{
 		"size_label": "Medium",
+		"price_multiplier": 2.0,
 		"memory_limit": "2g",
 		"cpu_cores": 2,
 		"credits_per_hour": 2.0,
@@ -39,6 +41,7 @@ INSTANCE_SIZES = [
 	},
 	{
 		"size_label": "Large",
+		"price_multiplier": 4.0,
 		"memory_limit": "4g",
 		"cpu_cores": 4,
 		"credits_per_hour": 4.0,
@@ -46,6 +49,18 @@ INSTANCE_SIZES = [
 		"is_default": 0,
 		"sort_order": 3,
 	},
+]
+
+# Credits per row rather than a rate, so a longer window can cost less per hour. That is the
+# point of selling durations: a week is a commitment and is priced like one.
+LEASE_PLANS = [
+	{"plan_label": "30 minutes", "minutes": 30, "credits": 5, "is_active": 1, "sort_order": 1},
+	{"plan_label": "2 hours", "minutes": 120, "credits": 18, "is_active": 1, "sort_order": 2},
+	{"plan_label": "8 hours", "minutes": 480, "credits": 60, "is_active": 1, "sort_order": 3},
+	{"plan_label": "1 day", "minutes": 1440, "credits": 150, "is_active": 1, "sort_order": 4},
+	{"plan_label": "2 days", "minutes": 2880, "credits": 260, "is_active": 1, "sort_order": 5},
+	{"plan_label": "4 days", "minutes": 5760, "credits": 460, "is_active": 1, "sort_order": 6},
+	{"plan_label": "1 week", "minutes": 10080, "credits": 700, "is_active": 1, "sort_order": 7},
 ]
 
 CREDIT_PACKS = [
@@ -79,8 +94,10 @@ CREDIT_PACKS = [
 def seed_defaults() -> None:
 	"""Idempotent. Safe to call on every install and from the patch."""
 	seed_rows("Instance Size", "size_label", INSTANCE_SIZES)
+	seed_rows("Lease Plan", "plan_label", LEASE_PLANS)
 	seed_rows("Credit Pack", "pack_label", CREDIT_PACKS)
 	seed_credit_settings()
+	seed_default_lease_plan()
 	ensure_ledger_index()
 
 
@@ -102,11 +119,17 @@ def ensure_ledger_index() -> None:
 	this order has already been credited, and that question is asked against the one table that
 	grows forever — without the index it is a full scan, and it is on the path money takes.
 
-	DocType JSON declares only single-column `search_index` entries, so both are added by hand.
-	`add_index` is idempotent.
+	DocType JSON declares only single-column `search_index` entries, so all three are added by
+	hand. `add_index` is idempotent.
+
+	`(account, request_id)` is the replay guard's index, and it is composite for a second reason
+	besides speed: that guard is a locking read on a key that usually does not exist, so it holds
+	the gap the ledger row is inserted into. Scoped to one account, two tenants renewing at the
+	same instant lock different gaps.
 	"""
 	frappe.db.add_index("Credit Ledger Entry", ["account", "creation"])
 	frappe.db.add_index("Credit Ledger Entry", ["reference_doctype", "reference_name"])
+	frappe.db.add_index("Credit Ledger Entry", ["account", "request_id"])
 
 
 def seed_credit_settings() -> None:
@@ -120,3 +143,15 @@ def seed_credit_settings() -> None:
 
 	settings = frappe.new_doc("Credit Settings")
 	settings.save(ignore_permissions=True)
+
+
+def seed_default_lease_plan() -> None:
+	"""Point `Credit Settings` at the shortest plan, so a lab that names none still has one.
+
+	Only when the field is empty: an operator who chose a different fallback keeps it.
+	"""
+	if frappe.db.get_single_value("Credit Settings", "default_lease_plan"):
+		return
+	shortest = frappe.db.get_value("Lease Plan", {"is_active": 1}, "name", order_by="minutes asc")
+	if shortest:
+		frappe.db.set_single_value("Credit Settings", "default_lease_plan", shortest)

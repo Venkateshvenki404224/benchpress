@@ -21,8 +21,8 @@ effect. A caller who is both at their cap and short of credits is told about the
 and then learns about the shortfall — two sentences, both actionable.
 
 Costs are **checks, not debits**. Nothing here writes to a balance; `metering` still owns every
-charge. What a start must prove is one hour of runway at its size rate, because an hourly meter
-cannot honestly admit an instance the sweep would stop within the hour.
+charge. What a start must prove is the price of one lease, which is the number the size picker
+quoted and the number the deploy is about to spend.
 """
 
 import functools
@@ -33,7 +33,7 @@ from frappe import _
 from frappe.utils import cint, flt, today
 
 from benchpress.benchpress.doctype.bench_instance import get_instance_id
-from benchpress.credits import account, config, metering, passes
+from benchpress.credits import account, config, lease
 from benchpress.permissions import has_app_permission
 
 ACCOUNT = "Credit Account"
@@ -41,7 +41,6 @@ BENCH = "Bench Instance"
 LEDGER = "Credit Ledger Entry"
 SITE = "Bench Site"
 
-MINIMUM_RUNWAY_HOURS = 1
 TOP_UP_ROUTE = config.TOP_UP_ROUTE
 
 
@@ -75,7 +74,7 @@ def _enforce(method, cost, caps, args, kwargs) -> None:
 	for cap in caps:
 		cap(**arguments)
 	if cost:
-		_require_runway(cost(**arguments))
+		_require_balance(cost(**arguments))
 
 
 def _arguments_by_name(method, args, kwargs) -> dict:
@@ -88,28 +87,23 @@ def _arguments_by_name(method, args, kwargs) -> dict:
 # --- What an action must be able to afford ------------------------------------
 
 
-def instance_runway(**call) -> float:
-	"""One hour at this instance's rate. `self` is the `Bench Instance` the method was called on.
-
-	An unexpired `Always On Pass` is prepaid, so starting that instance costs nothing to prove.
-	"""
-	bench = call["self"]
-	if passes.has_active_pass(bench.name):
-		return 0.0
-	return lab_runway(bench.lab)
+def instance_lease_cost(**call) -> float:
+	"""One lease on this instance's lab. `self` is the `Bench Instance` the method was called on."""
+	return lab_lease_cost(call["self"].lab)
 
 
-def payload_runway(**call) -> float:
-	"""The same runway for `api.create_bench`, whose lab arrives inside the JSON payload."""
-	return lab_runway(frappe.parse_json(call.get("data")).get("lab"))
+def payload_lease_cost(**call) -> float:
+	"""The same price for `api.create_bench`, whose lab arrives inside the JSON payload."""
+	return lab_lease_cost(frappe.parse_json(call.get("data")).get("lab"))
 
 
-def lab_runway(lab_name) -> float:
-	"""One hour at the lab's size rate — the least an hourly meter can honestly admit."""
+def lab_lease_cost(lab_name) -> float:
+	"""What one window on this lab costs — what the start is about to spend, not a rate."""
 	if not lab_name:
 		return 0.0
-	rate = metering.rate_for_lab(frappe.get_cached_doc("Lab", lab_name))
-	return flt(rate * MINIMUM_RUNWAY_HOURS)
+	lab = frappe.get_cached_doc("Lab", lab_name)
+	plan = lease.plan_for(lab)
+	return lease.cost_of(lab, plan) if plan else 0.0
 
 
 def build_charge(**call) -> float:
@@ -209,9 +203,8 @@ def _subject_instance(**call) -> str | None:
 def _concurrency_limit() -> int:
 	"""The paid ceiling once anything has been bought, the free one until then.
 
-	"Has paid" is the existence of a Purchase row, not a `lifetime_purchased` balance: an Always On
-	Pass is money spent on hours rather than credits, so it posts a zero-credit row. Somebody who
-	has bought a pass has plainly paid, and a float that stayed at zero would call them free.
+	"Has paid" is the existence of a Purchase row, not a `lifetime_purchased` balance: a refund
+	clears the float, and somebody who bought and was refunded has still plainly paid.
 	"""
 	settings = config.settings()
 	paid = frappe.db.exists(LEDGER, {"account": frappe.session.user, "entry_type": account.PURCHASE})
@@ -231,9 +224,13 @@ def _site_limit(bench_name) -> int:
 # --- The balance check -------------------------------------------------------
 
 
-def _require_runway(needed) -> None:
-	"""Refuse by name, naming the shortfall and the route out of it."""
-	row = _account_row()
+def require_balance(user: str, needed) -> None:
+	"""Refuse by name, naming the shortfall and the route out of it.
+
+	Takes the user rather than reading the session: a renewal is charged to the bench's owner,
+	who is not always whoever pressed the button.
+	"""
+	row = _account_row(user)
 	if row.is_suspended:
 		frappe.throw(_("This account is suspended, so nothing new can be started."))
 	available = account.available(row)
@@ -241,14 +238,22 @@ def _require_runway(needed) -> None:
 		frappe.throw(_shortfall_message(flt(needed), available))
 
 
-def _account_row():
-	"""The caller's balance fields, opening the account first.
+def _require_balance(needed) -> None:
+	require_balance(frappe.session.user, needed)
+
+
+def _account_row(user: str):
+	"""One user's balance fields, read under the lock the charge takes.
 
 	`ensure_account` posts the signup grant, and a brand-new user whose grant has not landed yet
 	would otherwise be refused the very first deploy they ever ask for.
+
+	The read locks because the guard decides whether to debit and must see the row the debit will
+	write: this session is REPEATABLE READ, where a plain read answers from the snapshot the
+	transaction opened — before a racing purchase on the same account committed.
 	"""
-	name = account.ensure_account(frappe.session.user)
-	return frappe.db.get_value(ACCOUNT, name, account.BALANCE_FIELDS, as_dict=True)
+	name = account.ensure_account(user)
+	return frappe.db.get_value(ACCOUNT, name, account.BALANCE_FIELDS, as_dict=True, for_update=True)
 
 
 def _shortfall_message(needed, available) -> str:

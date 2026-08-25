@@ -1,7 +1,7 @@
 # Copyright (c) 2026, Venkatesh and Contributors
 # See license.txt
 
-"""Phase 6 takes money, so the assertions here are about the two ways that goes wrong.
+"""Money in, so the assertions here are about the two ways that goes wrong.
 
 **Paying twice for one payment.** Razorpay retries webhooks, `on_update` fires on every save of
 an order, and an operator pressing *Sync Status* is a third delivery. So the central test replays
@@ -11,7 +11,8 @@ only correct when every message arrives exactly once is not correct.
 **Being paid a rupee for a thousand credits.** `razorpay_frappe` ships an open
 `/razorpay-api/initiate-order` endpoint where the caller names their own amount and references, so
 an order is not evidence of what was bought. The settlement tests therefore forge orders — right
-pack, wrong price; somebody else's instance — and insist nothing is credited.
+pack, wrong price; a reference to something BenchPress does not sell — and insist nothing is
+credited.
 
 Everything that needs a `Razorpay Order` skips when the app is absent, because that is a supported
 state rather than a broken one. `TestPaymentsWithoutGateway` is the test that runs either way, and
@@ -23,25 +24,22 @@ from unittest.mock import patch
 
 import frappe
 from frappe.tests import IntegrationTestCase
-from frappe.utils import add_days, add_to_date, flt, getdate, now_datetime, today
+from frappe.utils import flt
 
 from benchpress import api
 from benchpress.benchpress.doctype.bench_instance import get_instance_id
-from benchpress.credits import account, config, metering, passes, payments
+from benchpress.credits import account, config, metering, payments
 from benchpress.credits.seed import seed_defaults
 
 ACCOUNT = "Credit Account"
 LEDGER = "Credit Ledger Entry"
 BENCHPRESS_SETTINGS = "BenchPress Settings"
-PASS = "Always On Pass"
 
 # The seeded "Small" size and "Starter" pack.
-RATE = 1.0
 GRANT = 40.0
 PACK = "Starter"
 PACK_PRICE = 499
 PACK_CREDITS = 200.0
-PASS_PRICE = 999
 
 USER = "payments-owner@example.com"
 STRANGER = "payments-stranger@example.com"
@@ -139,7 +137,11 @@ class PaymentsFixture(IntegrationTestCase):
 		frappe.db.set_value(
 			"Bench Instance",
 			self.bench.name,
-			{"credit_burn_rate": 0.0, "credit_burn_started": None, "status": "Running"},
+			{
+				"status": "Running",
+				"expires_at_ts": 0,
+				"lease_state": "",
+			},
 			update_modified=False,
 		)
 
@@ -155,16 +157,6 @@ class PaymentsFixture(IntegrationTestCase):
 	def write_switch(self, value) -> None:
 		frappe.db.set_single_value(BENCHPRESS_SETTINGS, "enable_credits", value)
 		frappe.db.commit()  # nosemgrep -- the code under test commits, so the restore must too
-		frappe.clear_cache()
-
-	def set_pass_price(self, rupees) -> None:
-		original = frappe.db.get_single_value("Credit Settings", "always_on_monthly_inr")
-		self.addCleanup(self.write_pass_price, original)
-		self.write_pass_price(rupees)
-
-	def write_pass_price(self, rupees) -> None:
-		frappe.db.set_single_value("Credit Settings", "always_on_monthly_inr", rupees)
-		frappe.db.commit()  # nosemgrep -- committed for the same reason as the switch
 		frappe.clear_cache()
 
 	def balance(self) -> float:
@@ -191,7 +183,6 @@ class PaymentsFixture(IntegrationTestCase):
 	@classmethod
 	def wipe(cls) -> None:
 		"""The ledger blocks updates, not deletes — the suite still has to clean up after itself."""
-		frappe.db.delete(PASS, {"bench_instance": cls.bench.name})
 		for email in (USER, STRANGER):
 			frappe.db.delete(LEDGER, {"account": email})
 			frappe.db.delete(ACCOUNT, {"user": email})
@@ -215,12 +206,6 @@ class TestPaymentsWithoutGateway(PaymentsFixture):
 	def test_buying_says_what_is_missing(self):
 		with self.without_gateway(), self.assertRaises(frappe.ValidationError) as refusal:
 			payments.buy_credits(PACK)
-		self.assertIn(payments.APP, str(refusal.exception))
-
-	def test_buying_a_pass_says_the_same_thing(self):
-		self.set_pass_price(PASS_PRICE)
-		with self.without_gateway(), self.assertRaises(frappe.ValidationError) as refusal:
-			payments.buy_always_on_pass(self.bench.name)
 		self.assertIn(payments.APP, str(refusal.exception))
 
 	def test_prices_are_still_published(self):
@@ -292,9 +277,6 @@ class TestOrderSettlement(PaymentsFixture):
 	def pack_order(self, amount=PACK_PRICE, **kwargs):
 		return self.order("Credit Pack", PACK, amount, **kwargs)
 
-	def pass_order(self, amount=PASS_PRICE, bench=None, **kwargs):
-		return self.order("Bench Instance", bench or self.bench.name, amount, **kwargs)
-
 	# --- Crediting exactly once ------------------------------------------------
 
 	def test_a_paid_pack_credits_the_balance(self):
@@ -342,77 +324,21 @@ class TestOrderSettlement(PaymentsFixture):
 		self.pay(self.order("User", self.user, PACK_PRICE))
 		self.assertEqual(self.entries(account.PURCHASE), [])
 
-	def test_a_pass_bought_for_somebody_elses_instance_credits_nothing(self):
-		self.set_pass_price(PASS_PRICE)
-		self.pay(self.pass_order(owner=self.stranger))
-		self.assertFalse(passes.has_active_pass(self.bench.name))
+	# --- A payment landing mid-lease --------------------------------------------
 
-	# --- Mid-burn ---------------------------------------------------------------
-
-	def test_a_purchase_mid_burn_keeps_the_hours_already_run(self):
-		"""A payment landing during a session must add credits without erasing the accrual."""
+	def test_a_purchase_inside_a_lease_adds_credits_and_leaves_the_deadline_alone(self):
+		"""A payment landing during a window must not shorten, extend or re-charge it."""
 		bench = frappe.get_doc("Bench Instance", self.bench.name)
 		metering.on_bench_running(bench)
-		self.backdate_burn(hours=2)
+		charged = self.balance()
+		deadline = frappe.db.get_value("Bench Instance", self.bench.name, "expires_at_ts")
+		self.assertTrue(deadline, "the lease never armed, so this proves nothing")
 
 		self.pay(self.pack_order())
-		self.assertAlmostEqual(self.available(), GRANT - 2 * RATE + PACK_CREDITS, places=4)
 
-		metering.on_bench_stopped(frappe.get_doc("Bench Instance", self.bench.name))
-		self.assertAlmostEqual(self.balance(), GRANT - 2 * RATE + PACK_CREDITS, places=4)
+		self.assertAlmostEqual(self.available(), charged + PACK_CREDITS, places=4)
+		self.assertEqual(frappe.db.get_value("Bench Instance", self.bench.name, "expires_at_ts"), deadline)
 		self.assertAlmostEqual(self.ledger_sum(), self.balance(), places=4)
-
-	def backdate_burn(self, hours: int) -> None:
-		frappe.db.set_value(
-			ACCOUNT,
-			self.user,
-			"burn_since",
-			add_to_date(now_datetime(), hours=-hours),
-			update_modified=False,
-		)
-
-	# --- The always-on pass -----------------------------------------------------
-
-	def test_a_paid_pass_exempts_the_instance(self):
-		self.set_pass_price(PASS_PRICE)
-		self.pay(self.pass_order())
-
-		self.assertTrue(passes.has_active_pass(self.bench.name))
-		granted = frappe.get_all(PASS, filters={"bench_instance": self.bench.name}, fields=["valid_until"])
-		self.assertEqual(getdate(granted[0].valid_until), getdate(add_days(today(), config.PASS_DAYS)))
-
-	def test_a_pass_stops_the_hourly_meter(self):
-		"""Prepaid time and hourly time are the same time; charging both sells it twice."""
-		self.set_pass_price(PASS_PRICE)
-		metering.on_bench_running(frappe.get_doc("Bench Instance", self.bench.name))
-		self.assertEqual(flt(frappe.db.get_value(ACCOUNT, self.user, "burn_rate")), RATE)
-
-		self.pay(self.pass_order())
-		self.assertEqual(flt(frappe.db.get_value(ACCOUNT, self.user, "burn_rate")), 0.0)
-		self.assertFalse(frappe.db.get_value("Bench Instance", self.bench.name, "credit_burn_started"))
-
-	def test_replaying_a_pass_webhook_grants_one_month(self):
-		self.set_pass_price(PASS_PRICE)
-		order = self.pass_order()
-		self.pay(order)
-		for _delivery in range(2):
-			payments.on_razorpay_update(frappe.get_doc(payments.ORDER, order.name))
-		self.assertEqual(frappe.db.count(PASS, {"bench_instance": self.bench.name}), 1)
-
-	def test_a_pass_costs_no_credits(self):
-		"""It buys hours, not credits — but it is still a Purchase row, so the money is recorded."""
-		self.set_pass_price(PASS_PRICE)
-		self.pay(self.pass_order())
-		purchases = self.entries(account.PURCHASE)
-		self.assertEqual(len(purchases), 1)
-		self.assertEqual(flt(purchases[0].credits), 0.0)
-		self.assertEqual(self.balance(), GRANT)
-
-	def test_a_second_pass_cannot_be_bought_while_one_is_live(self):
-		self.set_pass_price(PASS_PRICE)
-		self.pay(self.pass_order())
-		with self.assertRaises(frappe.ValidationError):
-			payments.buy_always_on_pass(self.bench.name)
 
 	# --- Refunds and adjustments -------------------------------------------------
 
@@ -494,9 +420,3 @@ class TestPurchaseEndpoints(PaymentsFixture):
 		self.addCleanup(frappe.set_user, "Administrator")
 		with self.assertRaises(frappe.PermissionError):
 			api.buy_credits(PACK)
-
-	def test_a_pass_needs_access_to_the_instance(self):
-		frappe.set_user(self.stranger)
-		self.addCleanup(frappe.set_user, "Administrator")
-		with self.assertRaises(frappe.PermissionError):
-			api.buy_always_on_pass(self.bench.name)

@@ -23,6 +23,7 @@
   "public_url",
   "container_section",
   "container_id",
+  "node",
   "container_image",
   "runtime",
   "column_break_container",
@@ -39,10 +40,14 @@
   "wg_ip",
   "vpn_peer",
   "credits_section",
-  "credit_burn_rate",
-  "ttl_warned_at",
+  "expires_at_ts",
+  "lease_state",
   "column_break_credits",
-  "credit_burn_started",
+  "stop_claimed_at",
+  "expiry_attempts",
+  "stop_started_at",
+  "container_stopped_at",
+  "expiry_lateness",
   "reap_warned_at",
   "apps_section",
   "apps"
@@ -137,6 +142,14 @@
    "fieldname": "container_id",
    "fieldtype": "Data",
    "label": "Container ID",
+   "read_only": 1
+  },
+  {
+   "description": "The host whose Docker daemon holds this container. Empty means the only node.",
+   "fieldname": "node",
+   "fieldtype": "Data",
+   "label": "Node",
+   "permlevel": 1,
    "read_only": 1
   },
   {
@@ -248,30 +261,8 @@
    "label": "Credits"
   },
   {
-   "description": "Credits per hour this instance is currently contributing to its owner's burn rate.",
-   "fieldname": "credit_burn_rate",
-   "fieldtype": "Float",
-   "label": "Credit Burn Rate",
-   "precision": "6",
-   "read_only": 1
-  },
-  {
-   "description": "When the TTL warning for the current run was sent. Older than started_at means this run has not been warned yet.",
-   "fieldname": "ttl_warned_at",
-   "fieldtype": "Datetime",
-   "label": "TTL Warned At",
-   "read_only": 1
-  },
-  {
    "fieldname": "column_break_credits",
    "fieldtype": "Column Break"
-  },
-  {
-   "description": "Set means this instance is being metered. The idempotence guard for start/stop, so a redeploy or a restart cannot add the rate twice.",
-   "fieldname": "credit_burn_started",
-   "fieldtype": "Datetime",
-   "label": "Credit Burn Started",
-   "read_only": 1
   },
   {
    "description": "When the reap warning for the current stopped period was sent. Older than modified means this period has not been warned yet.",
@@ -290,6 +281,64 @@
    "fieldname": "code_server_url",
    "fieldtype": "Data",
    "label": "Code Server URL",
+   "read_only": 1
+  },
+  {
+   "description": "Epoch seconds. Not a Datetime: the app clock and the database clock can differ, and a naive string cannot be parsed safely in a browser.",
+   "fieldname": "expires_at_ts",
+   "fieldtype": "Long Int",
+   "label": "Lease Expires At (epoch)",
+   "permlevel": 1,
+   "read_only": 1
+  },
+  {
+   "description": "Active means a deadline is running. Stopping means the sweep has claimed this row and a stop job owns it. Failed means the stop kept failing and the row was parked.",
+   "fieldname": "lease_state",
+   "fieldtype": "Select",
+   "label": "Lease State",
+   "options": "\nActive\nStopping\nFailed",
+   "permlevel": 1,
+   "read_only": 1
+  },
+  {
+   "description": "When the sweep claimed this row, so a worker that died mid-stop is reclaimable.",
+   "fieldname": "stop_claimed_at",
+   "fieldtype": "Datetime",
+   "label": "Stop Claimed At",
+   "permlevel": 1,
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "description": "Failed expiry stops. A stop that keeps failing parks instead of taking a sweep slot every tick.",
+   "fieldname": "expiry_attempts",
+   "fieldtype": "Int",
+   "label": "Expiry Attempts",
+   "permlevel": 1,
+   "read_only": 1
+  },
+  {
+   "description": "When the stop job began, so queue time and Docker time can be told apart.",
+   "fieldname": "stop_started_at",
+   "fieldtype": "Datetime",
+   "label": "Stop Started At",
+   "permlevel": 1,
+   "read_only": 1
+  },
+  {
+   "description": "When the container actually stopped.",
+   "fieldname": "container_stopped_at",
+   "fieldtype": "Datetime",
+   "label": "Container Stopped At",
+   "permlevel": 1,
+   "read_only": 1
+  },
+  {
+   "description": "Seconds between the deadline and the container stopping. The lease SLO. Empty on a stop nothing was due for, which is why this is a Long Int: a Frappe Int is NOT NULL.",
+   "fieldname": "expiry_lateness",
+   "fieldtype": "Long Int",
+   "label": "Expiry Lateness (s)",
+   "permlevel": 1,
    "read_only": 1
   }
  ],

@@ -1,7 +1,7 @@
 # Copyright (c) 2026, Venkatesh and Contributors
 # See license.txt
 
-"""Phase 5's gate: what the guard refuses, and — just as important — what it does not.
+"""The gate: what the guard refuses, and — just as important — what it does not.
 
 Every refusal test has a positive control immediately beside it. A guard that throws for everyone
 passes a denial test perfectly, and that failure mode is the expensive one: it looks like security
@@ -33,10 +33,12 @@ BENCH = "Bench Instance"
 BENCHPRESS_SETTINGS = "BenchPress Settings"
 CREDIT_SETTINGS = "Credit Settings"
 LEDGER = "Credit Ledger Entry"
-PASS = "Always On Pass"
 
-# The seeded "Small" size: 1g / 1 core / 1.0 credits per hour / 3 sites.
-RATE = 1.0
+# The seeded "Small" size (1g / 1 core / 3 sites) on a plan this module pins, 30 minutes for 5.
+# Pinned rather than inherited: `default_lease_plan` is admin-editable, and reading the site's
+# choice made every shortfall assertion here a function of whatever price that plan carries today.
+LEASE_COST = 5.0
+GUARD_PLAN = "Guard 30 Minutes"
 GRANT = 40.0
 MAX_SITES = 3
 USER = "guard-user@example.com"
@@ -51,7 +53,29 @@ TUNED_SETTINGS = (
 	"max_devices",
 	"max_builds_per_day",
 	"custom_build_credits",
+	"default_lease_plan",
 )
+
+
+def _ensure_guard_plan() -> str:
+	"""A plan whose price is `LEASE_COST` by construction."""
+	if frappe.db.exists("Lease Plan", GUARD_PLAN):
+		frappe.db.set_value("Lease Plan", GUARD_PLAN, {"minutes": 30, "credits": LEASE_COST, "is_active": 1})
+		return GUARD_PLAN
+	return (
+		frappe.get_doc(
+			{
+				"doctype": "Lease Plan",
+				"plan_label": GUARD_PLAN,
+				"minutes": 30,
+				"credits": LEASE_COST,
+				"is_active": 1,
+				"sort_order": 30,
+			}
+		)
+		.insert(ignore_permissions=True)
+		.name
+	)
 
 
 def _ensure_user(email: str, role: str | None = None) -> str:
@@ -146,6 +170,7 @@ class TestCreditGuard(IntegrationTestCase):
 		self.set_credits_enabled(self.switch_at_start)
 		for field, value in self.settings_at_start.items():
 			self.set_setting(field, value)
+		self.set_setting("default_lease_plan", _ensure_guard_plan())
 		self.set_size_field("max_sites", self.max_sites_at_start)
 
 	def tearDown(self):
@@ -190,16 +215,16 @@ class TestCreditGuard(IntegrationTestCase):
 		with patch("frappe.enqueue"):
 			self.assertEqual(api.create_bench(json.dumps({"lab": self.lab.name}))["status"], "Deploying")
 
-	def test_a_balance_below_one_hour_is_still_a_shortfall(self):
-		"""An hourly meter cannot honestly admit an instance the sweep would stop within the hour."""
+	def test_a_balance_below_the_lease_price_is_a_shortfall(self):
+		"""The window is bought up front, so what a start must prove is the price of one."""
 		self.enable_credits()
-		self.set_balance(RATE / 2)
+		self.set_balance(LEASE_COST / 2)
 		frappe.set_user(self.user)
 		self.assertRaises(frappe.ValidationError, self.bench_document().enqueue_start)
 
-	def test_exactly_one_hour_of_runway_is_enough(self):
+	def test_exactly_the_lease_price_is_enough(self):
 		self.enable_credits()
-		self.set_balance(RATE)
+		self.set_balance(LEASE_COST)
 		frappe.set_user(self.user)
 		with patch("frappe.enqueue"):
 			self.bench_document().enqueue_deploy()
@@ -221,22 +246,6 @@ class TestCreditGuard(IntegrationTestCase):
 			self.bench_document().enqueue_deploy()
 		frappe.set_user("Administrator")
 		self.assertEqual(account.summary(self.user)["balance"], GRANT)
-
-	def test_an_always_on_pass_starts_free(self):
-		"""A pass is prepaid, so an empty balance is not a reason to refuse that instance."""
-		self.enable_credits()
-		self.set_balance(0)
-		self.grant_pass(self.bench.name)
-		frappe.set_user(self.user)
-		with patch("frappe.enqueue"):
-			self.bench_document().enqueue_deploy()
-
-	def test_an_expired_pass_exempts_nothing(self):
-		self.enable_credits()
-		self.set_balance(0)
-		self.grant_pass(self.bench.name, valid_until=add_days(today(), -1))
-		frappe.set_user(self.user)
-		self.assertRaises(frappe.ValidationError, self.bench_document().enqueue_deploy)
 
 	# --- The concurrency cap --------------------------------------------------
 
@@ -273,17 +282,12 @@ class TestCreditGuard(IntegrationTestCase):
 		guard.cap_concurrent_instances(self=self.bench_document())
 
 	def test_a_purchase_raises_the_concurrency_cap(self):
-		"""Having paid is a Purchase row, not a balance.
-
-		An Always On Pass buys hours rather than credits, so it posts a zero-credit Purchase row —
-		somebody who has bought one has plainly paid, and a `lifetime_purchased` float that stayed
-		at zero would still call them a free user.
-		"""
+		"""Having paid is a Purchase row, not a balance: a refund leaves the row and clears the float."""
 		self.enable_credits()
 		self.set_setting("max_concurrent_free", 1)
 		self.set_setting("max_concurrent_paid", 3)
 		self.set_running(self.other_bench.name)
-		account.purchase(self.user, 0.0, "an always-on pass", ("Lab", self.lab.name))
+		account.purchase(self.user, 200.0, "a credit pack", ("Lab", self.lab.name))
 		frappe.set_user(self.user)
 		guard.cap_concurrent_instances(self=self.bench_document())
 
@@ -423,20 +427,10 @@ class TestCreditGuard(IntegrationTestCase):
 			frappe.db.set_value(
 				BENCH,
 				name,
-				{"status": "Stopped", "credit_burn_rate": 0.0, "credit_burn_started": None},
+				{"status": "Stopped", "expires_at_ts": 0, "lease_state": ""},
 				update_modified=False,
 			)
-		frappe.db.delete(PASS, {"bench_instance": ("in", names)})
 		frappe.db.delete("Bench Site", {"bench": ("in", names)})
-
-	def grant_pass(self, bench_name: str, valid_until=None) -> None:
-		"""Inserted past its own validation when the test needs an expired one to exist."""
-		pass_doc = frappe.get_doc(
-			{"doctype": PASS, "bench_instance": bench_name, "valid_until": add_days(today(), 30)}
-		)
-		pass_doc.insert(ignore_permissions=True)
-		if valid_until:
-			frappe.db.set_value(PASS, pass_doc.name, "valid_until", valid_until, update_modified=False)
 
 	def add_sites(self, count: int) -> None:
 		for index in range(count):

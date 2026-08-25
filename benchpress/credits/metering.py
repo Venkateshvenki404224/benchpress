@@ -3,79 +3,74 @@
 
 """The lifecycle sites that bill: an instance starting, an instance stopping, an image built.
 
-Only two meters exist, deliberately — running hours and custom image builds. Deploys, redeploys,
-sites, devices, VPN peers and *failed* builds are all free and hard-capped instead: a rate limit
-reads as fair use, a credit charge reads as nickel-and-diming. Do not add a third meter here.
+There is one lease and one flat fee. A deploy buys a fixed window at the moment its container
+reaches `Running`, charged once through `account.charge`; the only other charge is a custom image
+build. Sites, devices, VPN peers, redeploys and *failed* builds are free and hard-capped instead —
+a rate limit reads as fair use, a credit charge reads as nickel-and-diming. Do not add a second
+meter here.
 
-`benchpress.credits.account` knows nothing about benches; this module is the translation layer.
-It exists because the same transition is reachable from four places (the deploy pipeline, the
-Desk buttons, the SPA action endpoint, and the reconciliation sweep), and every one of them must
-be idempotent: a redeploy of a running bench, or a `restart` that never stopped anything, must
-not add a second copy of the rate.
+`benchpress.credits.account` knows nothing about benches and `benchpress.credits.lease` knows
+nothing about money; this module is the translation layer between them. It exists because the
+same transition is reachable from four places (the deploy pipeline, the Desk buttons, the SPA
+action endpoint, and the enforcement sweep), and every one of them must be idempotent: a redeploy
+of a running bench, or a `restart` that never stopped anything, must not buy a second window.
 
-Idempotence is stored on the bench rather than inferred from its status, because status changes
-for reasons that are not billing events. `credit_burn_started` set means "this instance is
-currently contributing `credit_burn_rate` to its owner's burn rate", and nothing else does.
+Idempotence is `lease_state`, not status, because status changes for reasons that are not
+billing events. `Active` means "this instance is inside a window somebody paid for".
 """
 
 import frappe
-from frappe.utils import flt, now_datetime
 
-from benchpress.credits import account, config, passes
+from benchpress.credits import account, config, lease
 from benchpress.labs import bench_label
-
-BENCH = "Bench Instance"
 
 
 def on_bench_running(bench) -> None:
-	"""Begin metering a bench at its lab's size rate. Idempotent.
+	"""Charge the lease and start its clock. Idempotent.
 
-	An instance holding an unexpired `Always On Pass` is prepaid, so the hourly meter never starts
-	for it — the pass exempts it from the TTL stop as well, and charging by the hour on top of a
-	monthly price would sell the same time twice.
+	Called from every transition into `Running`, before the caller saves `status`, so the charge
+	and the deadline land in the same transaction as the status they belong to. Nothing charges
+	at deploy: a cold image build takes minutes, and a window that opens before the container
+	exists sells time the build ate.
 	"""
-	if not config.credits_enabled() or bench.credit_burn_started:
-		return
-	if passes.has_active_pass(bench.name):
+	if not config.credits_enabled() or bench.get("lease_state") == lease.ACTIVE:
 		return
 	lab = frappe.get_cached_doc("Lab", bench.lab)
-	rate = rate_for_lab(lab)
-	account.start_burn(bench.owner, bench.name, rate, label=bench_label(lab.lab_id))
-	_mark_burning(bench, rate)
+	plan = lease.plan_for(lab)
+	if not plan:
+		return
+	charge_lease(bench, lab, plan)
+	lease.arm(bench, lab, plan)
+
+
+def charge_lease(bench, lab, plan, request_id: str | None = None) -> float:
+	"""Debit one lease window and return what it cost.
+
+	`request_id` makes the debit idempotent for a caller that may deliver the same click more
+	than once — a renew from three tabs. A deploy needs none: `lease_state` is its guard.
+	"""
+	cost = lease.cost_of(lab, plan)
+	label = bench_label(lab.lab_id) or bench.name
+	account.charge(
+		bench.owner,
+		cost,
+		f"{label} — {plan.plan_label} lease",
+		("Bench Instance", bench.name),
+		request_id=request_id,
+	)
+	return cost
 
 
 def on_bench_stopped(bench) -> None:
-	"""Stop metering a bench, charging whatever it ran for. Idempotent.
+	"""Clear the lease clock. Idempotent, and free on a bench that never held one.
 
-	Also the failure path: a deploy that died settles the time its container did run and adds no
-	further charge, which is what makes failed deploys free.
+	A stopped row must not keep a deadline that has passed: the next start would set `Running`
+	beside it and the following sweep would claim the bench straight back.
+
+	This is also the failure path, and it charges nothing — a deploy that died before `Running`
+	never bought a window, which is what makes failed deploys free.
 	"""
-	if not config.credits_enabled() or not bench.credit_burn_started:
-		return
-	lab_id = frappe.db.get_value("Lab", bench.lab, "lab_id")
-	account.stop_burn(bench.owner, bench.name, flt(bench.credit_burn_rate), label=bench_label(lab_id))
-	_mark_stopped(bench)
-
-
-def on_pass_purchased(bench) -> None:
-	"""Stop the hourly meter for an instance that just went prepaid. Idempotent.
-
-	Only the meter stops — the container keeps running, which is the whole point of the pass. The
-	hours already run are settled on the way out, so the buyer pays by the hour up to the purchase
-	and by the month after it, and never for both at once.
-	"""
-	if not config.credits_enabled() or not bench.credit_burn_started:
-		return
-	lab_id = frappe.db.get_value("Lab", bench.lab, "lab_id")
-	label = bench_label(lab_id) or bench.name
-	account.stop_burn(
-		bench.owner,
-		bench.name,
-		flt(bench.credit_burn_rate),
-		label=label,
-		description=f"{label} is prepaid — hourly billing stopped",
-	)
-	_mark_stopped(bench)
+	lease.disarm(bench)
 
 
 def on_image_built(lab) -> None:
@@ -93,34 +88,4 @@ def on_image_built(lab) -> None:
 		config.settings().custom_build_credits,
 		f"Custom image build for {lab.title or lab.lab_id}",
 		("Lab", lab.name),
-	)
-
-
-def rate_for_lab(lab) -> float:
-	"""The credits-per-hour of the `Instance Size` this lab's resources resolve to."""
-	size = config.size_for_lab(lab)
-	return flt(size.credits_per_hour) if size else 0.0
-
-
-def _mark_burning(bench, rate) -> None:
-	_set_flags(bench, rate, now_datetime())
-
-
-def _mark_stopped(bench) -> None:
-	_set_flags(bench, 0.0, None)
-
-
-def _set_flags(bench, rate, started) -> None:
-	"""Write the flags without touching `modified`.
-
-	A billing flag is not a user edit, and the deploy pipeline holds this document across several
-	saves — bumping `modified` here would make the next one a timestamp mismatch.
-	"""
-	bench.credit_burn_rate = flt(rate)
-	bench.credit_burn_started = started
-	frappe.db.set_value(
-		BENCH,
-		bench.name,
-		{"credit_burn_rate": bench.credit_burn_rate, "credit_burn_started": started},
-		update_modified=False,
 	)

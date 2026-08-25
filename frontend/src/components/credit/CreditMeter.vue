@@ -49,7 +49,7 @@
 // and its fill is what is left, which is the shape of a fuel gauge and reads the same way at a
 // glance: full is fine, a sliver is not.
 import { creditSummary } from "@/data/credits";
-import { burnLabel, creditMeter } from "@/utils/credits";
+import { creditMeter } from "@/utils/credits";
 import { TONES, fillFor } from "@/utils/statusThemes";
 import { Progress, Tooltip } from "frappe-ui";
 import { computed } from "vue";
@@ -79,9 +79,6 @@ const balanceClass = computed(() =>
 	WARNING_TONES.has(meter.value.tone) ? TONES[meter.value.tone].text : "text-ink-gray-9"
 );
 
-/** What the collapsed rail cannot show, and what the expanded card leaves out: the burn. */
-const tooltip = computed(() => {
-	const burning = burnLabel(creditSummary.burnRate);
-	return burning ? `${meter.value.label} · ${burning}` : meter.value.label;
-});
+/** What the collapsed rail cannot show: the figures behind the bar. */
+const tooltip = computed(() => meter.value.label);
 </script>

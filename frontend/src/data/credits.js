@@ -11,18 +11,17 @@ import { computed, reactive } from "vue";
  * resource is ever fetched.
  *
  * The balance is never summed from the ledger: `get_credit_summary` returns the
- * stored balance minus the burn accrued since it was settled, which is why a
- * refresh is one indexed read and can be called on navigation without cost.
+ * stored balance, which is why a refresh is one indexed read and can be called on
+ * navigation without cost.
  */
 
 export const creditsEnabled = computed(() => userContext.credits?.enabled === true);
 
 export const creditSummary = reactive({
 	balance: 0,
-	// Everything ever allocated to the account — the meter's denominator. It is the settled
-	// balance plus lifetime spend, so it stays put while the balance above it falls.
+	// Everything ever allocated to the account — the meter's denominator. It is the balance
+	// plus lifetime spend, so it stays put while the balance above it falls.
 	allocated: 0,
-	burnRate: 0,
 	isSuspended: false,
 });
 
@@ -34,7 +33,6 @@ export const creditSummaryResource = createResource({
 	onSuccess(summary) {
 		creditSummary.balance = summary?.balance ?? 0;
 		creditSummary.allocated = summary?.allocated ?? 0;
-		creditSummary.burnRate = summary?.burn_rate ?? 0;
 		creditSummary.isSuspended = summary?.is_suspended ?? false;
 	},
 });
@@ -51,7 +49,6 @@ export function primeCreditSummary() {
 	if (!creditsEnabled.value) return;
 	creditSummary.balance = userContext.credits?.balance ?? 0;
 	creditSummary.allocated = userContext.credits?.allocated ?? 0;
-	creditSummary.burnRate = userContext.credits?.burn_rate ?? 0;
 	creditSummary.isSuspended = userContext.credits?.is_suspended ?? false;
 }
 

@@ -1,0 +1,107 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "field:plan_label",
+ "creation": "2026-08-25 06:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "plan_label",
+  "minutes",
+  "credits",
+  "column_break_pricing",
+  "is_active",
+  "sort_order"
+ ],
+ "fields": [
+  {
+   "description": "Shown in the duration picker, e.g. 2 hours",
+   "fieldname": "plan_label",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Plan Label",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "description": "How long the bench runs before it is stopped.",
+   "fieldname": "minutes",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Minutes",
+   "reqd": 1
+  },
+  {
+   "description": "Charged once, when the container reaches Running. 0 = this duration is free. Credits per row rather than a rate, so a week can cost less per hour than half an hour.",
+   "fieldname": "credits",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Credits",
+   "precision": "2"
+  },
+  {
+   "fieldname": "column_break_pricing",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "1",
+   "description": "Inactive plans disappear from the picker without being deleted, and a lab already pointing at one keeps working.",
+   "fieldname": "is_active",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Is Active"
+  },
+  {
+   "default": "0",
+   "description": "Ascending display order in the duration picker.",
+   "fieldname": "sort_order",
+   "fieldtype": "Int",
+   "label": "Sort Order"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-08-25 06:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Benchpress",
+ "name": "Lease Plan",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "BenchPress Admin",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "read": 1,
+   "role": "BenchPress User"
+  }
+ ],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "sort_order",
+ "sort_order": "ASC",
+ "states": [],
+ "track_changes": 1
+}

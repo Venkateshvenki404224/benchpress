@@ -9,7 +9,7 @@ from frappe.model.document import Document
 from frappe.utils.background_jobs import is_job_enqueued
 
 from benchpress.benchpress.doctype.bench_instance import get_instance_id
-from benchpress.credits.guard import cap_concurrent_instances, instance_runway, requires_credits
+from benchpress.credits.guard import cap_concurrent_instances, instance_lease_cost, requires_credits
 from benchpress.permissions import is_admin
 
 DEPLOY_JOB_TIMEOUT = 7200
@@ -44,6 +44,18 @@ class BenchInstance(Document):
 					"delete this instance and deploy again to change it."
 				).format(self.name)
 			)
+
+	def before_save(self):
+		"""The lease fields belong to `lease._write`; never let a stale document write them back.
+
+		A deploy job holds this document for minutes, and `save()` writes every field from that
+		copy — including a deadline a renewal has since moved.
+		"""
+		if self.is_new():
+			return
+		from benchpress.credits import lease
+
+		lease.refresh_into(self)
 
 	def validate_higher_perm_levels(self):
 		"""Refuse a runtime the caller may not set, where Frappe would silently drop it.
@@ -81,7 +93,7 @@ class BenchInstance(Document):
 		return username
 
 	@frappe.whitelist()
-	@requires_credits(cost=instance_runway, caps=(cap_concurrent_instances,))
+	@requires_credits(cost=instance_lease_cost, caps=(cap_concurrent_instances,))
 	def enqueue_deploy(self):
 		if is_job_enqueued(self._deploy_job_id()):
 			frappe.msgprint(_("A deploy is already in progress for this bench."))
@@ -105,7 +117,7 @@ class BenchInstance(Document):
 		frappe.msgprint(_("Bench stopped."))
 
 	@frappe.whitelist()
-	@requires_credits(cost=instance_runway, caps=(cap_concurrent_instances,))
+	@requires_credits(cost=instance_lease_cost, caps=(cap_concurrent_instances,))
 	def enqueue_redeploy(self):
 		if is_job_enqueued(self._deploy_job_id()):
 			frappe.msgprint(_("A deploy is already in progress for this bench."))
@@ -125,7 +137,7 @@ class BenchInstance(Document):
 		return f"deploy_bench:{self.name}"
 
 	@frappe.whitelist()
-	@requires_credits(cost=instance_runway, caps=(cap_concurrent_instances,))
+	@requires_credits(cost=instance_lease_cost, caps=(cap_concurrent_instances,))
 	def enqueue_start(self):
 		from benchpress.credits import metering
 		from benchpress.deploy_manager import enqueue_route_sync
@@ -136,6 +148,8 @@ class BenchInstance(Document):
 		start_container(self.container_id)
 		self.status = "Running"
 		self.started_at = frappe.utils.now_datetime()
+		# Buys a fresh window before the save writes `Running`. A start that left the old,
+		# passed deadline on the row would be claimed by the next sweep and stopped again.
 		metering.on_bench_running(self)
 		self.save()
 		frappe.db.commit()  # nosemgrep: intentional commit to persist status before response

@@ -19,30 +19,27 @@ the credit hangs off that one once-ever answer.
 **The amount is never taken from the caller.** `razorpay_frappe` exposes an open
 `/razorpay-api/initiate-order` endpoint on which any logged-in user names their own amount,
 metadata and references, so a paid order is *not* evidence of what was bought. Settlement
-re-reads the price from the `Credit Pack` or `Credit Settings` the order points at and credits
-nothing unless the rupees actually paid match it. A forged order buys exactly what it paid for.
+re-reads the price from the `Credit Pack` the order points at and credits nothing unless the
+rupees actually paid match it. A forged order buys exactly what it paid for.
 
 Orders only: no payment links, no subscriptions, no auto-renewal, no dunning, no proration, no
-cancellation. A lapsed always-on pass is bought again. Recurring billing is a business to run,
-not a feature to add, and keeping it out is worth more than the convenience.
+cancellation. Money buys credits and credits buy time, so a customer who wants more time renews a
+lease rather than holding a plan. Recurring billing is a business to run, not a feature to add,
+and keeping it out is worth more than the convenience.
 """
 
 import frappe
 from frappe import _
-from frappe.utils import add_days, cint, cstr, flt, today
+from frappe.utils import cint, cstr, flt
 
-from benchpress.credits import account, config, metering, passes
-from benchpress.labs import bench_label
+from benchpress.credits import account, config
 
 APP = "razorpay_frappe"
 ORDER = "Razorpay Order"
 PACK = "Credit Pack"
-BENCH = "Bench Instance"
 
 CURRENCY = "INR"
-PASS_DAYS = config.PASS_DAYS
 
-BENCH_FIELDS = ["name", "owner", "lab", "credit_burn_rate", "credit_burn_started"]
 PACK_FIELDS = ["name", "pack_label", "inr_price", "credits"]
 
 
@@ -67,8 +64,6 @@ def purchase_options() -> dict:
 		"enabled": True,
 		"payments_available": payments_available(),
 		"packs": config.active_packs(),
-		"always_on_inr": cint(config.settings().always_on_monthly_inr),
-		"always_on_days": PASS_DAYS,
 	}
 
 
@@ -78,30 +73,11 @@ def buy_credits(pack_name: str) -> dict:
 	return _open_order(pack.inr_price, PACK, pack.name, _("{0} credit pack").format(pack.pack_label))
 
 
-def buy_always_on_pass(bench_name: str) -> dict:
-	"""Open an order for 30 days of always-on on one instance."""
-	bench = _pass_candidate(bench_name)
-	price = cint(config.settings().always_on_monthly_inr)
-	if not price:
-		frappe.throw(_("The always-on pass has no price set on this site, so it cannot be bought."))
-	return _open_order(price, BENCH, bench.name, _("Always On Pass for {0}").format(_label(bench)))
-
-
 def _pack_on_sale(pack_name: str):
 	"""The pack, if it is one a customer may buy. Missing and withdrawn get the same sentence."""
 	if not frappe.db.get_value(PACK, pack_name, "is_active"):
 		frappe.throw(_("That credit pack is not on sale."))
 	return frappe.get_cached_doc(PACK, pack_name)
-
-
-def _pass_candidate(bench_name: str):
-	"""The instance a pass is being bought for. One live pass at a time, so a month is sold once."""
-	bench = frappe.db.get_value(BENCH, bench_name, BENCH_FIELDS, as_dict=True)
-	if not bench:
-		frappe.throw(_("That instance does not exist."))
-	if passes.has_active_pass(bench.name):
-		frappe.throw(_("This instance already holds an active pass. Buy the next one when it lapses."))
-	return bench
 
 
 def _open_order(amount, ref_doctype: str, ref_name: str, description: str) -> dict:
@@ -139,7 +115,7 @@ def _require_gateway() -> None:
 
 
 def on_razorpay_update(doc, event=None) -> None:
-	"""The doc event `razorpay_frappe` documents, and the seam this whole phase hangs on.
+	"""The doc event `razorpay_frappe` documents, and the seam settlement hangs on.
 
 	It fires on *every* save of an order, which is the reason settlement is replay-safe rather than
 	once-only: the checkout callback, the `payment.captured` webhook and each of its retries all
@@ -157,12 +133,9 @@ def settle_order(order) -> None:
 	"""
 	if not config.credits_enabled():
 		return
-	if order.ref_dt == PACK:
-		_settle_pack(order)
-	elif order.ref_dt == BENCH:
-		_settle_pass(order)
-	else:
-		_unsettled(order, "it references nothing BenchPress sells")
+	if order.ref_dt != PACK:
+		return _unsettled(order, "it references nothing BenchPress sells")
+	_settle_pack(order)
 
 
 def _settle_pack(order) -> None:
@@ -176,38 +149,6 @@ def _settle_pack(order) -> None:
 		order.owner, flt(pack.credits), _("Bought the {0} pack").format(pack.pack_label), _reference(order)
 	):
 		_announce(order.owner)
-
-
-def _settle_pass(order) -> None:
-	"""Grant the pass, and stop the hourly meter the pass replaces.
-
-	The ledger row carries **zero credits**: a pass buys hours, not credits. It is written anyway,
-	because the ledger is the record that money moved and because it is the replay guard both
-	halves of this share — the pass row is only ever created behind a `purchase` that returned
-	True, so a redelivered webhook cannot mint a second month.
-	"""
-	bench = frappe.db.get_value(BENCH, order.ref_dn, BENCH_FIELDS, as_dict=True)
-	if not bench:
-		return _unsettled(order, "the instance it names no longer exists")
-	if bench.owner != order.owner:
-		return _unsettled(order, "it was paid by somebody who does not own that instance")
-	price = cint(config.settings().always_on_monthly_inr)
-	if not _amount_matches(order, price):
-		return _unsettled(order, f"it paid {cint(order.amount)} for a pass priced {price}")
-	description = _("Always On Pass for {0}, {1} days").format(_label(bench), PASS_DAYS)
-	if account.purchase(order.owner, 0.0, description, _reference(order)):
-		_grant_pass(bench, order)
-		_announce(order.owner)
-
-
-def _grant_pass(bench, order) -> None:
-	"""The pass row, then the meter it makes unnecessary."""
-	pass_doc = frappe.new_doc(passes.PASS)
-	pass_doc.bench_instance = bench.name
-	pass_doc.valid_until = add_days(today(), PASS_DAYS)
-	pass_doc.razorpay_order = cstr(order.name)
-	pass_doc.insert(ignore_permissions=True)
-	metering.on_pass_purchased(bench)
 
 
 def _amount_matches(order, price) -> bool:
@@ -236,8 +177,3 @@ def _unsettled(order, reason: str) -> None:
 def _announce(user: str) -> None:
 	"""Nudge the balance chip. Best-effort — the SPA also refreshes when checkout returns."""
 	frappe.publish_realtime("benchpress:credits", user=user)
-
-
-def _label(bench) -> str:
-	"""What the instance is called on screen. `bench.name` is an md5, which explains nothing."""
-	return bench_label(frappe.db.get_value("Lab", bench.lab, "lab_id")) or bench.name

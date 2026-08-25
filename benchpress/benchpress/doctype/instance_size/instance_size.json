@@ -9,6 +9,8 @@
  "field_order": [
   "size_label",
   "credits_per_hour",
+  "price_multiplier",
+  "default_lease_plan",
   "column_break_identity",
   "is_default",
   "sort_order",
@@ -83,6 +85,22 @@
    "fieldname": "max_sites",
    "fieldtype": "Int",
    "label": "Max Sites"
+  },
+  {
+   "default": "1.0",
+   "description": "Multiplies every lease plan's price on this size. 1.0 = the catalog price.",
+   "fieldname": "price_multiplier",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Price Multiplier",
+   "precision": "2"
+  },
+  {
+   "description": "The duration a lab on this size deploys at, unless the lab names its own.",
+   "fieldname": "default_lease_plan",
+   "fieldtype": "Link",
+   "label": "Default Lease Plan",
+   "options": "Lease Plan"
   }
  ],
  "grid_page_length": 50,

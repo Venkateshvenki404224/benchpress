@@ -204,10 +204,7 @@ scheduler_events = {
 	# "all": [
 	# 	"benchpress.tasks.all"
 	# ],
-	# Its own job, never folded into the `*/1` stats cron: that one already spends ~2s per
-	# container and blows its window past ~25 benches. This one makes no Docker calls at all.
 	"daily": [
-		"benchpress.credits.reconcile.reconcile_burn_rates",
 		"benchpress.credits.reaper.reap_stopped_instances",
 	],
 	# "hourly": [
@@ -229,13 +226,19 @@ scheduler_events = {
 		"*/5 * * * *": [
 			"benchpress.mariadb_manager.scheduled_health_check",
 			# Never on the `*/1` stats cron: that job spends ~2s per container on the Docker
-			# socket, and an enforcement decision queued behind Docker I/O arrives late. Five
-			# minutes is fine enough for a TTL measured in hours and for the 15-minute warning.
+			# socket, and a decision queued behind Docker I/O arrives late. The clock is not
+			# this job's business — `drain` owns expiry; this one checks balances.
 			"benchpress.credits.sweep.enforce_limits",
 			# The enqueuer, never `reconcile_instance_routes` itself: scheduled jobs land on
 			# `default`, which `queue-short` also consumes, and that container has no route
 			# mount. Lifecycle triggers already converge in seconds — this is the net under them.
 			"benchpress.deploy_manager.enqueue_route_reconcile",
+			# The net under the lease warden, not the primary path: `DEFAULT_SCHEDULER_TICK` is
+			# four minutes here, so no cron entry can promise better than that. The warden claims
+			# within seconds; this catches whatever it misses while the warden is restarting.
+			# Both use the same conditional claim, so running together cannot double-stop a
+			# bench. It makes no Docker calls, so it is safe on either worker.
+			"benchpress.credits.drain.sweep_expired_leases",
 		],
 		"0 2 * * *": [
 			"benchpress.mariadb_manager.scheduled_backup",

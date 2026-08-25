@@ -26,11 +26,19 @@
 			</div>
 		</div>
 
-		<p v-if="startedLabel" class="mt-3 text-2xs text-ink-gray-5" data-test="container-started">
-			Started {{ startedLabel }}
-		</p>
-
-		<AlwaysOnUpsell :bench="bench" :label="lab.title || lab.lab_id" @bought="emit('bought')" />
+		<div class="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1">
+			<p v-if="startedLabel" class="text-2xs text-ink-gray-5" data-test="container-started">
+				Started {{ startedLabel }}
+			</p>
+			<span v-if="startedLabel && bench.expires_at_ts" class="text-2xs text-ink-gray-4"
+				>·</span
+			>
+			<LeaseControl
+				:bench="bench"
+				@renewed="emit('renewed', $event)"
+				@redeploy="emit('redeploy')"
+			/>
+		</div>
 	</SectionCard>
 </template>
 
@@ -38,7 +46,7 @@
 import SectionCard from "@/components/SectionCard.vue";
 import StatusBadge from "@/components/StatusBadge.vue";
 import UsageBar from "@/components/UsageBar.vue";
-import AlwaysOnUpsell from "@/components/credit/AlwaysOnUpsell.vue";
+import LeaseControl from "@/components/lab/LeaseControl.vue";
 import { cpuMeter, healthCaption, memoryMeter } from "@/utils/containerStats";
 import { dayjsLocal } from "frappe-ui";
 import { computed } from "vue";
@@ -50,7 +58,7 @@ const props = defineProps({
 	healthAgeSeconds: { type: Number, default: null },
 });
 
-const emit = defineEmits(["bought"]);
+const emit = defineEmits(["renewed", "redeploy"]);
 
 const cpu = computed(() => cpuMeter(props.bench, props.lab));
 const memory = computed(() => memoryMeter(props.bench, props.lab));

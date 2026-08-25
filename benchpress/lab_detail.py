@@ -18,7 +18,7 @@ output — still only have `=== … ===` markers, so both are read.
 
 import frappe
 
-from benchpress.credits import config, passes
+from benchpress.credits import config, lease
 from benchpress.deploy_pipeline import scan_log
 
 BENCH_FIELDS = [
@@ -39,6 +39,8 @@ BENCH_FIELDS = [
 	"ssh_username",
 	"code_server_url",
 	"started_at",
+	"expires_at_ts",
+	"modified",
 	"owner",
 ]
 
@@ -63,7 +65,9 @@ def get_lab(name: str) -> dict:
 		"cpu_cores": lab.cpu_cores,
 		"enable_ssh": lab.enable_ssh,
 		"enable_code_server": lab.enable_code_server,
-		"credits_per_hour": _rate(lab),
+		"lease_price": _lease_price(lab),
+		# Sent beside the deadline so nothing renders a countdown against the browser's own clock.
+		"server_now_ms": lease.now_ms(),
 		"apps": [_app_row(app) for app in lab.apps],
 		"bench": bench,
 		"sites": _sites(bench),
@@ -71,16 +75,18 @@ def get_lab(name: str) -> dict:
 	}
 
 
-def _rate(lab) -> float | None:
-	"""What deploying this lab costs per hour, or ``None`` when credits are switched off.
+def _lease_price(lab) -> dict | None:
+	"""What one lease on this lab costs and how long it buys, or ``None`` with credits off.
 
-	`None` rather than `0` so the screen can tell "credits do not exist here" apart from "this
-	size is free", and hide the chip in the first case only.
+	`None` rather than a zero price so the screen can tell "credits do not exist here" apart from
+	"this lab is free", and hide the chip in the first case only.
 	"""
 	if not config.credits_enabled():
 		return None
-	size = config.size_for_lab(lab)
-	return size.credits_per_hour if size else 0.0
+	plan = lease.plan_for(lab)
+	if not plan:
+		return {"credits": 0.0, "plan_label": ""}
+	return {"credits": lease.cost_of(lab, plan), "plan_label": plan.plan_label}
 
 
 def _app_row(app) -> dict:
@@ -104,9 +110,9 @@ def _caller_bench(lab_name: str) -> dict | None:
 	if not benches:
 		return None
 	bench = benches[0]
-	# Whether this instance is prepaid, and until when. One indexed read, and only when credits
-	# exist at all — the card that offers the pass is the same card that must not offer a second.
-	bench["always_on_until"] = passes.active_pass_until(bench["name"]) if config.credits_enabled() else None
+	# The last moment a renew still restores this container instead of rebuilding it, so the
+	# screen knows whether its call to action is Renew or Redeploy.
+	bench["grace_ends_at_ts"] = lease.grace_ends_at(bench) if bench["status"] == "Stopped" else None
 	return bench
 
 

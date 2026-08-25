@@ -12,16 +12,19 @@
   "column_break_grants",
   "low_balance_warn_percent",
   "lifecycle_section",
-  "max_run_hours",
   "reap_after_days",
+  "lease_section",
+  "default_lease_plan",
+  "column_break_lease",
+  "lease_sweep_batch",
+  "lease_reclaim_seconds",
+  "lease_max_attempts",
   "caps_section",
   "max_concurrent_free",
   "max_concurrent_paid",
   "column_break_caps",
   "max_devices",
   "max_builds_per_day",
-  "always_on_section",
-  "always_on_monthly_inr",
   "signup_section",
   "waitlist_open",
   "column_break_signup",
@@ -64,13 +67,6 @@
    "fieldname": "lifecycle_section",
    "fieldtype": "Section Break",
    "label": "Instance Lifecycle"
-  },
-  {
-   "default": "8",
-   "description": "Hard TTL: a running instance is auto-stopped after this many hours. 0 = unlimited.",
-   "fieldname": "max_run_hours",
-   "fieldtype": "Int",
-   "label": "Max Run Hours"
   },
   {
    "default": "7",
@@ -117,19 +113,6 @@
    "label": "Max Builds per Day"
   },
   {
-   "fieldname": "always_on_section",
-   "fieldtype": "Section Break",
-   "label": "Always On Pass"
-  },
-  {
-   "default": "999",
-   "description": "Monthly price per instance, in INR, to exempt it from the TTL auto-stop. 0 = the pass is not sold.",
-   "fieldname": "always_on_monthly_inr",
-   "fieldtype": "Currency",
-   "label": "Always On Monthly (INR)",
-   "options": "INR"
-  },
-  {
    "fieldname": "signup_section",
    "fieldtype": "Section Break",
    "label": "Self-serve Signup"
@@ -146,10 +129,47 @@
    "fieldtype": "Column Break"
   },
   {
-   "description": "One domain per line. An email signup from any of these is refused. OAuth signups are not checked — the provider has already vouched for the account.",
+   "description": "One domain per line. An email signup from any of these is refused. OAuth signups are not checked \u2014 the provider has already vouched for the account.",
    "fieldname": "blocked_email_domains",
    "fieldtype": "Small Text",
    "label": "Blocked Email Domains"
+  },
+  {
+   "fieldname": "lease_section",
+   "fieldtype": "Section Break",
+   "label": "Leases"
+  },
+  {
+   "description": "The duration a deploy buys when neither the lab nor its size names one.",
+   "fieldname": "default_lease_plan",
+   "fieldtype": "Link",
+   "label": "Default Lease Plan",
+   "options": "Lease Plan"
+  },
+  {
+   "fieldname": "column_break_lease",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "200",
+   "description": "Most expired leases one sweep may claim. Each claim queues a stop, and the stop queue is the ceiling.",
+   "fieldname": "lease_sweep_batch",
+   "fieldtype": "Int",
+   "label": "Lease Sweep Batch"
+  },
+  {
+   "default": "300",
+   "description": "How long a claimed stop may sit before another sweep re-queues it. A worker killed mid-batch strands its claims otherwise.",
+   "fieldname": "lease_reclaim_seconds",
+   "fieldtype": "Int",
+   "label": "Lease Reclaim Seconds"
+  },
+  {
+   "default": "5",
+   "description": "Failed expiry stops before the lease is parked. A parked row is an error state, not a silence.",
+   "fieldname": "lease_max_attempts",
+   "fieldtype": "Int",
+   "label": "Lease Max Attempts"
   }
  ],
  "grid_page_length": 50,

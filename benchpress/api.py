@@ -8,13 +8,26 @@ from frappe.query_builder.functions import Count
 
 from benchpress import image_cache, lab_detail, lab_templates, labs
 from benchpress.benchpress.doctype.bench_instance.bench_instance import DEPLOY_JOB_TIMEOUT
-from benchpress.credits import account, metering, payments
+
+# Every field the renew path decides from, read once under the row lock.
+RENEW_FIELDS = [
+	"name",
+	"owner",
+	"lab",
+	"status",
+	"container_id",
+	"modified",
+	"lease_state",
+	"expires_at_ts",
+]
+from benchpress.credits import account, config, lease, metering, payments
 from benchpress.credits.guard import (
 	build_charge,
 	cap_builds_per_day,
 	cap_concurrent_instances,
 	cap_devices,
-	payload_runway,
+	payload_lease_cost,
+	require_balance,
 	requires_credits,
 )
 from benchpress.permissions import (
@@ -36,6 +49,17 @@ def get_labs() -> list[dict]:
 def get_lab(name: str) -> dict:
 	require_app_user()
 	return lab_detail.get_lab(name)
+
+
+@frappe.whitelist()
+def server_time() -> dict:
+	"""The clock every countdown in the SPA corrects against.
+
+	Epoch milliseconds, so nothing has to parse a naive datetime string — `new Date("2026-08-25
+	03:10:17")` reads as browser-local in V8 and has historically been `Invalid Date` in Safari.
+	"""
+	require_app_user()
+	return {"server_now_ms": lease.now_ms()}
 
 
 @frappe.whitelist()
@@ -140,7 +164,7 @@ def _counts_by_bench(doctype: str, column: str, bench_names: list[str]) -> dict[
 
 
 @frappe.whitelist()
-@requires_credits(cost=payload_runway, caps=(cap_concurrent_instances,))
+@requires_credits(cost=payload_lease_cost, caps=(cap_concurrent_instances,))
 def create_bench(data: str) -> dict:
 	require_app_user()
 	from benchpress.benchpress.doctype.bench_instance import get_instance_id
@@ -249,8 +273,9 @@ def bench_action(bench_name: str, action: str) -> dict:
 		restart_container(bench.container_id)
 
 	bench.status = "Running"
-	# A restart does not interrupt the session — the instance was billable before and is
-	# billable after — so this only starts a meter that was not already running.
+	# A restart does not interrupt the window the user already bought, so this only buys one
+	# for a bench that had none — and it runs before the save so the deadline and the status
+	# it belongs to are written together.
 	metering.on_bench_running(bench)
 	bench.save()
 	frappe.db.commit()
@@ -442,10 +467,115 @@ def buy_credits(pack: str) -> dict:
 
 
 @frappe.whitelist()
-def buy_always_on_pass(bench_name: str) -> dict:
-	"""Open a Razorpay order for a pass on one instance the caller is allowed to see."""
+def get_lease_plans() -> list[dict]:
+	"""The duration catalog the renew dialog offers, in display order."""
+	require_app_user()
+	return lease.active_plans()
+
+
+@frappe.whitelist()
+def renew_bench(bench_name: str, plan: str, request_id: str) -> dict:
+	"""Buy one more lease window, extending from the deadline the caller already had.
+
+	`request_id` is required and has no default: three tabs of impatient clicking is the ordinary
+	case, and a key the server invents for a caller who sent none is not an idempotency key.
+
+	Everything after the lock is ordered so that a refusal cannot debit — the guards run first,
+	the charge last. Raises `ValidationError` when the sweep already claimed the row, when the
+	plan would push the lease past the lab's ceiling, or when the grace window has closed.
+	"""
+	from benchpress.deploy_manager import enqueue_route_sync
+
 	require_bench_access(bench_name)
-	return payments.buy_always_on_pass(bench_name)
+	if not config.credits_enabled():
+		frappe.throw(_("Credits are switched off on this site, so there is nothing to renew."))
+	if not frappe.utils.cstr(request_id).strip():
+		frappe.throw(_("A renewal needs a request id."))
+
+	# The lock the stop job takes in `lease.confirm_expiry`, held until this transaction commits:
+	# a renew and the sweep trying to end the same lease serialise here instead of racing. Every
+	# decision below reads from this row and not from a cached document — under REPEATABLE READ
+	# only the locking read is guaranteed to see a stop that committed a moment ago.
+	bench = frappe.db.get_value("Bench Instance", bench_name, RENEW_FIELDS, as_dict=True, for_update=True)
+	if bench.lease_state == lease.STOPPING:
+		frappe.throw(_("This bench is already stopping. Start it again once it has, then renew."))
+
+	# Before the replay check, not after it: that check locks the gap this account's ledger row
+	# lands in, and a renewal that reaches the gap before the account row deadlocks against one
+	# that took them the other way round.
+	account.lock(bench.owner)
+	if account.request_posted(bench.owner, request_id):
+		return _lease_state(bench, charged=0.0)
+
+	lab = frappe.get_cached_doc("Lab", bench.lab)
+	chosen = _lease_plan(plan)
+	_assert_within_ceiling(bench, lab, chosen)
+	stopped = bench.status == "Stopped"
+	if stopped:
+		_assert_inside_grace(bench)
+	require_balance(bench.owner, lease.cost_of(lab, chosen))
+
+	charged = metering.charge_lease(bench, lab, chosen, request_id=request_id)
+	lease.extend(bench, chosen)
+	if stopped:
+		_restart_in_grace(bench)
+	lease.announce_renewed(bench)
+	frappe.db.commit()  # nosemgrep -- releases the row lock, and the push is hung off this commit
+	if stopped:
+		enqueue_route_sync(bench.name)
+	return _lease_state(bench, charged=charged)
+
+
+def _lease_plan(plan: str) -> dict:
+	row = frappe.db.get_value("Lease Plan", {"name": plan, "is_active": 1}, lease.PLAN_FIELDS, as_dict=True)
+	if not row:
+		frappe.throw(_("That lease duration is not on sale."))
+	return row
+
+
+def _assert_within_ceiling(bench, lab, plan) -> None:
+	"""Refuse rather than clip: a silent clip charges the full price for less time."""
+	ceiling = lease.ceiling_seconds(lab)
+	if not ceiling:
+		return
+	if lease.remaining(bench) + frappe.utils.cint(plan.minutes) * 60 > ceiling:
+		frappe.throw(
+			_("A lease on this lab cannot run longer than {0} minutes in total.").format(
+				frappe.utils.cint(lab.max_lease_minutes)
+			)
+		)
+
+
+def _assert_inside_grace(bench) -> None:
+	"""A stopped bench keeps its container until the reaper takes it. After that, only a redeploy."""
+	grace_ends = lease.grace_ends_at(bench)
+	if not bench.container_id or (grace_ends is not None and grace_ends <= lease.now_ts()):
+		frappe.throw(_("This bench has been torn down. Redeploy it to start a new lease."))
+
+
+def _restart_in_grace(bench) -> None:
+	"""Start the container the bench still has. Expiry only stopped it, so this is not a rebuild."""
+	from benchpress.docker_manager import start_container
+
+	start_container(bench.container_id)
+	bench.status = "Running"
+	frappe.db.set_value(
+		"Bench Instance",
+		bench.name,
+		{"status": "Running", "started_at": frappe.utils.now_datetime()},
+		update_modified=False,
+	)
+
+
+def _lease_state(bench, charged: float) -> dict:
+	return {
+		"name": bench.name,
+		"status": bench.status,
+		"expires_at_ts": frappe.utils.cint(bench.expires_at_ts),
+		"grace_ends_at_ts": lease.grace_ends_at(bench) if bench.status == "Stopped" else None,
+		"server_now_ms": lease.now_ms(),
+		"charged": charged,
+	}
 
 
 @frappe.whitelist()

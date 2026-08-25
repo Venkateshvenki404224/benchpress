@@ -10,8 +10,6 @@
   "user",
   "balance",
   "column_break_identity",
-  "burn_rate",
-  "burn_since",
   "lifetime_section",
   "lifetime_purchased",
   "column_break_lifetime",
@@ -31,7 +29,7 @@
    "reqd": 1
   },
   {
-   "description": "Settled credits. The live balance subtracts the burn accrued since Burn Since; it is never stored.",
+   "description": "Credits available to spend. Written only by benchpress.credits.account, under a row lock.",
    "fieldname": "balance",
    "fieldtype": "Float",
    "in_list_view": 1,
@@ -42,22 +40,6 @@
   {
    "fieldname": "column_break_identity",
    "fieldtype": "Column Break"
-  },
-  {
-   "description": "Credits per hour, summed over this user's running instances. 0 = nothing is burning.",
-   "fieldname": "burn_rate",
-   "fieldtype": "Float",
-   "in_list_view": 1,
-   "label": "Burn Rate",
-   "precision": "6",
-   "read_only": 1
-  },
-  {
-   "description": "When Burn Rate last changed. Everything between then and now is unsettled burn.",
-   "fieldname": "burn_since",
-   "fieldtype": "Datetime",
-   "label": "Burn Since",
-   "read_only": 1
   },
   {
    "fieldname": "lifetime_section",

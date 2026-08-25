@@ -130,6 +130,7 @@
 						<span class="block truncate text-2xs text-ink-gray-4">
 							{{ benchLabel(row.lab_id) }} · {{ row.deployed_as.status }}
 						</span>
+						<LeaseCountdown :expires-at-ts="row.deployed_as.expires_at_ts" />
 					</template>
 					<span v-else class="text-xs text-ink-gray-4">Never deployed</span>
 				</div>
@@ -161,6 +162,7 @@ import DataTable from "@/components/DataTable.vue";
 import EmptyState from "@/components/EmptyState.vue";
 import SectionCard from "@/components/SectionCard.vue";
 import StatusBadge from "@/components/StatusBadge.vue";
+import LeaseCountdown from "@/components/lab/LeaseCountdown.vue";
 import OnboardingPanel from "@/components/overview/OnboardingPanel.vue";
 import { labsResource } from "@/data/labs";
 import { userContext } from "@/data/userContext";

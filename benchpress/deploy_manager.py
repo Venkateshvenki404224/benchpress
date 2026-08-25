@@ -16,7 +16,7 @@ from frappe.utils.file_lock import LockTimeoutError
 from frappe.utils.synchronization import filelock
 
 from benchpress import image_cache
-from benchpress.credits import metering
+from benchpress.credits import lease, metering
 from benchpress.deploy_pipeline import DeployLogWriter, DeployPipeline
 from benchpress.docker_manager import (
 	build_lab_image,
@@ -607,6 +607,7 @@ def _deploy_bench(bench_name: str) -> None:
 		# isolated by long after the run.
 		pipeline.log(f"container runtime {container_runtime(container_id)}")
 		bench.container_id = container_id
+		bench.node = lease.local_node()
 		bench.container_image = lab.image_tag
 		bench.save(ignore_permissions=True)
 		frappe.db.commit()
@@ -705,10 +706,11 @@ def _deploy_bench(bench_name: str) -> None:
 
 		bench.status = "Running"
 		bench.started_at = frappe.utils.now_datetime()
-		bench.save(ignore_permissions=True)
-		# Metering starts where the clock does: an instance is billable once it is actually
-		# up, so everything above this line is free however long it took to get there.
+		# Before the save, not after: the lease charge and the deadline it writes belong in the
+		# same transaction as the status they pay for. Everything above this line is free
+		# however long it took, because a deploy that never gets here never reaches `Running`.
 		metering.on_bench_running(bench)
+		bench.save(ignore_permissions=True)
 		frappe.db.commit()
 		# The eleventh step and the run's success line are one line: it carries
 		# the total elapsed time, and "Deploy complete" is still in its text for
@@ -1031,22 +1033,41 @@ def build_lab(lab_name: str) -> None:
 	_notify_owner(lab.owner, f"Lab build complete: {lab.title} ({image_tag})", "Lab", lab_name)
 
 
-def stop_bench(bench_name: str) -> None:
+def stop_bench(bench_name: str, from_claim: bool = False) -> None:
 	"""Stop a bench container, and with it every site the container was serving.
 
 	VPN stops automatically with the container. The sites do not: nothing answers on a stopped
 	container, so a row left `Active` is the page telling the user to open an address that has
 	gone quiet. This is the one stop path — `api.bench_action("stop")` routes here too — so the
 	deactivation cannot be missed by a second caller.
+
+	It is also where an expired lease lands, which is why it starts by confirming the claim
+	under a row lock. `from_claim` marks that caller: a user pressing Stop carries no claim and
+	always goes ahead, while a queued expiry that has outlived its claim must not.
 	"""
+	if not lease.confirm_expiry(bench_name, from_claim=from_claim):
+		return
+
+	lease.record_stop_started(bench_name)
 	bench = frappe.get_doc("Bench Instance", bench_name)
+	lease.assert_local(bench)
+	expired = bench.lease_state == lease.STOPPING
 
-	if bench.container_id:
-		stop_container(bench.container_id)
+	try:
+		if bench.container_id:
+			stop_container(bench.container_id)
+	except Exception:
+		if expired:
+			lease.release(bench_name, failed=True)
+			frappe.db.commit()  # nosemgrep -- the retry has to survive the failure that caused it
+		raise
 
+	lease.record_stopped(bench, expired)
 	bench.status = "Stopped"
 	metering.on_bench_stopped(bench)
 	bench.save(ignore_permissions=True)
 	_deactivate_bench_sites(bench)
+	if expired:
+		lease.announce_expired(bench)
 	frappe.db.commit()  # nosemgrep -- intentional commit to persist status before response
 	enqueue_route_sync(bench.name)

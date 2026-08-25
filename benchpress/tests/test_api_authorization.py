@@ -183,6 +183,7 @@ class TestApiAuthorization(IntegrationTestCase):
 		self.assert_denied(lambda: api.get_code_server_credentials(bench))
 		self.assert_denied(lambda: api.get_bench_credentials(bench))
 		self.assert_denied(lambda: api.restart_code_server(bench))
+		self.assert_denied(lambda: api.renew_bench(bench, "any-plan", "authz-guest-req"))
 
 	def test_only_the_two_signup_doors_are_open_to_guests(self):
 		"""Whitelisting an endpoint for Guest is a decision, not an accident.
@@ -272,6 +273,11 @@ class TestApiAuthorization(IntegrationTestCase):
 	def test_cross_user_denied_from_bench_action(self):
 		frappe.set_user(self.user_b)
 		self.assert_denied(lambda: api.bench_action(self.bench.name, "start"))
+
+	def test_cross_user_denied_from_renew_bench(self):
+		"""Renew spends the owner's credits and can start their container. It is theirs alone."""
+		frappe.set_user(self.user_b)
+		self.assert_denied(lambda: api.renew_bench(self.bench.name, "any-plan", "authz-cross-req"))
 
 	def test_cross_user_denied_from_get_code_server_credentials(self):
 		frappe.set_user(self.user_b)
@@ -410,9 +416,8 @@ class TestApiAuthorization(IntegrationTestCase):
 		frappe.set_user(self.norole_user)
 		self.assert_denied(api.get_purchase_options)
 		self.assert_denied(lambda: api.buy_credits("Starter"))
-		self.assert_denied(lambda: api.buy_always_on_pass(self.bench.name))
 
-	# --- The phase-5 credit gate must never answer a permission question -----
+	# --- The credit gate must never answer a permission question -------------
 
 	def test_the_credit_gate_never_precedes_an_endpoints_own_guard(self):
 		"""With credits armed, a role-less caller must still meet `PermissionError` — not a price.
