@@ -28,6 +28,7 @@
   "runtime",
   "column_break_container",
   "container_ip",
+  "bridge_network",
   "started_at",
   "database_server",
   "stats_section",
@@ -174,6 +175,14 @@
    "fieldname": "container_ip",
    "fieldtype": "Data",
    "label": "Container IP",
+   "read_only": 1
+  },
+  {
+   "description": "Docker network the container was created on. Fixed at create time; benches predating the bridge family read 'benchpress'.",
+   "fieldname": "bridge_network",
+   "fieldtype": "Data",
+   "label": "Bridge Network",
+   "permlevel": 1,
    "read_only": 1
   },
   {

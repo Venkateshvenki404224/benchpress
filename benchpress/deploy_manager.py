@@ -614,7 +614,7 @@ def _deploy_bench(bench_name: str) -> None:
 
 		start_container(container_id)
 		pipeline.step("container_ip")
-		container_ip = wait_for_container_running(container_id, timeout=60)
+		container_ip = wait_for_container_running(container_id, bench.bridge_network, timeout=60)
 		bench.container_ip = container_ip
 		pipeline.log(f"container_ip {container_ip}")
 		bench.save(ignore_permissions=True)
@@ -862,7 +862,7 @@ def _setup_container_vpn(bench, container_id: str, pipeline) -> None:
 	bench.save(ignore_permissions=True)
 	frappe.db.commit()
 	pipeline.log(f"VPN peer {peer['peer']} registered, claimed IP {peer['assigned_ip']}")
-	configure_container(container_id, peer["private_key"], peer["assigned_ip"])
+	configure_container(container_id, peer["private_key"], peer["assigned_ip"], bench.bridge_network)
 	pipeline.log(f"Container VPN: {peer['assigned_ip']}")
 
 

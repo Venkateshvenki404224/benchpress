@@ -13,6 +13,7 @@
   "column_break_docker",
   "base_domain",
   "traefik_network",
+  "bench_subnet_base",
   "resource_section",
   "container_memory_limit",
   "column_break_resource",
@@ -64,6 +65,13 @@
    "fieldname": "traefik_network",
    "fieldtype": "Data",
    "label": "Traefik Network"
+  },
+  {
+   "default": "10.20",
+   "description": "First two octets of the bench bridge family. Bridge i is <base>.<i*16>.0/20. Changing it renames no existing network.",
+   "fieldname": "bench_subnet_base",
+   "fieldtype": "Data",
+   "label": "Bench Subnet Base"
   },
   {
    "fieldname": "resource_section",
