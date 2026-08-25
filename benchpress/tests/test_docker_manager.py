@@ -537,3 +537,62 @@ class TestReadBacksTakeTheirNetwork(unittest.TestCase):
 		get_client.return_value.containers.get.return_value = container
 
 		self.assertEqual(wait_for_container_running("abc123", "benchpress-0"), "10.20.0.5")
+
+
+# The message this daemon really emits, copied from a live refusal on Docker 29.7.2 with a
+# /29 scratch network. The create succeeded and the *start* raised it.
+LIVE_EXHAUSTION = (
+	"500 Server Error for http+docker://localhost/v1.55/containers/abc123/start: "
+	'Internal Server Error ("failed to set up container networking: no available IPv4 '
+	"addresses on this network's address pools: benchpress-0 (fd8f9346a771)\")"
+)
+
+
+class TestAddressPoolExhausted(unittest.TestCase):
+	def test_the_live_refusal_is_recognised(self):
+		self.assertTrue(docker_manager._address_pool_exhausted(docker.errors.APIError(LIVE_EXHAUSTION)))
+
+	def test_another_five_hundred_is_not_a_full_bridge(self):
+		"""The daemon answers 500 for everything, so only the wording separates the two."""
+		error = docker.errors.APIError('500 Server Error: Internal Server Error ("no such image")')
+		self.assertFalse(docker_manager._address_pool_exhausted(error))
+
+
+class TestStartBenchContainer(unittest.TestCase):
+	@patch("benchpress.docker_manager.start_container")
+	def test_a_bridge_with_room_starts_the_container_it_was_given(self, start):
+		self.assertEqual(docker_manager.start_bench_container("abc123", MagicMock(), MagicMock()), "abc123")
+		start.assert_called_once_with("abc123")
+
+	@patch("benchpress.placement.next_network", return_value="benchpress-1")
+	@patch("benchpress.docker_manager.create_bench_container", return_value="def456")
+	@patch("benchpress.docker_manager.remove_container")
+	@patch("benchpress.docker_manager.container_network", return_value="benchpress-0")
+	@patch("benchpress.docker_manager.start_container")
+	def test_a_full_bridge_rolls_once_onto_the_next(self, start, _network, remove, create, _next):
+		start.side_effect = [docker.errors.APIError(LIVE_EXHAUSTION), None]
+		bench, lab = MagicMock(), MagicMock()
+
+		self.assertEqual(docker_manager.start_bench_container("abc123", bench, lab), "def456")
+
+		remove.assert_called_once_with("abc123")
+		create.assert_called_once_with(bench, lab, "benchpress-1")
+
+	@patch("benchpress.placement.next_network", return_value="benchpress-1")
+	@patch("benchpress.docker_manager.create_bench_container", return_value="def456")
+	@patch("benchpress.docker_manager.remove_container")
+	@patch("benchpress.docker_manager.container_network", return_value="benchpress-0")
+	@patch("benchpress.docker_manager.start_container")
+	def test_a_second_refusal_is_raised_rather_than_looped_on(self, start, _network, _remove, _create, _next):
+		"""Two bridges refusing in a row means the count disagrees with the daemon."""
+		start.side_effect = docker.errors.APIError(LIVE_EXHAUSTION)
+
+		with self.assertRaises(docker.errors.APIError):
+			docker_manager.start_bench_container("abc123", MagicMock(), MagicMock())
+
+	@patch("benchpress.docker_manager.start_container")
+	def test_any_other_docker_error_is_not_rolled(self, start):
+		start.side_effect = docker.errors.APIError("no such image")
+
+		with self.assertRaises(docker.errors.APIError):
+			docker_manager.start_bench_container("abc123", MagicMock(), MagicMock())

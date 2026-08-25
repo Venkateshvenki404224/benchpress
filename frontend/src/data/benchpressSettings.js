@@ -4,6 +4,7 @@ import { computed, reactive, ref } from "vue";
 import ContainerIcon from "~icons/lucide/container";
 import CpuIcon from "~icons/lucide/cpu";
 import GlobeIcon from "~icons/lucide/globe";
+import NetworkIcon from "~icons/lucide/network";
 
 /** Each group is one nav item and one panel in the settings dialog. */
 export const SETTINGS_GROUPS = [
@@ -42,6 +43,33 @@ export const SETTINGS_GROUPS = [
 				label: "Traefik network",
 				mono: true,
 				help: "Containers join this network",
+			},
+		],
+	},
+	{
+		key: "group-network",
+		tab: "network",
+		title: "Bench network",
+		icon: NetworkIcon,
+		note: "The bridge family new benches are placed on. Bridges are created as they are needed.",
+		fields: [
+			{
+				key: "bench_subnet_base",
+				label: "Subnet base",
+				mono: true,
+				help: "Bridge i is <base>.<i×16>.0/20",
+			},
+			{
+				key: "bench_bridge_count",
+				label: "Bridge count",
+				type: "number",
+				help: "The most bridges the family may grow to",
+			},
+			{
+				key: "bench_slots_per_bridge",
+				label: "Slots per bridge",
+				type: "number",
+				help: "Benches a bridge takes before the next one is preferred — a Linux bridge caps at 1024 ports",
 			},
 		],
 	},

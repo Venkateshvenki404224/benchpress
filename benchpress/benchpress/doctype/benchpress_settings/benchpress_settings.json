@@ -14,6 +14,8 @@
   "base_domain",
   "traefik_network",
   "bench_subnet_base",
+  "bench_bridge_count",
+  "bench_slots_per_bridge",
   "resource_section",
   "container_memory_limit",
   "column_break_resource",
@@ -72,6 +74,20 @@
    "fieldname": "bench_subnet_base",
    "fieldtype": "Data",
    "label": "Bench Subnet Base"
+  },
+  {
+   "default": "16",
+   "description": "How many bench bridges the family may grow to. Bridges are created lazily, so this is a maximum and not a startup cost.",
+   "fieldname": "bench_bridge_count",
+   "fieldtype": "Int",
+   "label": "Bench Bridge Count"
+  },
+  {
+   "default": "1000",
+   "description": "Benches a bridge takes before the next one is preferred. A Linux bridge caps at 1024 ports and three of them are infrastructure.",
+   "fieldname": "bench_slots_per_bridge",
+   "fieldtype": "Int",
+   "label": "Bench Slots Per Bridge"
   },
   {
    "fieldname": "resource_section",

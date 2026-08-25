@@ -18,6 +18,4 @@ def execute():
 	for name in frappe.get_all(
 		"Bench Instance", filters={"bridge_network": ("in", ["", None])}, pluck="name"
 	):
-		frappe.db.set_value(
-			"Bench Instance", name, "bridge_network", LEGACY_NETWORK, update_modified=False
-		)
+		frappe.db.set_value("Bench Instance", name, "bridge_network", LEGACY_NETWORK, update_modified=False)

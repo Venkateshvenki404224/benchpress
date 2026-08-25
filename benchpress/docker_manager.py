@@ -251,12 +251,9 @@ def attach_infrastructure(network: str, client: docker.DockerClient | None = Non
 	"""
 	client = client or get_client()
 	net = client.networks.get(network)
-	present = {c.get("Name") for c in net.attrs.get("Containers", {}).values()}
-	attached = []
-	for name in INFRASTRUCTURE_CONTAINERS:
-		if name in present:
-			attached.append(name)
-			continue
+	missing = missing_infrastructure(network, client)
+	attached = [name for name in INFRASTRUCTURE_CONTAINERS if name not in missing]
+	for name in missing:
 		try:
 			net.connect(name)
 			attached.append(name)
@@ -265,6 +262,17 @@ def attach_infrastructure(network: str, client: docker.DockerClient | None = Non
 		except docker.errors.APIError as e:
 			frappe.logger("benchpress").warning(f"could not attach {name} to {network}: {e}")
 	return attached
+
+
+def missing_infrastructure(network: str, client: docker.DockerClient | None = None) -> list[str]:
+	"""Infrastructure containers absent from `network`; empty when the bridge does not exist."""
+	client = client or get_client()
+	try:
+		net = client.networks.get(network)
+	except docker.errors.NotFound:
+		return []
+	present = {c.get("Name") for c in net.attrs.get("Containers", {}).values()}
+	return [name for name in INFRASTRUCTURE_CONTAINERS if name not in present]
 
 
 def build_lab_image(lab_doc, log_fn=None, no_cache: bool = False) -> str:
@@ -319,12 +327,15 @@ def build_lab_image(lab_doc, log_fn=None, no_cache: bool = False) -> str:
 	return image_tag
 
 
-def create_bench_container(bench_doc, lab_doc) -> str:
+def create_bench_container(bench_doc, lab_doc, network: str | None = None) -> str:
 	"""Create a container from a lab image with resource limits.
 	Does NOT start the container. Returns the container ID.
+
+	`network` overrides the bench's recorded bridge, which is what a roll onto the next
+	bridge needs: the row still names the bridge Docker refused.
 	"""
 	client = get_client()
-	network = getattr(bench_doc, "bridge_network", None) or LEGACY_NETWORK
+	network = network or getattr(bench_doc, "bridge_network", None) or LEGACY_NETWORK
 	ensure_bench_network_for(network, client)
 
 	name = bench_doc.bench_name
@@ -384,6 +395,50 @@ def create_bench_container(bench_doc, lab_doc) -> str:
 def container_runtime(container_id: str) -> str:
 	"""The runtime the daemon actually created this container under."""
 	return get_client().containers.get(container_id).attrs["HostConfig"]["Runtime"]
+
+
+def container_network(container_id: str) -> str:
+	"""The bench network the daemon actually put this container on."""
+	return get_client().containers.get(container_id).attrs["HostConfig"]["NetworkMode"]
+
+
+def start_bench_container(container_id: str, bench_doc, lab_doc) -> str:
+	"""Start the bench, moving it to the next bridge if this one has no address left.
+
+	Returns the id of the container that is now running — a roll recreates it, so it is
+	not always the one passed in.
+
+	Docker allocates the address at start and not at create (measured on 29.7.2), so a
+	full bridge refuses here rather than in `create_bench_container`. One retry, never a
+	loop: a second refusal means the recorded count disagrees with the daemon, and a loop
+	would hide that.
+	"""
+	from benchpress import placement  # placement imports this module
+
+	try:
+		start_container(container_id)
+		return container_id
+	except docker.errors.APIError as error:
+		if not _address_pool_exhausted(error):
+			raise
+
+	# Recreated rather than reconnected: the endpoint on the full bridge is fixed at create,
+	# and the new container has to take the name the old one is still holding.
+	rolled_to = placement.next_network(container_network(container_id))
+	remove_container(container_id)
+	container_id = create_bench_container(bench_doc, lab_doc, rolled_to)
+	start_container(container_id)
+	return container_id
+
+
+def _address_pool_exhausted(error: docker.errors.APIError) -> bool:
+	"""True when the daemon refused because the network has no free address.
+
+	Matched as text: the daemon answers 500 for this, the same status as every other start
+	failure. `tests/test_docker_manager.py` pins the wording this host really emits, so a
+	daemon upgrade that reworded it fails a test rather than a deploy.
+	"""
+	return "no available ipv4 addresses" in str(error).lower()
 
 
 def get_container_ip(container_id: str, network: str | None = None) -> str:

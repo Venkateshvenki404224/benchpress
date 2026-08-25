@@ -30,6 +30,7 @@ LOG_RETENTION_DAYS = default_log_clearing_doctypes["Deploy Log"]
 INFRASTRUCTURE_LABELS = {
 	"docker_socket": "Docker socket",
 	"docker_network": "Docker network",
+	"bridge_capacity": "Bridge capacity",
 	"mariadb": "MariaDB",
 	"clock_skew": "Clock skew",
 	"redis": "Redis",
@@ -267,7 +268,7 @@ def _bench_labels(bench_names: list[str]) -> dict:
 
 
 def _infrastructure(admin: bool) -> list[dict] | None:
-	"""The seven real diagnostics checks — admins only, never a placeholder."""
+	"""The eight real diagnostics checks — admins only, never a placeholder."""
 	if not admin:
 		return None
 	from benchpress.diagnostics import display_row, run_diagnostics

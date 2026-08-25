@@ -12,6 +12,7 @@ import docker
 import frappe
 from frappe.query_builder.functions import Now
 
+from benchpress import placement
 from benchpress.docker_manager import CONTAINER_RUNTIMES, get_client, host_runtimes
 from benchpress.mariadb_manager import check_mariadb_health
 from benchpress.vpn_adapter import DEFAULT_INTERFACE
@@ -47,6 +48,7 @@ def run_diagnostics() -> list[dict]:
 	return [
 		_check_docker_socket(),
 		_check_docker_network(),
+		_check_bridge_capacity(),
 		_check_mariadb(),
 		_check_clock_skew(),
 		_check_redis(),
@@ -75,6 +77,23 @@ def _check_docker_network() -> dict:
 		)
 	except Exception as e:
 		return check_row("docker_network", False, f"Could not inspect networks: {e}")
+
+
+def _check_bridge_capacity() -> dict:
+	"""How much room the bench bridge family has left, counted rather than assumed.
+
+	Inspects and nothing else: a bridge that does not exist yet is absent from the report
+	rather than created, which is what this module promises and what keeps the family lazy.
+	"""
+	try:
+		usage = placement.bridge_usage()
+		if not usage:
+			return check_row("bridge_capacity", True, "No bench bridge exists yet")
+		per_bridge = ", ".join(f"{row['network']} {row['used']} used / {row['free']} free" for row in usage)
+		headroom = placement.headroom(usage)
+		return check_row("bridge_capacity", headroom > 0, f"{per_bridge} — {headroom} benches of headroom")
+	except Exception as e:
+		return check_row("bridge_capacity", False, f"Could not measure bridge capacity: {e}")
 
 
 def _check_mariadb() -> dict:

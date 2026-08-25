@@ -9,10 +9,12 @@ from contextlib import contextmanager, nullcontext
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import docker
 import frappe
 import yaml
 from frappe.tests import IntegrationTestCase
 
+from benchpress import docker_manager
 from benchpress.benchpress.doctype.bench_instance import get_instance_id
 
 # Any dotted quad, anywhere in the rendered file. The property routes must hold is that no
@@ -400,7 +402,10 @@ class TestDeployManager(IntegrationTestCase):
 			patch.object(deploy_manager, "host_runtimes", autospec=True) as mock_runtimes,
 			patch.object(deploy_manager, "container_runtime", autospec=True) as mock_runtime_of,
 			patch.object(deploy_manager, "create_bench_container", autospec=True) as mock_create,
-			patch.object(deploy_manager, "start_container", autospec=True),
+			# The deploy starts through the roll wrapper, so the bridge it lands on is a
+			# read-back rather than the id that went in.
+			patch.object(deploy_manager, "start_bench_container", new=lambda cid, bench, lab: cid),
+			patch.object(deploy_manager, "container_network", new=lambda cid: "benchpress-0"),
 			patch.object(deploy_manager, "wait_for_container_running", autospec=True) as mock_wait,
 			patch.object(deploy_manager, "remove_container", autospec=True) as mock_remove_container,
 			patch.object(deploy_manager, "_notify_owner", autospec=True),
@@ -618,7 +623,10 @@ class TestDeployStepMarkers(IntegrationTestCase):
 			patch.object(deploy_manager, "host_runtimes", autospec=True) as mock_runtimes,
 			patch.object(deploy_manager, "container_runtime", autospec=True) as mock_runtime_of,
 			patch.object(deploy_manager, "create_bench_container", autospec=True) as mock_create,
-			patch.object(deploy_manager, "start_container", autospec=True),
+			# The deploy starts through the roll wrapper, so the bridge it lands on is a
+			# read-back rather than the id that went in.
+			patch.object(deploy_manager, "start_bench_container", new=lambda cid, bench, lab: cid),
+			patch.object(deploy_manager, "container_network", new=lambda cid: "benchpress-0"),
 			patch.object(deploy_manager, "wait_for_container_running", autospec=True) as mock_wait,
 			# Only the socket is mocked, not the reporting around it: a unit test must not
 			# depend on a running Traefik, but the log line must still be the real one.
@@ -1116,7 +1124,10 @@ class TestTerminalStateNotifications(IntegrationTestCase):
 			patch.object(deploy_manager, "host_runtimes", autospec=True) as mock_runtimes,
 			patch.object(deploy_manager, "container_runtime", autospec=True) as mock_runtime_of,
 			patch.object(deploy_manager, "create_bench_container", autospec=True) as mock_create,
-			patch.object(deploy_manager, "start_container", autospec=True),
+			# The deploy starts through the roll wrapper, so the bridge it lands on is a
+			# read-back rather than the id that went in.
+			patch.object(deploy_manager, "start_bench_container", new=lambda cid, bench, lab: cid),
+			patch.object(deploy_manager, "container_network", new=lambda cid: "benchpress-0"),
 			patch.object(deploy_manager, "wait_for_container_running", autospec=True) as mock_wait,
 			patch.object(deploy_manager, "_write_instance_route", autospec=True),
 			patch.object(deploy_manager, "_ensure_wildcard_anchor", autospec=True),
@@ -1983,7 +1994,67 @@ class TestReconcileInstanceRoutes(IntegrationTestCase):
 				result = deploy_manager.reconcile_instance_routes()
 
 				self.assertTrue(survivor.exists())
-				self.assertEqual(result, {"anchored": False, "written": 0, "deleted": 0, "kept": 0})
+				self.assertEqual(
+					result, {"anchored": False, "written": 0, "deleted": 0, "kept": 0, "attached": {}}
+				)
+
+
+class TestReconcileBridgeAttachments(IntegrationTestCase):
+	"""The half of the `*/5` pass that owns which containers can reach a bench bridge.
+
+	`docker compose up -d traefik` recreates the proxy with only its compose networks, so
+	every bridge this app made loses its ingress and says nothing about it.
+	"""
+
+	def _reconcile(self, present: dict[str, list[str]], bridges=2):
+		"""Run the pass against a daemon whose bridges hold `present`; returns (result, connects)."""
+		from benchpress import deploy_manager
+
+		client = MagicMock()
+		connects = []
+
+		def get(name):
+			if name not in present:
+				raise docker.errors.NotFound(name)
+			network = MagicMock()
+			network.attrs = {"Containers": {n: {"Name": n} for n in present[name]}}
+			network.connect.side_effect = lambda container: connects.append((name, container))
+			return network
+
+		client.networks.get.side_effect = get
+		with (
+			patch("benchpress.docker_manager.get_client", return_value=client),
+			patch("benchpress.placement.bridge_count", return_value=bridges),
+		):
+			return deploy_manager._reconcile_bridge_attachments(), connects
+
+	def test_a_recreated_proxy_is_put_back_without_being_restarted(self):
+		result, connects = self._reconcile(
+			{"benchpress-0": ["benchpress-mariadb", "benchpress-redis", "a-bench"]}
+		)
+
+		self.assertEqual(connects, [("benchpress-0", "benchpress_traefik")])
+		self.assertEqual(result, {"attached": {"benchpress-0": ["benchpress_traefik"]}})
+
+	def test_a_quiet_tick_reports_nothing(self):
+		result, connects = self._reconcile({"benchpress-0": list(docker_manager.INFRASTRUCTURE_CONTAINERS)})
+
+		self.assertEqual(connects, [])
+		self.assertEqual(result, {"attached": {}})
+
+	def test_a_bridge_that_does_not_exist_is_not_created(self):
+		"""The family grows on a deploy, never on a timer."""
+		_result, connects = self._reconcile({})
+
+		self.assertEqual(connects, [])
+
+	def test_only_the_three_infrastructure_containers_are_ever_connected(self):
+		_result, connects = self._reconcile({"benchpress-0": [], "benchpress-1": []})
+
+		self.assertEqual(
+			{container for _network, container in connects},
+			set(docker_manager.INFRASTRUCTURE_CONTAINERS),
+		)
 
 
 class TestSettingsReAnchor(IntegrationTestCase):
