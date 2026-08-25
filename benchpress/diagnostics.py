@@ -8,12 +8,19 @@ starts, or repairs anything. `run_diagnostics` structurally cannot throw:
 each check catches its own exceptions and reports them as a fail row.
 """
 
+from pathlib import Path
+
 import docker
 import frappe
 from frappe.query_builder.functions import Now
 
 from benchpress import placement
-from benchpress.docker_manager import CONTAINER_RUNTIMES, get_client, host_runtimes
+from benchpress.docker_manager import (
+	CONTAINER_RUNTIMES,
+	DEFAULT_PIDS_LIMIT,
+	get_client,
+	host_runtimes,
+)
 from benchpress.mariadb_manager import check_mariadb_health
 from benchpress.vpn_adapter import DEFAULT_INTERFACE
 
@@ -23,6 +30,16 @@ REDIS_CONTAINER_NAME = "benchpress-redis"
 # Two seconds absorbs MariaDB truncating NOW() to whole seconds; what it catches
 # is a timezone difference, which is hours, not drift.
 SKEW_TOLERANCE_SECONDS = 2
+
+PROC_SYS = Path("/proc/sys")
+
+# The kernel ceilings a container can read. The neighbour table is not among them:
+# /proc/sys/net/ipv4/neigh/default/ does not exist in this network namespace, and a row
+# that silently left it out would read as checked and fine.
+CONTAINER_VISIBLE_CEILINGS = ("kernel.pty.max", "kernel.pid_max", "net.netfilter.nf_conntrack_max")
+TERMINALS_PER_BENCH = 8
+PTY_ROOT_RESERVE = 1024
+CONNTRACK_PER_BENCH = 256
 
 
 def check_row(check: str, ok: bool, hint: str) -> dict:
@@ -49,6 +66,7 @@ def run_diagnostics() -> list[dict]:
 		_check_docker_socket(),
 		_check_docker_network(),
 		_check_bridge_capacity(),
+		_check_kernel_ceilings(),
 		_check_mariadb(),
 		_check_clock_skew(),
 		_check_redis(),
@@ -94,6 +112,51 @@ def _check_bridge_capacity() -> dict:
 		return check_row("bridge_capacity", headroom > 0, f"{per_bridge} — {headroom} benches of headroom")
 	except Exception as e:
 		return check_row("bridge_capacity", False, f"Could not measure bridge capacity: {e}")
+
+
+def _read_sysctl(name: str) -> int | None:
+	"""A knob's running value from /proc/sys, or None when it is not in this namespace."""
+	try:
+		return int(PROC_SYS.joinpath(*name.split(".")).read_text().split()[0])
+	except (OSError, ValueError, IndexError):
+		return None
+
+
+def _check_kernel_ceilings() -> dict:
+	"""Host-wide limits a dense fleet runs into, read from /proc/sys rather than assumed.
+
+	The targets are `benchpress_devops/host_tuning.py`'s arithmetic sized against one
+	bridge's worth of benches, which is what `sudo scripts/tune-host.sh` writes by default.
+	Only that script can raise them, and only from the host.
+	"""
+	try:
+		benches = placement.slots_per_bridge()
+		targets = {
+			"kernel.pty.max": benches * TERMINALS_PER_BENCH + PTY_ROOT_RESERVE,
+			"kernel.pid_max": benches * DEFAULT_PIDS_LIMIT,
+			"net.netfilter.nf_conntrack_max": benches * CONNTRACK_PER_BENCH,
+		}
+		running = {name: _read_sysctl(name) for name in CONTAINER_VISIBLE_CEILINGS}
+		blind_spot = (
+			"The neighbour table is not visible from inside a container — read it on the host "
+			"with ./entry.py --check-host"
+		)
+		low = [
+			f"{name} is {running[name] if running[name] is not None else 'unreadable'}, below {targets[name]}"
+			for name in CONTAINER_VISIBLE_CEILINGS
+			if running[name] is None or running[name] < targets[name]
+		]
+		if low:
+			return check_row(
+				"kernel_ceilings",
+				False,
+				f"{'; '.join(low)} for {benches} benches — raise it on the host with "
+				f"sudo scripts/tune-host.sh --benches {benches}. {blind_spot}",
+			)
+		measured = ", ".join(f"{name} {running[name]}" for name in CONTAINER_VISIBLE_CEILINGS)
+		return check_row("kernel_ceilings", True, f"{measured} — enough for {benches} benches. {blind_spot}")
+	except Exception as e:
+		return check_row("kernel_ceilings", False, f"Could not read kernel ceilings: {e}")
 
 
 def _check_mariadb() -> dict:

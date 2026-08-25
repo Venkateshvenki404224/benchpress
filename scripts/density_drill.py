@@ -85,7 +85,9 @@ def _fill(network: str, cap: int, created: list[str]) -> int | None:
 
 def _verdict(args, usable: int, refused_at: int | None, attempted: int) -> int:
 	if refused_at is None:
-		print(f"/{args.subnet_size}: {attempted} endpoints up, no refusal — the cap of {args.endpoints} was hit first")
+		print(
+			f"/{args.subnet_size}: {attempted} endpoints up, no refusal — the cap of {args.endpoints} was hit first"
+		)
 		return 0
 	held = refused_at - 1
 	print(f"/{args.subnet_size}: {held} endpoints held, refused at {refused_at}, {usable} addresses usable")
@@ -125,9 +127,18 @@ def _base_domain() -> str:
 	"""The site's own `base_domain`, read through bench rather than off this host's disk."""
 	finished = subprocess.run(
 		[
-			"docker", "compose", "exec", "-T", "backend",
-			"bench", "--site", SITE, "execute", "frappe.client.get_value",
-			"--kwargs", json.dumps({"doctype": "BenchPress Settings", "fieldname": "base_domain"}),
+			"docker",
+			"compose",
+			"exec",
+			"-T",
+			"backend",
+			"bench",
+			"--site",
+			SITE,
+			"execute",
+			"frappe.client.get_value",
+			"--kwargs",
+			json.dumps({"doctype": "BenchPress Settings", "fieldname": "base_domain"}),
 		],
 		cwd=COMPOSE_DIR,
 		capture_output=True,

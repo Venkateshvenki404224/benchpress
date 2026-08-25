@@ -46,12 +46,13 @@ BUDGETS_MS = {
 	"get_deploy_history": 600,
 }
 
-# The eight rows benchpress.diagnostics always returns; the real checks talk to
+# The nine rows benchpress.diagnostics always returns; the real checks talk to
 # Docker and MariaDB, so the Overview timing test never runs them.
 DIAGNOSTICS_ROWS = [
 	{"check": "docker_socket", "status": "pass", "hint": "Docker daemon reachable"},
 	{"check": "docker_network", "status": "pass", "hint": "benchpress network exists"},
 	{"check": "bridge_capacity", "status": "pass", "hint": "benchpress-0 4 used / 996 free"},
+	{"check": "kernel_ceilings", "status": "pass", "hint": "kernel.pty.max 9024"},
 	{"check": "mariadb", "status": "pass", "hint": "MariaDB responding"},
 	{"check": "clock_skew", "status": "pass", "hint": "App and database clocks agree"},
 	{"check": "redis", "status": "fail", "hint": "benchpress-redis container not found"},
