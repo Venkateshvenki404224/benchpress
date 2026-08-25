@@ -70,7 +70,7 @@ def setup(workers: int = 12, cap: int = 1, mode: str = "cap") -> dict:
 	cap = 0 if mode in UNCAPPED_MODES else cint(cap)
 	cap_field, cap_before = _set_cap(cap)
 	base_domain = frappe.db.get_single_value("BenchPress Settings", "base_domain")
-	frappe.db.commit()
+	frappe.db.commit()  # nosemgrep -- the drill's workers are separate processes and cannot see uncommitted fixtures
 	return {
 		"user": user,
 		"api_key": frappe.db.get_value("User", user, "api_key"),
@@ -95,7 +95,7 @@ def ensure_drill_user() -> str:
 	Separate from `setup` so a caller can get the token without minting labs or moving the cap.
 	"""
 	user = _ensure_user()
-	frappe.db.commit()
+	frappe.db.commit()  # nosemgrep -- the token has to exist for a process that is not this one
 	return f"{frappe.db.get_value('User', user, 'api_key')}:{_api_secret(user)}"
 
 
@@ -103,7 +103,7 @@ def restore(cap_field: str, cap_before) -> dict:
 	"""Put the site's own concurrency cap back."""
 	frappe.db.set_single_value("Credit Settings", cap_field, cint(cap_before))
 	frappe.clear_cache(doctype="Credit Settings")
-	frappe.db.commit()
+	frappe.db.commit()  # nosemgrep -- the cap must go back even if the caller dies mid-request
 	return {cap_field: cint(cap_before)}
 
 
@@ -153,7 +153,7 @@ def stage_real_lab(image_tag: str, size: str = "Small") -> str:
 				"enable_code_server": 0,
 			}
 		).insert(ignore_permissions=True)
-	frappe.db.commit()
+	frappe.db.commit()  # nosemgrep -- the workers deploy against this lab from their own processes
 	return lab_id
 
 
@@ -194,7 +194,7 @@ def cleanup() -> dict:
 		frappe.delete_doc("Lab", lab, force=True, ignore_permissions=True)
 	frappe.db.delete(LEDGER, {"account": DRILL_USER})
 	frappe.db.delete(ACCOUNT, {"user": DRILL_USER})
-	frappe.db.commit()
+	frappe.db.commit()  # nosemgrep -- cleanup on a host serving real tenants must be durable
 	return {
 		"benches": len(benches),
 		"labs": len(labs),
