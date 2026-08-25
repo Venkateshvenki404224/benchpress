@@ -30,7 +30,7 @@ import frappe
 from frappe.tests import IntegrationTestCase
 from frappe.utils import flt
 
-from benchpress import api, deploy_manager
+from benchpress import api, deploy_manager, lab_detail
 from benchpress.benchpress.doctype.bench_instance import get_instance_id
 from benchpress.credits import account, config, lease, metering
 from benchpress.credits.seed import seed_default_lease_plan, seed_defaults
@@ -615,7 +615,7 @@ class TestLease(IntegrationTestCase):
 		self.assertEqual(payload["state"], "Stopped")
 		self.assertIn("lab_id", payload)
 		self.assertIn("expires_at_ts", payload)
-		self.assertIn("server_now_ts", payload)
+		self.assertIn("server_now_ms", payload)
 		self.assertIn("revision", payload)
 		self.assertFalse(
 			[key for key in payload if "password" in key],
@@ -649,6 +649,29 @@ class TestLease(IntegrationTestCase):
 		):
 			deploy_manager.stop_bench(self.bench.name)
 		self.assertEqual(self.lease_events(publish), [])
+
+	# --- The clock the browser anchors on --------------------------------------
+
+	def test_the_anchor_keeps_its_milliseconds(self):
+		"""Whole seconds on the wire put the browser's clock up to a second behind the server.
+
+		The countdown then rounds that up again, and a running lease reads about 1.6 seconds
+		longer than it is — time the user does not have. The deadline stays whole seconds; only
+		the clock sample needs the resolution.
+		"""
+		with patch("time.time", return_value=1787622936.472):
+			self.assertEqual(api.server_time(), {"server_now_ms": 1787622936472})
+
+	def test_the_lab_payload_carries_the_same_anchor(self):
+		"""A tab that reloads re-anchors from the payload it already fetched."""
+		with patch("time.time", return_value=1787622936.472):
+			payload = lab_detail.get_lab(self.lab.name)
+		self.assertEqual(payload["server_now_ms"], 1787622936472)
+
+	def test_the_expiry_push_carries_the_same_anchor(self):
+		with patch("time.time", return_value=1787622936.472), patch("frappe.publish_realtime") as publish:
+			lease.announce_expired(self.running_bench())
+		self.assertEqual(self.lease_events(publish)[0].args[1]["server_now_ms"], 1787622936472)
 
 	# --- The deadline is not a client claim ------------------------------------
 
