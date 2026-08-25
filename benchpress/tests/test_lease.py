@@ -233,6 +233,10 @@ class TestLease(IntegrationTestCase):
 					"lease_state": "",
 					"stop_claimed_at": None,
 					"expiry_attempts": 0,
+					"node": None,
+					"stop_started_at": None,
+					"container_stopped_at": None,
+					"expiry_lateness": None,
 					"credit_burn_rate": 0,
 					"credit_burn_started": None,
 				},
@@ -572,7 +576,7 @@ class TestLease(IntegrationTestCase):
 			lease.claim_due(50)
 
 		self.assertTrue(enqueue.call_args.kwargs["enqueue_after_commit"])
-		self.assertEqual(enqueue.call_args.kwargs["queue"], "long")
+		self.assertEqual(enqueue.call_args.kwargs["queue"], lease.STOP_QUEUE)
 
 	def test_the_sweep_makes_no_docker_call(self):
 		"""It runs wherever the scheduler puts it, and `queue-short` has no socket mounted."""
@@ -635,9 +639,7 @@ class TestLease(IntegrationTestCase):
 	def test_a_stop_that_keeps_failing_stops_taking_a_slot(self):
 		self.enable_credits()
 		self.expire()
-		frappe.db.set_value(
-			BENCH, self.bench.name, "expiry_attempts", lease.MAX_EXPIRY_ATTEMPTS, update_modified=False
-		)
+		frappe.db.set_value(BENCH, self.bench.name, "lease_state", lease.FAILED, update_modified=False)
 		with patch.object(frappe.db, "commit"), patch("frappe.enqueue"):
 			self.assertEqual(lease.claim_due(50), [])
 
