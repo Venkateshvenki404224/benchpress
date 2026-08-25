@@ -1,0 +1,307 @@
+# Authoring the Ralph loop
+
+Read this when writing a spec's `ralph.sh` (Job 3). Start from
+`assets/ralph.sh.template` and replace every `{{PLACEHOLDER}}` and every `ADAPT:`
+block.
+
+## Contents
+
+- [What a Ralph loop is](#what-a-ralph-loop-is)
+- [The one idea that makes it work](#the-one-idea-that-makes-it-work)
+- [Designing smoke_check](#designing-smoke_check)
+- [Proving the UI](#proving-the-ui)
+- [Why a loop stalls](#why-a-loop-stalls)
+- [Preflight and rollback](#preflight-and-rollback)
+- [The phase prompt](#the-phase-prompt)
+- [Filling in the template](#filling-in-the-template)
+- [Before you hand it over](#before-you-hand-it-over)
+
+## What a Ralph loop is
+
+A bash loop that runs one **fresh** headless `claude -p` session per iteration.
+Nothing carries between iterations except the file system: the spec, a notes file
+per phase, and marker files. Phases run strictly in order; phase N+1 starts only
+once phase N is genuinely finished.
+
+Fresh sessions are the point. An agent that has been arguing with a problem for
+two hours has a context full of failed approaches; an agent that starts from the
+spec plus a notes file has the conclusions without the wreckage.
+
+Not every spec wants one. A loop pays for itself when the work is long, has
+verifiable per-phase end states, and touches something you would rather not
+babysit. A two-file refactor does not need one.
+
+## The one idea that makes it work
+
+**The agent does not get to be the only judge of its own work.**
+
+Every phase ends with the agent writing a `.done` marker. The loop then runs
+`smoke_check` — its own verification, in bash, against the real system — and if
+that disagrees it **deletes the marker** and the phase continues. The agent
+cannot declare success past a broken system, and phase N+1 can never start on a
+bad base.
+
+This is worth the effort because "reported success while doing nothing" is the
+single most common failure in this kind of automation. An exit code is not
+evidence.
+
+## Designing smoke_check
+
+The gates are the hard part and the part worth thinking about. Rules:
+
+**Write gates that fail today.** Before the feature exists, `smoke_check <phase>`
+should fail. If it passes on an unmodified tree it is testing nothing. Run it and
+confirm, then keep the output — it is proof the gate has teeth.
+
+**The baseline must pass.** `smoke_check 0` runs before the first iteration. It
+must pass on the current system, or the loop refuses to start — deliberately, so
+the loop can tell its own damage apart from what it inherited. If the baseline
+fails, either the system is genuinely broken or the gate is wrong; both need a
+human.
+
+**Gate the incumbent, not just the new thing.** Name whatever is serving users
+today and check it every single time, at every phase including phase 0. Most
+damage from this kind of work is collateral.
+
+**Gate on the property, not the symptom.** If the feature exists to stop
+certificates being issued, gate on "no new certificate appeared" — not on the
+site loading. A system can look perfect while quietly doing the thing you built
+the feature to prevent.
+
+**Find a real discriminator.** Two different services can both return 200 with a
+page titled "Login". Status codes and titles usually prove nothing. Find the
+field that actually differs — a header, a site name in a payload, a certificate
+subject — and verify it by hand before trusting it.
+
+> A worked example: an earlier loop discriminated the control plane from a tenant
+> site by reading `"sitename"` out of the boot payload. A later release replaced
+> that page with an SPA that never emits it, so the check returned empty for a
+> perfectly healthy system and the loop aborted at baseline every run. The `server`
+> header — nginx versus Werkzeug — was the durable discriminator. Test every helper
+> against the live system before shipping the loop.
+
+**Every helper returns 0 even when it finds nothing.** Under `set -euo pipefail`
+an unguarded `grep` miss aborts the whole loop instead of reporting the failure
+the gate exists to catch. End helpers with `|| true` and an explicit `return 0`.
+
+**Redirect stdin on every `docker compose exec`, or the loop hangs forever.**
+GNU `timeout` calls `setpgid()` to put its child in its own process group so it
+can kill the group. That group is *background* relative to the terminal, so the
+Compose CLI touching the controlling terminal takes SIGTTIN and stops — and
+because `timeout` is stopped alongside it, the timeout never fires. A
+one-second query then sits frozen for hours, reading to the operator as a hung
+phase. `-T` is not enough: it disables TTY allocation for the exec'd process,
+not the CLI's own terminal access.
+
+```bash
+( cd "$DEVOPS_DIR" && </dev/null timeout 120 docker compose exec -T db sh -c '...' )
+```
+
+Leave off only where stdin is already a pipe (`printf ... | timeout ...`), where
+the redirect would override the pipe and break the query. The signature when it
+happens: `ps -o pid,pgid,tpgid,stat` shows `T`/`Tl` with `PGID != TPGID`.
+SIGCONT does not help — the kernel re-stops it.
+
+**Include the status-lockstep gate.** The template ships it: phases before the
+last must leave the spec in `in-progress/`, the final phase in `completed/`, and
+`promote_spec.py --check` must pass. Keep it. Spec bookkeeping is what an agent
+drops first when it is concentrating on code, and a shipped feature filed under
+"not started" is how a tracker stops being worth reading.
+
+## Proving the UI
+
+A green smoke check says the code is right. It says nothing about whether anyone
+can see it. If the spec touches a page, the loop needs a browser, and
+`agent-browser` is the one to use — check it launches **before** handing the loop
+over, because an agent discovering a missing browser mid-phase spends an
+iteration on setup instead of the feature.
+
+Set `APP_URL` in the config block. The template's `preflight` refuses to start
+when `APP_URL` is set and `agent-browser` is missing, which is the right moment
+to find out.
+
+Three things hide a correct, merged UI change. None of them fails a test, and all
+three have cost real iterations:
+
+| What | Why it hides the change | How the loop catches it |
+|---|---|---|
+| **Built assets older than the source** | the server ships compiled bundles, so the browser gets the previous build | `assets_stale` in `smoke_check` — a gate, not a habit |
+| **A feature flag is off** | money-touching and half-built features hang off a settings toggle, and the whole surface renders exactly as it did before | read the flag in a helper and gate on it |
+| **No row exercises it** | a feature keyed on a new column shows nothing while every row predating the migration has it `NULL` | the phase's verification has to create a row that carries the data |
+
+The first is worth a gate rather than a note because it is invisible from inside
+the code: every test passes, the component is correct, the diff is merged, and the
+user sees the old page. Only a timestamp comparison catches it.
+
+One more that wastes a whole debugging session: **check the page the feature
+actually lives on**. A dashboard or overview that was never in the spec's scope
+looks untouched no matter how right the work is.
+
+## Why a loop stalls
+
+Three causes, all observed, all silent — a stalled loop and a working loop look
+identical from the terminal.
+
+**The agent ends its turn waiting.** A headless `claude -p` session has no next
+turn, so "I've started the drill in the background and will report when it
+finishes" ends the iteration with the work half-done and the switches unrestored.
+Say this in the prompt explicitly; it does not occur to an agent that has spent
+its whole existence in interactive sessions. The template's *How an iteration
+ends* section carries the wording.
+
+**A `docker compose exec` under `timeout` takes SIGTTIN.** Covered in
+[Designing smoke_check](#designing-smoke_check) — the fix is `</dev/null`. The
+diagnosis is `ps -o pid,pgid,tpgid,stat`: `T`/`Tl` with `PGID != TPGID`, and
+Ctrl-C cannot clear it because the stuck process is not in the terminal's
+foreground group.
+
+**A process outlives the session that started it.** A load harness or watcher an
+agent backgrounded keeps mutating the system after its session dies, so the next
+iteration's smoke check reads state nobody is maintaining. Tell the agent to stop
+what it starts, and when a phase ends badly, check for orphans before re-running:
+`ps -eo pid,ppid,etime,args | grep <your harness>`.
+
+## Preflight and rollback
+
+`preflight()` snapshots, once, everything that:
+
+1. rollback needs — so recovering is a file copy rather than an act of memory, and
+2. `smoke_check` compares against — counts, identity sets, the list of things that
+   existed before.
+
+Then write the rollback command into the phase prompt verbatim. Not "restore the
+config" — the actual command, with paths. An agent mid-incident should not be
+composing it.
+
+State the order plainly: **restore first, diagnose after.** A rolled-back
+iteration that leaves the system working is a good iteration.
+
+## The phase prompt
+
+**The prompt is not in ralph.sh.** It lives in `prompt.md` beside it, copied from
+`assets/prompt.md.template`. `ralph.sh` reads that file, substitutes
+`{{PLACEHOLDERS}}`, and passes the result to `claude -p`.
+
+This split exists because the prompt is the part you actually tune. Buried in a
+200-line bash heredoc it is unreadable and every edit risks the script; as
+markdown it can be revised between runs with no change to ralph.sh, and the next
+iteration picks it up.
+
+How the file is laid out:
+
+- Everything **above** the first `<!-- PHASE n -->` marker is sent for every phase.
+- Below the markers, only the block matching the current phase is appended — this
+  replaces the old `phase_extra()` bash function.
+- Block comments are stripped before sending, so notes to whoever edits the file
+  cost no tokens. A block comment is delimited by lines that are **only** `<!--`
+  and `-->`; keep it that way, because prose mentioning `-->` inline on a
+  delimiter line would end the comment early.
+- Substitution is bash parameter expansion, never `eval` or `sed` — the prompt is
+  markdown full of backticks, quotes and `$`, and both of those would execute or
+  mangle it. An unrecognised `{{PLACEHOLDER}}` is left in place, so a typo shows
+  up in the log instead of silently becoming an empty string.
+
+The shared half already carries the parts that generalise: read order, branch/PR
+flow, spec-status commands, comment discipline, notes contract, completion
+contract, escape hatch. What you write per spec:
+
+- **`{{FEATURE_SUMMARY}}`** — two or three sentences on what is broken and what
+  the outcome is. The agent has no memory; this is its orientation.
+- **`{{SAFETY_RULES}}`** — the irreversible things, stated as prohibitions with
+  reasons. "Never X" alone invites a clever exception; "Never X, because Y" does
+  not. Cover: what must never be deleted, what must never be restarted, which
+  commands are out of bounds and why, and anything with a rate limit or a cost.
+- **`{{EXTRA_RULES}}`** — repo-specific traps. Which lint command is wrong to run.
+  Which services hold a stale module until restarted. Anything that has bitten
+  someone.
+- **the `<!-- PHASE n -->` blocks** — per-phase warnings. Put the destructive
+  phase's order of operations here, phrased as "do not reorder them".
+
+Write prohibitions where the agent will be when it needs them, and give the
+reason. An agent that understands why a rule exists will not route around it.
+
+## Filling in the template
+
+Copy both files into the spec folder, then fill them in:
+
+```bash
+cp .claude/skills/issue-to-phases/assets/ralph.sh.template   specs/not-completed/<slug>/ralph.sh
+cp .claude/skills/issue-to-phases/assets/prompt.md.template  specs/not-completed/<slug>/prompt.md
+chmod +x specs/not-completed/<slug>/ralph.sh
+```
+
+In **`ralph.sh`** — the wiring:
+
+| Placeholder | What goes in |
+|---|---|
+| `{{SPEC_SLUG}}` | folder name, e.g. `wildcard-cert-routing` |
+| `{{RALPH_NS}}` | short namespace for markers/logs, e.g. `wildcard-cert` |
+| `{{NOTES_PREFIX}}` | short prefix for notes files, e.g. `wc` |
+| `{{APP_DIR}}` / `{{DEVOPS_DIR}}` / `{{WORKDIR}}` | absolute paths |
+| `{{BRANCH}}` / `{{BASE_BRANCH}}` | from the spec README |
+| `{{PHASE_FILES}}` | one quoted filename per line, in order |
+| `{{ITER_TIMEOUT}}` | seconds per session; size it to the slowest phase |
+| `{{APP_URL}}` | the running UI, for the browser checks — empty on a spec with no UI |
+| `{{SRC_GLOB}}` / `{{BUILT_MARKER}}` | frontend source tree and one built asset, for `assets_stale` |
+| `{{RISK_LINE}}` | one line telling the user what this loop will change |
+| `{{HELPERS}}`, `{{PREFLIGHT}}`, `{{SMOKE_CHECKS}}` | bash, per above |
+
+In **`prompt.md`** — the words:
+
+| Placeholder | What goes in |
+|---|---|
+| `{{FEATURE_SUMMARY}}` | two or three sentences of orientation |
+| `{{CONTEXT_DOCS}}` | the CLAUDE.md / design docs worth reading |
+| `{{TEST_CMD}}` / `{{LINT_CMD}}` | the repo's real commands |
+| `{{EXTRA_RULES}}` | repo-specific traps |
+| `{{SAFETY_RULES}}` | the irreversible things, each with its reason |
+| `{{ROLLBACK}}` | the exact restore command, with paths |
+| `<!-- PHASE n -->` blocks | per-phase warnings |
+
+Everything else in `prompt.md` — phase number, ordinal, paths, markers, branch —
+is substituted by `ralph.sh` at run time. Leave those alone.
+
+Leave `{{APP_URL}}` empty on a backend-only spec and delete the `assets_stale`
+helper with its gate — an empty `find` glob matches the whole tree and the gate
+then fails on every run.
+
+`RALPH_NS` and `NOTES_PREFIX` must be unique per spec. Two loops sharing a
+namespace makes the second one skip every phase as "already done" and overwrite
+the first one's notes.
+
+## Before you hand it over
+
+Five checks, all cheap, and each has caught a real bug:
+
+```bash
+bash -n ralph.sh                      # 1. syntax
+```
+
+2. **Run every helper by hand** against the live system and confirm each returns
+   what you assumed. This is where a stale discriminator shows up. If the spec has
+   a UI, launch the browser once too — `agent-browser open "$APP_URL"` — so a
+   missing binary or a sandbox flag surfaces now rather than mid-phase.
+
+3. **Execute `smoke_check` in a sandbox**, without starting the loop. Extract the
+   config and function block into a scratch file, point `WORKDIR` at a temp
+   directory, and call `preflight` then `smoke_check 0` and `smoke_check 1`:
+
+```bash
+sed -n '/^set -euo pipefail/,/^# ─── Prompt/p' ralph.sh | sed '$d' > /tmp/harness.sh
+cat >> /tmp/harness.sh <<'EOS'
+preflight
+smoke_check 0 && echo "BASELINE PASS" || echo "BASELINE FAIL"
+smoke_check 1 && echo "PHASE-1 GATE PASS" || echo "PHASE-1 GATE FAIL"
+EOS
+sed -i 's|^WORKDIR=.*|WORKDIR="/tmp/ralphtest"|' /tmp/harness.sh
+bash /tmp/harness.sh
+```
+
+   Baseline must pass and the phase-1 gate must **fail** — on today's unmodified
+   tree, naming the specific things the phase will fix. That pair is the
+   calibration. Paste the output when you hand the loop over.
+
+4. **`chmod +x ralph.sh`.**
+
+Then tell the user how to watch it and how to stop it, and say plainly what it
+will change.
