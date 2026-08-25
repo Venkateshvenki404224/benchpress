@@ -184,6 +184,15 @@ class TestSiteNameClaim(IntegrationTestCase):
 
 		self.assertEqual(frappe.db.get_value(SITE, bench.site_name, "owner"), "tenant@example.com")
 
+	def test_deleting_the_instance_frees_the_name(self):
+		"""The row cannot outlive its bench: nothing would ever drop the database it named."""
+		bench = self._bench(self.labs[0], f"freed.{DOMAIN}")
+		self._claimed(bench)
+
+		frappe.delete_doc(BENCH, bench.name, force=True, ignore_permissions=True)
+
+		self.assertFalse(frappe.db.exists(SITE, f"freed.{DOMAIN}"))
+
 	# --- The worker's last line of defence ------------------------------------
 
 	def test_recording_a_site_that_belongs_to_another_bench_raises(self):

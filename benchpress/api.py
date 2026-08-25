@@ -378,11 +378,9 @@ def _delete_bench(bench) -> dict:
 	from benchpress.vpn_adapter import remove_bench_peer
 
 	teardown_bench(bench)
+	# Before the instance: it reads the `Bench Site` rows, which `BenchInstance.on_trash` removes.
 	_drop_bench_site_databases(bench)
 	remove_bench_peer(bench)
-	# Before the instance: `force=True` skips the link check, so these would orphan.
-	for site in frappe.get_all("Bench Site", filters={"bench": bench.name}, pluck="name"):
-		frappe.delete_doc("Bench Site", site, force=True, ignore_permissions=True)
 	frappe.delete_doc("Bench Instance", bench.name, force=True)
 	frappe.db.commit()
 	return {"status": "deleted"}

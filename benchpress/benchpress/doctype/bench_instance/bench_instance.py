@@ -58,13 +58,20 @@ class BenchInstance(Document):
 		lease.refresh_into(self)
 
 	def on_trash(self):
-		"""Give the concurrency slot back. `api._delete_bench` deletes with `force=True`, which
-		skips the link check, and `Bench Admission.bench` is `Data` - so nothing else would ever
-		notice the orphan.
+		"""Give the concurrency slot and the site name back.
+
+		`api._delete_bench` deletes with `force=True`, which skips the link check, and
+		`Bench Admission.bench` is `Data` - so nothing else would ever notice either orphan.
+
+		The site name goes here rather than at the call site because a `Bench Site` row whose
+		instance is gone can no longer drop its own database: only `api._delete_bench` does that,
+		and it needs the instance. It runs the drop before this, while the rows are still here.
 		"""
 		from benchpress.credits import admission
 
 		admission.release(self.name)
+		for site in frappe.get_all("Bench Site", filters={"bench": self.name}, pluck="name"):
+			frappe.delete_doc("Bench Site", site, force=True, ignore_permissions=True)
 
 	def validate_higher_perm_levels(self):
 		"""Refuse a runtime the caller may not set, where Frappe would silently drop it.
