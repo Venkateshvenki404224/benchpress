@@ -818,22 +818,27 @@ class TestLease(IntegrationTestCase):
 			"the bench row was read without the lock `confirm_expiry` takes",
 		)
 
-	def test_a_renewal_that_commits_first_makes_the_stop_a_no_op(self):
-		"""The sweep's read was true when it ran and stale when it acted."""
+	def test_a_renewal_that_commits_first_leaves_the_sweep_nothing_to_claim(self):
+		"""The sweep's read was true when it ran and stale by the time it tried to act.
+
+		Both racers take the same row lock, so the renew either commits before the conditional
+		claim runs — this — or arrives after it and is refused by name. There is no third order
+		in which a bench that has just been paid for is stopped.
+		"""
 		self.enable_credits()
 		metering.on_bench_running(self.running_bench())
 		self.expire()
-		self.claim()
-		lease.release(self.bench.name)
+		self.assertIn(self.bench.name, lease._due(lease.now_ts(), 50))
 
 		with self.renewing():
 			api.renew_bench(self.bench.name, self.short_plan, "req-wins")
-		with patch.object(deploy_manager, "stop_container") as stop, patch.object(frappe.db, "commit"):
-			deploy_manager.stop_bench(self.bench.name)
+		with patch.object(frappe.db, "commit"), patch("frappe.enqueue") as enqueue:
+			self.assertEqual(lease.claim_due(50), [])
 
-		stop.assert_not_called()
+		enqueue.assert_not_called()
 		self.assertEqual(frappe.db.get_value(BENCH, self.bench.name, "status"), "Running")
 		self.assertEqual(self.lease_state(), lease.ACTIVE)
+		self.assertGreater(self.deadline(), lease.now_ts())
 
 	def test_a_renewal_that_arrives_after_the_claim_is_refused_by_name(self):
 		"""The sweep won. The user gets a sentence about starting it again, not a traceback."""
