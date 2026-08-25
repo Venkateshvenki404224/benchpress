@@ -21,7 +21,7 @@ billing events. `Active` means "this instance is inside a window somebody paid f
 
 import frappe
 
-from benchpress.credits import account, config, lease
+from benchpress.credits import account, admission, config, lease
 from benchpress.labs import bench_label
 
 
@@ -40,6 +40,9 @@ def on_bench_running(bench) -> None:
 	if not plan:
 		return
 	charge_lease(bench, lab, plan)
+	# Beside the charge, under the lock it just took: the credits admission reserved for this
+	# start have become the window it reserved them for, so they stop being held.
+	admission.release_hold(bench.name)
 	lease.arm(bench, lab, plan)
 
 

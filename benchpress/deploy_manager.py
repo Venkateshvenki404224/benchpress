@@ -16,7 +16,7 @@ from frappe.utils.file_lock import LockTimeoutError
 from frappe.utils.synchronization import filelock
 
 from benchpress import image_cache
-from benchpress.credits import lease, metering
+from benchpress.credits import admission, lease, metering
 from benchpress.deploy_pipeline import DeployLogWriter, DeployPipeline
 from benchpress.docker_manager import (
 	build_lab_image,
@@ -733,6 +733,9 @@ def _deploy_bench(bench_name: str) -> None:
 		# Settle whatever did run and charge nothing further: a failed deploy is free, and a
 		# failed *re*deploy of an instance that was already burning must not keep burning.
 		metering.on_bench_stopped(bench)
+		# Beside the settle, not behind it: `on_bench_stopped` is free on a bench that never
+		# held a lease, which is every deploy that fails before Running.
+		admission.release(bench.name)
 		frappe.db.commit()
 		append_log(f"=== Deploy failed: {e!s} ===", "error")
 		frappe.db.set_value("Deploy Log", deploy_log_name, "log_type", "error")
@@ -797,7 +800,7 @@ def _checked_exec(container_id: str, command: str, what: str) -> None:
 
 
 def _record_primary_site(bench, lab, admin_password: str) -> None:
-	"""Record the deploy's site as a `Bench Site`, which is what every site list reads.
+	"""Activate the `Bench Site` this deploy was admitted against, which every site list reads.
 
 	Idempotent: a deploy re-runs, so an existing row is refreshed rather than duplicated.
 
@@ -805,10 +808,7 @@ def _record_primary_site(bench, lab, admin_password: str) -> None:
 	`BenchPress User` read `if_owner`, so an admin redeploying somebody else's instance would
 	take the row over and empty that tenant's Sites tab.
 	"""
-	existing = frappe.db.get_value("Bench Site", {"bench": bench.name, "site_name": bench.site_name})
-	site = frappe.get_doc("Bench Site", existing) if existing else frappe.new_doc("Bench Site")
-	site.bench = bench.name
-	site.site_name = bench.site_name
+	site = _claimed_site(bench)
 	site.status = "Active"
 	site.admin_password = admin_password
 	site.owner = bench.owner
@@ -818,6 +818,24 @@ def _record_primary_site(bench, lab, admin_password: str) -> None:
 	site.save(ignore_permissions=True)
 	# No commit: the next log line commits, and committing here outlives a test rollback
 	# that discards the parent instance.
+
+
+def _claimed_site(bench):
+	"""The row `api.create_bench` claimed for this name, claiming it here if nothing did.
+
+	Raises when the name belongs to another bench. This is the last line of defence rather than
+	the constraint - the primary key is that - and a deploy that would write over somebody
+	else's site must fail loudly instead.
+	"""
+	if not frappe.db.exists("Bench Site", bench.site_name):
+		# A Desk deploy never went through `create_bench`, so nothing claimed the name for it.
+		from benchpress.api import _claim_site_name
+
+		_claim_site_name(bench)
+	site = frappe.get_doc("Bench Site", bench.site_name)
+	if site.bench != bench.name:
+		raise Exception(f"Site {bench.site_name} belongs to {site.bench}")
+	return site
 
 
 def _site_app_names(lab) -> list[str]:
@@ -857,11 +875,13 @@ def redeploy_bench(bench_name: str) -> None:
 
 
 def _redeploy_bench(bench_name: str) -> None:
-	teardown_bench(frappe.get_doc("Bench Instance", bench_name))
+	# The slot is held across the whole redeploy: releasing between the two halves would hand it
+	# to somebody else and leave this caller one over their limit when their own deploy lands.
+	teardown_bench(frappe.get_doc("Bench Instance", bench_name), release_admission=False)
 	_deploy_bench(bench_name)
 
 
-def teardown_bench(bench) -> None:
+def teardown_bench(bench, *, release_admission: bool = True) -> None:
 	"""Return an instance to `Draft`: container, volume and site database all gone.
 
 	The one teardown path in the app. A redeploy runs it before building the instance again, and
@@ -870,6 +890,9 @@ def teardown_bench(bench) -> None:
 
 	Every removal is best-effort. A volume that was already gone, or a database that never
 	existed, must not leave the instance stuck describing resources it no longer has.
+
+	`release_admission=False` keeps the concurrency slot, and only `_redeploy_bench` passes it:
+	a redeploy is this plus a deploy, and the caller must not lose their own slot in between.
 	"""
 	if bench.container_id:
 		try:
@@ -896,6 +919,9 @@ def teardown_bench(bench) -> None:
 	# this the burning flag would survive the teardown and the fresh container — which
 	# `_deploy_bench` bills through the same idempotence guard — would run unmetered.
 	metering.on_bench_stopped(bench)
+
+	if release_admission:
+		admission.release(bench.name)
 
 	bench.container_id = None
 	bench.container_image = None
@@ -1065,6 +1091,9 @@ def stop_bench(bench_name: str, from_claim: bool = False) -> None:
 	lease.record_stopped(bench, expired)
 	bench.status = "Stopped"
 	metering.on_bench_stopped(bench)
+	# Stopped is free, so it must stop holding a slot too: a caller at their cap who stops
+	# everything they own would otherwise never start anything again.
+	admission.release(bench.name)
 	bench.save(ignore_permissions=True)
 	_deactivate_bench_sites(bench)
 	if expired:

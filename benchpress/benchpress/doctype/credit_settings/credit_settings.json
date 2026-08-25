@@ -22,6 +22,7 @@
   "caps_section",
   "max_concurrent_free",
   "max_concurrent_paid",
+  "max_concurrent_uncredited",
   "column_break_caps",
   "max_devices",
   "max_builds_per_day",
@@ -93,6 +94,13 @@
    "fieldname": "max_concurrent_paid",
    "fieldtype": "Int",
    "label": "Max Concurrent (Paid)"
+  },
+  {
+   "default": "0",
+   "description": "Concurrent instances per user while credits are switched off. 0 = unlimited, which is what an install that has never opted in keeps.",
+   "fieldname": "max_concurrent_uncredited",
+   "fieldtype": "Int",
+   "label": "Max Concurrent (Credits Off)"
   },
   {
    "fieldname": "column_break_caps",

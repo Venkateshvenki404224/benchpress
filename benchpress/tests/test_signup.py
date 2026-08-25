@@ -29,7 +29,7 @@ import frappe
 from frappe.tests import IntegrationTestCase
 
 from benchpress import signup, waitlist
-from benchpress.credits import account, guard, onboarding
+from benchpress.credits import account, admission, guard, onboarding
 from benchpress.credits.onboarding import ACCESS_ROLE
 
 ACCOUNT = "Credit Account"
@@ -316,17 +316,18 @@ class TestSelfServeSignup(IntegrationTestCase):
 
 		frappe.set_user(EMAIL)
 
-		self.assertEqual(guard._concurrency_limit(), FREE_CEILING)
+		self.assertEqual(guard.concurrency_limit(), FREE_CEILING)
 
 	def test_the_free_ceiling_refusal_names_the_number(self):
-		"""`test_credit_guard` owns the counting; what matters here is that the user is told why."""
+		"""`test_admission` owns the claim; what matters here is that the user is told why."""
 		self.set_setting("max_concurrent_free", FREE_CEILING)
 		signup.sign_up(EMAIL, "Test Person")
 		frappe.set_user(EMAIL)
 
-		with patch("frappe.db.count", return_value=FREE_CEILING):
-			with self.assertRaises(frappe.ValidationError) as refusal:
-				guard.cap_concurrent_instances(data=json.dumps({}))
+		account.ensure_account(EMAIL)
+		frappe.db.set_value("Credit Account", EMAIL, "active_instances", FREE_CEILING, update_modified=False)
+		with self.assertRaises(frappe.ValidationError) as refusal:
+			admission.claim(EMAIL, "signup-ceiling-bench", FREE_CEILING)
 
 		self.assertIn(str(FREE_CEILING), str(refusal.exception))
 

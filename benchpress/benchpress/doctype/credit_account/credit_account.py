@@ -11,12 +11,22 @@ which is why an operator's only ways in are the two document actions below.
 import frappe
 from frappe import _
 from frappe.model.document import Document
+from frappe.utils import cint, flt
 
 from benchpress.credits import account, payments
 from benchpress.permissions import require_admin
 
 
 class CreditAccount(Document):
+	def validate(self):
+		# The tripwire for a lost decrement: a slot released twice would otherwise leave a
+		# negative count that reads as free capacity forever, and a hold returned twice would
+		# leave a balance that spends more than it holds.
+		if cint(self.active_instances) < 0:
+			frappe.throw(_("Active instances cannot be negative."))
+		if flt(self.reserved_credits) < 0:
+			frappe.throw(_("Reserved credits cannot be negative."))
+
 	@frappe.whitelist()
 	def post_adjustment(self, credits: float, reason: str):
 		"""Move this balance by hand, in either direction, with the reason on the row.

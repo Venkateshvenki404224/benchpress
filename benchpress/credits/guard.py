@@ -3,9 +3,13 @@
 
 """The gate: one decorator that can refuse an action before any work is queued.
 
-Phases 1-4 measured; this is where the economics start to say no. Everything refusable goes
-through `requires_credits`, so there is exactly one place that decides what "cannot afford" and
-"too many" mean, and exactly one shape of refusal.
+Everything refusable goes through `requires_admission`, so there is exactly one place that
+decides what "cannot afford" and "too many" mean, and exactly one shape of refusal.
+
+The concurrency cap is not here, and neither is the balance an instance is judged against. Both
+are a claim now rather than a count and a comparison, taken by `benchpress.credits.admission`
+against a row it inserts under one lock; what survives here is the numbers that claim is judged
+against and the functions that price a call.
 
 Two rules the refusals obey:
 
@@ -15,14 +19,14 @@ Two rules the refusals obey:
 - **`0` means unlimited.** Every cap reads its `Credit Settings` field and returns early on zero,
   so an operator disables a cap by clearing it rather than by editing code.
 
-Ordering inside the gate is deliberate: the caps run first because they are plain indexed counts,
-and the balance check last because it opens the account (posting the signup grant) as a side
-effect. A caller who is both at their cap and short of credits is told about the cap, fixes it,
-and then learns about the shortfall — two sentences, both actionable.
+Ordering inside the claim is deliberate: the cap is decided before the credits, so a caller who
+is both at their cap and short is told about the cap, fixes it, and then learns about the
+shortfall — two sentences, both actionable.
 
-Costs are **checks, not debits**. Nothing here writes to a balance; `metering` still owns every
-charge. What a start must prove is the price of one lease, which is the number the size picker
-quoted and the number the deploy is about to spend.
+Costs are **holds, not debits**. Nothing here writes to a balance; `metering` still owns every
+charge. What a start must prove is the price of one lease — the number the size picker quoted
+and the number the deploy is about to spend — and admission reserves it until that deploy
+spends it.
 """
 
 import functools
@@ -33,7 +37,7 @@ from frappe import _
 from frappe.utils import cint, flt, today
 
 from benchpress.benchpress.doctype.bench_instance import get_instance_id
-from benchpress.credits import account, config, lease
+from benchpress.credits import account, admission, config, lease
 from benchpress.permissions import has_app_permission
 
 ACCOUNT = "Credit Account"
@@ -41,15 +45,13 @@ BENCH = "Bench Instance"
 LEDGER = "Credit Ledger Entry"
 SITE = "Bench Site"
 
-TOP_UP_ROUTE = config.TOP_UP_ROUTE
 
-
-def requires_credits(cost=None, caps=()):
+def requires_admission(cost=None, caps=()):
 	"""Refuse what the caller cannot pay for, or already has too many of.
 
 	`cost` and each entry in `caps` are called with the wrapped call's arguments by name, so they
-	read `data=` or `self=` rather than indexing a tuple. With the switch off the wrapper is a
-	pass-through and costs not one query.
+	read `data=` or `self=` rather than indexing a tuple. With the switch off only the slot claim
+	runs, and on a call about no instance that is nothing at all.
 
 	A caller without an app role is passed straight through to the endpoint's own guard. The gate
 	must never be the first thing a Guest meets: it would answer a permission question with an
@@ -60,7 +62,7 @@ def requires_credits(cost=None, caps=()):
 	def decorator(method):
 		@functools.wraps(method)
 		def wrapper(*args, **kwargs):
-			if config.credits_enabled() and has_app_permission():
+			if has_app_permission():
 				_enforce(method, cost, caps, args, kwargs)
 			return method(*args, **kwargs)
 
@@ -70,11 +72,27 @@ def requires_credits(cost=None, caps=()):
 
 
 def _enforce(method, cost, caps, args, kwargs) -> None:
+	"""Claim the slot and the credits together, then the caps that are about something else.
+
+	The claim runs whatever the switch says, because concurrency is capacity rather than
+	economics and `0` is already the operator's way of turning it off. The hold inside it is
+	money, and money does not exist on a site with credits off — which is also why the price is
+	not even computed there.
+
+	The cap and the hold are one decision under one lock, so a caller at neither limit cannot be
+	admitted twice by two requests that read the same figures.
+	"""
 	arguments = _arguments_by_name(method, args, kwargs)
+	subject = _subject_instance(**arguments)
+	needed = flt(cost(**arguments)) if cost and config.credits_enabled() else 0.0
+	admission.claim(frappe.session.user, subject, concurrency_limit(), needed)
+	if not config.credits_enabled():
+		return
 	for cap in caps:
 		cap(**arguments)
-	if cost:
-		_require_balance(cost(**arguments))
+	if needed and not subject:
+		# A custom image build holds no slot, so nothing held its price either: it stays a check.
+		require_balance(frappe.session.user, needed)
 
 
 def _arguments_by_name(method, args, kwargs) -> dict:
@@ -88,8 +106,8 @@ def _arguments_by_name(method, args, kwargs) -> dict:
 
 
 def instance_lease_cost(**call) -> float:
-	"""One lease on this instance's lab. `self` is the `Bench Instance` the method was called on."""
-	return lab_lease_cost(call["self"].lab)
+	"""One lease on this instance's lab, for a call that was handed the document itself."""
+	return lab_lease_cost(_called_on(call).lab)
 
 
 def payload_lease_cost(**call) -> float:
@@ -112,24 +130,6 @@ def build_charge(**call) -> float:
 
 
 # --- The caps: one indexed count each, never a fetch-and-len -----------------
-
-
-def cap_concurrent_instances(**call) -> None:
-	"""The caller's running instances, not counting the one this call is about.
-
-	Redeploying one of N running instances still leaves N running, so counting the subject would
-	let the cap forbid the very people holding it from touching what they already have.
-	"""
-	limit = _concurrency_limit()
-	if not limit:
-		return
-	running = frappe.db.count(BENCH, _other_running_instances(**call))
-	if running >= limit:
-		frappe.throw(
-			_(
-				"You have {0} instances running, the most your plan allows. Stop one, or buy credits at {1} to raise the limit."
-			).format(limit, TOP_UP_ROUTE)
-		)
 
 
 def cap_sites_per_instance(**call) -> None:
@@ -183,29 +183,36 @@ def cap_builds_per_day(**call) -> None:
 		)
 
 
-def _other_running_instances(**call) -> dict:
-	subject = _subject_instance(**call)
-	filters = {"owner": frappe.session.user, "status": "Running"}
-	if subject:
-		filters["name"] = ("!=", subject)
-	return filters
-
-
 def _subject_instance(**call) -> str | None:
-	"""The instance this call is about — the document itself, or the one its payload names."""
-	bench = call.get("self")
+	"""The instance this call is about — the document itself, or the one its payload names.
+
+	`None` for a call that is about no instance at all, such as a device or an image build, and
+	`admission.claim` treats that as nothing to claim.
+	"""
+	bench = _called_on(call)
 	if bench is not None:
 		return bench.name
-	lab_name = frappe.parse_json(call.get("data")).get("lab")
+	data = call.get("data")
+	lab_name = frappe.parse_json(data).get("lab") if data else None
 	return get_instance_id(frappe.session.user, lab_name) if lab_name else None
 
 
-def _concurrency_limit() -> int:
-	"""The paid ceiling once anything has been bought, the free one until then.
+def _called_on(call):
+	"""The `Bench Instance` document this call carries, whether as a method's `self` or an argument."""
+	return call.get("self") or call.get("bench")
+
+
+def concurrency_limit() -> int:
+	"""How many instances this caller may hold at once. `0` means unlimited.
 
 	"Has paid" is the existence of a Purchase row, not a `lifetime_purchased` balance: a refund
 	clears the float, and somebody who bought and was refunded has still plainly paid.
+
+	With credits off there are no plans to read, so the cap is its own setting. It defaults to
+	`0`, which is what keeps an install that has never opted in behaving as it did.
 	"""
+	if not config.credits_enabled():
+		return cint(config.settings().max_concurrent_uncredited)
 	settings = config.settings()
 	paid = frappe.db.exists(LEDGER, {"account": frappe.session.user, "entry_type": account.PURCHASE})
 	return cint(settings.max_concurrent_paid if paid else settings.max_concurrent_free)
@@ -227,19 +234,19 @@ def _site_limit(bench_name) -> int:
 def require_balance(user: str, needed) -> None:
 	"""Refuse by name, naming the shortfall and the route out of it.
 
+	What a caller may spend is `spendable` rather than `available`: credits an admitted deploy is
+	already holding are committed, and a renewal that spent them would overdraw the account the
+	moment that deploy reaches `Running`.
+
 	Takes the user rather than reading the session: a renewal is charged to the bench's owner,
 	who is not always whoever pressed the button.
 	"""
 	row = _account_row(user)
 	if row.is_suspended:
 		frappe.throw(_("This account is suspended, so nothing new can be started."))
-	available = account.available(row)
-	if flt(needed) > available:
-		frappe.throw(_shortfall_message(flt(needed), available))
-
-
-def _require_balance(needed) -> None:
-	require_balance(frappe.session.user, needed)
+	spendable = account.spendable(row)
+	if flt(needed) > spendable:
+		frappe.throw(account.shortfall_message(flt(needed), spendable))
 
 
 def _account_row(user: str):
@@ -254,9 +261,3 @@ def _account_row(user: str):
 	"""
 	name = account.ensure_account(user)
 	return frappe.db.get_value(ACCOUNT, name, account.BALANCE_FIELDS, as_dict=True, for_update=True)
-
-
-def _shortfall_message(needed, available) -> str:
-	return _("Not enough credits: this needs {0} and {1} are available — {2} short. Top up at {3}.").format(
-		flt(needed, 2), flt(available, 2), flt(needed - available, 2), TOP_UP_ROUTE
-	)

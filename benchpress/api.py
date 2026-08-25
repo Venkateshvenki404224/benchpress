@@ -24,11 +24,11 @@ from benchpress.credits import account, config, lease, metering, payments
 from benchpress.credits.guard import (
 	build_charge,
 	cap_builds_per_day,
-	cap_concurrent_instances,
 	cap_devices,
+	instance_lease_cost,
 	payload_lease_cost,
 	require_balance,
-	requires_credits,
+	requires_admission,
 )
 from benchpress.permissions import (
 	get_bench_owner_filter,
@@ -83,7 +83,7 @@ def create_lab_from_template(template: str, lab_id: str | None = None, title: st
 
 
 @frappe.whitelist()
-@requires_credits(cost=build_charge, caps=(cap_builds_per_day,))
+@requires_admission(cost=build_charge, caps=(cap_builds_per_day,))
 def build_lab_image(lab_name: str) -> dict:
 	require_admin()
 	frappe.enqueue(
@@ -164,7 +164,7 @@ def _counts_by_bench(doctype: str, column: str, bench_names: list[str]) -> dict[
 
 
 @frappe.whitelist()
-@requires_credits(cost=payload_lease_cost, caps=(cap_concurrent_instances,))
+@requires_admission(cost=payload_lease_cost)
 def create_bench(data: str) -> dict:
 	require_app_user()
 	from benchpress.benchpress.doctype.bench_instance import get_instance_id
@@ -179,40 +179,20 @@ def create_bench(data: str) -> dict:
 	lab = frappe.get_cached_doc("Lab", lab_name)
 	requested_site_name = data.get("site_name") or data.get("site")
 
+	site_name = resolve_site_name(requested_site_name)
 	instance_id = get_instance_id(frappe.session.user, lab_name)
 	if frappe.db.exists("Bench Instance", instance_id):
-		doc = frappe.get_doc("Bench Instance", instance_id)
-		site_name = resolve_site_name(requested_site_name, exclude_bench=doc.name)
-		if site_name and site_name != doc.site_name:
-			_assert_site_name_changeable(doc)
-			doc.site_name = site_name
-		doc.status = "Deploying"
-		doc.save()
+		doc = _redeploy_instance(instance_id, site_name)
 	else:
-		doc = frappe.get_doc(
-			{
-				"doctype": "Bench Instance",
-				"bench_name": data.get("bench_name"),
-				"lab": lab_name,
-				"frappe_version": lab.frappe_version,
-				"domain": data.get("domain"),
-				"site_name": resolve_site_name(requested_site_name),
-				"status": "Draft",
-			}
-		)
+		try:
+			doc = _new_instance(lab, data, site_name)
+		except frappe.DuplicateEntryError:
+			# A call for the same (user, lab) that arrived first already named this bench.
+			# `get_instance_id` is deterministic, so the branch was always meant to be idempotent.
+			frappe.clear_last_message()
+			doc = _redeploy_instance(instance_id, site_name)
 
-		for app in lab.apps:
-			doc.append(
-				"apps",
-				{
-					"app_name": app.app_name,
-					"app_label": app.app_label,
-					"git_url": app.git_url,
-					"branch": app.branch,
-				},
-			)
-
-		doc.insert()
+	_claim_site_name(doc)
 
 	frappe.enqueue(
 		"benchpress.deploy_manager.deploy_bench",
@@ -225,6 +205,77 @@ def create_bench(data: str) -> dict:
 	)
 
 	return {"name": doc.name, "status": "Deploying"}
+
+
+def _redeploy_instance(instance_id: str, site_name: str | None):
+	doc = frappe.get_doc("Bench Instance", instance_id)
+	if site_name and site_name != doc.site_name:
+		_assert_site_name_changeable(doc)
+		doc.site_name = site_name
+	doc.status = "Deploying"
+	doc.save()
+	return doc
+
+
+def _new_instance(lab, data: dict, site_name: str | None):
+	doc = frappe.get_doc(
+		{
+			"doctype": "Bench Instance",
+			"bench_name": data.get("bench_name"),
+			"lab": lab.name,
+			"frappe_version": lab.frappe_version,
+			"domain": data.get("domain"),
+			"site_name": site_name,
+			"status": "Draft",
+		}
+	)
+	for app in lab.apps:
+		doc.append(
+			"apps",
+			{
+				"app_name": app.app_name,
+				"app_label": app.app_label,
+				"git_url": app.git_url,
+				"branch": app.branch,
+			},
+		)
+	return doc.insert()
+
+
+def _claim_site_name(bench) -> None:
+	"""Claim the site name by insert. The primary key is the check, and nothing else is.
+
+	The name is held for exactly as long as the row: `teardown_bench` keeps it so a redeploy
+	still owns its own name, and only `_delete_bench` frees it - which is when the database
+	behind it actually stops existing.
+	"""
+	try:
+		site = frappe.get_doc(
+			{
+				"doctype": "Bench Site",
+				"site_name": bench.site_name,
+				"bench": bench.name,
+				"status": "Creating",
+			}
+		).insert(ignore_permissions=True)
+	except frappe.DuplicateEntryError:
+		_refuse_taken_site_name(bench)
+		return
+	# After the insert, which stamps the session user over any owner handed to it. `Bench Site`
+	# is read `if_owner`, so an admin deploying somebody else's instance would otherwise take the
+	# row over and empty that tenant's Sites tab.
+	frappe.db.set_value("Bench Site", site.name, "owner", bench.owner, update_modified=False)
+
+
+def _refuse_taken_site_name(bench) -> None:
+	# First, and on both paths: the framework msgprints "Bench Site X already exists" before it
+	# raises, so a redeploy would carry that internal sentence on an otherwise successful reply.
+	frappe.clear_last_message()
+	# A locking read, because this session is REPEATABLE READ: a plain one answers from a
+	# snapshot taken before the winner committed, and would refuse this caller their own name.
+	if frappe.db.get_value("Bench Site", bench.site_name, "bench", for_update=True) == bench.name:
+		return
+	frappe.throw(_("Site name '{0}' is already in use. Choose a different name.").format(bench.site_name))
 
 
 def _assert_site_name_changeable(doc) -> None:
@@ -248,9 +299,6 @@ def _assert_site_name_changeable(doc) -> None:
 
 @frappe.whitelist()
 def bench_action(bench_name: str, action: str) -> dict:
-	from benchpress.deploy_manager import enqueue_route_sync
-	from benchpress.docker_manager import restart_container, start_container
-
 	require_bench_access(bench_name)
 	if action == "delete" and not is_admin():
 		frappe.throw(_("Only admins can delete bench instances."), frappe.PermissionError)
@@ -264,6 +312,19 @@ def bench_action(bench_name: str, action: str) -> dict:
 
 	if action not in ("start", "restart"):
 		frappe.throw(_("Invalid action: {0}").format(action))
+
+	return _start_bench(bench, action)
+
+
+@requires_admission(cost=instance_lease_cost)
+def _start_bench(bench, action: str) -> dict:
+	"""Bring a deployed container back up, behind the same gate every other start carries.
+
+	This is the start path the SPA uses, so it is where the cap and the hold have to be. Stopping
+	and deleting stay outside the gate: stopping is what a refused caller is being told to do.
+	"""
+	from benchpress.deploy_manager import enqueue_route_sync
+	from benchpress.docker_manager import restart_container, start_container
 
 	_require_container(bench)
 	if action == "start":
@@ -317,11 +378,9 @@ def _delete_bench(bench) -> dict:
 	from benchpress.vpn_adapter import remove_bench_peer
 
 	teardown_bench(bench)
+	# Before the instance: it reads the `Bench Site` rows, which `BenchInstance.on_trash` removes.
 	_drop_bench_site_databases(bench)
 	remove_bench_peer(bench)
-	# Before the instance: `force=True` skips the link check, so these would orphan.
-	for site in frappe.get_all("Bench Site", filters={"bench": bench.name}, pluck="name"):
-		frappe.delete_doc("Bench Site", site, force=True, ignore_permissions=True)
 	frappe.delete_doc("Bench Instance", bench.name, force=True)
 	frappe.db.commit()
 	return {"status": "deleted"}
@@ -380,7 +439,7 @@ def get_deploy_history() -> dict:
 
 
 @frappe.whitelist()
-@requires_credits(caps=(cap_devices,))
+@requires_admission(caps=(cap_devices,))
 def add_device(device_name: str, device_type: str, public_key: str | None = None) -> dict:
 	require_app_user()
 	from benchpress.vpn_adapter import register_device
