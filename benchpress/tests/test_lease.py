@@ -455,6 +455,24 @@ class TestLease(IntegrationTestCase):
 		self.assertEqual(len(self.usage_rows()), 1)
 		self.assertEqual(self.deadline(), first)
 
+	def test_a_slow_deploy_saving_late_cannot_revert_a_renewal(self):
+		"""A renewal that commits mid-deploy survives the deploy's own save.
+
+		The deploy job holds a document loaded minutes earlier; `save()` writes every field from
+		that copy. Observed live: a 162-second redeploy reverted an 8-hour renewal bought 25
+		seconds before it finished, and the ledger kept the 60 credits.
+		"""
+		self.enable_credits()
+		stale = self.running_bench()  # the deploy job's copy, loaded before the renew
+		metering.on_bench_running(stale)
+
+		renewed = lease.extend(self.running_bench(), self.plan(self.long_plan))
+
+		stale.status = "Running"
+		stale.save(ignore_permissions=True)
+
+		self.assertEqual(self.deadline(), renewed)
+
 	def test_a_deploy_that_fails_after_the_container_started_is_free(self):
 		"""The invariant `metering.py` documents: a deploy that never reached `Running` costs nothing."""
 		self.enable_credits()
