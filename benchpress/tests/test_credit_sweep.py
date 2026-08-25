@@ -224,6 +224,11 @@ class TestCreditSweep(IntegrationTestCase):
 		self.assertEqual(self.enqueued.call_args.kwargs["queue"], "long")
 		self.assertTrue(self.enqueued.call_args.kwargs["deduplicate"])
 
+	def test_the_stop_cannot_start_before_the_decision_commits(self):
+		"""`stop_bench` re-reads the row, so a job that runs first acts on a decision that may roll back."""
+		sweep._enqueue_stop(self.bench.name)
+		self.assertTrue(self.enqueued.call_args.kwargs["enqueue_after_commit"])
+
 	def test_the_sweep_does_not_scale_in_query_count(self):
 		"""One query per load, whatever the fleet size — never a `get_doc` per instance."""
 		self.enable_credits()
