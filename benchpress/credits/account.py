@@ -31,7 +31,7 @@ LEDGER = "Credit Ledger Entry"
 # credits, and rounding that to two places at every debit would leak the difference.
 PRECISION = 6
 
-BALANCE_FIELDS = ["balance", "is_suspended"]
+BALANCE_FIELDS = ["balance", "is_suspended", "reserved_credits"]
 # The hot path reads only what it must; the meter also needs the denominator, so it asks for one
 # field more in the same single read rather than making the guard carry it.
 SUMMARY_FIELDS = [*BALANCE_FIELDS, "lifetime_spent"]
@@ -60,6 +60,23 @@ def available(account) -> float:
 	return flt(flt(account.balance), PRECISION)
 
 
+def spendable(account) -> float:
+	"""What a new commitment may take: the balance less what admission is already holding.
+
+	Never what the sweep asks — that is `available`, and a hold must not read as running out.
+	It deliberately does not settle anything: an admission is a question, and a question that
+	wrote a ledger row would put a Usage line in the statement for merely asking.
+	"""
+	return flt(available(account) - flt(account.reserved_credits), PRECISION)
+
+
+def shortfall_message(needed, available) -> str:
+	"""Refuse by name: what this costs, what is left, the gap, and the way out of it."""
+	return _("Not enough credits: this needs {0} and {1} are available — {2} short. Top up at {3}.").format(
+		flt(needed, 2), flt(available, 2), flt(needed - available, 2), config.TOP_UP_ROUTE
+	)
+
+
 def allocated(account) -> float:
 	"""Every credit ever put into this account: what is left, plus what has gone.
 
@@ -84,11 +101,12 @@ def summary(user: str) -> dict:
 		return {"enabled": False}
 	row = frappe.db.get_value(ACCOUNT, user, SUMMARY_FIELDS, as_dict=True)
 	if not row:
-		return {"enabled": True, "balance": 0.0, "allocated": 0.0, "is_suspended": False}
+		return {"enabled": True, "balance": 0.0, "allocated": 0.0, "reserved": 0.0, "is_suspended": False}
 	return {
 		"enabled": True,
 		"balance": available(row),
 		"allocated": allocated(row),
+		"reserved": flt(row.reserved_credits, PRECISION),
 		"is_suspended": bool(row.is_suspended),
 	}
 

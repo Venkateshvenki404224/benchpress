@@ -214,7 +214,7 @@ class TestCreditGuard(IntegrationTestCase):
 		message = str(refusal.exception)
 		self.assertIn("Not enough credits", message)
 		self.assertIn("short", message, "a refusal that does not name the gap explains nothing")
-		self.assertIn(guard.TOP_UP_ROUTE, message, "a refusal must name the way out of it")
+		self.assertIn(config.TOP_UP_ROUTE, message, "a refusal must name the way out of it")
 
 	def test_a_funded_user_may_deploy(self):
 		"""The positive control: the same call, the only difference being a balance."""

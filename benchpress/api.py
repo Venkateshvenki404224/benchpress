@@ -25,6 +25,7 @@ from benchpress.credits.guard import (
 	build_charge,
 	cap_builds_per_day,
 	cap_devices,
+	instance_lease_cost,
 	payload_lease_cost,
 	require_balance,
 	requires_admission,
@@ -247,9 +248,6 @@ def _assert_site_name_changeable(doc) -> None:
 
 @frappe.whitelist()
 def bench_action(bench_name: str, action: str) -> dict:
-	from benchpress.deploy_manager import enqueue_route_sync
-	from benchpress.docker_manager import restart_container, start_container
-
 	require_bench_access(bench_name)
 	if action == "delete" and not is_admin():
 		frappe.throw(_("Only admins can delete bench instances."), frappe.PermissionError)
@@ -263,6 +261,19 @@ def bench_action(bench_name: str, action: str) -> dict:
 
 	if action not in ("start", "restart"):
 		frappe.throw(_("Invalid action: {0}").format(action))
+
+	return _start_bench(bench, action)
+
+
+@requires_admission(cost=instance_lease_cost)
+def _start_bench(bench, action: str) -> dict:
+	"""Bring a deployed container back up, behind the same gate every other start carries.
+
+	This is the start path the SPA uses, so it is where the cap and the hold have to be. Stopping
+	and deleting stay outside the gate: stopping is what a refused caller is being told to do.
+	"""
+	from benchpress.deploy_manager import enqueue_route_sync
+	from benchpress.docker_manager import restart_container, start_container
 
 	_require_container(bench)
 	if action == "start":

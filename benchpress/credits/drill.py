@@ -1,7 +1,7 @@
 # Copyright (c) 2026, Venkatesh and contributors
 # For license information, please see license.txt
 
-"""Setup and teardown for `scripts/admission_drill.py`, the concurrency drill.
+"""Setup and teardown for `scripts/admission_drill.py`, the admission drill.
 
 Nothing here is whitelisted, and nothing here may become whitelisted: cleanup deletes with
 `force=True` and has no business being reachable over HTTP. The harness reaches it through
@@ -11,10 +11,14 @@ The drill fires one caller at **N distinct labs**. `get_instance_id` is `md5(ema
 N calls naming one lab all name the same bench - a same-lab drill would hold at the cap because
 there was only ever one thing to admit, and would report a pass against a gate that does
 nothing. Distinct labs are the whole point.
+
+There are two modes. `cap` moves the concurrency limit and funds the account past anything it
+could be refused for; `credits` lifts the limit and funds it with exactly three leases. Each one
+has to be able to fail for its own reason and no other.
 """
 
 import frappe
-from frappe.utils import cint
+from frappe.utils import cint, flt
 
 from benchpress.credits import account, config
 
@@ -26,20 +30,35 @@ LEDGER = "Credit Ledger Entry"
 DRILL_USER = "admission-drill@example.com"
 DRILL_ROLE = "BenchPress User"
 LAB_PREFIX = "drill-"
-DRILL_BALANCE = 100000.0
+
+# Every drill lab prices its own lease, so what a drill admission costs does not depend on which
+# plan the site happens to default to. `credits` mode divides a balance by this and expects the
+# quotient.
+LEASE_PRICE = 1.0
+
+# `cap` mode measures the concurrency claim, so its account is funded past anything it could be
+# refused for. `credits` mode measures the hold, so its account affords exactly three of them.
+CAP_MODE_BALANCE = 100000.0
+CREDIT_MODE_BALANCE = 3.0
 
 
-def setup(workers: int = 12, cap: int = 1) -> dict:
+def setup(workers: int = 12, cap: int = 1, mode: str = "cap") -> dict:
 	"""Open the drill account, mint its labs and its token, and set the cap. Idempotent.
 
 	Returns everything the harness needs, including `cap_field` and `cap_before` so it can put
 	the site's own cap back: which field the limit comes from depends on whether credits are on,
 	and the drill must not assume.
+
+	`credits` mode lifts the cap to unlimited, because a run that measures the hold must not be
+	able to pass by refusing on the count instead.
 	"""
 	workers = cint(workers)
+	credits_mode = mode == "credits"
 	user = _ensure_user()
 	labs = [_ensure_lab(index) for index in range(workers)]
-	_fund(user)
+	balance = CREDIT_MODE_BALANCE if credits_mode else CAP_MODE_BALANCE
+	_fund(user, balance)
+	cap = 0 if credits_mode else cint(cap)
 	cap_field, cap_before = _set_cap(cap)
 	frappe.db.commit()
 	return {
@@ -51,7 +70,10 @@ def setup(workers: int = 12, cap: int = 1) -> dict:
 		"credits_enabled": bool(config.credits_enabled()),
 		"cap_field": cap_field,
 		"cap_before": cap_before,
-		"cap": cint(cap),
+		"cap": cap,
+		"mode": mode,
+		"balance": balance,
+		"lease_price": LEASE_PRICE,
 	}
 
 
@@ -75,12 +97,23 @@ def restore(cap_field: str, cap_before) -> dict:
 
 def report() -> dict:
 	"""What the drill asserts on: the counter, and the rows the counter is meant to count."""
+	row = frappe.db.get_value(
+		ACCOUNT, DRILL_USER, ["active_instances", "reserved_credits", "balance"], as_dict=True
+	)
 	return {
 		"user": DRILL_USER,
-		"active_instances": cint(frappe.db.get_value(ACCOUNT, DRILL_USER, "active_instances")),
+		"active_instances": cint(row.active_instances) if row else 0,
+		"reserved_credits": flt(row.reserved_credits) if row else 0.0,
+		"balance": flt(row.balance) if row else 0.0,
 		"admission_rows": frappe.db.count(ADMISSION, {"account": DRILL_USER}),
+		"held_credits": flt(_held_total()),
 		"benches": frappe.db.count(BENCH, {"owner": DRILL_USER}),
 	}
+
+
+def _held_total() -> float:
+	rows = frappe.get_all(ADMISSION, filters={"account": DRILL_USER}, pluck="held_credits")
+	return sum(flt(held) for held in rows)
 
 
 def stage_real_lab(image_tag: str, size: str = "Small") -> str:
@@ -205,8 +238,11 @@ def _api_secret(user: str) -> str | None:
 
 
 def _ensure_lab(index: int) -> str:
+	"""One drill lab, priced at `LEASE_PRICE`. Re-priced on every run, because a lab outlives one."""
 	lab_id = f"{LAB_PREFIX}{index}"
 	if frappe.db.exists("Lab", lab_id):
+		frappe.db.set_value("Lab", lab_id, "deploy_credits", LEASE_PRICE, update_modified=False)
+		frappe.clear_document_cache("Lab", lab_id)
 		return lab_id
 	return (
 		frappe.get_doc(
@@ -219,6 +255,7 @@ def _ensure_lab(index: int) -> str:
 				# them enabled a pull failure is a far cheaper mistake than a real build.
 				"image_tag": "benchpress/admission-drill:latest",
 				"instance_size": config.default_size().name if config.default_size() else None,
+				"deploy_credits": LEASE_PRICE,
 			}
 		)
 		.insert(ignore_permissions=True)
@@ -226,15 +263,22 @@ def _ensure_lab(index: int) -> str:
 	)
 
 
-def _fund(user: str) -> None:
-	"""Enough credits that nothing is refused for the wrong reason. Set, not granted.
+def _fund(user: str, balance: float) -> None:
+	"""Set the drill account to exactly `balance`, holding nothing. Set, not granted.
 
-	The drill measures the concurrency claim. A shortfall refusal would fail it for a reason
-	that has nothing to do with what is being measured, and a real grant would leave money on a
-	live site's ledger.
+	Set rather than granted because a real grant would leave money on a live site's ledger, and
+	exactly rather than at least because `credits` mode divides this figure by the lease price
+	and expects the quotient. The claims and the aggregates go with it: a previous run that was
+	not cleaned up would otherwise start this one with credits already reserved.
 	"""
 	account.ensure_account(user)
-	frappe.db.set_value(ACCOUNT, user, "balance", DRILL_BALANCE, update_modified=False)
+	frappe.db.delete(ADMISSION, {"account": user})
+	frappe.db.set_value(
+		ACCOUNT,
+		user,
+		{"balance": flt(balance), "active_instances": 0, "reserved_credits": 0.0},
+		update_modified=False,
+	)
 
 
 def _set_cap(cap: int) -> tuple[str, int]:

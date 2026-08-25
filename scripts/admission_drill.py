@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fire N parallel `create_bench` calls at one caller's cap and count what got in.
+"""Fire N parallel `create_bench` calls at one caller's limits and count what got in.
 
 The harness for `specs/.../atomic-admission`. It never reimplements the claim: every request
 goes over HTTP to the shipped endpoint, and the only thing this file decides is how many of
@@ -23,7 +23,13 @@ Three properties make it safe to run against a host that is serving real tenants
 The labs are distinct on purpose. `get_instance_id` is `md5(email + lab)`, so N calls naming
 one lab all name one bench, and a same-lab drill would hold at the cap with nothing to admit.
 
+`--mode cap` measures the concurrency claim: the cap is moved and the account is funded past
+anything else it could be refused for. `--mode credits` measures the hold: the cap is lifted and
+the account affords exactly three leases, so a pass means three admissions and nine shortfalls.
+Each mode fails if anything is refused for the other one's reason.
+
     python3 scripts/admission_drill.py --mode cap --workers 12 --i-know-this-is benchpress.cloud
+    python3 scripts/admission_drill.py --mode credits --workers 12 --i-know-this-is benchpress.cloud
 """
 
 import argparse
@@ -46,12 +52,18 @@ DEPLOY_QUEUE = "queue-long"
 CREATE_BENCH = "/api/method/benchpress.api.create_bench"
 LOGGED_USER = "/api/method/frappe.auth.get_logged_user"
 
-# The sentence `admission.claim` throws. Matched as text because that is all an HTTP client
+# The two sentences `admission.claim` throws. Matched as text because that is all an HTTP client
 # gets: Frappe answers every refusal with 417 and the message inside `_server_messages`.
 CAP_SENTENCE = "the most your plan allows"
+CREDIT_SENTENCE = "Not enough credits"
+
+VERDICTS = ("admitted", "refused_cap", "refused_credits", "refused_other", "error")
 
 REQUEST_TIMEOUT = 120
 BENCH_TIMEOUT = 600
+
+# Credits are floats at precision 6 on both sides of every comparison here.
+TOLERANCE = 1e-6
 
 
 def main() -> int:
@@ -60,10 +72,13 @@ def main() -> int:
 		print("cleanup:", json.dumps(_bench_execute("cleanup")))
 		return 0
 
-	setup = _bench_execute("setup", workers=args.workers, cap=args.cap)
-	_assert_right_site(args.i_know_this_is, setup)
-
+	setup = _bench_execute("setup", workers=args.workers, cap=args.cap, mode=args.mode)
+	# Inside the try: setup has already moved the site's cap, so every way out of here has to
+	# put it back, including the two refusals below.
 	try:
+		_assert_right_site(args.i_know_this_is, setup)
+		if args.mode == "credits" and not setup["credits_enabled"]:
+			_refuse("credits are switched off on this site, so there is no hold to measure")
 		return _run(args, setup)
 	finally:
 		print("restore:", json.dumps(_bench_execute("restore", **_restore_kwargs(setup))))
@@ -130,45 +145,76 @@ def _outcome(index: int, lab: str, status: int, body: bytes) -> dict:
 	text = body.decode(errors="replace")
 	if status == 200:
 		return {"index": index, "lab": lab, "verdict": "admitted", "detail": text[:200]}
-	verdict = "refused_cap" if CAP_SENTENCE in text else "refused_other"
-	return {"index": index, "lab": lab, "verdict": verdict, "detail": text[:300]}
+	return {"index": index, "lab": lab, "verdict": _refusal(text), "detail": text[:300]}
+
+
+def _refusal(text: str) -> str:
+	if CAP_SENTENCE in text:
+		return "refused_cap"
+	if CREDIT_SENTENCE in text:
+		return "refused_credits"
+	return "refused_other"
 
 
 def _verdict(args, setup, results, report) -> int:
-	counts = {verdict: 0 for verdict in ("admitted", "refused_cap", "refused_other", "error")}
+	counts = dict.fromkeys(VERDICTS, 0)
 	for result in results:
 		counts[result["verdict"]] += 1
-	expected = args.cap or args.workers
+	expected = _expected(args, setup)
 
 	print(
-		f"admitted {counts['admitted']} / attempted {args.workers} · cap {args.cap} · "
-		f"refused {counts['refused_cap']} (cap) {counts['refused_other']} (other) · "
-		f"{counts['error']} errors"
+		f"admitted {counts['admitted']} / attempted {args.workers} · cap {setup['cap']} · "
+		f"refused {counts['refused_cap']} (cap) {counts['refused_credits']} (credits) "
+		f"{counts['refused_other']} (other) · {counts['error']} errors"
 	)
-	print(f"account: active_instances={report['active_instances']} rows={report['admission_rows']}")
+	print(
+		f"account: active_instances={report['active_instances']} rows={report['admission_rows']} "
+		f"reserved={report['reserved_credits']} held={report['held_credits']} "
+		f"balance={report['balance']}"
+	)
 
-	broken = _broken(counts, expected, report)
+	broken = _broken(args, setup, counts, expected, report)
 	sys.stdout.flush()
 	for line in broken:
 		print(f"FAIL: {line}", file=sys.stderr)
+	unexplained = (_wrong_reason(args.mode), "refused_other", "error")
 	for result in results:
-		if result["verdict"] in ("refused_other", "error"):
+		if result["verdict"] in unexplained:
 			print(f"  {result['lab']}: {result['verdict']} {result['detail']}", file=sys.stderr)
 	return 1 if broken else 0
 
 
-def _broken(counts: dict, expected: int, report: dict) -> list[str]:
+def _expected(args, setup: dict) -> int:
+	"""How many of these requests should get in, from the limit the mode is measuring."""
+	if args.mode == "credits":
+		return int(setup["balance"] // setup["lease_price"])
+	return setup["cap"] or args.workers
+
+
+def _wrong_reason(mode: str) -> str:
+	"""The refusal that means this run measured something other than what it was aimed at."""
+	return "refused_credits" if mode == "cap" else "refused_cap"
+
+
+def _broken(args, setup: dict, counts: dict, expected: int, report: dict) -> list[str]:
+	wrong_reason = _wrong_reason(args.mode)
+	# Nothing is held on a site with credits off, where the claim is the whole of admission.
+	held = expected * setup["lease_price"] if setup["credits_enabled"] else 0.0
 	broken = []
 	if counts["admitted"] != expected:
 		broken.append(f"expected {expected} admitted, got {counts['admitted']}")
 	if counts["error"]:
 		broken.append(f"{counts['error']} requests failed to complete")
-	if counts["refused_other"]:
-		broken.append(f"{counts['refused_other']} refused for a reason that is not the cap")
+	if counts[wrong_reason] or counts["refused_other"]:
+		broken.append(f"{counts[wrong_reason] + counts['refused_other']} refused for the wrong reason")
 	if report["admission_rows"] != counts["admitted"]:
 		broken.append(f"{report['admission_rows']} admission rows for {counts['admitted']} admitted")
 	if report["active_instances"] != report["admission_rows"]:
 		broken.append(f"counter says {report['active_instances']}, rows say {report['admission_rows']}")
+	if abs(report["reserved_credits"] - report["held_credits"]) > TOLERANCE:
+		broken.append(f"account reserves {report['reserved_credits']}, rows hold {report['held_credits']}")
+	if abs(report["reserved_credits"] - held) > TOLERANCE:
+		broken.append(f"expected {held} credits held, account reserves {report['reserved_credits']}")
 	return broken
 
 
@@ -275,7 +321,7 @@ def _last_json(output: str, function: str) -> dict:
 
 def _parse_args():
 	parser = argparse.ArgumentParser(description=__doc__)
-	parser.add_argument("--mode", choices=("cap", "cleanup"), default="cap")
+	parser.add_argument("--mode", choices=("cap", "credits", "cleanup"), default="cap")
 	parser.add_argument("--workers", type=int, default=12)
 	parser.add_argument("--cap", type=int, default=1, help="0 means unlimited")
 	parser.add_argument("--i-know-this-is", required=True, help="the site's base_domain")

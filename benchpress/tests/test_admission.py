@@ -1,7 +1,7 @@
 # Copyright (c) 2026, Venkatesh and Contributors
 # See license.txt
 
-"""Admission: what a claim writes, what it refuses, and what gives it back.
+"""Admission: what a claim writes and holds, what it refuses, and what gives both back.
 
 The unit tests here prove the logic. They cannot prove the property, because the suite never
 commits and a second connection would see nothing and then block on the first one's lock until
@@ -16,10 +16,11 @@ from unittest.mock import patch
 
 import frappe
 from frappe.tests import IntegrationTestCase
-from frappe.utils import add_to_date, now_datetime
+from frappe.utils import add_to_date, flt, now_datetime
 
+from benchpress import api
 from benchpress.benchpress.doctype.bench_instance import get_instance_id
-from benchpress.credits import admission, admission_repair, config
+from benchpress.credits import admission, admission_repair, config, metering
 from benchpress.credits.seed import seed_defaults
 
 ACCOUNT = "Credit Account"
@@ -33,7 +34,31 @@ USER = "admission-user@example.com"
 OTHER = "admission-other@example.com"
 LABS = ("admission-lab-a", "admission-lab-b", "admission-lab-c")
 
+# Every drill lab prices its own lease, so the hold is a number this module chose rather than
+# whatever plan the site happens to default to.
+LEASE_COST = 4.0
+ADMISSION_PLAN = "Admission 30 Minutes"
+
 TUNED_SETTINGS = ("max_concurrent_free", "max_concurrent_paid", "max_concurrent_uncredited")
+
+
+def _ensure_plan() -> str:
+	if frappe.db.exists("Lease Plan", ADMISSION_PLAN):
+		return ADMISSION_PLAN
+	return (
+		frappe.get_doc(
+			{
+				"doctype": "Lease Plan",
+				"plan_label": ADMISSION_PLAN,
+				"minutes": 30,
+				"credits": LEASE_COST,
+				"is_active": 1,
+				"sort_order": 30,
+			}
+		)
+		.insert(ignore_permissions=True)
+		.name
+	)
 
 
 def _ensure_user(email: str) -> str:
@@ -50,7 +75,7 @@ def _ensure_user(email: str) -> str:
 	return email
 
 
-def _ensure_lab(lab_id: str):
+def _ensure_lab(lab_id: str, plan: str):
 	if frappe.db.exists("Lab", lab_id):
 		return frappe.get_doc("Lab", lab_id)
 	return frappe.get_doc(
@@ -61,6 +86,8 @@ def _ensure_lab(lab_id: str):
 			"frappe_version": "version-15",
 			"image_tag": "benchpress/test:latest",
 			"instance_size": "Small",
+			"default_lease_plan": plan,
+			"deploy_credits": LEASE_COST,
 		}
 	).insert(ignore_permissions=True)
 
@@ -95,7 +122,8 @@ class TestAdmission(IntegrationTestCase):
 		}
 		cls.user = _ensure_user(USER)
 		cls.other = _ensure_user(OTHER)
-		cls.labs = [_ensure_lab(lab_id) for lab_id in LABS]
+		cls.plan = _ensure_plan()
+		cls.labs = [_ensure_lab(lab_id, cls.plan) for lab_id in LABS]
 
 	def setUp(self):
 		frappe.set_user("Administrator")
@@ -219,6 +247,149 @@ class TestAdmission(IntegrationTestCase):
 		self.assertEqual(self.counter(), 0)
 		self.assertEqual(self.rows(), [])
 
+	# --- The hold -------------------------------------------------------------
+
+	def test_a_claim_holds_the_credits_its_start_will_spend(self):
+		self.enable_credits()
+		self.set_balance(10)
+		self.assertTrue(admission.claim(USER, self.benches[0].name, 0, cost=LEASE_COST))
+		self.assertEqual(self.reserved(), LEASE_COST)
+		self.assertEqual(self.held(self.benches[0].name), LEASE_COST)
+
+	def test_a_hold_is_not_a_charge(self):
+		"""No balance moves and no statement line appears for merely asking to deploy."""
+		self.enable_credits()
+		self.set_balance(10)
+		entries = frappe.db.count(LEDGER, {"account": USER})
+		admission.claim(USER, self.benches[0].name, 0, cost=LEASE_COST)
+		self.assertEqual(self.balance(), 10.0)
+		self.assertEqual(frappe.db.count(LEDGER, {"account": USER}), entries)
+
+	def test_what_one_admission_holds_the_next_cannot_spend(self):
+		"""The whole point of the field: the balance still reads 10, what is spendable does not."""
+		self.enable_credits()
+		self.set_balance(10)
+		admission.claim(USER, self.benches[0].name, 0, cost=6.0)
+		with self.assertRaises(frappe.ValidationError) as refusal:
+			admission.claim(USER, self.benches[1].name, 0, cost=6.0)
+		self.assertIn("Not enough credits", str(refusal.exception))
+		self.assertEqual(self.balance(), 10.0)
+
+	def test_the_same_call_is_admitted_with_nothing_in_the_way(self):
+		"""The positive control: the same cost against the same balance, no hold held."""
+		self.enable_credits()
+		self.set_balance(10)
+		self.assertTrue(admission.claim(USER, self.benches[1].name, 0, cost=6.0))
+
+	def test_exactly_what_is_left_over_a_hold_is_enough(self):
+		self.enable_credits()
+		self.set_balance(10)
+		admission.claim(USER, self.benches[0].name, 0, cost=6.0)
+		self.assertTrue(admission.claim(USER, self.benches[1].name, 0, cost=4.0))
+		self.assertEqual(self.reserved(), 10.0)
+
+	def test_a_suspended_account_starts_nothing_and_holds_nothing(self):
+		self.enable_credits()
+		self.set_balance(100)
+		frappe.db.set_value(ACCOUNT, USER, "is_suspended", 1, update_modified=False)
+		with self.assertRaises(frappe.ValidationError) as refusal:
+			admission.claim(USER, self.benches[0].name, 0, cost=LEASE_COST)
+		self.assertIn("suspended", str(refusal.exception))
+		self.assertEqual(self.rows(), [])
+
+	def test_a_start_that_costs_nothing_is_admitted_at_zero_credits(self):
+		"""A lab no lease plan reaches is free, and free is what it has to afford."""
+		self.enable_credits()
+		self.set_balance(0)
+		self.assertTrue(admission.claim(USER, self.benches[0].name, 0, cost=0.0))
+		self.assertEqual(self.reserved(), 0.0)
+
+	def test_nothing_is_held_with_credits_switched_off(self):
+		"""Concurrency is capacity; the hold is money, and there is no money on such a site."""
+		self.set_credits_enabled(0)
+		self.assertTrue(admission.claim(USER, self.benches[0].name, 0, cost=LEASE_COST))
+		self.assertEqual(self.reserved(), 0.0)
+		self.assertEqual(self.held(self.benches[0].name), 0.0)
+
+	def test_a_second_claim_for_one_bench_holds_no_more(self):
+		"""A retry re-uses the hold it already took, so it costs nothing to ask twice."""
+		self.enable_credits()
+		self.set_balance(LEASE_COST)
+		admission.claim(USER, self.benches[0].name, 0, cost=LEASE_COST)
+		self.assertFalse(admission.claim(USER, self.benches[0].name, 0, cost=LEASE_COST))
+		self.assertEqual(self.reserved(), LEASE_COST)
+
+	def test_a_bench_that_already_holds_a_slot_is_still_priced(self):
+		"""A redeploy takes no new slot, and would otherwise be the one start nobody can refuse."""
+		self.enable_credits()
+		self.set_balance(LEASE_COST)
+		admission.claim(USER, self.benches[0].name, 0, cost=LEASE_COST)
+		admission.release_hold(self.benches[0].name)
+		self.set_balance(LEASE_COST / 2)
+		with self.assertRaises(frappe.ValidationError) as refusal:
+			admission.claim(USER, self.benches[0].name, 0, cost=LEASE_COST)
+		self.assertIn("Not enough credits", str(refusal.exception))
+
+	# --- Giving the hold back -------------------------------------------------
+
+	def test_releasing_the_hold_keeps_the_slot(self):
+		self.enable_credits()
+		self.set_balance(10)
+		admission.claim(USER, self.benches[0].name, 0, cost=LEASE_COST)
+		self.assertEqual(admission.release_hold(self.benches[0].name), LEASE_COST)
+		self.assertEqual(self.reserved(), 0.0)
+		self.assertEqual(self.held(self.benches[0].name), 0.0)
+		self.assertEqual(self.rows(), [self.benches[0].name])
+		self.assertEqual(self.counter(), 1)
+		self.assertEqual(self.balance(), 10.0)
+
+	def test_releasing_the_hold_twice_returns_it_once(self):
+		self.enable_credits()
+		self.set_balance(10)
+		admission.claim(USER, self.benches[0].name, 0, cost=LEASE_COST)
+		admission.release_hold(self.benches[0].name)
+		self.assertEqual(admission.release_hold(self.benches[0].name), 0.0)
+		self.assertEqual(self.reserved(), 0.0)
+
+	def test_release_gives_back_the_hold_with_the_slot(self):
+		self.enable_credits()
+		self.set_balance(10)
+		admission.claim(USER, self.benches[0].name, 0, cost=LEASE_COST)
+		admission.release(self.benches[0].name)
+		self.assertEqual(self.reserved(), 0.0)
+		self.assertEqual(self.rows(), [])
+		self.assertEqual(self.balance(), 10.0, "a hold that comes back was never a charge")
+
+	def test_a_negative_hold_is_refused(self):
+		"""The tripwire for a hold returned twice, which would spend more than the account has."""
+		account = frappe.get_doc(ACCOUNT, self.opened_account())
+		account.reserved_credits = -1
+		self.assertRaises(frappe.ValidationError, account.save)
+
+	def test_reaching_running_turns_the_hold_into_a_charge(self):
+		"""The one transition the whole hold exists for, and the ledger row it finally writes."""
+		self.enable_credits()
+		self.set_balance(10)
+		admission.claim(USER, self.benches[0].name, 0, cost=LEASE_COST)
+		metering.on_bench_running(self.running_bench(self.benches[0]))
+		self.assertEqual(self.reserved(), 0.0)
+		self.assertEqual(self.balance(), 10.0 - LEASE_COST)
+		self.assertEqual(self.rows(), [self.benches[0].name], "the slot outlives the hold")
+
+	def test_a_failed_deploy_gives_the_hold_back_and_charges_nothing(self):
+		self.enable_credits()
+		self.set_balance(10)
+		bench = self.running_bench(self.benches[0])
+		admission.claim(USER, bench.name, 0, cost=LEASE_COST)
+		entries = frappe.db.count(LEDGER, {"account": USER})
+
+		metering.on_bench_stopped(bench)
+		admission.release(bench.name)
+
+		self.assertEqual(self.reserved(), 0.0)
+		self.assertEqual(self.balance(), 10.0)
+		self.assertEqual(frappe.db.count(LEDGER, {"account": USER}), entries)
+
 	# --- The gate -------------------------------------------------------------
 
 	def test_the_gate_claims_with_credits_switched_off(self):
@@ -248,6 +419,49 @@ class TestAdmission(IntegrationTestCase):
 				frappe.get_doc(BENCH, bench.name).enqueue_deploy()
 		frappe.set_user("Administrator")
 		self.assertEqual(len(self.rows()), len(self.benches))
+
+	def test_the_spa_start_path_is_behind_the_gate(self):
+		"""`api.bench_action` is how the SPA starts a bench, and it carried no limit at all."""
+		self.set_credits_enabled(0)
+		self.set_setting("max_concurrent_uncredited", 1)
+		admission.claim(USER, self.benches[0].name, 1)
+		self.running_bench(self.benches[1])
+		frappe.set_user(USER)
+		with self.assertRaises(frappe.ValidationError) as refusal:
+			api.bench_action(self.benches[1].name, "start")
+		self.assertIn("instances running", str(refusal.exception))
+
+	def test_the_spa_start_path_admits_one_under_the_cap(self):
+		self.set_credits_enabled(0)
+		self.set_setting("max_concurrent_uncredited", 2)
+		admission.claim(USER, self.benches[0].name, 2)
+		self.running_bench(self.benches[1])
+		frappe.set_user(USER)
+		with (
+			patch("benchpress.docker_manager.start_container"),
+			patch("benchpress.deploy_manager.enqueue_route_sync"),
+			patch("frappe.db.commit"),
+		):
+			api.bench_action(self.benches[1].name, "start")
+		frappe.set_user("Administrator")
+		self.assertIn(self.benches[1].name, self.rows())
+
+	def test_stopping_stays_outside_the_gate(self):
+		"""Stopping is what a refused caller is being told to do, so it cannot itself be refused."""
+		self.set_credits_enabled(0)
+		self.set_setting("max_concurrent_uncredited", 1)
+		bench = self.running_bench(self.benches[1])
+		admission.claim(USER, self.benches[0].name, 1)
+		admission.claim(USER, bench.name, 0)
+		frappe.set_user(USER)
+		with (
+			patch("benchpress.deploy_manager.stop_container"),
+			patch("frappe.enqueue"),
+			patch("frappe.db.commit"),
+		):
+			api.bench_action(bench.name, "stop")
+		frappe.set_user("Administrator")
+		self.assertNotIn(bench.name, self.rows())
 
 	# --- The reconciler -------------------------------------------------------
 
@@ -292,6 +506,24 @@ class TestAdmission(IntegrationTestCase):
 		frappe.db.set_value(ACCOUNT, USER, "active_instances", 7, update_modified=False)
 		admission_repair.reconcile_admissions()
 		self.assertEqual(self.counter(), 1)
+
+	def test_the_reconciler_heals_a_drifted_hold(self):
+		self.enable_credits()
+		self.set_balance(10)
+		admission.claim(USER, self.benches[0].name, 0, cost=LEASE_COST)
+		frappe.db.set_value(BENCH, self.benches[0].name, "status", "Running", update_modified=False)
+		frappe.db.set_value(ACCOUNT, USER, "reserved_credits", 99.0, update_modified=False)
+		admission_repair.reconcile_admissions()
+		self.assertEqual(self.reserved(), LEASE_COST)
+
+	def test_an_adopted_orphan_holds_nothing(self):
+		"""Its lease was charged when it started, so there is nothing left for a hold to cover."""
+		self.enable_credits()
+		self.set_balance(10)
+		frappe.db.set_value(BENCH, self.benches[0].name, "status", "Running", update_modified=False)
+		admission_repair.reconcile_admissions()
+		self.assertEqual(self.held(self.benches[0].name), 0.0)
+		self.assertEqual(self.reserved(), 0.0)
 
 	def test_the_drill_mints_a_token_the_harness_can_read(self):
 		"""`bench execute … ensure_drill_user` is how every drill run gets its credentials."""
@@ -344,6 +576,21 @@ class TestAdmission(IntegrationTestCase):
 
 	def counter(self) -> int:
 		return frappe.db.get_value(ACCOUNT, USER, "active_instances") or 0
+
+	def reserved(self) -> float:
+		return flt(frappe.db.get_value(ACCOUNT, USER, "reserved_credits"))
+
+	def balance(self) -> float:
+		return flt(frappe.db.get_value(ACCOUNT, USER, "balance"))
+
+	def held(self, bench_name: str) -> float:
+		return flt(frappe.db.get_value(ADMISSION, bench_name, "held_credits"))
+
+	def set_balance(self, credits) -> None:
+		frappe.db.set_value(ACCOUNT, self.opened_account(), "balance", credits, update_modified=False)
+
+	def enable_credits(self) -> None:
+		self.set_credits_enabled(1)
 
 	def rows(self) -> list[str]:
 		return sorted(frappe.get_all(ADMISSION, filters={"account": USER}, pluck="name"))
