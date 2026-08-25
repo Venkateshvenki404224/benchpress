@@ -181,6 +181,7 @@ def _enqueue_stop(bench_name: str) -> None:
 		timeout=STOP_TIMEOUT,
 		job_id=f"stop_bench:{bench_name}",
 		deduplicate=True,
+		enqueue_after_commit=True,  # the job re-reads `status`, so it must not start before the commit
 	)
 
 
