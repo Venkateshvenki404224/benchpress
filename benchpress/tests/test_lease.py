@@ -148,15 +148,25 @@ class TestLease(IntegrationTestCase):
 	@classmethod
 	def tearDownClass(cls):
 		frappe.set_user("Administrator")
-		for bench in (cls.bench, cls.other_bench):
-			frappe.delete_doc(BENCH, bench.name, force=True, ignore_permissions=True)
-		for lab in (cls.lab, cls.other_lab):
-			frappe.delete_doc("Lab", lab.name, force=True, ignore_permissions=True)
-		cls.wipe_credits()
-		# Before the plans go: this module commits, so a Single still naming a fixture would
-		# break every later `Credit Settings` save in the suite with a broken link. A recorded
-		# value that is itself a fixture means an earlier run died here — fall back to the seed
-		# rather than restoring the leak.
+		# The catalog first, and in a `try`: a `Lease Plan` is product data — it is what the
+		# lease picker offers. Deleting the benches ahead of it once hit a lock-wait timeout,
+		# which aborted the rest of this method and left three fixture plans on sale.
+		try:
+			cls.restore_catalog()
+		finally:
+			cls.drop_fixtures()
+		frappe.db.commit()  # nosemgrep -- fixtures were committed, so the cleanup must be too
+		super().tearDownClass()
+
+	@classmethod
+	def restore_catalog(cls) -> None:
+		"""Put `Credit Settings` back, then remove the fixture plans it may still name.
+
+		That order, not the other one: this module commits, so a Single left naming a deleted
+		fixture breaks every later `Credit Settings` save in the suite with a broken link. A
+		recorded value that is itself a fixture means an earlier run died here — fall back to
+		the seed rather than restoring the leak.
+		"""
 		fixtures = (cls.short_plan, cls.long_plan, cls.free_plan)
 		restore = None if cls.default_plan_at_start in fixtures else cls.default_plan_at_start
 		frappe.db.set_single_value(CREDIT_SETTINGS, "default_lease_plan", restore)
@@ -164,11 +174,17 @@ class TestLease(IntegrationTestCase):
 			frappe.delete_doc(PLAN, plan, force=True, ignore_permissions=True)
 		seed_default_lease_plan()
 		frappe.clear_cache(doctype=CREDIT_SETTINGS)
+
+	@classmethod
+	def drop_fixtures(cls) -> None:
+		for bench in (cls.bench, cls.other_bench):
+			frappe.delete_doc(BENCH, bench.name, force=True, ignore_permissions=True)
+		for lab in (cls.lab, cls.other_lab):
+			frappe.delete_doc("Lab", lab.name, force=True, ignore_permissions=True)
+		cls.wipe_credits()
 		for user in (cls.user, cls.other_user):
 			if frappe.db.exists("User", user):
 				frappe.delete_doc("User", user, force=True, ignore_permissions=True)
-		frappe.db.commit()  # nosemgrep -- fixtures were committed, so the cleanup must be too
-		super().tearDownClass()
 
 	@classmethod
 	def wipe_credits(cls) -> None:
