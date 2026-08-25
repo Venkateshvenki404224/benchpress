@@ -93,8 +93,7 @@
    "fieldtype": "Data",
    "label": "Request ID",
    "read_only": 1,
-   "no_copy": 1,
-   "search_index": 1
+   "no_copy": 1
   }
  ],
  "grid_page_length": 50,

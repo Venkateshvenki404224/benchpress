@@ -119,11 +119,17 @@ def ensure_ledger_index() -> None:
 	this order has already been credited, and that question is asked against the one table that
 	grows forever — without the index it is a full scan, and it is on the path money takes.
 
-	DocType JSON declares only single-column `search_index` entries, so both are added by hand.
-	`request_id` is one column and declares its own. `add_index` is idempotent.
+	DocType JSON declares only single-column `search_index` entries, so all three are added by
+	hand. `add_index` is idempotent.
+
+	`(account, request_id)` is the replay guard's index, and it is composite for a second reason
+	besides speed: that guard is a locking read on a key that usually does not exist, so it holds
+	the gap the ledger row is inserted into. Scoped to one account, two tenants renewing at the
+	same instant lock different gaps.
 	"""
 	frappe.db.add_index("Credit Ledger Entry", ["account", "creation"])
 	frappe.db.add_index("Credit Ledger Entry", ["reference_doctype", "reference_name"])
+	frappe.db.add_index("Credit Ledger Entry", ["account", "request_id"])
 
 
 def seed_credit_settings() -> None:

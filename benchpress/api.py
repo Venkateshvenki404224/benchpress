@@ -507,7 +507,11 @@ def renew_bench(bench_name: str, plan: str, request_id: str) -> dict:
 	if bench.lease_state == lease.STOPPING:
 		frappe.throw(_("This bench is already stopping. Start it again once it has, then renew."))
 
-	if account.request_posted(request_id):
+	# Before the replay check, not after it: that check locks the gap this account's ledger row
+	# lands in, and a renewal that reaches the gap before the account row deadlocks against one
+	# that took them the other way round.
+	account.lock(bench.owner)
+	if account.request_posted(bench.owner, request_id):
 		return _lease_state(bench, charged=0.0)
 
 	lab = frappe.get_cached_doc("Lab", bench.lab)

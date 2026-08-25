@@ -250,13 +250,17 @@ def _require_runway(needed) -> None:
 
 
 def _account_row(user: str):
-	"""One user's balance fields, opening the account first.
+	"""One user's balance fields, read under the lock the charge takes.
 
 	`ensure_account` posts the signup grant, and a brand-new user whose grant has not landed yet
 	would otherwise be refused the very first deploy they ever ask for.
+
+	The read locks because the guard decides whether to debit and must see the row the debit will
+	write: this session is REPEATABLE READ, where a plain read answers from the snapshot the
+	transaction opened — before a racing purchase on the same account committed.
 	"""
 	name = account.ensure_account(user)
-	return frappe.db.get_value(ACCOUNT, name, account.BALANCE_FIELDS, as_dict=True)
+	return frappe.db.get_value(ACCOUNT, name, account.BALANCE_FIELDS, as_dict=True, for_update=True)
 
 
 def _shortfall_message(needed, available) -> str:

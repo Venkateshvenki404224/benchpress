@@ -316,8 +316,23 @@ def adjust(user: str, credits, reason: str) -> None:
 	_write_entry(account, ADJUSTMENT, flt(credits), reason)
 
 
-def request_posted(request_id: str) -> bool:
-	"""Whether this client request id has already written a row. A **locking** read.
+def lock(user: str) -> None:
+	"""Serialise this transaction against every other purchase on one account.
+
+	Taken before the guards and the replay check that decide from the account, and before
+	`request_posted` in particular: that check locks a gap this account's ledger row is then
+	inserted into, so two renewals reaching the gap ahead of the account row deadlock on the way
+	back — one holding the gap and waiting for the account, the other the reverse.
+
+	The account is not opened here. One that does not exist has posted nothing, and opening it
+	would post the signup grant as a side effect of a purchase that may still be refused.
+	"""
+	if frappe.db.exists(ACCOUNT, user):
+		frappe.db.get_value(ACCOUNT, user, "name", for_update=True)
+
+
+def request_posted(user: str, request_id: str) -> bool:
+	"""Whether this account has already written a row for this client request id. A **locking** read.
 
 	`reference_posted` can be a plain lookup because the reference it guards is created by an
 	outside system. A request id is created by a browser that may be firing three of them at
@@ -325,8 +340,14 @@ def request_posted(request_id: str) -> bool:
 	transaction opened, which predates the racing click, and charge it twice. A locking read sees
 	the latest commit. `reference_name` cannot carry the key instead: it is a Dynamic Link, and a
 	synthetic name fails validation.
+
+	Scoped to the account, on the `(account, request_id)` index. Matched across the whole ledger
+	the key would be one namespace shared by every tenant, and the gap the locking read takes
+	would span every tenant's rows rather than this one's.
 	"""
-	return bool(frappe.db.get_value(LEDGER, {"request_id": request_id}, "name", for_update=True))
+	return bool(
+		frappe.db.get_value(LEDGER, {"account": user, "request_id": request_id}, "name", for_update=True)
+	)
 
 
 def reference_posted(reference) -> bool:
