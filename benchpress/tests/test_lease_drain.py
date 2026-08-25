@@ -477,6 +477,22 @@ class TestLeaseDrain(IntegrationTestCase):
 		self.expire(self.bench.name)
 		self.assertEqual(self.sweep()["claimed"], [self.bench.name])
 
+	def test_the_warden_drops_the_caches_a_request_would_have_dropped(self):
+		"""The difference between a service and a request, and it is not academic.
+
+		`frappe.local` never resets in a long-lived process, and `frappe.cache.get_value` reads
+		`frappe.local.cache` before Redis. A warden started while credits were off therefore
+		reads `enable_credits` once and never again: it sleeps its ceiling forever while leases
+		fall due, and the only evidence is that expiry is back to the four-minute cron.
+		"""
+		frappe.local.cache["lease-drain-stale"] = "stale"
+		frappe.db.value_cache["Lease Drain Stale"] = {"stale": "stale"}
+		with patch.object(drain, "sweep_expired_leases"):
+			warden.tick()
+
+		self.assertNotIn("lease-drain-stale", frappe.local.cache)
+		self.assertNotIn("Lease Drain Stale", frappe.db.value_cache)
+
 	def test_the_warden_is_not_a_scheduled_job(self):
 		"""It is a long-lived service. On the scheduler it would be a four-minute loop again."""
 		scheduled = repr(hooks.scheduler_events)
