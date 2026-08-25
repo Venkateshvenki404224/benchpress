@@ -868,6 +868,48 @@ class TestLease(IntegrationTestCase):
 
 		charge.assert_not_called()
 
+	# --- A claim that no longer exists must not stop anything ------------------
+
+	def test_a_queued_expiry_stop_outlived_by_its_claim_does_not_run(self):
+		"""`queue-long` is one worker, so a claimed stop can sit behind a two-hour deploy.
+
+		By the time it runs, the user may have stopped the bench themselves and started it
+		again — buying a new window. The row then reads `Active` with no claim on it, which is
+		also what a user pressing Stop looks like, so the job has to say which one it is.
+		"""
+		self.enable_credits()
+		metering.on_bench_running(self.running_bench())
+		self.expire()
+		self.claim()
+		self.stop_the_bench()
+		metering.on_bench_running(self.running_bench())
+		frappe.db.set_value(BENCH, self.bench.name, "status", "Running", update_modified=False)
+
+		with patch.object(deploy_manager, "stop_container") as stop, patch.object(frappe.db, "commit"):
+			deploy_manager.stop_bench(self.bench.name, from_claim=True)
+
+		stop.assert_not_called()
+		self.assertEqual(frappe.db.get_value(BENCH, self.bench.name, "status"), "Running")
+		self.assertEqual(self.lease_state(), lease.ACTIVE)
+
+	def test_a_user_pressed_stop_carries_no_claim_and_always_goes_ahead(self):
+		"""The control. The same row state, and the opposite answer, because the caller differs."""
+		self.enable_credits()
+		metering.on_bench_running(self.running_bench())
+
+		with patch.object(deploy_manager, "stop_container") as stop, patch.object(frappe.db, "commit"):
+			deploy_manager.stop_bench(self.bench.name)
+
+		stop.assert_called_once()
+		self.assertEqual(frappe.db.get_value(BENCH, self.bench.name, "status"), "Stopped")
+
+	def test_the_sweep_enqueues_a_stop_that_says_it_came_from_a_claim(self):
+		self.enable_credits()
+		self.expire()
+		with patch.object(frappe.db, "commit"), patch("frappe.enqueue") as enqueue:
+			lease.claim_due(50)
+		self.assertTrue(enqueue.call_args.kwargs["from_claim"])
+
 	# --- Renew: idempotency ----------------------------------------------------
 
 	def test_three_clicks_carrying_one_request_id_charge_once(self):
