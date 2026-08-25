@@ -1032,7 +1032,7 @@ def build_lab(lab_name: str) -> None:
 	_notify_owner(lab.owner, f"Lab build complete: {lab.title} ({image_tag})", "Lab", lab_name)
 
 
-def stop_bench(bench_name: str) -> None:
+def stop_bench(bench_name: str, from_claim: bool = False) -> None:
 	"""Stop a bench container, and with it every site the container was serving.
 
 	VPN stops automatically with the container. The sites do not: nothing answers on a stopped
@@ -1041,9 +1041,10 @@ def stop_bench(bench_name: str) -> None:
 	deactivation cannot be missed by a second caller.
 
 	It is also where an expired lease lands, which is why it starts by confirming the claim
-	under a row lock. A user pressing Stop carries no claim and always goes ahead.
+	under a row lock. `from_claim` marks that caller: a user pressing Stop carries no claim and
+	always goes ahead, while a queued expiry that has outlived its claim must not.
 	"""
-	if not lease.confirm_expiry(bench_name):
+	if not lease.confirm_expiry(bench_name, from_claim=from_claim):
 		return
 
 	bench = frappe.get_doc("Bench Instance", bench_name)

@@ -260,6 +260,7 @@ def _enqueue_stop(bench_name: str) -> None:
 		timeout=STOP_TIMEOUT,
 		job_id=f"stop_bench:{bench_name}",
 		deduplicate=True,
+		from_claim=True,
 		enqueue_after_commit=True,  # the job re-reads the claim, so it must not start before it commits
 	)
 
@@ -267,17 +268,23 @@ def _enqueue_stop(bench_name: str) -> None:
 # --- The stop job's half of the protocol ---------------------------------------
 
 
-def confirm_expiry(bench_name: str) -> bool:
+def confirm_expiry(bench_name: str, from_claim: bool = False) -> bool:
 	"""Whether a claimed stop should still go ahead, decided under the lock renew takes.
 
 	Returns `False`, and hands the claim back, when the deadline moved after the sweep claimed
-	the row. A bench with no claim on it is not this protocol's business and always goes ahead.
+	the row.
+
+	`from_claim` is what tells the two callers apart on a row carrying no claim, because they
+	look identical from the row alone. A user pressing Stop always goes ahead. A queued expiry
+	whose claim has gone does not: `queue-long` is one worker, so that job can sit behind a
+	two-hour deploy, and by the time it runs the bench may have been stopped, started and paid
+	for again.
 
 	The lock is released before the caller returns: a container stop can take thirty seconds,
 	and holding a row lock across it would make a renew wait for the bench it is trying to save.
 	"""
 	if frappe.db.get_value(BENCH, bench_name, "lease_state") != STOPPING:
-		return True
+		return not from_claim
 	row = frappe.db.get_value(BENCH, bench_name, LEASE_FIELDS, as_dict=True, for_update=True)
 	renewed = cint(row.expires_at_ts) > now_ts()
 	if renewed:
