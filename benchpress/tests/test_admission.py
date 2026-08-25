@@ -293,6 +293,18 @@ class TestAdmission(IntegrationTestCase):
 		admission_repair.reconcile_admissions()
 		self.assertEqual(self.counter(), 1)
 
+	def test_the_drill_mints_a_token_the_harness_can_read(self):
+		"""`bench execute … ensure_drill_user` is how every drill run gets its credentials."""
+		from benchpress.credits import drill
+
+		with patch("frappe.db.commit"):
+			token = drill.ensure_drill_user()
+			self.assertEqual(drill.ensure_drill_user(), token, "the token must not rotate")
+
+		self.assertRegex(token, r"^[A-Za-z0-9]{8,}:[A-Za-z0-9]{8,}$")
+		key, _, _secret = token.partition(":")
+		self.assertEqual(key, frappe.db.get_value("User", drill.DRILL_USER, "api_key"))
+
 	# --- Helpers --------------------------------------------------------------
 
 	def backdate(self, bench_name: str, **age) -> None:

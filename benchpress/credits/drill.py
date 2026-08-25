@@ -45,7 +45,7 @@ def setup(workers: int = 12, cap: int = 1) -> dict:
 	return {
 		"user": user,
 		"api_key": frappe.db.get_value("User", user, "api_key"),
-		"api_secret": frappe.utils.password.get_decrypted_password("User", user, "api_secret"),
+		"api_secret": _api_secret(user),
 		"labs": labs,
 		"base_domain": frappe.db.get_single_value("BenchPress Settings", "base_domain"),
 		"credits_enabled": bool(config.credits_enabled()),
@@ -53,6 +53,16 @@ def setup(workers: int = 12, cap: int = 1) -> dict:
 		"cap_before": cap_before,
 		"cap": cint(cap),
 	}
+
+
+def ensure_drill_user() -> str:
+	"""Open the drill user and its API keys on their own, and return the token as `key:secret`.
+
+	Separate from `setup` so a caller can get the token without minting labs or moving the cap.
+	"""
+	user = _ensure_user()
+	frappe.db.commit()
+	return f"{frappe.db.get_value('User', user, 'api_key')}:{_api_secret(user)}"
 
 
 def restore(cap_field: str, cap_before) -> dict:
@@ -183,9 +193,15 @@ def _ensure_user() -> str:
 	if DRILL_ROLE not in {row.role for row in user.roles}:
 		user.append("roles", {"role": DRILL_ROLE})
 	user.api_key = user.api_key or frappe.generate_hash(length=15)
-	user.api_secret = frappe.generate_hash(length=15)
+	if not _api_secret(user.name):
+		user.api_secret = frappe.generate_hash(length=15)
 	user.save(ignore_permissions=True)
 	return user.name
+
+
+def _api_secret(user: str) -> str | None:
+	# Absent rather than an exception: the row exists before its key does.
+	return frappe.utils.password.get_decrypted_password("User", user, "api_secret", raise_exception=False)
 
 
 def _ensure_lab(index: int) -> str:
