@@ -1,7 +1,7 @@
 # Copyright (c) 2026, Venkatesh and Contributors
 # See license.txt
 
-"""The two scheduled halves of phase 5: the enforcement sweep and the reaper.
+"""The two scheduled sweeps: the balance check and the reaper.
 
 Both are asserted the same way — the decision, and the fact that the decision is *only* a decision.
 Neither job may touch Docker: they run on `queue-short`, which has no socket mounted, so a test
@@ -20,7 +20,7 @@ from unittest.mock import patch
 
 import frappe
 from frappe.tests import IntegrationTestCase
-from frappe.utils import add_days, add_to_date, now_datetime, today
+from frappe.utils import add_days, now_datetime
 
 from benchpress.credits import account, config, reaper, sweep
 from benchpress.credits.seed import seed_defaults
@@ -30,15 +30,12 @@ BENCH = "Bench Instance"
 BENCHPRESS_SETTINGS = "BenchPress Settings"
 CREDIT_SETTINGS = "Credit Settings"
 LEDGER = "Credit Ledger Entry"
-PASS = "Always On Pass"
 
-RATE = 1.0
 GRANT = 40.0
-MAX_RUN_HOURS = 8
 REAP_AFTER_DAYS = 7
 USER = "sweep-user@example.com"
 
-TUNED_SETTINGS = ("max_run_hours", "reap_after_days", "low_balance_warn_percent")
+TUNED_SETTINGS = ("reap_after_days", "low_balance_warn_percent")
 
 
 def _ensure_user(email: str) -> str:
@@ -146,41 +143,10 @@ class TestCreditSweep(IntegrationTestCase):
 
 	def test_neither_job_does_anything_when_credits_are_off(self):
 		self.set_credits_enabled(0)
-		self.run_for_hours(MAX_RUN_HOURS + 1)
+		self.fund(0)
 		self.assertEqual(sweep.enforce_limits(), {"checked": 0, "stopped": [], "warned": []})
 		self.assertEqual(reaper.reap_stopped_instances(), {"reaped": [], "warned": []})
 		self.enqueued.assert_not_called()
-
-	# --- The TTL --------------------------------------------------------------
-
-	def test_the_ttl_stop_fires_at_the_boundary(self):
-		self.enable_credits()
-		self.fund(GRANT)
-		self.run_for_hours(MAX_RUN_HOURS)
-
-		self.assertEqual(sweep.enforce_limits()["stopped"], [self.bench.name])
-		self.assert_enqueued("benchpress.deploy_manager.stop_bench")
-
-	def test_an_instance_inside_its_ttl_is_left_alone(self):
-		self.enable_credits()
-		self.fund(GRANT)
-		self.run_for_hours(MAX_RUN_HOURS - 1)
-		self.assertEqual(sweep.enforce_limits()["stopped"], [])
-
-	def test_the_ttl_stop_is_skipped_when_a_pass_is_active(self):
-		self.enable_credits()
-		self.fund(GRANT)
-		self.run_for_hours(MAX_RUN_HOURS + 5)
-		self.grant_pass()
-		self.assertEqual(sweep.enforce_limits()["stopped"], [])
-		self.enqueued.assert_not_called()
-
-	def test_an_unlimited_ttl_stops_nothing(self):
-		self.enable_credits()
-		self.fund(GRANT)
-		self.set_setting("max_run_hours", 0)
-		self.run_for_hours(1000)
-		self.assertEqual(sweep.enforce_limits()["stopped"], [])
 
 	# --- The balance ----------------------------------------------------------
 
@@ -193,13 +159,6 @@ class TestCreditSweep(IntegrationTestCase):
 	def test_a_funded_owner_keeps_running(self):
 		self.enable_credits()
 		self.fund(GRANT)
-		self.assertEqual(sweep.enforce_limits()["stopped"], [])
-
-	def test_a_pass_outlives_a_spent_balance(self):
-		"""Prepaid is prepaid: the pass exempts the instance from the burn, so also from the stop."""
-		self.enable_credits()
-		self.fund(0)
-		self.grant_pass()
 		self.assertEqual(sweep.enforce_limits()["stopped"], [])
 
 	def test_an_owner_with_no_account_row_is_not_stopped(self):
@@ -245,27 +204,6 @@ class TestCreditSweep(IntegrationTestCase):
 		self.assertEqual(self.count_queries(sweep.enforce_limits), one)
 
 	# --- Warnings, and how often -------------------------------------------
-
-	def test_the_ttl_warning_is_sent_once_per_run(self):
-		self.enable_credits()
-		self.fund(GRANT)
-		self.run_for_minutes(MAX_RUN_HOURS * 60 - 10)
-
-		sweep.enforce_limits()
-		sweep.enforce_limits()
-		self.assertEqual(self.alerts.call_count, 1, "a warning repeated every five minutes is noise")
-		self.assertIn("auto-stops", self.alerts.call_args.args[1])
-
-	def test_a_later_run_is_warned_again(self):
-		"""Once per *session*, not once ever — a restart earns its own warning."""
-		self.enable_credits()
-		self.fund(GRANT)
-		self.run_for_minutes(MAX_RUN_HOURS * 60 - 10)
-		sweep.enforce_limits()
-
-		self.restart_after_the_last_warning()
-		sweep.enforce_limits()
-		self.assertEqual(self.alerts.call_count, 2)
 
 	def test_the_low_balance_warning_is_sent_once_per_depletion(self):
 		self.enable_credits()
@@ -383,40 +321,17 @@ class TestCreditSweep(IntegrationTestCase):
 		frappe.clear_cache(doctype=CREDIT_SETTINGS)
 
 	def fund(self, credits) -> None:
-		"""A settled balance and no accrual, so `available()` is exactly what was asked for."""
 		account.ensure_account(self.user)
 		frappe.db.set_value(
 			ACCOUNT,
 			self.user,
-			{"balance": credits, "burn_rate": 0.0, "burn_since": now_datetime(), "low_balance_warned": 0},
+			{"balance": credits, "low_balance_warned": 0},
 			update_modified=False,
 		)
 
 	def warn_threshold(self) -> float:
 		percent = config.settings().low_balance_warn_percent
 		return GRANT * percent / 100.0
-
-	def run_for_hours(self, hours) -> None:
-		self.run_for_minutes(hours * 60)
-
-	def run_for_minutes(self, minutes) -> None:
-		frappe.db.set_value(
-			BENCH,
-			self.bench.name,
-			{"status": "Running", "started_at": add_to_date(now_datetime(), minutes=-minutes)},
-			update_modified=False,
-		)
-
-	def restart_after_the_last_warning(self) -> None:
-		"""What a restart leaves behind: a warning stamp older than the run now under way."""
-		started_at = frappe.db.get_value(BENCH, self.bench.name, "started_at")
-		frappe.db.set_value(
-			BENCH,
-			self.bench.name,
-			"ttl_warned_at",
-			add_to_date(started_at, minutes=-1),
-			update_modified=False,
-		)
 
 	def stopped_for_days(self, days) -> None:
 		"""`modified` is stopped-since, so the reap window is set by writing it directly."""
@@ -425,11 +340,6 @@ class TestCreditSweep(IntegrationTestCase):
 			BENCH, self.bench.name, "modified", add_days(now_datetime(), -days), update_modified=False
 		)
 
-	def grant_pass(self) -> None:
-		frappe.get_doc(
-			{"doctype": PASS, "bench_instance": self.bench.name, "valid_until": add_days(today(), 30)}
-		).insert(ignore_permissions=True)
-
 	def reset_bench(self) -> None:
 		frappe.db.set_value(
 			BENCH,
@@ -437,15 +347,11 @@ class TestCreditSweep(IntegrationTestCase):
 			{
 				"status": "Running",
 				"started_at": now_datetime(),
-				"credit_burn_rate": 0.0,
-				"credit_burn_started": None,
-				"ttl_warned_at": None,
 				"reap_warned_at": None,
 				"database_server": None,
 			},
 			update_modified=True,
 		)
-		frappe.db.delete(PASS, {"bench_instance": self.bench.name})
 
 	def assert_enqueued(self, method: str) -> None:
 		self.assertEqual(self.enqueued.call_args.args[0], method)

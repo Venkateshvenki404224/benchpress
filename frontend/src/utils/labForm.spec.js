@@ -162,7 +162,9 @@ describe("buildSummary", () => {
 	});
 
 	it("leads with the size, priced, once one is chosen", () => {
-		expect(buildSummary(form(), size(), true)[0]).toBe("Small — 1 GB, 1 vCPU at 1 credits/hr");
+		expect(buildSummary(form(), size(), true)[0]).toBe(
+			"Small — 1 GB, 1 vCPU at 5 credits / 30 minutes"
+		);
 	});
 
 	it("names the size without a price when credits are off", () => {
@@ -192,6 +194,7 @@ function size() {
 		size_label: "Small",
 		memory_limit: "1g",
 		cpu_cores: 1,
-		credits_per_hour: 1,
+		lease_credits: 5,
+		lease_label: "30 minutes",
 	};
 }

@@ -237,8 +237,6 @@ class TestLease(IntegrationTestCase):
 					"stop_started_at": None,
 					"container_stopped_at": None,
 					"expiry_lateness": None,
-					"credit_burn_rate": 0,
-					"credit_burn_started": None,
 				},
 				update_modified=False,
 			)
@@ -456,13 +454,6 @@ class TestLease(IntegrationTestCase):
 
 		self.assertEqual(len(self.usage_rows()), 1)
 		self.assertEqual(self.deadline(), first)
-
-	def test_no_account_carries_a_burn_rate_any_more(self):
-		"""The hourly meter is gone. Two meters beside each other would bill the same hour twice."""
-		self.enable_credits()
-		metering.on_bench_running(self.running_bench())
-		self.assertEqual(flt(frappe.db.get_value(ACCOUNT, self.user, "burn_rate")), 0.0)
-		self.assertFalse(frappe.db.get_value(BENCH, self.bench.name, "credit_burn_started"))
 
 	def test_a_deploy_that_fails_after_the_container_started_is_free(self):
 		"""The invariant `metering.py` documents: a deploy that never reached `Running` costs nothing."""
@@ -1204,20 +1195,3 @@ class TestLeaseAccountingSurface(IntegrationTestCase):
 		"""
 		self.assertNotIn("Only two meters exist", metering.__doc__)
 		self.assertIn("lease", metering.__doc__.lower())
-
-	def test_no_scheduled_job_can_raise_a_burn_rate(self):
-		"""The nightly reconciler re-derives a rate from flags nothing writes any more.
-
-		Left scheduled, it rebuilt one within a minute of credits being switched on against a
-		fleet carrying flags from a previous release — a second billing system beside the lease.
-		"""
-		self.assertNotIn(
-			"benchpress.credits.reconcile.reconcile_burn_rates",
-			frappe.get_hooks("scheduler_events").get("daily", []),
-		)
-
-	def test_no_lifecycle_hook_reaches_the_hourly_meter(self):
-		"""Two meters beside each other bill the same hour twice."""
-		source = inspect.getsource(metering)
-		self.assertNotIn("account.start_burn", source)
-		self.assertNotIn("account.stop_burn", source)

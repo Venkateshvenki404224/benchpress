@@ -38,7 +38,6 @@ GLOBAL_BY_DESIGN = {
 	"Credit Pack": "the price list",
 	"Lease Plan": "the duration catalog",
 	"Instance Size": "the size list",
-	"Always On Pass": "read through owner-scoped endpoints; rows name their own bench",
 }
 
 

@@ -1,5 +1,7 @@
+import { readFileSync, readdirSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { burnLabel, creditLabel, creditMeter, rateLabel, signedCreditLabel } from "./credits";
+import { creditLabel, creditMeter, leasePriceLabel, signedCreditLabel } from "./credits";
 
 describe("creditLabel", () => {
 	it("rounds the accounting precision down to something readable", () => {
@@ -35,22 +37,20 @@ describe("signedCreditLabel", () => {
 	});
 });
 
-describe("rateLabel", () => {
-	it("names the unit the price is quoted in", () => {
-		expect(rateLabel(2)).toBe("2 credits/hr");
-		expect(rateLabel(1.5)).toBe("1.50 credits/hr");
-		expect(rateLabel(0)).toBe("0 credits/hr");
-	});
-});
-
-describe("burnLabel", () => {
-	it("explains a falling balance while something runs", () => {
-		expect(burnLabel(1.5)).toBe("Burning 1.50 credits/hr");
+describe("leasePriceLabel", () => {
+	it("quotes what one lease costs, and how long it buys", () => {
+		expect(leasePriceLabel(5, "30 minutes")).toBe("5 credits / 30 minutes");
+		expect(leasePriceLabel(7.5, "2 hours")).toBe("7.50 credits / 2 hours");
 	});
 
-	it("says nothing when nothing is running", () => {
-		expect(burnLabel(0)).toBe("");
-		expect(burnLabel(null)).toBe("");
+	it("drops the duration when no plan applies", () => {
+		expect(leasePriceLabel(5)).toBe("5 credits");
+		expect(leasePriceLabel(5, "")).toBe("5 credits");
+	});
+
+	it("says nothing when there is no price to quote", () => {
+		expect(leasePriceLabel(null, "30 minutes")).toBe("");
+		expect(leasePriceLabel(undefined)).toBe("");
 	});
 });
 
@@ -87,5 +87,29 @@ describe("creditMeter", () => {
 	it("reads a missing summary as an empty gauge rather than NaN", () => {
 		expect(creditMeter(undefined, null).value).toBe(0);
 		expect(creditMeter("not a number", 40).value).toBe(0);
+	});
+});
+
+// The hourly meter left the backend; a label that outlived it would quote a rate nothing
+// computes. Scanning the source is the only way to assert that no component still renders one.
+const BURN_NAMES =
+	/\bburnLabel\b|\brateLabel\b|\bburnRate\b|\bburn_rate\b|\bcredits_per_hour\b|AlwaysOn|always_on/;
+
+function sources(dir, found = []) {
+	for (const entry of readdirSync(dir, { withFileTypes: true })) {
+		const path = join(dir, entry.name);
+		if (entry.isDirectory()) sources(path, found);
+		else if (/\.(js|vue)$/.test(entry.name) && !entry.name.endsWith(".spec.js"))
+			found.push(path);
+	}
+	return found;
+}
+
+describe("the hourly meter", () => {
+	it("is named nowhere in the SPA", () => {
+		const offenders = sources("src").filter((path) =>
+			BURN_NAMES.test(readFileSync(path, "utf8"))
+		);
+		expect(offenders).toEqual([]);
 	});
 });

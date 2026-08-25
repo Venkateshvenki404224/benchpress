@@ -115,14 +115,13 @@ class TestCreditConfig(IntegrationTestCase):
 
 	def test_settings_carry_the_seeded_defaults(self):
 		settings = config.settings()
-		self.assertEqual(settings.max_run_hours, 8)
 		self.assertEqual(settings.reap_after_days, 7)
 		self.assertEqual(settings.signup_grant_credits, 40)
 
 	def test_a_negative_cap_is_rejected(self):
 		settings = frappe.get_doc("Credit Settings")
-		self.addCleanup(self.restore_max_run_hours, settings.max_run_hours)
-		settings.max_run_hours = -1
+		self.addCleanup(self.restore_setting, "reap_after_days", settings.reap_after_days)
+		settings.reap_after_days = -1
 		self.assertRaises(frappe.ValidationError, settings.save)
 
 	def set_credits_enabled(self, value: int) -> None:
@@ -143,7 +142,7 @@ class TestCreditConfig(IntegrationTestCase):
 		pack.is_active = 1
 		pack.save(ignore_permissions=True)
 
-	def restore_max_run_hours(self, value) -> None:
+	def restore_setting(self, field: str, value) -> None:
 		settings = frappe.get_doc("Credit Settings")
-		settings.max_run_hours = value
+		settings.set(field, value)
 		settings.save(ignore_permissions=True)

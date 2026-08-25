@@ -416,9 +416,8 @@ class TestApiAuthorization(IntegrationTestCase):
 		frappe.set_user(self.norole_user)
 		self.assert_denied(api.get_purchase_options)
 		self.assert_denied(lambda: api.buy_credits("Starter"))
-		self.assert_denied(lambda: api.buy_always_on_pass(self.bench.name))
 
-	# --- The phase-5 credit gate must never answer a permission question -----
+	# --- The credit gate must never answer a permission question -------------
 
 	def test_the_credit_gate_never_precedes_an_endpoints_own_guard(self):
 		"""With credits armed, a role-less caller must still meet `PermissionError` — not a price.
