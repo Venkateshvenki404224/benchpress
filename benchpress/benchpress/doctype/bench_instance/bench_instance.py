@@ -45,6 +45,18 @@ class BenchInstance(Document):
 				).format(self.name)
 			)
 
+	def before_save(self):
+		"""The lease fields belong to `lease._write`; never let a stale document write them back.
+
+		A deploy job holds this document for minutes, and `save()` writes every field from that
+		copy — including a deadline a renewal has since moved.
+		"""
+		if self.is_new():
+			return
+		from benchpress.credits import lease
+
+		lease.refresh_into(self)
+
 	def validate_higher_perm_levels(self):
 		"""Refuse a runtime the caller may not set, where Frappe would silently drop it.
 

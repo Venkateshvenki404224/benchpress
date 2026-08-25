@@ -223,6 +223,24 @@ def disarm(bench) -> None:
 	)
 
 
+OWNED_FIELDS = ("expires_at_ts", "lease_state", "stop_claimed_at", "expiry_attempts")
+
+
+def refresh_into(bench) -> None:
+	"""Re-read the lease fields from the row into a document that may be stale.
+
+	`_write` is the only writer of these fields and it bypasses `save()`, so a long-running job
+	holding a document loaded before a renewal would write its stale copy back and revert it.
+	Observed live: a 162-second redeploy reverted an 8-hour renewal bought 25 seconds before it
+	finished, and the ledger kept the 60 credits.
+	"""
+	stored = frappe.db.get_value(BENCH, bench.name, OWNED_FIELDS, as_dict=True)
+	if not stored:
+		return
+	for field, value in stored.items():
+		setattr(bench, field, value)
+
+
 def _write(bench, values: dict) -> None:
 	"""Write the row and the in-memory document together, without touching `modified`.
 
