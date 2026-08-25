@@ -725,6 +725,17 @@ class TestLeaseAccountingSurface(IntegrationTestCase):
 		self.assertNotIn("Only two meters exist", metering.__doc__)
 		self.assertIn("lease", metering.__doc__.lower())
 
+	def test_no_scheduled_job_can_raise_a_burn_rate(self):
+		"""The nightly reconciler re-derives a rate from flags nothing writes any more.
+
+		Left scheduled, it rebuilt one within a minute of credits being switched on against a
+		fleet carrying flags from a previous release — a second billing system beside the lease.
+		"""
+		self.assertNotIn(
+			"benchpress.credits.reconcile.reconcile_burn_rates",
+			frappe.get_hooks("scheduler_events").get("daily", []),
+		)
+
 	def test_no_lifecycle_hook_reaches_the_hourly_meter(self):
 		"""Two meters beside each other bill the same hour twice."""
 		source = inspect.getsource(metering)
