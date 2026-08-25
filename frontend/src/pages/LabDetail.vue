@@ -39,7 +39,6 @@
 								:bench="bench"
 								:lab="lab.data"
 								:health-age-seconds="healthAgeSeconds"
-								@bought="refresh"
 								@renewed="onRenewed"
 								@redeploy="deployLab"
 							/>

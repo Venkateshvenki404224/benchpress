@@ -28,8 +28,6 @@ export const purchaseOptions = reactive({
 	loaded: false,
 	available: false,
 	packs: [],
-	alwaysOnInr: 0,
-	alwaysOnDays: 30,
 });
 
 export const purchaseOptionsResource = createResource({
@@ -39,18 +37,11 @@ export const purchaseOptionsResource = createResource({
 		purchaseOptions.loaded = true;
 		purchaseOptions.available = options?.payments_available === true;
 		purchaseOptions.packs = options?.packs ?? [];
-		purchaseOptions.alwaysOnInr = options?.always_on_inr ?? 0;
-		purchaseOptions.alwaysOnDays = options?.always_on_days ?? 30;
 	},
 });
 
 export const buyCreditsResource = createResource({
 	url: "benchpress.api.buy_credits",
-	transform: (data) => data?.message ?? data,
-});
-
-export const buyPassResource = createResource({
-	url: "benchpress.api.buy_always_on_pass",
 	transform: (data) => data?.message ?? data,
 });
 
@@ -66,11 +57,6 @@ export function loadPurchaseOptions() {
 export async function buyPack(pack) {
 	const order = await buyCreditsResource.submit({ pack });
 	return checkout(order, `${pack} added to your balance.`);
-}
-
-export async function buyAlwaysOnPass(benchName, label) {
-	const order = await buyPassResource.submit({ bench_name: benchName });
-	return checkout(order, `${label} is always on for ${purchaseOptions.alwaysOnDays} days.`);
 }
 
 /**

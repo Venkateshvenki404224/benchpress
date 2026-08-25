@@ -94,11 +94,11 @@ class TestMeterGone(IntegrationTestCase):
 
 	def test_the_pass_module_is_gone(self):
 		with self.assertRaises(ImportError):
-			from benchpress.credits import passes  # noqa: F401
+			from benchpress.credits import passes
 
 	def test_the_reconciler_is_gone(self):
 		with self.assertRaises(ImportError):
-			from benchpress.credits import reconcile  # noqa: F401
+			from benchpress.credits import reconcile
 
 	def test_nothing_is_scheduled_to_repair_a_rate(self):
 		from benchpress import hooks
@@ -141,6 +141,7 @@ class TestMeterGone(IntegrationTestCase):
 
 	def test_every_ledger_sums_to_its_account_balance(self):
 		self.enable_credits()
+		self.ensure_user()
 		account.grant(USER, 40.0, "Ledger check grant")
 		account.charge(USER, 5.0, "Ledger check lease")
 		rows = frappe.get_all(ACCOUNT, fields=["name", "balance"])
@@ -168,6 +169,20 @@ class TestMeterGone(IntegrationTestCase):
 		self.assertEqual(retire_always_on_passes.lease_deadline(add_days(today(), -3), now), now)
 
 	# --- Helpers ---------------------------------------------------------------
+
+	def ensure_user(self) -> None:
+		"""`Credit Account.user` is a Link, so the account needs somebody to belong to."""
+		if frappe.db.exists("User", USER):
+			return
+		frappe.get_doc(
+			{
+				"doctype": "User",
+				"email": USER,
+				"first_name": "Meter Gone",
+				"send_welcome_email": 0,
+				"roles": [{"role": "BenchPress User"}],
+			}
+		).insert(ignore_permissions=True)
 
 	def enable_credits(self) -> None:
 		"""Arm the switch for one test, inside its transaction.

@@ -150,7 +150,7 @@ class TestCredits(IntegrationTestCase):
 		self.assertEqual(self.entry_count(), 0)
 		self.assertEqual(account.summary(self.user), {"enabled": False})
 		self.assertFalse(account.statement(self.user)["enabled"])
-		self.assertIsNone(api.get_lab(self.lab.name)["credits_per_hour"])
+		self.assertIsNone(api.get_lab(self.lab.name)["lease_price"])
 
 	# --- The arithmetic -------------------------------------------------------
 

@@ -26,7 +26,7 @@ from benchpress.credits.guard import (
 	cap_builds_per_day,
 	cap_concurrent_instances,
 	cap_devices,
-	payload_runway,
+	payload_lease_cost,
 	require_balance,
 	requires_credits,
 )
@@ -164,7 +164,7 @@ def _counts_by_bench(doctype: str, column: str, bench_names: list[str]) -> dict[
 
 
 @frappe.whitelist()
-@requires_credits(cost=payload_runway, caps=(cap_concurrent_instances,))
+@requires_credits(cost=payload_lease_cost, caps=(cap_concurrent_instances,))
 def create_bench(data: str) -> dict:
 	require_app_user()
 	from benchpress.benchpress.doctype.bench_instance import get_instance_id
@@ -464,13 +464,6 @@ def buy_credits(pack: str) -> dict:
 	"""Open a Razorpay order for a credit pack. The price is the pack's, never the caller's."""
 	require_app_user()
 	return payments.buy_credits(pack)
-
-
-@frappe.whitelist()
-def buy_always_on_pass(bench_name: str) -> dict:
-	"""Open a Razorpay order for a pass on one instance the caller is allowed to see."""
-	require_bench_access(bench_name)
-	return payments.buy_always_on_pass(bench_name)
 
 
 @frappe.whitelist()

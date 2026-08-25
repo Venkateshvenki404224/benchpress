@@ -39,8 +39,6 @@
 				@redeploy="emit('redeploy')"
 			/>
 		</div>
-
-		<AlwaysOnUpsell :bench="bench" :label="lab.title || lab.lab_id" @bought="emit('bought')" />
 	</SectionCard>
 </template>
 
@@ -48,7 +46,6 @@
 import SectionCard from "@/components/SectionCard.vue";
 import StatusBadge from "@/components/StatusBadge.vue";
 import UsageBar from "@/components/UsageBar.vue";
-import AlwaysOnUpsell from "@/components/credit/AlwaysOnUpsell.vue";
 import LeaseControl from "@/components/lab/LeaseControl.vue";
 import { cpuMeter, healthCaption, memoryMeter } from "@/utils/containerStats";
 import { dayjsLocal } from "frappe-ui";
@@ -61,7 +58,7 @@ const props = defineProps({
 	healthAgeSeconds: { type: Number, default: null },
 });
 
-const emit = defineEmits(["bought", "renewed", "redeploy"]);
+const emit = defineEmits(["renewed", "redeploy"]);
 
 const cpu = computed(() => cpuMeter(props.bench, props.lab));
 const memory = computed(() => memoryMeter(props.bench, props.lab));

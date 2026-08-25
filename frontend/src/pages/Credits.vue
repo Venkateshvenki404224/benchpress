@@ -3,24 +3,19 @@
 		<div class="mb-3.5">
 			<h1 class="text-title font-semibold text-ink-gray-9">Credits</h1>
 			<p class="mt-0.5 max-w-[620px] text-body text-ink-gray-5">
-				Two things cost credits: the hours an instance runs, and a custom image build that
-				nobody has built before. Deploys, sites, devices and failed builds are free.
+				Two things cost credits: the lease an instance runs on, and a custom image build
+				that nobody has built before. Sites, devices and failed builds are free.
 			</p>
 		</div>
 
-		<div class="mb-3 grid gap-3 sm:grid-cols-3">
+		<div class="mb-3 grid gap-3 sm:grid-cols-2">
 			<StatTile
 				label="Balance"
 				:value="meter.balanceLabel"
 				:note="`of ${meter.allocatedLabel} allocated`"
 			/>
-			<StatTile label="Burn rate" :value="rateLabel(creditSummary.burnRate)" />
 			<StatTile label="Entries" :value="String(total)" />
 		</div>
-
-		<p v-if="burning" class="mb-3 text-2xs text-ink-amber-3" data-test="credits-burning">
-			{{ burning }} — the balance above already counts the time since the last entry.
-		</p>
 
 		<div class="mb-3">
 			<CreditPacks @bought="reload" />
@@ -95,13 +90,7 @@ import {
 	primeCreditSummary,
 	refreshCreditSummary,
 } from "@/data/credits";
-import {
-	burnLabel,
-	creditLabel,
-	creditMeter,
-	rateLabel,
-	signedCreditLabel,
-} from "@/utils/credits";
+import { creditLabel, creditMeter, signedCreditLabel } from "@/utils/credits";
 import { Button, dayjsLocal } from "frappe-ui";
 import { computed, onMounted, ref } from "vue";
 
@@ -128,7 +117,6 @@ const rows = computed(() => statement.value.rows ?? []);
 const total = computed(() => statement.value.total ?? 0);
 const loading = computed(() => creditStatementResource.loading);
 const pages = computed(() => Math.max(Math.ceil(total.value / PAGE_LENGTH), 1));
-const burning = computed(() => burnLabel(creditSummary.burnRate));
 // The same figures the sidebar gauge reads, so the page it opens cannot disagree with it.
 const meter = computed(() => creditMeter(creditSummary.balance, creditSummary.allocated));
 

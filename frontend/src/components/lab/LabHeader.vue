@@ -40,11 +40,11 @@
 				<!-- The price sits with the specs that decide it, in view at the moment
 				     of choosing rather than discovered later on a statement. -->
 				<span
-					v-if="rateChip"
+					v-if="priceChip"
 					class="rounded bg-surface-amber-1 px-1.5 py-px text-2xs text-ink-amber-3"
 					data-test="lab-rate"
 				>
-					{{ rateChip }}
+					{{ priceChip }}
 				</span>
 			</div>
 		</div>
@@ -98,7 +98,7 @@
 <script setup>
 import AppIcon from "@/components/AppIcon.vue";
 import StatusBadge from "@/components/StatusBadge.vue";
-import { rateLabel } from "@/utils/credits";
+import { leasePriceLabel } from "@/utils/credits";
 import {
 	DEPLOY,
 	OPEN,
@@ -191,12 +191,12 @@ const specChips = computed(() => {
 	return chips.filter(Boolean);
 });
 
-// `null` means credits do not exist on this site, which is not the same as a size
+// `null` means credits do not exist on this site, which is not the same as a lab
 // that is free — so the chip is absent in the first case and reads "0" in the second.
-const rateChip = computed(() =>
-	props.lab.credits_per_hour === null || props.lab.credits_per_hour === undefined
-		? ""
-		: rateLabel(props.lab.credits_per_hour)
+const priceChip = computed(() =>
+	props.lab.lease_price
+		? leasePriceLabel(props.lab.lease_price.credits, props.lab.lease_price.plan_label)
+		: ""
 );
 
 // Stop and Delete are reachable only from here, each behind a confirmation.

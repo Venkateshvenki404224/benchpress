@@ -107,6 +107,29 @@ def cost_of(lab, plan) -> float:
 	return flt(flt(plan.get("credits")) * multiplier, account.PRECISION)
 
 
+def plan_for_size(size) -> dict | None:
+	"""The lease plan a size deploys at: its own, else the site default."""
+	chosen = (size.get("default_lease_plan") if size else None) or config.settings().default_lease_plan
+	return frappe.db.get_value(PLAN, chosen, PLAN_FIELDS, as_dict=True) if chosen else None
+
+
+def priced_sizes() -> list[dict]:
+	"""Every `Instance Size` carrying what one lease on it costs — the number the picker shows.
+
+	A size is chosen before a lab exists, so the price cannot come from `cost_of`: there is no
+	`deploy_credits` override to honour yet, only the plan and the size's own multiplier.
+	"""
+	return [{**size, **_size_price(size)} for size in config.instance_sizes()]
+
+
+def _size_price(size) -> dict:
+	plan = plan_for_size(size)
+	if not plan:
+		return {"lease_credits": None, "lease_label": ""}
+	credits = flt(flt(plan.get("credits")) * flt(size.price_multiplier or 1.0), account.PRECISION)
+	return {"lease_credits": credits, "lease_label": plan.plan_label}
+
+
 def batch_cap() -> int:
 	"""Most expired leases one sweep may claim. The stop queue, not the SQL, is what this caps."""
 	return cint(config.settings().lease_sweep_batch) or DEFAULT_SWEEP_BATCH
@@ -137,7 +160,7 @@ def arm(bench, lab, plan) -> int:
 	row carrying a deadline that has already passed is the resurrection bug: the next sweep
 	claims it and the bench dies seconds after the user started it.
 	"""
-	return _arm_at(bench, now_ts() + minutes_for(lab, plan) * 60)
+	return arm_at(bench, now_ts() + minutes_for(lab, plan) * 60)
 
 
 def extend(bench, plan) -> int:
@@ -148,10 +171,11 @@ def extend(bench, plan) -> int:
 	the deadline when it stopped — so `now` is what it extends from.
 	"""
 	base = max(now_ts(), cint(bench.get("expires_at_ts")))
-	return _arm_at(bench, base + cint(plan.get("minutes")) * 60)
+	return arm_at(bench, base + cint(plan.get("minutes")) * 60)
 
 
-def _arm_at(bench, deadline: int) -> int:
+def arm_at(bench, deadline: int) -> int:
+	"""Write one deadline and clear whatever the last claim left behind. Returns the deadline."""
 	_write(
 		bench,
 		{

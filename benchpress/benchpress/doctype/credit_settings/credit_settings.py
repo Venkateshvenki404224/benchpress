@@ -11,13 +11,11 @@ NON_NEGATIVE_FIELDS = (
 	"signup_grant_credits",
 	"custom_build_credits",
 	"low_balance_warn_percent",
-	"max_run_hours",
 	"reap_after_days",
 	"max_concurrent_free",
 	"max_concurrent_paid",
 	"max_devices",
 	"max_builds_per_day",
-	"always_on_monthly_inr",
 )
 
 

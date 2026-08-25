@@ -22,10 +22,6 @@ SETTINGS = "Credit Settings"
 BENCHPRESS_SETTINGS = "BenchPress Settings"
 SIZE_INDEX_ATTRIBUTE = "benchpress_instance_size_index"
 
-# How long a bought Always On Pass runs. Fixed rather than configurable: it is the unit the price
-# `always_on_monthly_inr` is named after, and two places to change one month is one place too many.
-PASS_DAYS = 30
-
 # Where every refusal and every stop notice sends somebody who wants to keep going. One constant,
 # so the sentence and the router entry can never drift apart.
 TOP_UP_ROUTE = "/frontend/credits"

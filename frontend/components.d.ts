@@ -11,7 +11,6 @@ declare module 'vue' {
     ActivityFeed: typeof import('./src/components/overview/ActivityFeed.vue')['default']
     ActivityRow: typeof import('./src/components/ActivityRow.vue')['default']
     AddDeviceDialog: typeof import('./src/components/device/AddDeviceDialog.vue')['default']
-    AlwaysOnUpsell: typeof import('./src/components/credit/AlwaysOnUpsell.vue')['default']
     AppChip: typeof import('./src/components/AppChip.vue')['default']
     AppIcon: typeof import('./src/components/AppIcon.vue')['default']
     AppSearch: typeof import('./src/components/AppSearch.vue')['default']

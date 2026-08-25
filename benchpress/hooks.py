@@ -205,9 +205,6 @@ scheduler_events = {
 	# 	"benchpress.tasks.all"
 	# ],
 	"daily": [
-		# `reconcile_burn_rates` is deliberately absent. It re-derives an hourly rate from the
-		# running fleet, and nothing raises one any more, so scheduling it rebuilds a second
-		# billing system beside the lease. Phase 5 deletes the fields it repairs.
 		"benchpress.credits.reaper.reap_stopped_instances",
 	],
 	# "hourly": [
@@ -229,8 +226,8 @@ scheduler_events = {
 		"*/5 * * * *": [
 			"benchpress.mariadb_manager.scheduled_health_check",
 			# Never on the `*/1` stats cron: that job spends ~2s per container on the Docker
-			# socket, and an enforcement decision queued behind Docker I/O arrives late. Five
-			# minutes is fine enough for a TTL measured in hours and for the 15-minute warning.
+			# socket, and a decision queued behind Docker I/O arrives late. The clock is not
+			# this job's business — `drain` owns expiry; this one checks balances.
 			"benchpress.credits.sweep.enforce_limits",
 			# The enqueuer, never `reconcile_instance_routes` itself: scheduled jobs land on
 			# `default`, which `queue-short` also consumes, and that container has no route

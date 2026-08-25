@@ -12,7 +12,6 @@
   "column_break_grants",
   "low_balance_warn_percent",
   "lifecycle_section",
-  "max_run_hours",
   "reap_after_days",
   "lease_section",
   "default_lease_plan",
@@ -26,8 +25,6 @@
   "column_break_caps",
   "max_devices",
   "max_builds_per_day",
-  "always_on_section",
-  "always_on_monthly_inr",
   "signup_section",
   "waitlist_open",
   "column_break_signup",
@@ -72,13 +69,6 @@
    "label": "Instance Lifecycle"
   },
   {
-   "default": "8",
-   "description": "Hard TTL: a running instance is auto-stopped after this many hours. 0 = unlimited.",
-   "fieldname": "max_run_hours",
-   "fieldtype": "Int",
-   "label": "Max Run Hours"
-  },
-  {
    "default": "7",
    "description": "A stopped instance is deleted after this many days. 0 = never reap.",
    "fieldname": "reap_after_days",
@@ -121,19 +111,6 @@
    "fieldname": "max_builds_per_day",
    "fieldtype": "Int",
    "label": "Max Builds per Day"
-  },
-  {
-   "fieldname": "always_on_section",
-   "fieldtype": "Section Break",
-   "label": "Always On Pass"
-  },
-  {
-   "default": "999",
-   "description": "Monthly price per instance, in INR, to exempt it from the TTL auto-stop. 0 = the pass is not sold.",
-   "fieldname": "always_on_monthly_inr",
-   "fieldtype": "Currency",
-   "label": "Always On Monthly (INR)",
-   "options": "INR"
   },
   {
    "fieldname": "signup_section",

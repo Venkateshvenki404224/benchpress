@@ -31,7 +31,7 @@
 				}}</span>
 				<span class="mt-0.5 block text-2xs text-ink-gray-5">{{ specLine(size) }}</span>
 				<span v-if="priced" class="mt-0.5 block text-2xs font-medium text-ink-gray-7">
-					{{ rateLabel(size.credits_per_hour) }}
+					{{ leasePriceLabel(size.lease_credits, size.lease_label) }}
 				</span>
 			</button>
 		</div>
@@ -40,10 +40,11 @@
 
 <script setup>
 // The price belongs at the moment of choosing, which is here — a size is the only
-// field on this form that costs money, so it is the only one that shows a rate.
-// The rate is hidden entirely when credits are off: a self-hoster picking a
-// container size should not be shown a currency that does not exist for them.
-import { rateLabel } from "@/utils/credits";
+// field on this form that costs money. It quotes what one lease costs rather than a
+// rate, because that is the number the deploy is about to spend. Hidden entirely
+// when credits are off: a self-hoster picking a container size should not be shown
+// a currency that does not exist for them.
+import { leasePriceLabel } from "@/utils/credits";
 import { cpuLabel, memoryLabel } from "@/utils/labSpecs";
 
 defineProps({

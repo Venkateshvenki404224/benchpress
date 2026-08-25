@@ -1,44 +1,41 @@
 # Copyright (c) 2026, Venkatesh and contributors
 # For license information, please see license.txt
 
-"""The enforcement sweep: which running instances have to stop, and who should be warned first.
+"""The balance sweep: whose running instances have to stop, and who should be warned first.
 
-Its own cron, never folded into `collect_bench_stats`. That job already spends ~2s per container
-on `stats(stream=False)` and exceeds its own window past ~25 benches; an enforcement decision that
-queues behind Docker I/O is an enforcement decision that arrives late, and a TTL that fires late
-is a TTL nobody trusts.
+The clock is not its business — `benchpress.credits.drain` owns expiry, and a lease that runs out
+stops there. This answers the other question: an account at zero has nothing left to renew with,
+so its instances come down and the owner is told why.
 
-So this makes **no Docker calls at all**. Hours are `now - started_at`, balances are arithmetic on
-the burn rate, and everything it loads it loads for the whole fleet at once: one query for the
-running instances, one for their labs, one for their owners' accounts, one for the passes. The
+It makes **no Docker calls at all**, and everything it loads it loads for the whole fleet at once:
+one query for the running instances, one for their labs, one for their owners' accounts. The
 grouping is a dict, so the pass is O(N) in running instances.
 
 **Deciding is not acting.** Scheduled jobs run on `queue-short`, which has no Docker socket
 mounted — the same constraint that makes the stats cron write `Unknown`. The sweep therefore
 decides, then hands each stop to `queue-long`, the only worker that can reach a container.
 
-It warns before it acts: once per run before a TTL stop, and once per depletion before credits run
-out. A limit that arrives without warning reads as a fault.
+It warns once per depletion before credits run out. A limit that arrives without warning reads as
+a fault.
 """
 
 import frappe
-from frappe.utils import cint, flt, get_datetime, now_datetime, time_diff_in_seconds
+from frappe.utils import cint, flt
 
-from benchpress.credits import account, config, notify, passes
+from benchpress.credits import account, config, notify
 
 ACCOUNT = "Credit Account"
 BENCH = "Bench Instance"
 LAB = "Lab"
 
-RUNNING_FIELDS = ["name", "owner", "lab", "started_at", "ttl_warned_at"]
+RUNNING_FIELDS = ["name", "owner", "lab"]
 ACCOUNT_FIELDS = ["name", *account.BALANCE_FIELDS, "lifetime_purchased", "low_balance_warned"]
 
-TTL_WARNING_MINUTES = 15
 STOP_TIMEOUT = 600
 
 
 def enforce_limits() -> dict:
-	"""One indexed query, pure datetime math, zero Docker calls."""
+	"""Three indexed queries, arithmetic on stored balances, zero Docker calls."""
 	if not config.credits_enabled():
 		return _nothing_to_do()
 	running = frappe.get_all(BENCH, filters={"status": "Running"}, fields=RUNNING_FIELDS)
@@ -53,7 +50,6 @@ class LimitSweep:
 	def __init__(self, running: list):
 		self.running = running
 		self.settings = config.settings()
-		self.exempt = passes.active_pass_benches([bench.name for bench in running])
 		self.lab_ids = _lab_ids({bench.lab for bench in running})
 		self.accounts = _accounts({bench.owner for bench in running})
 		self.stopped: list[str] = []
@@ -65,7 +61,7 @@ class LimitSweep:
 		return {"checked": len(self.running), "stopped": self.stopped, "warned": self.warned}
 
 	def _by_owner(self) -> dict:
-		"""Group once into a dict: the balance is per owner, the TTL is per instance."""
+		"""Group once into a dict: the balance is per owner and every instance under it goes."""
 		grouped: dict[str, list] = {}
 		for bench in self.running:
 			grouped.setdefault(bench.owner, []).append(bench)
@@ -73,38 +69,13 @@ class LimitSweep:
 
 	def _enforce_for_owner(self, owner: str, benches: list) -> None:
 		row = self.accounts.get(owner)
-		out_of_credits = self._out_of_credits(row)
-		for bench in benches:
-			if bench.name not in self.exempt:
-				self._enforce_one(bench, out_of_credits)
+		if self._out_of_credits(row):
+			for bench in benches:
+				bench.lab_id = self.lab_ids.get(bench.lab)
+				self._stop(bench)
 		self._settle_low_balance_warning(owner, row)
 
-	def _enforce_one(self, bench, out_of_credits: bool) -> None:
-		bench.lab_id = self.lab_ids.get(bench.lab)
-		minutes_left = self._minutes_left(bench)
-		reason = self._stop_reason(minutes_left, out_of_credits)
-		if reason:
-			self._stop(bench, reason)
-		elif minutes_left is not None and minutes_left <= TTL_WARNING_MINUTES:
-			self._warn_ttl(bench, minutes_left)
-
 	# --- Deciding -------------------------------------------------------------
-
-	def _minutes_left(self, bench) -> float | None:
-		"""Minutes before this run hits the TTL, or `None` when there is no TTL to hit."""
-		max_hours = cint(self.settings.max_run_hours)
-		if not max_hours or not bench.started_at:
-			return None
-		ran_minutes = time_diff_in_seconds(now_datetime(), get_datetime(bench.started_at)) / 60.0
-		return max_hours * 60 - ran_minutes
-
-	def _stop_reason(self, minutes_left: float | None, out_of_credits: bool) -> str | None:
-		"""A code, not a sentence — `notify` owns every word a user reads."""
-		if minutes_left is not None and minutes_left <= 0:
-			return notify.TTL_REACHED
-		if out_of_credits:
-			return notify.OUT_OF_CREDITS
-		return None
 
 	def _out_of_credits(self, row) -> bool:
 		"""No account row means no balance to be out of — credits were only just switched on."""
@@ -112,17 +83,10 @@ class LimitSweep:
 
 	# --- Acting ---------------------------------------------------------------
 
-	def _stop(self, bench, reason: str) -> None:
+	def _stop(self, bench) -> None:
 		_enqueue_stop(bench.name)
-		notify.announce_stop(bench, reason)
+		notify.announce_stop(bench)
 		self.stopped.append(bench.name)
-
-	def _warn_ttl(self, bench, minutes_left: float) -> None:
-		if notify.already_warned(bench.ttl_warned_at, bench.started_at):
-			return
-		notify.warn_ttl(bench, max(int(minutes_left), 0))
-		notify.stamp_warning(bench.name, "ttl_warned_at")
-		self.warned.append(bench.name)
 
 	def _settle_low_balance_warning(self, owner: str, row) -> None:
 		"""Warn once per depletion, and re-arm the warning when the balance recovers."""

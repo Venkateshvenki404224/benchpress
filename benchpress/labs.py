@@ -109,14 +109,14 @@ def get_lab_form_options() -> dict:
 	`Instance Size` rows. Restating any of them in the SPA would make a new Frappe version or a
 	retuned price a two-file change and let the two copies disagree.
 	"""
-	from benchpress.credits import config
+	from benchpress.credits import config, lease
 
 	meta = frappe.get_meta("Lab")
 	versions = meta.get_field("frappe_version").options or ""
 	return {
 		"frappe_versions": [version for version in versions.split("\n") if version],
 		"defaults": {fieldname: meta.get_field(fieldname).default for fieldname in FORM_DEFAULTS},
-		"instance_sizes": config.instance_sizes(),
+		"instance_sizes": lease.priced_sizes(),
 		"credits_enabled": config.credits_enabled(),
 	}
 

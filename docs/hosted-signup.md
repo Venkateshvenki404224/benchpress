@@ -84,7 +84,8 @@ checked on the email path only — an OAuth signup has already been vouched for 
 is the other reason to prefer those buttons.
 
 The concurrency ceiling switches to `Max Concurrent (Paid)` the moment the account has a `Purchase`
-ledger row. An Always On Pass counts as a purchase even though it posts zero credits.
+ledger row. The row rather than the balance, because a refund clears the balance and the account
+has still plainly paid.
 
 ---
 
