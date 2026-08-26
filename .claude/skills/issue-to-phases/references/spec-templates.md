@@ -128,6 +128,14 @@ boundary as an oversight.>
 > site, so it fails on any bench with real rows. This phase gates on CI for it.
 > See [Tests](ralph-loop.md#tests-scoped-fenced-exit-code).
 
+<Where the phase moves a function that a scheduler entry or an `enqueue` call
+names by string, spell the closing order out — it is the step a phase drops:>
+
+> **String-named move:** this phase ends with rewrite every string → `migrate` →
+> restart the workers, in that order. Migrating after the restart leaves a
+> `Scheduled Job Type` row pointing at nothing, and that failure is silent. See
+> [Moving code that a string names](ralph-loop.md#moving-code-that-a-string-names).
+
 **Rollback**, if step <n> fails: <the exact command. Restore first, diagnose after.>
 
 ## Done when
@@ -323,6 +331,13 @@ phase runs the scoped test modules it touches — see
 none of them. The agent edits the suite, so the suite cannot be the independent
 word on the agent's work. Verification observes the running system, and CI runs
 the suite against a site the agent never touched.
+
+**A phase that moves code verifies the strings, not just the imports.** Frappe
+resolves scheduled and enqueued jobs from dotted strings at run time, so a green
+import proves nothing about them. The three gates that do — a `git grep` for the
+old path, two static tests that resolve every scheduler and `enqueue` target, and
+one runtime pass over `Scheduled Job Type.method` — are in
+[Moving code that a string names](ralph-loop.md#moving-code-that-a-string-names).
 
 Include a negative control wherever one is cheap: a name that should *not*
 resolve, a user who should *not* have access, a file that should *not* be

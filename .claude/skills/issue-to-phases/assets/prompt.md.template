@@ -214,6 +214,38 @@ them fails a test, and all three have cost a real iteration:
 Check the page the feature actually lives on. A dashboard or overview page that
 was never in scope will look untouched no matter how correct the work is.
 
+## If this phase moves a function that a string names
+
+Frappe resolves a scheduled job and an enqueued job from a **dotted string** at
+run time. Your imports can all be correct and those strings still point at
+nothing. Ending the phase in the wrong order is silent — the `Scheduled Job Type`
+row raises no exception, writes no log row, and still advances `last_execution`,
+so the desk list shows a job that ran a moment ago while nothing has run at all.
+
+End the phase in this order, and do not reorder it:
+
+1. Rewrite **every** string in the same commit as the move: call sites,
+   `hooks.py`, docstrings, tracked `.md`, and the test assertions naming the path.
+   `git grep '<old.dotted.path>'` must come back empty.
+2. `docker compose exec backend bench --site frontend migrate`
+3. `docker compose restart backend queue-long queue-short scheduler websocket`
+
+Before step 3, poll `queue-long` for at most 120 seconds, then go ahead anyway and
+write the depth you gave up at into your notes. Do not block until it is empty:
+the restart kills an in-flight deploy in any case, and waiting can hang this
+iteration behind a two-minute one.
+
+Two things you must not do:
+
+- **Do not add a re-export shim** to the module you moved the code out of. It
+  makes a cycle, and the form that looks safest — the shim at the bottom of the
+  old module — works when the old module is imported first and raises
+  `ImportError` when the new one is. That is the path an RQ worker takes, so the
+  shim is green in CI and broken in every worker.
+- **Do not rename any RQ `job_id`.** It is a dedup key, not an import path, so the
+  move cannot break it. Renaming it lets a job queued under the old id run beside
+  a new one.
+
 ## How an iteration ends
 
 **Never end your turn waiting for something.** This is a headless session: there

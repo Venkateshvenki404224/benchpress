@@ -203,6 +203,15 @@ completed.
   test: **the built assets are older than the source**, **a feature flag hides
   it**, and **no row exercises it** (the feature reads a column every existing row
   has as `NULL`). Check those three before concluding the code is wrong.
+- **A move that changes a dotted path ends with `migrate`, then the restart.**
+  Frappe resolves scheduled and enqueued jobs from strings at run time, so moving
+  a function they name breaks them while every import still works. Rewrite every
+  string in the same commit, run
+  `docker compose exec backend bench --site frontend migrate`, and restart the
+  workers **after** — the other order leaves a `Scheduled Job Type` row pointing
+  at nothing, and that fails in complete silence. Job ids never change during a
+  move, and a re-export shim is not a fallback: see
+  [Moving code that a string names](references/ralph-loop.md#moving-code-that-a-string-names).
 - One subfolder per feature, always inside a status bucket — never loose in
   `specs/` or in a bucket root.
 - One branch and one PR per feature. Never a second PR for a later phase.

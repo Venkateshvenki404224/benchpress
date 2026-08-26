@@ -10,6 +10,7 @@ block.
 - [The one idea that makes it work](#the-one-idea-that-makes-it-work)
 - [Designing smoke_check](#designing-smoke_check)
 - [Tests: scoped, fenced, exit code](#tests-scoped-fenced-exit-code)
+- [Moving code that a string names](#moving-code-that-a-string-names)
 - [Proving the UI](#proving-the-ui)
 - [Why a loop stalls](#why-a-loop-stalls)
 - [Preflight and rollback](#preflight-and-rollback)
@@ -125,6 +126,11 @@ On a repo with **no** workflows, delete the gate and both helpers. `gh pr checks
 reports nothing there, so the gate would wait out its entire budget and fail every
 phase for the absence of a thing that does not exist.
 
+**A phase that moves code gets a grep gate.** A moved function that a dotted
+string names is broken in a way no import error and no test catches, so
+`smoke_check` greps for the old path. See
+[Moving code that a string names](#moving-code-that-a-string-names).
+
 **Include the status-lockstep gate.** The template ships it: phases before the
 last must leave the spec in `in-progress/`, the final phase in `completed/`, and
 `promote_spec.py --check` must pass. Keep it. Spec bookkeeping is what an agent
@@ -170,6 +176,111 @@ OK
 A scoped command splits the same way — `--module benchpress.tests.test_deploy_manager`
 is 86 tests then 30 — so the rule holds everywhere. No `tail`, no `grep -q OK`.
 Only `$?` is honest.
+
+**A phase that moves a string-named function names one more module.** The static
+job-path tests are the gate that outlives the refactor, so every later phase of
+the move runs them too. See
+[Moving code that a string names](#moving-code-that-a-string-names).
+
+## Moving code that a string names
+
+A refactor phase that moves a function is not finished when the imports are
+right. Frappe resolves a scheduled job and an enqueued job from a **dotted
+string** at run time, through `frappe.get_attr`, so a name that moved leaves those
+strings pointing at nothing. The two carriers fail in opposite ways, and the
+persisted one is the silent one:
+
+| Carrier | What a stale string does | The only trace |
+|---|---|---|
+| a `Scheduled Job Type` row, from `hooks.scheduler_events` | the job stops running, indefinitely | one `INFO` line in `logs/scheduler.log` |
+| a `frappe.enqueue("…")` call site | the job fails once, at the moment it is queued | `ModuleNotFoundError` in `FailedJobRegistry` |
+
+The scheduler row is the dangerous one because it goes on looking healthy.
+`ScheduledJobType.execute()` catches the exception and `run_scheduled_job` catches
+again, so nothing raises. No `Scheduled Job Log` row is written when the row has
+`create_log = 0`, and no `Error Log` row appears either. `last_execution` still
+advances, because `log_status("Start")` stamps it before the call — so the desk
+list shows a job that ran a moment ago while a `*/5` reconcile has quietly
+stopped.
+
+### End the phase in this order
+
+1. **Move the code and rewrite every string in the same commit** — call sites,
+   `hooks.py`, docstrings, tracked `.md`, and the test assertions that name the
+   path. A forgotten test assertion fails loudly, which is the cheapest gate here.
+2. **`docker compose exec backend bench --site frontend migrate`.**
+3. **`docker compose restart backend queue-long queue-short scheduler websocket`.**
+
+Step 2 before step 3 is a rule, not a preference. `migrate` calls `sync_jobs()`
+(`frappe/migrate.py:162`), which inserts the new `Scheduled Job Type` row and then
+deletes the one whose method is no longer in `scheduler_events`. So the stale row
+never outlives the commit, and a scheduler string never needs a `patches.txt`
+entry. `migrate` runs inside `backend`, a fresh process reading the bind-mounted
+new code, so it sees the new hooks while the un-restarted workers resolve the new
+path straight from disk. Between steps 2 and 3 both paths work. **Migrating after
+the restart is the order that opens the silent window.**
+
+Before step 3, wait for `queue-long` — **bounded, and not a gate.** Poll for at
+most 120 seconds, then go ahead anyway and log the depth it gave up at. A restart
+already kills an in-flight deploy, so blocking until the queue is empty buys
+nothing and can hang the loop behind a two-minute deploy.
+
+### Never add a re-export shim
+
+The reflex fix for a moved name is to re-export it from the old module. Do not.
+A move that leaves any back-reference into the old module — and a partial extract
+usually leaves one — makes the re-export a cycle, and the cycle breaks on the path
+the workers take:
+
+| Where the shim goes | Entered via the old module | Entered via the new module |
+|---|---|---|
+| top of the old module | `ImportError` | `ImportError` |
+| bottom of the old module | works | **`ImportError`** |
+| lazy import inside the new module | works | works |
+
+The middle row is the trap. It is the form a reviewer asks for, it passes every
+test that imports the old module first, and it fails on
+`frappe.get_attr("<new module>.<name>")` — which is exactly what an RQ worker
+calls. A shim that is green in CI and broken in every worker is worse than no
+shim. Rewriting the strings costs one `git grep` and needs none of this.
+
+### Job ids are frozen
+
+An RQ `job_id` is a dedup key, not an import path, so moving the function cannot
+break it. Renaming it during the move is what breaks: a job queued under the old
+id is invisible to `is_job_enqueued` on the new one
+(`frappe/utils/background_jobs.py:664`), so two runs of a job that exists to be
+unique can overlap. `bench_instance.py:174`'s `deploy_bench:{self.name}` is the
+live example — one id shared by deploy and redeploy on purpose, so that "a deploy
+is already in progress" is true for both. Leave every job id exactly as it is,
+across every phase of the move.
+
+### The three gates
+
+Two are static and one is a runtime check, and none needs a human.
+
+**a. A repo-wide grep, in `smoke_check`.** After the phase, no moved name may
+survive as `<old dotted module>.<name>` anywhere. Use `git grep`, not a
+Python-only search: a docstring, a `.md` file or a JSON fixture holds these too.
+Write the pattern with the module prefix and the trailing dot so it cannot match a
+bare job id like `deploy_bench:`.
+
+**b. Two static tests, added once in the first phase that moves anything.** They
+generalize `benchpress/tests/test_scheduler_entries.py`, which already AST-walks
+`scheduler_events` and proves the shape works:
+
+- every string in `hooks.scheduler_events` resolves under `frappe.get_attr`;
+- every `enqueue` target resolves — AST-walk each non-test `.py` under the app,
+  take the first positional or `method=` `Constant` of each `enqueue` call, and
+  resolve it.
+
+This is the gate that outlives the refactor. Any later move of a job target then
+fails a test instead of going quiet.
+
+**c. One runtime assertion, after step 2.** Resolve every
+`Scheduled Job Type.method` on the live site with `frappe.get_attr` and fail on
+any that raises. Gate **b** proves the source is right. This one proves the
+**database** is, which is the half no static check can see.
 
 ## Proving the UI
 
@@ -396,7 +507,11 @@ contract, escape hatch. What you write per spec:
   Which services hold a stale module until restarted. Anything that has bitten
   someone.
 - **the `<!-- PHASE n -->` blocks** — per-phase warnings. Put the destructive
-  phase's order of operations here, phrased as "do not reorder them".
+  phase's order of operations here, phrased as "do not reorder them". A phase that
+  moves a function named by a string is exactly this case: write out
+  rewrite → `migrate` → restart, with the reason, because the wrong order fails
+  silently. See
+  [Moving code that a string names](#moving-code-that-a-string-names).
 
 Write prohibitions where the agent will be when it needs them, and give the
 reason. An agent that understands why a rule exists will not route around it.
@@ -436,6 +551,7 @@ In **`prompt.md`** — the words:
 | `{{FEATURE_SUMMARY}}` | two or three sentences of orientation |
 | `{{CONTEXT_DOCS}}` | the CLAUDE.md / design docs worth reading |
 | `{{TEST_CMD}}` | one scoped `--module` line per test file the phase touches — see [Tests](#tests-scoped-fenced-exit-code) |
+| `<!-- PHASE n -->` order of operations | any sequence the phase must not reorder, including a [string-named move](#moving-code-that-a-string-names) |
 | `{{LINT_CMD}}` | the repo's real lint command |
 | `{{EXTRA_RULES}}` | repo-specific traps |
 | `{{SAFETY_RULES}}` | the irreversible things, each with its reason |
