@@ -142,6 +142,22 @@ shipped feature filed under "not started".
 
 {{SAFETY_RULES}}
 
+### Never touch the host
+
+These are the README's `## Host steps` Never list, restated here because this is
+the text you actually read. Each one carries its reason, because a rule without a
+reason invites a clever exception.
+
+{{HOST_NEVER_RULES}}
+
+The loop snapshots exactly these surfaces at preflight and diffs them at every
+phase. A change is **fatal**: the loop stops and waits for a human, rather than
+retracting your marker and trying again. Nothing the next iteration does can undo
+a host change.
+
+A host step that must happen is somebody else's job. Say so in your notes and
+write the blocked marker. Do not run it.
+
 ## Rollback
 
 {{ROLLBACK}}

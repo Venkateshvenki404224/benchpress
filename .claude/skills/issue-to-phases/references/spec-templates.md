@@ -7,6 +7,7 @@ Read this when writing or revising a spec folder (Job 1).
 - [The folder](#the-folder)
 - [README.md template](#readmemd-template)
 - [phase-N.md template](#phase-nmd-template)
+- [The `## Host steps` section](#the--host-steps-section) — every spec writes it, even an empty one
 - [The code-snippet style contract](#the-code-snippet-style-contract) — read this one even if you skim the rest
 - [Verification sections that are worth writing](#verification-sections-that-are-worth-writing)
 
@@ -72,6 +73,11 @@ shippable and verified before the next.>
 - <concrete files, functions, fields each phase touches, so a phase doc can point
   here instead of repeating it>
 
+## Host steps
+
+<Three labelled lists — Precondition, Leftover, Never — all three written even
+when one is empty. See [The `## Host steps` section](#the--host-steps-section).>
+
 ## Conventions (from CLAUDE.md — apply to all phases)
 
 - <the repo conventions the implementer must follow>
@@ -111,6 +117,11 @@ boundary as an oversight.>
 
 1. <concrete, runnable steps — commands, and what the output must say>
 
+<Where a step depends on human-only host work, link it rather than restating it:>
+
+> **Host step (precondition):** <what must be true>. See
+> [Host steps](README.md#host-steps). The loop refuses to start otherwise.
+
 **Rollback**, if step <n> fails: <the exact command. Restore first, diagnose after.>
 
 ## Done when
@@ -119,6 +130,101 @@ boundary as an oversight.>
 (still works / no-ops cleanly when unconfigured), and a sentence naming the known
 gaps this phase deliberately leaves for later phases.>
 ```
+
+## The `## Host steps` section
+
+Every spec README carries this section, and it is the single source for the
+human-only work around the loop. Phase specs link to it. They never restate a
+step, because two copies drift and the loop reads neither.
+
+Three kinds of step, and they are not interchangeable:
+
+| | **Precondition** | **Leftover** | **Never** |
+|---|---|---|---|
+| When | before phase 1 is attempted | after the last phase lands | at any time |
+| Who runs it | a human, before the loop starts | a human, after the loop finishes | nobody |
+| What the loop does | `preflight` refuses to start | finishes, then reports it | `smoke_check` stops the loop |
+| Example | `sudo scripts/enable-sysbox.sh` | `sudo scripts/tune-host.sh` | write to `/etc/sysctl.d` |
+
+A Leftover and a Never are one action seen from two sides. "A human runs
+`tune-host.sh`" and "the loop must never run `tune-host.sh`" are the same entry,
+so every Leftover generates a Never. The Never list is never written on its own.
+
+**Write all three lists, even when one is empty.** An omitted list reads as "not
+considered". Write `— none` and the reason it is none.
+
+```markdown
+## Host steps
+
+### Precondition — true before phase 1 is attempted
+
+| Step | Verify (read-only, no root) | Why |
+|---|---|---|
+| <the command a human runs> | <a command that exits non-zero while the step is undone> | <what breaks without it> |
+
+### Leftover — a human runs this after the last phase
+
+| Step | Verify (read-only, no root) | Why |
+|---|---|---|
+| <the command a human runs> | <a command that exits non-zero while the step is undone> | <why no loop may run it> |
+
+### Never — the loop is gated on these
+
+| Never | Why |
+|---|---|
+| <the action> | <the damage, stated concretely> |
+```
+
+An empty list keeps its heading and gets a reason:
+
+```markdown
+### Leftover — a human runs this after the last phase
+
+— none. Nothing in this spec writes outside the checkout, so it adds no host
+debt and needs no new checker.
+```
+
+### The verify command is the load-bearing part
+
+Prose cannot gate a loop. Every Precondition and every Leftover names a command
+that is **read-only, needs no root, and exits non-zero while the step is undone**.
+Writing that checker is part of the work, not a note for later.
+
+**Scope the check to this spec, never to the whole host.** A whole-host readiness
+gate refuses to start every later loop until unrelated debt is paid. On this repo
+`entry.py --check-host` exits 1 today, because item 5's leftover has never been
+run. A spec about Docker events that gated on it would never start.
+
+### A leftover outlives the spec, so its record is tracked code
+
+`specs/` is gitignored in full, and a completed spec is deleted once its code
+lands. Nothing durable may be recorded only inside one.
+
+A leftover is per-host state, not a repo TODO. A second host owes every leftover,
+not the ones this host happened to skip. So the record is two tracked halves, and
+the phase that creates the debt ships both:
+
+| Half | Job |
+|---|---|
+| A read-only, non-root **checker** in tracked code | the host answers for itself, with no document to keep in step |
+| A line in the **operations runbook** | a human provisioning a fresh host reads it |
+
+Item 5 is the worked instance: `entry.py --check-host` and
+`benchpress_devops/PRODUCTION.md` §5.18. A spec whose leftover no tracked command
+can detect is not finished.
+
+`specs/STATUS.md` keeps a `⚠ by hand:` prefix in its Notes cell while the spec
+exists, so `grep '⚠ by hand:' specs/STATUS.md` lists what is outstanding on this
+host. That is a working-tree convenience, not the record of truth.
+
+### What the loop does with the section
+
+`ralph.sh` builds two gates from these lists, and `prompt.md` restates the Never
+list in its Safety section. See
+[references/ralph-loop.md](ralph-loop.md#the-two-host-gates) for both gates.
+
+A spec with no host steps at all deletes the section, the way a repo with no CI
+deletes the `ci_status` gate.
 
 ## The code-snippet style contract
 
