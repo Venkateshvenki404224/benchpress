@@ -99,10 +99,7 @@ def configure_container(
 	from benchpress.docker_manager import exec_in_container, write_file_to_container
 
 	config = render_container_config(private_key, assigned_ip, network)
-	write_file_to_container(container_id, config, "/etc/wireguard/wg0.conf")
-	exit_code, output = exec_in_container(container_id, "chmod 600 /etc/wireguard/wg0.conf", user="root")
-	if exit_code != 0:
-		raise Exception(f"Securing wg0.conf failed inside container: {output}")
+	write_file_to_container(container_id, config, "/etc/wireguard/wg0.conf", mode=0o600)
 	# The one tolerated exec here: the interface may legitimately be down already, and
 	# `|| true` is what makes that tolerance visible rather than a discarded exit code.
 	exec_in_container(container_id, "wg-quick down wg0 || true", user="root")

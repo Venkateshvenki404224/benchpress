@@ -7,6 +7,7 @@ import tempfile
 import unittest
 from contextlib import contextmanager, nullcontext
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import docker
@@ -16,6 +17,7 @@ from frappe.tests import IntegrationTestCase
 
 from benchpress import docker_manager
 from benchpress.benchpress.doctype.bench_instance import get_instance_id
+from benchpress.tests.test_docker_manager import exec_commands, exec_environments
 
 # Any dotted quad, anywhere in the rendered file. The property routes must hold is that no
 # address of any kind appears — asserting one known IP is absent would pass for the next one.
@@ -837,12 +839,34 @@ class TestDeployStepMarkers(IntegrationTestCase):
 		bench = self._bench()
 		self._enable_code_server()
 
-		self._run_deploy(bench, exec_failures={"chmod 600": (1, "Operation not permitted")})
+		self._run_deploy(bench, exec_failures={"chown -R": (1, "Operation not permitted")})
 
 		log = self._log(bench.name)
 		self.assertIn("Securing the code-server config failed (exit 1)", log)
 		self.assertNotIn("code-server ready at", log)
 		self.assertFalse(self._bench_field(bench, "code_server_url"))
+
+	@patch("benchpress.deploy_manager.secrets.token_urlsafe")
+	@patch("benchpress.docker_manager.get_client")
+	def test_the_code_server_password_goes_into_the_environment_and_into_no_command(self, get_client, token):
+		"""Docker publishes every exec command line, and the IDE password was in one."""
+		from benchpress import deploy_manager
+
+		sentinel = "cS1XnOtAr3alPassw0rd"
+		token.return_value = sentinel
+		container = get_client.return_value.containers.get.return_value
+		container.exec_run.return_value = (0, b"")
+		bench = self._bench()
+		bench.ssh_username = "tenant"
+
+		deploy_manager._start_code_server(
+			bench, "cid-cs", MagicMock(), SimpleNamespace(base_domain="localhost")
+		)
+
+		written = [env for env in exec_environments(container) if sentinel in str(env)]
+		self.assertEqual(len(written), 1)
+		for command in exec_commands(container):
+			self.assertNotIn(sentinel, command)
 
 	def test_a_working_step_ten_stores_the_tunnel_address_on_localhost(self):
 		bench = self._bench()

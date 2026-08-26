@@ -876,9 +876,9 @@ def _start_code_server(bench, container_id: str, pipeline, settings) -> None:
 	"""Configure code-server, launch it, and only then claim it is up.
 
 	Every exec is checked. The config write decides whether code-server can authenticate at
-	all, the `chown`/`chmod` decides whether it reads that file or leaks the password to every
-	account in the container, and `restart.sh` is what actually launches it — a deploy that
-	reports a `code_server_url` answering nothing is worse than one that fails here.
+	all, the `chown` decides whether it reads that file, and `restart.sh` is what actually
+	launches it — a deploy that reports a `code_server_url` answering nothing is worse than
+	one that fails here.
 
 	The address is cleared before the attempt and stored after it, so a failed launch leaves
 	the field empty and `LabHeader.showCodeServer` hides the button instead of offering a
@@ -891,10 +891,12 @@ def _start_code_server(bench, container_id: str, pipeline, settings) -> None:
 	config_yaml = f"bind-addr: 0.0.0.0:8080\nauth: password\npassword: {code_server_password}\ncert: false\n"
 	config_path = f"{cs_home}/.config/code-server/config.yaml"
 
-	write_file_to_container(container_id, config_yaml, config_path)
+	write_file_to_container(container_id, config_yaml, config_path, mode=0o600)
+	# The tar header set the mode, but `linkuser.sh` minted the tenant account and this
+	# caller does not know its id, so the ownership fix still runs as its own exec.
 	_checked_exec(
 		container_id,
-		f"chown -R {cs_user}:{cs_user} {cs_home}/.config && chmod 600 {config_path}",
+		f"chown -R {cs_user}:{cs_user} {cs_home}/.config",
 		"Securing the code-server config",
 	)
 	_checked_exec(container_id, "bash /opt/benchpress/scripts/restart.sh", "restart.sh")
