@@ -23,6 +23,8 @@ from frappe.utils.data import cint, now_datetime, time_diff_in_seconds
 
 DEFAULT_INTERFACE = "wg0"
 CONTAINER_KEEPALIVE_SECONDS = 25
+# The legacy bench network's gateway, for a bench predating the bridge family.
+LEGACY_GATEWAY = "172.30.0.1"
 # Fallback when VPN Settings has never been saved; matches its own default.
 DEFAULT_STATUS_POLL_MINUTES = 5
 DEVICE_TYPES = ["Mobile", "Laptop", "Desktop", "Tablet", "Server", "IoT", "Embedded"]
@@ -86,7 +88,9 @@ def remove_bench_peer(bench) -> None:
 		frappe.delete_doc("VPN Peer", peer_name, ignore_permissions=True)
 
 
-def configure_container(container_id: str, private_key: str, assigned_ip: str) -> None:
+def configure_container(
+	container_id: str, private_key: str, assigned_ip: str, network: str | None = None
+) -> None:
 	"""Write the client conf into the container and bring its tunnel up.
 
 	Taken down first, tolerating failure: `wg-quick up` refuses to run when the interface
@@ -94,7 +98,7 @@ def configure_container(container_id: str, private_key: str, assigned_ip: str) -
 	"""
 	from benchpress.docker_manager import exec_in_container, write_file_to_container
 
-	config = render_container_config(private_key, assigned_ip)
+	config = render_container_config(private_key, assigned_ip, network)
 	write_file_to_container(container_id, config, "/etc/wireguard/wg0.conf")
 	exit_code, output = exec_in_container(container_id, "chmod 600 /etc/wireguard/wg0.conf", user="root")
 	if exit_code != 0:
@@ -107,8 +111,8 @@ def configure_container(container_id: str, private_key: str, assigned_ip: str) -
 		raise Exception(f"wg-quick up failed inside container: {output}")
 
 
-def render_container_config(private_key: str, assigned_ip: str) -> str:
-	"""Client conf for a bench container: it reaches wg0 via the Docker gateway."""
+def render_container_config(private_key: str, assigned_ip: str, network: str | None = None) -> str:
+	"""Client conf for a bench container: it reaches wg0 via its own bridge's gateway."""
 	server = frappe.get_cached_doc("WireGuard Server", DEFAULT_INTERFACE)
 	pool_network = ipaddress.ip_network(server.address_cidr, strict=False)
 	return (
@@ -119,25 +123,38 @@ def render_container_config(private_key: str, assigned_ip: str) -> str:
 		"[Peer]\n"
 		f"PublicKey = {server.server_public_key}\n"
 		f"AllowedIPs = {pool_network}\n"
-		f"Endpoint = {_get_docker_gateway()}:{server.listen_port}\n"
+		f"Endpoint = {_get_docker_gateway(network)}:{server.listen_port}\n"
 		f"PersistentKeepalive = {CONTAINER_KEEPALIVE_SECONDS}\n"
 	)
 
 
-def _get_docker_gateway() -> str:
-	"""The host's gateway IP on the benchpress Docker network."""
-	from benchpress.docker_manager import get_client
+def _get_docker_gateway(network: str | None = None) -> str:
+	"""The host's gateway IP on `network`, defaulting to the legacy bench network."""
+	from benchpress import docker_manager
 
-	client = get_client()
+	network = network or docker_manager.LEGACY_NETWORK
 	try:
-		network = client.networks.get("benchpress")
-		ipam = network.attrs.get("IPAM", {})
-		configs = ipam.get("Config", [])
+		attrs = docker_manager.get_client().networks.get(network).attrs
+		configs = attrs.get("IPAM", {}).get("Config", [])
 		if configs and "Gateway" in configs[0]:
 			return configs[0]["Gateway"]
 	except Exception:
 		pass  # best-effort
-	return "172.30.0.1"
+	return _fallback_gateway(network)
+
+
+def _fallback_gateway(network: str) -> str:
+	"""The gateway `network` is defined to have, when Docker could not be asked.
+
+	A bench on bridge 1 whose endpoint reads bridge 0's gateway has no route to the
+	host, and `wg-quick` reports nothing about it.
+	"""
+	from benchpress import docker_manager
+
+	index = docker_manager.bench_network_index(network)
+	if index is None:
+		return LEGACY_GATEWAY
+	return docker_manager.bench_network_spec(index, docker_manager.subnet_base())["gateway"]
 
 
 def register_device(device_name: str, device_type: str, public_key: str | None = None) -> dict:

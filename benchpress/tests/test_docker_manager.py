@@ -172,13 +172,15 @@ class TestDockerManagerBlockIO(IntegrationTestCase):
 		super().setUpClass()
 		frappe.set_user("Administrator")
 
-	def _container_create_kwargs(self, lab, runtime="runc"):
+	def _container_create_kwargs(self, lab, runtime="runc", bridge_network="benchpress-0"):
 		"""Run create_bench_container with Docker mocked and return the
 		kwargs passed to client.containers.create."""
-		bench = types.SimpleNamespace(bench_name="blockio-test-bench", runtime=runtime)
+		bench = types.SimpleNamespace(
+			bench_name="blockio-test-bench", runtime=runtime, bridge_network=bridge_network
+		)
 		with (
 			patch("benchpress.docker_manager.get_client") as mock_client,
-			patch("benchpress.docker_manager.ensure_network"),
+			patch("benchpress.docker_manager.ensure_bench_network_for"),
 			patch("benchpress.docker_manager._get_host_block_devices", return_value=["/dev/sda"]),
 		):
 			mock_client.return_value.containers.create.return_value = MagicMock(id="cid")
@@ -231,6 +233,23 @@ class TestDockerManagerBlockIO(IntegrationTestCase):
 		kwargs = self._container_create_kwargs(lab)
 
 		self.assertEqual(kwargs["pids_limit"], DEFAULT_PIDS_LIMIT)
+
+	def test_the_container_is_created_on_the_bench_own_network(self):
+		lab = _make_lab("network-family")
+		self.addCleanup(frappe.delete_doc, "Lab", lab.name, force=True, ignore_permissions=True)
+
+		kwargs = self._container_create_kwargs(lab, bridge_network="benchpress-1")
+
+		self.assertEqual(kwargs["network"], "benchpress-1")
+
+	def test_a_bench_with_no_network_falls_back_to_the_legacy_one(self):
+		"""A row the backfill has not reached must not be sent to a bridge it is not on."""
+		lab = _make_lab("network-legacy")
+		self.addCleanup(frappe.delete_doc, "Lab", lab.name, force=True, ignore_permissions=True)
+
+		kwargs = self._container_create_kwargs(lab, bridge_network="")
+
+		self.assertEqual(kwargs["network"], "benchpress")
 
 	def test_runc_passes_no_runtime_kwarg(self):
 		"""A runc bench must produce the call it produced before runtimes existed."""
@@ -346,3 +365,234 @@ class TestContainerRuntime(unittest.TestCase):
 		get_client.return_value = client
 
 		self.assertEqual(container_runtime("cid"), "sysbox-runc")
+
+
+class TestBenchNetworkSpec(unittest.TestCase):
+	def test_index_zero_is_the_base_of_the_family(self):
+		spec = docker_manager.bench_network_spec(0, "10.20")
+
+		self.assertEqual(spec["name"], "benchpress-0")
+		self.assertEqual(spec["device"], "bpbr0")
+		self.assertEqual(spec["subnet"], "10.20.0.0/20")
+		self.assertEqual(spec["gateway"], "10.20.0.1")
+
+	def test_each_index_starts_on_its_own_slash_20_boundary(self):
+		"""A /20 spans 16 third octets, so overlapping ones would share addresses."""
+		subnets = [docker_manager.bench_network_spec(i, "10.20")["subnet"] for i in range(4)]
+
+		self.assertEqual(subnets, ["10.20.0.0/20", "10.20.16.0/20", "10.20.32.0/20", "10.20.48.0/20"])
+
+	def test_the_device_name_fits_ifnamsiz(self):
+		self.assertLess(len(docker_manager.bench_network_spec(15, "10.20")["device"]), 16)
+
+	def test_a_subnet_base_moves_only_the_addresses(self):
+		spec = docker_manager.bench_network_spec(1, "10.40")
+
+		self.assertEqual(spec["name"], "benchpress-1")
+		self.assertEqual(spec["subnet"], "10.40.16.0/20")
+
+	def test_index_round_trips_through_the_name(self):
+		for index in (0, 1, 7):
+			name = docker_manager.bench_network_spec(index)["name"]
+			self.assertEqual(docker_manager.bench_network_index(name), index)
+
+	def test_a_foreign_name_has_no_index(self):
+		for name in ("benchpress", "benchpress_frappe_network", "benchpress-labs", "bridge"):
+			self.assertIsNone(docker_manager.bench_network_index(name))
+
+
+def _network_holding(*container_names):
+	network = MagicMock()
+	network.attrs = {"Containers": {f"cid{i}": {"Name": n} for i, n in enumerate(container_names)}}
+	return network
+
+
+class TestAttachInfrastructure(unittest.TestCase):
+	@patch("benchpress.docker_manager.get_client")
+	def test_attaches_exactly_the_three_infrastructure_containers(self, get_client):
+		network = _network_holding()
+		get_client.return_value.networks.get.return_value = network
+
+		attached = docker_manager.attach_infrastructure("benchpress-0")
+
+		self.assertEqual(attached, list(docker_manager.INFRASTRUCTURE_CONTAINERS))
+		self.assertEqual(
+			[call.args[0] for call in network.connect.call_args_list],
+			list(docker_manager.INFRASTRUCTURE_CONTAINERS),
+		)
+
+	@patch("benchpress.docker_manager.get_client")
+	def test_the_control_plane_is_never_attached(self, get_client):
+		"""A tenant bridge that reaches the control plane's own database is a breach."""
+		network = _network_holding()
+		get_client.return_value.networks.get.return_value = network
+
+		docker_manager.attach_infrastructure("benchpress-0")
+
+		connected = {call.args[0] for call in network.connect.call_args_list}
+		self.assertTrue(
+			connected.isdisjoint({"benchpress_db", "benchpress_redis-cache", "benchpress_redis-queue"})
+		)
+
+	@patch("benchpress.docker_manager.get_client")
+	def test_an_already_connected_container_is_not_reconnected(self, get_client):
+		network = _network_holding("benchpress_traefik")
+		get_client.return_value.networks.get.return_value = network
+
+		attached = docker_manager.attach_infrastructure("benchpress-0")
+
+		self.assertIn("benchpress_traefik", attached)
+		self.assertNotIn("benchpress_traefik", [call.args[0] for call in network.connect.call_args_list])
+
+	@patch("benchpress.docker_manager.get_client")
+	def test_a_missing_container_is_skipped(self, get_client):
+		"""A dev checkout has no Traefik, and the deploy must still complete."""
+		network = _network_holding()
+		network.connect.side_effect = [docker.errors.NotFound("no such container"), None, None]
+		get_client.return_value.networks.get.return_value = network
+
+		attached = docker_manager.attach_infrastructure("benchpress-0")
+
+		self.assertEqual(attached, ["benchpress-mariadb", "benchpress-redis"])
+
+
+class TestEnsureBenchNetwork(unittest.TestCase):
+	def _client_without(self, network_name):
+		client = MagicMock()
+
+		def get(name):
+			if name == network_name:
+				raise docker.errors.NotFound(name)
+			return _network_holding()
+
+		client.networks.get.side_effect = get
+		return client
+
+	@patch("benchpress.docker_manager.subnet_base", return_value="10.20")
+	@patch("benchpress.docker_manager.attach_infrastructure")
+	@patch("benchpress.docker_manager.get_client")
+	def test_creates_the_bridge_with_a_pinned_device(self, get_client, _attach, _base):
+		"""The device option is honoured only at create; a later one keeps br-<hex>."""
+		client = self._client_without("benchpress-0")
+		get_client.return_value = client
+
+		docker_manager.ensure_bench_network(0)
+
+		kwargs = client.networks.create.call_args.kwargs
+		self.assertEqual(kwargs["options"]["com.docker.network.bridge.name"], "bpbr0")
+		pool = kwargs["ipam"]["Config"][0]
+		self.assertEqual(pool["Subnet"], "10.20.0.0/20")
+		self.assertEqual(pool["Gateway"], "10.20.0.1")
+
+	@patch("benchpress.docker_manager.subnet_base", return_value="10.20")
+	@patch("benchpress.docker_manager.attach_infrastructure")
+	@patch("benchpress.docker_manager.get_client")
+	def test_an_existing_bridge_is_not_recreated_but_is_reattached(self, get_client, attach, _base):
+		client = MagicMock()
+		client.networks.get.return_value = _network_holding()
+		get_client.return_value = client
+
+		self.assertEqual(docker_manager.ensure_bench_network(0), "benchpress-0")
+
+		client.networks.create.assert_not_called()
+		attach.assert_called_once_with("benchpress-0", client)
+
+	@patch("benchpress.docker_manager.ensure_network")
+	@patch("benchpress.docker_manager.get_client")
+	def test_the_legacy_name_ensures_the_legacy_network(self, get_client, ensure_network):
+		"""Benches that predate the family stay where their containers already are."""
+		self.assertEqual(docker_manager.ensure_bench_network_for("benchpress"), "benchpress")
+
+		ensure_network.assert_called_once()
+
+	@patch("benchpress.docker_manager.get_client")
+	def test_a_network_outside_the_family_is_refused(self, get_client):
+		with self.assertRaises(frappe.ValidationError):
+			docker_manager.ensure_bench_network_for("benchpress_frappe_network")
+
+
+class TestReadBacksTakeTheirNetwork(unittest.TestCase):
+	@patch("benchpress.docker_manager.get_client")
+	def test_the_ip_is_read_from_the_named_network(self, get_client):
+		container = MagicMock()
+		container.attrs = {
+			"NetworkSettings": {
+				"Networks": {
+					"benchpress": {"IPAddress": "172.30.0.5"},
+					"benchpress-0": {"IPAddress": "10.20.0.5"},
+				},
+				"IPAddress": "",
+			}
+		}
+		get_client.return_value.containers.get.return_value = container
+
+		self.assertEqual(docker_manager.get_container_ip("abc123", "benchpress-0"), "10.20.0.5")
+		self.assertEqual(docker_manager.get_container_ip("abc123"), "172.30.0.5")
+
+	@patch("benchpress.docker_manager.time.sleep")
+	@patch("benchpress.docker_manager.get_client")
+	def test_waiting_polls_the_named_network(self, get_client, _sleep):
+		attrs = {"NetworkSettings": {"Networks": {"benchpress-0": {"IPAddress": "10.20.0.5"}}}}
+		container = _reloading_container([("running", attrs)])
+		get_client.return_value.containers.get.return_value = container
+
+		self.assertEqual(wait_for_container_running("abc123", "benchpress-0"), "10.20.0.5")
+
+
+# The message this daemon really emits, copied from a live refusal on Docker 29.7.2 with a
+# /29 scratch network. The create succeeded and the *start* raised it.
+LIVE_EXHAUSTION = (
+	"500 Server Error for http+docker://localhost/v1.55/containers/abc123/start: "
+	'Internal Server Error ("failed to set up container networking: no available IPv4 '
+	"addresses on this network's address pools: benchpress-0 (fd8f9346a771)\")"
+)
+
+
+class TestAddressPoolExhausted(unittest.TestCase):
+	def test_the_live_refusal_is_recognised(self):
+		self.assertTrue(docker_manager._address_pool_exhausted(docker.errors.APIError(LIVE_EXHAUSTION)))
+
+	def test_another_five_hundred_is_not_a_full_bridge(self):
+		"""The daemon answers 500 for everything, so only the wording separates the two."""
+		error = docker.errors.APIError('500 Server Error: Internal Server Error ("no such image")')
+		self.assertFalse(docker_manager._address_pool_exhausted(error))
+
+
+class TestStartBenchContainer(unittest.TestCase):
+	@patch("benchpress.docker_manager.start_container")
+	def test_a_bridge_with_room_starts_the_container_it_was_given(self, start):
+		self.assertEqual(docker_manager.start_bench_container("abc123", MagicMock(), MagicMock()), "abc123")
+		start.assert_called_once_with("abc123")
+
+	@patch("benchpress.placement.next_network", return_value="benchpress-1")
+	@patch("benchpress.docker_manager.create_bench_container", return_value="def456")
+	@patch("benchpress.docker_manager.remove_container")
+	@patch("benchpress.docker_manager.container_network", return_value="benchpress-0")
+	@patch("benchpress.docker_manager.start_container")
+	def test_a_full_bridge_rolls_once_onto_the_next(self, start, _network, remove, create, _next):
+		start.side_effect = [docker.errors.APIError(LIVE_EXHAUSTION), None]
+		bench, lab = MagicMock(), MagicMock()
+
+		self.assertEqual(docker_manager.start_bench_container("abc123", bench, lab), "def456")
+
+		remove.assert_called_once_with("abc123")
+		create.assert_called_once_with(bench, lab, "benchpress-1")
+
+	@patch("benchpress.placement.next_network", return_value="benchpress-1")
+	@patch("benchpress.docker_manager.create_bench_container", return_value="def456")
+	@patch("benchpress.docker_manager.remove_container")
+	@patch("benchpress.docker_manager.container_network", return_value="benchpress-0")
+	@patch("benchpress.docker_manager.start_container")
+	def test_a_second_refusal_is_raised_rather_than_looped_on(self, start, _network, _remove, _create, _next):
+		"""Two bridges refusing in a row means the count disagrees with the daemon."""
+		start.side_effect = docker.errors.APIError(LIVE_EXHAUSTION)
+
+		with self.assertRaises(docker.errors.APIError):
+			docker_manager.start_bench_container("abc123", MagicMock(), MagicMock())
+
+	@patch("benchpress.docker_manager.start_container")
+	def test_any_other_docker_error_is_not_rolled(self, start):
+		start.side_effect = docker.errors.APIError("no such image")
+
+		with self.assertRaises(docker.errors.APIError):
+			docker_manager.start_bench_container("abc123", MagicMock(), MagicMock())

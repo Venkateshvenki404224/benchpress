@@ -82,11 +82,10 @@ def ensure_tree(specs_dir: Path) -> list[str]:
 	status_path = specs_dir / "STATUS.md"
 	if not status_path.exists():
 		body = STATUS_HEADER
-		for bucket, (heading, _, _) in BUCKETS.items():
+		for _bucket, (heading, _, _) in BUCKETS.items():
 			body += f"\n## {heading}\n" + render_section([])
 		body += (
-			"\n---\n\nTotals: 0 specs tracked (0 not started, 0 in progress, "
-			"0 completed, 0 superseded).\n"
+			"\n---\n\nTotals: 0 specs tracked (0 not started, 0 in progress, 0 completed, 0 superseded).\n"
 		)
 		status_path.write_text(body)
 		created.append(f"{status_path}")
@@ -95,7 +94,7 @@ def ensure_tree(specs_dir: Path) -> list[str]:
 		# section_bounds() never dies on a tree this script just finished creating.
 		text = status_path.read_text()
 		added = False
-		for bucket, (heading, _, _) in BUCKETS.items():
+		for _bucket, (heading, _, _) in BUCKETS.items():
 			if not re.search(rf"^##\s+{re.escape(heading)}\s*$", text, re.M):
 				insert_at = TOTALS_RE.search(text)
 				section = f"\n## {heading}\n" + render_section([])
@@ -125,7 +124,7 @@ def section_bounds(text: str, heading: str) -> tuple[int, int]:
 	start = re.search(rf"^##\s+{re.escape(heading)}\s*$", text, re.M)
 	if not start:
 		die(f"STATUS.md has no '## {heading}' section")
-	nxt = re.search(r"^(##\s+|---\s*$)", text[start.end():], re.M)
+	nxt = re.search(r"^(##\s+|---\s*$)", text[start.end() :], re.M)
 	end = start.end() + (nxt.start() if nxt else len(text) - start.end())
 	return start.end(), end
 
@@ -231,7 +230,7 @@ def check(specs_dir: Path, slug: str) -> int:
 			problems.append(f"STATUS.md has no row for {slug}")
 		elif row_bucket != bucket:
 			problems.append(f"STATUS.md files it under {row_bucket} but the folder is in {bucket}/")
-		for b, (heading, _, _) in BUCKETS.items():
+		for _b, (heading, _, _) in BUCKETS.items():
 			lo, hi = section_bounds(text, heading)
 			block = text[lo:hi]
 			rows, _ = split_rows(block)
@@ -256,7 +255,9 @@ def main() -> int:
 	ap.add_argument("--note", help="the Notes cell in STATUS.md (kept from the existing row if omitted)")
 	ap.add_argument("--specs-dir", default="specs", help="path to specs/ (default: specs)")
 	ap.add_argument("--check", action="store_true", help="verify the three trackers agree; change nothing")
-	ap.add_argument("--init", action="store_true", help="create specs/, every bucket and STATUS.md, then exit")
+	ap.add_argument(
+		"--init", action="store_true", help="create specs/, every bucket and STATUS.md, then exit"
+	)
 	ap.add_argument("--force", action="store_true", help="allow a backwards move")
 	args = ap.parse_args()
 

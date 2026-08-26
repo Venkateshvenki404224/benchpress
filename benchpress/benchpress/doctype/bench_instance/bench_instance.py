@@ -14,6 +14,9 @@ from benchpress.permissions import is_admin
 
 DEPLOY_JOB_TIMEOUT = 7200
 
+# Permlevel-1 fields a container is built from, and the noun each refusal names.
+FIXED_AT_CREATE = {"runtime": "runtime", "bridge_network": "network"}
+
 
 class BenchInstance(Document):
 	def before_insert(self):
@@ -27,23 +30,17 @@ class BenchInstance(Document):
 
 	def validate(self):
 		if self.is_new():
-			# Not in `before_insert`: `runtime` is permlevel 1, and Frappe resets a permlevel field
+			# Not in `before_insert`: these are permlevel 1, and Frappe resets a permlevel field
 			# to its new-doc value in between the two, discarding whatever was chosen there. That
-			# value is the Select's empty first option, which is why it carries one.
+			# value is the Select's empty first option, which is why `runtime` carries one.
 			if not self.runtime:
 				self.runtime = self._default_runtime()
+			if not self.bridge_network:
+				self.bridge_network = self._default_bridge_network()
 			return
-		if not self.has_value_changed("runtime"):
-			return
-		if not is_admin():
-			frappe.throw(_("Only an administrator can change a bench's runtime."), frappe.PermissionError)
-		if self.status != "Draft":
-			frappe.throw(
-				_(
-					"'{0}' is already deployed. A container's runtime is fixed when it is created — "
-					"delete this instance and deploy again to change it."
-				).format(self.name)
-			)
+		for fieldname, noun in FIXED_AT_CREATE.items():
+			if self.has_value_changed(fieldname):
+				self._assert_fixed_field_changeable(noun)
 
 	def before_save(self):
 		"""The lease fields belong to `lease._write`; never let a stale document write them back.
@@ -74,18 +71,42 @@ class BenchInstance(Document):
 			frappe.delete_doc("Bench Site", site, force=True, ignore_permissions=True)
 
 	def validate_higher_perm_levels(self):
-		"""Refuse a runtime the caller may not set, where Frappe would silently drop it.
+		"""Refuse a create-time field the caller may not set, where Frappe would silently drop it.
 
 		The base method resets a permlevel field the caller cannot write back to its stored value
 		and says nothing, so a tenant lowering their own isolation would read as success.
 		"""
-		requested = self.runtime
+		requested = {fieldname: self.get(fieldname) for fieldname in FIXED_AT_CREATE}
 		super().validate_higher_perm_levels()
-		if not self.is_new() and self.runtime != requested:
-			frappe.throw(_("Only an administrator can change a bench's runtime."), frappe.PermissionError)
+		if self.is_new():
+			return
+		for fieldname, noun in FIXED_AT_CREATE.items():
+			if self.get(fieldname) != requested[fieldname]:
+				frappe.throw(
+					_("Only an administrator can change a bench's {0}.").format(noun),
+					frappe.PermissionError,
+				)
+
+	def _assert_fixed_field_changeable(self, noun: str) -> None:
+		if not is_admin():
+			frappe.throw(
+				_("Only an administrator can change a bench's {0}.").format(noun), frappe.PermissionError
+			)
+		if self.status != "Draft":
+			frappe.throw(
+				_(
+					"'{0}' is already deployed. A container's {1} is fixed when it is created — "
+					"delete this instance and deploy again to change it."
+				).format(self.name, noun)
+			)
 
 	def _default_runtime(self) -> str:
 		return frappe.get_cached_doc("BenchPress Settings").default_bench_runtime or "runc"
+
+	def _default_bridge_network(self) -> str:
+		from benchpress.docker_manager import bench_network_spec
+
+		return bench_network_spec(0)["name"]
 
 	def autoname(self):
 		self.name = self.bench_name

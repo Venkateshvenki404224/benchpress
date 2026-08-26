@@ -102,6 +102,21 @@ the redirect would override the pipe and break the query. The signature when it
 happens: `ps -o pid,pgid,tpgid,stat` shows `T`/`Tl` with `PGID != TPGID`.
 SIGCONT does not help — the kernel re-stops it.
 
+**Gate on CI, and let the gate wait.** The template ships `ci_status` and
+`ci_green`: a phase is not done while the PR's checks are pending, and not done at
+all while any is failing. Two things make this worth its own helper rather than an
+instruction in the prompt. `gh pr checks` exits non-zero for *pending* as well as
+*failing*, so the exit code cannot tell "still running" from "broken" — read the
+buckets. And an agent that pushes at the end of its turn never sees the run
+finish, so the loop is the only thing still present when the answer arrives.
+
+Size `CI_WAIT_SECONDS` to the slowest workflow in the repo. A gate that gives up
+after two minutes on a fifteen-minute test suite fails every good phase.
+
+On a repo with **no** workflows, delete the gate and both helpers. `gh pr checks`
+reports nothing there, so the gate would wait out its entire budget and fail every
+phase for the absence of a thing that does not exist.
+
 **Include the status-lockstep gate.** The template ships it: phases before the
 last must leave the spec in `in-progress/`, the final phase in `completed/`, and
 `promote_spec.py --check` must pass. Keep it. Spec bookkeeping is what an agent

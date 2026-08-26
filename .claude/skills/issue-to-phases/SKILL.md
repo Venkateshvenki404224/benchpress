@@ -100,15 +100,21 @@ else the repo default.
 3. Implement from the phase spec. Follow the repo conventions, run the lint hook.
 4. Commit, `git push -u origin <branch>`
 5. `gh pr create --base <base> --head <branch> --title "Implemented phase one" --body "<what it does + how to verify>"`
+6. `gh pr checks <branch> --watch` — fix whatever is red before calling the phase done.
 
 **Phase N ≥ 2**
 1. `git switch <branch>` — do **not** branch off it.
 2. Implement, lint, commit, push.
-3. `gh pr edit <branch> --title "Implemented phase <ordinal>"` and
+3. `gh pr checks <branch> --watch`, and fix what it reports.
+4. `gh pr edit <branch> --title "Implemented phase <ordinal>"` and
    `gh pr comment <branch> --body "Phase <ordinal>: <what it added + how to verify>"`
-4. `promote_spec.py <slug> --to in-progress --detail "P<n> done"`
-5. **If it was the final phase and it merged:**
+5. `promote_spec.py <slug> --to in-progress --detail "P<n> done"`
+6. **If it was the final phase, CI is green and it merged:**
    `promote_spec.py <slug> --to completed --detail "all phases in <base> (PR #<n>)"`
+
+**CI is a gate, not a report.** A phase whose tests pass locally and fail on the
+runner is unfinished, and a check that was already red before the branch is still
+the branch's problem — nothing merges past it. Fix it in its own commit.
 
 Ordinals are spelled out: one, two, three, four, five.
 
@@ -200,6 +206,9 @@ completed.
 - One subfolder per feature, always inside a status bucket — never loose in
   `specs/` or in a bucket root.
 - One branch and one PR per feature. Never a second PR for a later phase.
+- **A spec reaches `completed/` only with a green CI run behind it.** The bucket
+  is a claim about shippability; a red PR filed under "completed" is the same lie
+  as a shipped feature filed under "not started".
 - Phase numbers and PR ordinals stay in lockstep: phase 1 is "Implemented phase
   one".
 - A phase with no concrete "Done when" is too big or too vague. Reslice it.

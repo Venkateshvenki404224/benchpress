@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 
 from frappe.tests import IntegrationTestCase
 
+from benchpress import vpn_adapter
 from benchpress.deploy_pipeline import DeployPipeline
 from benchpress.vpn_adapter import (
 	configure_container,
@@ -158,7 +159,7 @@ class TestSetupContainerVpn(IntegrationTestCase):
 			"private_key": "PRIV==",
 			"public_key": "PUB==",
 		}
-		bench = MagicMock()
+		bench = MagicMock(bridge_network="benchpress-0")
 		flow = MagicMock()
 		flow.attach_mock(mock_remove, "remove")
 		flow.attach_mock(mock_create, "create")
@@ -174,7 +175,7 @@ class TestSetupContainerVpn(IntegrationTestCase):
 		# before the container is configured so a failure cannot orphan it.
 		call_order = [name for name, _args, _kwargs in flow.mock_calls]
 		self.assertEqual(call_order, ["remove", "create", "save", "configure"])
-		mock_configure.assert_called_once_with("cid123", "PRIV==", "172.27.0.2")
+		mock_configure.assert_called_once_with("cid123", "PRIV==", "172.27.0.2", "benchpress-0")
 
 
 class TestRenderContainerConfig(IntegrationTestCase):
@@ -243,3 +244,27 @@ class TestConfigureContainer(IntegrationTestCase):
 			configure_container("cid123", "PRIV==", "172.27.0.5")
 
 		self.assertIn("wg-quick up failed", str(caught.exception))
+
+
+class TestDockerGateway(IntegrationTestCase):
+	@patch("benchpress.docker_manager.get_client")
+	def test_reads_the_gateway_the_network_reports(self, get_client):
+		get_client.return_value.networks.get.return_value.attrs = {
+			"IPAM": {"Config": [{"Gateway": "10.20.16.1"}]}
+		}
+
+		self.assertEqual(vpn_adapter._get_docker_gateway("benchpress-1"), "10.20.16.1")
+
+	@patch("benchpress.docker_manager.subnet_base", return_value="10.20")
+	@patch("benchpress.docker_manager.get_client")
+	def test_an_unreachable_daemon_falls_back_to_the_family_arithmetic(self, get_client, _base):
+		"""A bench on bridge 1 given bridge 0's gateway has no route to the host."""
+		get_client.side_effect = Exception("docker socket gone")
+
+		self.assertEqual(vpn_adapter._get_docker_gateway("benchpress-1"), "10.20.16.1")
+
+	@patch("benchpress.docker_manager.get_client")
+	def test_the_legacy_network_keeps_its_own_fallback(self, get_client):
+		get_client.side_effect = Exception("docker socket gone")
+
+		self.assertEqual(vpn_adapter._get_docker_gateway(), "172.30.0.1")

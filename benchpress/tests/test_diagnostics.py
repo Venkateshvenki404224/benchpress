@@ -1,7 +1,7 @@
 # Copyright (c) 2026, Venkatesh and Contributors
 # See license.txt
 
-"""run_diagnostics contract: seven rows, fixed order, never raises, never mutates."""
+"""run_diagnostics contract: nine rows, fixed order, never raises, never mutates."""
 
 import inspect
 import unittest
@@ -16,6 +16,8 @@ from benchpress.diagnostics import run_diagnostics
 CHECK_ORDER = [
 	"docker_socket",
 	"docker_network",
+	"bridge_capacity",
+	"kernel_ceilings",
 	"mariadb",
 	"clock_skew",
 	"redis",
@@ -24,6 +26,16 @@ CHECK_ORDER = [
 ]
 COUNT_WORDS = {6: "six", 7: "seven", 8: "eight", 9: "nine", 10: "ten"}
 HOST_RUNTIMES = {"names": {"runc", "sysbox-runc"}, "default": "runc"}
+# Small enough that a full bridge leaves the family with no headroom, which is the only
+# way `bridge_capacity` reports a fail.
+BRIDGE_COUNT = 2
+BRIDGE_SLOTS = 1000
+# What a tuned host reads back for the three ceilings a container can see.
+HEALTHY_CEILINGS = {
+	"kernel.pty.max": BRIDGE_SLOTS * 8 + 1024,
+	"kernel.pid_max": 4194304,
+	"net.netfilter.nf_conntrack_max": 1048576,
+}
 DB_ROW = frappe._dict(name="db-server-1", status="Running", container_name="benchpress-mariadb")
 
 # What this host really answers: MariaDB is UTC, Python is Asia/Calcutta.
@@ -31,9 +43,12 @@ DB_CLOCK = datetime(2026, 8, 24, 23, 11, 53)
 IST_OFFSET = timedelta(hours=5, minutes=30)
 
 
-def _healthy_client():
+def _healthy_client(bridge_endpoints=4):
 	client = MagicMock()
 	client.containers.get.return_value = MagicMock(status="running")
+	network = MagicMock()
+	network.attrs = {"Containers": {f"c{i}": {"Name": f"c{i}"} for i in range(bridge_endpoints)}}
+	client.networks.get.return_value = network
 	return client
 
 
@@ -51,11 +66,13 @@ class TestDiagnostics(unittest.TestCase):
 		app_clock=None,
 		db_clock=None,
 		db_clock_error=None,
+		ceilings=None,
 	):
 		"""Run run_diagnostics with everything healthy unless overridden.
 
 		Returns ({check: row}, ordered rows)."""
 		client = client or _healthy_client()
+		ceilings = HEALTHY_CEILINGS if ceilings is None else ceilings
 		with (
 			patch("benchpress.diagnostics.get_client", side_effect=client_error, return_value=client),
 			# A separate patch, because the runtime check reads `docker info` through
@@ -66,6 +83,13 @@ class TestDiagnostics(unittest.TestCase):
 				return_value=HOST_RUNTIMES if runtimes is None else runtimes,
 			),
 			patch("benchpress.diagnostics.check_mariadb_health", return_value=mariadb_healthy),
+			# The capacity check reaches the daemon through docker_manager's own client rather
+			# than the one above, so the same client is injected there — and left unmocked
+			# beyond that, so `networks.create.assert_not_called()` really covers it.
+			patch("benchpress.docker_manager.get_client", side_effect=client_error, return_value=client),
+			patch("benchpress.placement.bridge_count", return_value=BRIDGE_COUNT),
+			patch("benchpress.placement.slots_per_bridge", return_value=BRIDGE_SLOTS),
+			patch("benchpress.diagnostics._read_sysctl", side_effect=ceilings.get),
 			patch("benchpress.diagnostics.frappe") as frappe_mock,
 		):
 			frappe_mock.get_all.return_value = [DB_ROW] if db_rows is None else db_rows
@@ -93,7 +117,7 @@ class TestDiagnostics(unittest.TestCase):
 		# completing without an exception IS the core assertion
 		by_check, rows = self._run(client_error=Exception("socket unreachable"))
 		self.assertEqual(len(rows), len(CHECK_ORDER))
-		for check in ("docker_socket", "docker_network", "redis"):
+		for check in ("docker_socket", "docker_network", "bridge_capacity", "redis"):
 			self.assertEqual(by_check[check]["status"], "fail")
 
 	def test_missing_network_fails_with_hint(self):
@@ -146,8 +170,14 @@ class TestDiagnostics(unittest.TestCase):
 			db_rows=[],
 			installed_apps=["frappe"],
 			db_clock_error=Exception("down"),
+			ceilings={},
 		)
-		self.assertEqual([row["status"] for row in rows], ["fail"] * len(CHECK_ORDER))
+		# Capacity is the one exception: a family with no bridge yet is the lazy-creation
+		# invariant, not a broken environment.
+		self.assertEqual(
+			[row["status"] for row in rows if row["check"] != "bridge_capacity"],
+			["fail"] * (len(CHECK_ORDER) - 1),
+		)
 		client.networks.create.assert_not_called()
 		client.containers.create.assert_not_called()
 		client.containers.run.assert_not_called()
@@ -173,6 +203,36 @@ class TestDiagnostics(unittest.TestCase):
 		self.assertEqual(len(rows), len(CHECK_ORDER))
 		self.assertEqual(by_check["clock_skew"]["status"], "fail")
 		self.assertIn("db refuses the query", by_check["clock_skew"]["hint"])
+
+	def test_a_family_with_no_room_left_is_a_fail_row(self):
+		by_check, _rows = self._run(client=_healthy_client(bridge_endpoints=BRIDGE_SLOTS))
+		self.assertEqual(by_check["bridge_capacity"]["status"], "fail")
+		self.assertIn(f"{BRIDGE_SLOTS} used / 0 free", by_check["bridge_capacity"]["hint"])
+
+	def test_a_family_with_no_bridge_yet_is_not_a_failure(self):
+		"""Bridges are lazy, so an install that has never deployed reports room, not a problem."""
+		client = _healthy_client()
+		client.networks.get.side_effect = docker.errors.NotFound("no network")
+		by_check, _rows = self._run(client=client)
+		self.assertEqual(by_check["bridge_capacity"]["status"], "pass")
+
+	def test_kernel_ceilings_names_the_low_knob_and_what_raises_it(self):
+		by_check, _rows = self._run(ceilings={**HEALTHY_CEILINGS, "kernel.pty.max": 4096})
+		hint = by_check["kernel_ceilings"]["hint"]
+		self.assertEqual(by_check["kernel_ceilings"]["status"], "fail")
+		self.assertIn("kernel.pty.max is 4096, below 9024", hint)
+		self.assertIn("tune-host.sh", hint)
+
+	def test_kernel_ceilings_says_the_neighbour_table_is_not_visible_from_here(self):
+		"""A row that quietly omitted it would read as checked and fine."""
+		by_check, _rows = self._run()
+		self.assertEqual(by_check["kernel_ceilings"]["status"], "pass")
+		self.assertIn("neighbour table is not visible", by_check["kernel_ceilings"]["hint"])
+
+	def test_a_knob_this_namespace_cannot_read_is_a_fail_not_a_pass(self):
+		by_check, _rows = self._run(ceilings={})
+		self.assertEqual(by_check["kernel_ceilings"]["status"], "fail")
+		self.assertIn("unreadable", by_check["kernel_ceilings"]["hint"])
 
 	def test_the_diagnostics_row_count_moved_in_both_places(self):
 		"""One count, stated twice: the test_api fixture and the overview docstring."""

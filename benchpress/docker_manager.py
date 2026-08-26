@@ -27,6 +27,18 @@ CONTAINER_RUNTIMES = {"runc": None, "sysbox": "sysbox-runc"}
 HOST_RUNTIMES_ATTRIBUTE = "benchpress_host_runtimes"
 PREFLIGHT_IMAGE = "alpine"
 
+# The network every bench predating the bridge family sits on. It keeps receiving
+# MariaDB, Redis and Traefik as their primary network; it stops receiving benches.
+LEGACY_NETWORK = "benchpress"
+NETWORK_PREFIX = "benchpress-"
+BRIDGE_DEVICE_PREFIX = "bpbr"
+DEFAULT_SUBNET_BASE = "10.20"
+
+# Attached to every bench bridge so Docker's embedded DNS answers in both
+# directions. The control plane's own db and redis are deliberately absent: a
+# tenant bridge that reaches them is a breach, not a convenience.
+INFRASTRUCTURE_CONTAINERS = ("benchpress_traefik", "benchpress-mariadb", "benchpress-redis")
+
 
 def resolve_runtime(bench_doc) -> str | None:
 	"""The daemon runtime name for a bench, or None to use the daemon default."""
@@ -155,13 +167,112 @@ def ensure_network(client: docker.DockerClient | None = None) -> None:
 	"""Create the benchpress Docker network if it does not exist."""
 	client = client or get_client()
 	try:
-		client.networks.get("benchpress")
+		client.networks.get(LEGACY_NETWORK)
 	except docker.errors.NotFound:
 		client.networks.create(
-			"benchpress",
+			LEGACY_NETWORK,
 			driver="bridge",
 			ipam=docker.types.IPAMConfig(pool_configs=[docker.types.IPAMPool(subnet="172.30.0.0/24")]),
 		)
+
+
+def subnet_base() -> str:
+	return frappe.get_cached_doc("BenchPress Settings").bench_subnet_base or DEFAULT_SUBNET_BASE
+
+
+def bench_network_spec(index: int, base: str | None = None) -> dict:
+	"""Name, bridge device, subnet and gateway for one bench bridge.
+
+	`index * 16` in the third octet starts every /20 on its own boundary, so a later
+	per-node /16 scheme renumbers nothing.
+	"""
+	base = base or DEFAULT_SUBNET_BASE
+	octet = index * 16
+	return {
+		"name": f"{NETWORK_PREFIX}{index}",
+		"device": f"{BRIDGE_DEVICE_PREFIX}{index}",
+		"subnet": f"{base}.{octet}.0/20",
+		"gateway": f"{base}.{octet}.1",
+	}
+
+
+def bench_network_index(network: str) -> int | None:
+	"""The family index a network name encodes, or None if the name is not one of ours."""
+	if not network.startswith(NETWORK_PREFIX):
+		return None
+	suffix = network[len(NETWORK_PREFIX) :]
+	return int(suffix) if suffix.isdigit() else None
+
+
+def ensure_bench_network(index: int, client: docker.DockerClient | None = None) -> str:
+	"""Create bench bridge `index` if absent, attach infrastructure, return its name."""
+	client = client or get_client()
+	spec = bench_network_spec(index, subnet_base())
+	try:
+		client.networks.get(spec["name"])
+	except docker.errors.NotFound:
+		client.networks.create(
+			spec["name"],
+			driver="bridge",
+			ipam=docker.types.IPAMConfig(
+				pool_configs=[docker.types.IPAMPool(subnet=spec["subnet"], gateway=spec["gateway"])]
+			),
+			options={
+				# Honoured only at create. A network that already exists without it
+				# keeps its br-<hex> device forever, and phase 3's per-device
+				# proxy_arp sysctl has no stable path to write.
+				"com.docker.network.bridge.name": spec["device"],
+				"com.docker.network.bridge.enable_icc": "true",
+				"com.docker.network.bridge.enable_ip_masquerade": "true",
+			},
+		)
+	attach_infrastructure(spec["name"], client)
+	return spec["name"]
+
+
+def ensure_bench_network_for(network: str, client: docker.DockerClient | None = None) -> str:
+	"""Ensure the network a bench row names, whether legacy or one of the family."""
+	client = client or get_client()
+	if network == LEGACY_NETWORK:
+		ensure_network(client)
+		return network
+	index = bench_network_index(network)
+	if index is None:
+		frappe.throw(_("'{0}' is not a BenchPress bench network.").format(network))
+	return ensure_bench_network(index, client)
+
+
+def attach_infrastructure(network: str, client: docker.DockerClient | None = None) -> list[str]:
+	"""Connect the three infrastructure containers to `network`; returns those now on it.
+
+	Only INFRASTRUCTURE_CONTAINERS is ever attachable. The tuple is a security
+	boundary: an attachment reaches `Network.connect`, and putting the control
+	plane's own database on a network tenants share is a breach.
+	"""
+	client = client or get_client()
+	net = client.networks.get(network)
+	missing = missing_infrastructure(network, client)
+	attached = [name for name in INFRASTRUCTURE_CONTAINERS if name not in missing]
+	for name in missing:
+		try:
+			net.connect(name)
+			attached.append(name)
+		except docker.errors.NotFound:
+			continue  # a dev checkout has no Traefik
+		except docker.errors.APIError as e:
+			frappe.logger("benchpress").warning(f"could not attach {name} to {network}: {e}")
+	return attached
+
+
+def missing_infrastructure(network: str, client: docker.DockerClient | None = None) -> list[str]:
+	"""Infrastructure containers absent from `network`; empty when the bridge does not exist."""
+	client = client or get_client()
+	try:
+		net = client.networks.get(network)
+	except docker.errors.NotFound:
+		return []
+	present = {c.get("Name") for c in net.attrs.get("Containers", {}).values()}
+	return [name for name in INFRASTRUCTURE_CONTAINERS if name not in present]
 
 
 def build_lab_image(lab_doc, log_fn=None, no_cache: bool = False) -> str:
@@ -216,12 +327,16 @@ def build_lab_image(lab_doc, log_fn=None, no_cache: bool = False) -> str:
 	return image_tag
 
 
-def create_bench_container(bench_doc, lab_doc) -> str:
+def create_bench_container(bench_doc, lab_doc, network: str | None = None) -> str:
 	"""Create a container from a lab image with resource limits.
 	Does NOT start the container. Returns the container ID.
+
+	`network` overrides the bench's recorded bridge, which is what a roll onto the next
+	bridge needs: the row still names the bridge Docker refused.
 	"""
 	client = get_client()
-	ensure_network(client)
+	network = network or getattr(bench_doc, "bridge_network", None) or LEGACY_NETWORK
+	ensure_bench_network_for(network, client)
 
 	name = bench_doc.bench_name
 
@@ -270,7 +385,7 @@ def create_bench_container(bench_doc, lab_doc) -> str:
 		device_write_iops=device_write_iops or None,
 		device_read_bps=device_read_bps or None,
 		device_write_bps=device_write_bps or None,
-		network="benchpress",
+		network=network,
 		**runtime_kwargs,
 	)
 
@@ -282,13 +397,58 @@ def container_runtime(container_id: str) -> str:
 	return get_client().containers.get(container_id).attrs["HostConfig"]["Runtime"]
 
 
-def get_container_ip(container_id: str) -> str:
-	"""The container's bridge IP on the benchpress network."""
+def container_network(container_id: str) -> str:
+	"""The bench network the daemon actually put this container on."""
+	return get_client().containers.get(container_id).attrs["HostConfig"]["NetworkMode"]
+
+
+def start_bench_container(container_id: str, bench_doc, lab_doc) -> str:
+	"""Start the bench, moving it to the next bridge if this one has no address left.
+
+	Returns the id of the container that is now running — a roll recreates it, so it is
+	not always the one passed in.
+
+	Docker allocates the address at start and not at create (measured on 29.7.2), so a
+	full bridge refuses here rather than in `create_bench_container`. One retry, never a
+	loop: a second refusal means the recorded count disagrees with the daemon, and a loop
+	would hide that.
+	"""
+	from benchpress import placement  # placement imports this module
+
+	try:
+		start_container(container_id)
+		return container_id
+	except docker.errors.APIError as error:
+		if not _address_pool_exhausted(error):
+			raise
+
+	# Recreated rather than reconnected: the endpoint on the full bridge is fixed at create,
+	# and the new container has to take the name the old one is still holding.
+	rolled_to = placement.next_network(container_network(container_id))
+	remove_container(container_id)
+	container_id = create_bench_container(bench_doc, lab_doc, rolled_to)
+	start_container(container_id)
+	return container_id
+
+
+def _address_pool_exhausted(error: docker.errors.APIError) -> bool:
+	"""True when the daemon refused because the network has no free address.
+
+	Matched as text: the daemon answers 500 for this, the same status as every other start
+	failure. `tests/test_docker_manager.py` pins the wording this host really emits, so a
+	daemon upgrade that reworded it fails a test rather than a deploy.
+	"""
+	return "no available ipv4 addresses" in str(error).lower()
+
+
+def get_container_ip(container_id: str, network: str | None = None) -> str:
+	"""The container's bridge IP on `network`, defaulting to the legacy bench network."""
 	client = get_client()
 	container = client.containers.get(container_id)
 	networks = container.attrs["NetworkSettings"]["Networks"]
-	if "benchpress" in networks:
-		return networks["benchpress"]["IPAddress"]
+	network = network or LEGACY_NETWORK
+	if network in networks:
+		return networks[network]["IPAddress"]
 	return container.attrs["NetworkSettings"]["IPAddress"]
 
 
@@ -297,17 +457,18 @@ def start_container(container_id: str) -> None:
 	client.containers.get(container_id).start()
 
 
-def wait_for_container_running(container_id: str, timeout: int = 60) -> str:
-	"""Poll until the container reports status "running" and has an IP on the
-	benchpress network. Returns the container IP. Mirrors wait_for_mariadb.
+def wait_for_container_running(container_id: str, network: str | None = None, timeout: int = 60) -> str:
+	"""Poll until the container reports status "running" and has an IP on `network`.
+	Returns the container IP. Mirrors wait_for_mariadb.
 	"""
 	client = get_client()
 	container = client.containers.get(container_id)
+	network = network or LEGACY_NETWORK
 	for _attempt in range(timeout // 2):
 		container.reload()
 		if container.status == "running":
 			networks = container.attrs.get("NetworkSettings", {}).get("Networks", {})
-			ip = networks.get("benchpress", {}).get("IPAddress", "") or container.attrs.get(
+			ip = networks.get(network, {}).get("IPAddress", "") or container.attrs.get(
 				"NetworkSettings", {}
 			).get("IPAddress", "")
 			if ip:

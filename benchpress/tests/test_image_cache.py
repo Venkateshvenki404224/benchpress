@@ -225,7 +225,10 @@ class TestDeployReusesTheSharedImage(IntegrationTestCase):
 			patch.object(deploy_manager, "wait_for_mariadb", autospec=True),
 			patch.object(deploy_manager, "_remove_stale_container", autospec=True),
 			patch.object(deploy_manager, "create_bench_container", autospec=True) as mock_create,
-			patch.object(deploy_manager, "start_container", autospec=True),
+			# The deploy starts through the roll wrapper, so the bridge it lands on is a
+			# read-back rather than the id that went in.
+			patch.object(deploy_manager, "start_bench_container", new=lambda cid, bench, lab: cid),
+			patch.object(deploy_manager, "container_network", new=lambda cid: "benchpress-0"),
 			patch.object(deploy_manager, "wait_for_container_running", autospec=True) as mock_wait,
 			patch.object(deploy_manager, "_setup_container_vpn", autospec=True),
 			patch.object(deploy_manager, "write_file_to_container", autospec=True),
