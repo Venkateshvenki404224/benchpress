@@ -122,6 +122,12 @@ boundary as an oversight.>
 > **Host step (precondition):** <what must be true>. See
 > [Host steps](README.md#host-steps). The loop refuses to start otherwise.
 
+<Where the phase touches a test module fenced for live-site coupling, say so:>
+
+> **Fenced test module:** `benchpress.tests.<module>` asserts against the whole
+> site, so it fails on any bench with real rows. This phase gates on CI for it.
+> See [Tests](ralph-loop.md#tests-scoped-fenced-exit-code).
+
 **Rollback**, if step <n> fails: <the exact command. Restore first, diagnose after.>
 
 ## Done when
@@ -310,6 +316,13 @@ Good verification steps share three properties:
 3. **They say what to do when the step fails**, when the step touches something
    live. Restore first, diagnose after — a rolled-back attempt that leaves the
    system working beats a forward-debugged outage.
+
+**Tests are not the phase's verification, and they are never the loop's gate.** A
+phase runs the scoped test modules it touches — see
+[Tests](ralph-loop.md#tests-scoped-fenced-exit-code) — but `smoke_check` invokes
+none of them. The agent edits the suite, so the suite cannot be the independent
+word on the agent's work. Verification observes the running system, and CI runs
+the suite against a site the agent never touched.
 
 Include a negative control wherever one is cheap: a name that should *not*
 resolve, a user who should *not* have access, a file that should *not* be

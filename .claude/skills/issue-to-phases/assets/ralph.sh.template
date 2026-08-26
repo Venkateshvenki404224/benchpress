@@ -209,7 +209,10 @@ smoke_check() {
   fi
   echo "[ralph]   ok   the host is unchanged since preflight"
 
-  # ADAPT: the feature's own correctness gates.
+  # ADAPT: the feature's own correctness gates. No test-suite invocation belongs
+  # here: the agent edits the suite, so it cannot be the independent word on the
+  # agent's work. The agent runs its scoped tests from the prompt, ci_green runs
+  # the suite again on the runner.
 {{SMOKE_CHECKS}}
 
   # Ships-but-invisible. A correct component behind a stale bundle passes every

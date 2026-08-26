@@ -49,6 +49,17 @@ instead.
 {{LINT_CMD}}
 ```
 
+Those are the only tests you run. Do not widen them to the whole app: the suite
+is CI's job, and running it here reports failures that predate your branch.
+
+**Read the exit code, never the last line.** `run-tests` prints one summary per
+test category, so most targets print two, and the last one can say `OK` while the
+command exits 1. No `tail`, no `grep -q OK`:
+
+```bash
+<the test command above>; echo "exit=$?"
+```
+
 {{EXTRA_RULES}}
 
 ## How to write the code

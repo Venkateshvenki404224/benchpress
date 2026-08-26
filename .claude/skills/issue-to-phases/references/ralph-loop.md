@@ -9,6 +9,7 @@ block.
 - [What a Ralph loop is](#what-a-ralph-loop-is)
 - [The one idea that makes it work](#the-one-idea-that-makes-it-work)
 - [Designing smoke_check](#designing-smoke_check)
+- [Tests: scoped, fenced, exit code](#tests-scoped-fenced-exit-code)
 - [Proving the UI](#proving-the-ui)
 - [Why a loop stalls](#why-a-loop-stalls)
 - [Preflight and rollback](#preflight-and-rollback)
@@ -103,6 +104,12 @@ the redirect would override the pipe and break the query. The signature when it
 happens: `ps -o pid,pgid,tpgid,stat` shows `T`/`Tl` with `PGID != TPGID`.
 SIGCONT does not help — the kernel re-stops it.
 
+**smoke_check invokes no tests.** The gate is worth having because the agent is
+not the only judge of its own work, and the suite is a thing the agent edits. A
+phase that adds a passing test to a suite it also changed proves nothing. Tests
+belong in `{{TEST_CMD}}`, where the agent runs them. The independent run comes
+from `ci_green`, against a site the agent never touched.
+
 **Gate on CI, and let the gate wait.** The template ships `ci_status` and
 `ci_green`: a phase is not done while the PR's checks are pending, and not done at
 all while any is failing. Two things make this worth its own helper rather than an
@@ -123,6 +130,46 @@ last must leave the spec in `in-progress/`, the final phase in `completed/`, and
 `promote_spec.py --check` must pass. Keep it. Spec bookkeeping is what an agent
 drops first when it is concentrating on code, and a shipped feature filed under
 "not started" is how a tracker stops being worth reading.
+
+## Tests: scoped, fenced, exit code
+
+`{{TEST_CMD}}` names the test modules the phase touches, one line each:
+
+```bash
+docker compose exec backend bench --site frontend run-tests --module benchpress.tests.test_deploy_manager
+```
+
+Three rules, and each one has cost a real run.
+
+**Never `--app benchpress`.** The whole suite is CI's job. It takes 60 seconds
+against the live site, and eight of its tests fail on any developer site with
+real rows, for a reason no phase can fix — the fence list below.
+
+**Never name a fenced module.** `test_credit_sweep`, `test_demo_data`,
+`test_lease` and `test_signup` call a production function that scans the whole
+site, then assert on the whole result. `enforce_limits()["stopped"] == [my bench]`
+is true on an empty site and false as soon as one real bench exists. Cardinality
+is the property under test, so the assertions are correct and only unrunnable
+here. CI stays green because `ci.yml` builds a fresh `test_site` first. A phase
+that must touch one of these gates on CI alone, and its phase spec says so.
+Tracked as [#196](https://github.com/Venkateshvenki404224/benchpress/issues/196):
+delete a module from this list when that issue fixes it, not before.
+
+**Read the exit code, never the output.** `run-tests` prints one summary per test
+category, so any target holding both integration and unit tests prints two. The
+last line is the second summary, and it says `OK` on a run that exits 1:
+
+```
+Ran 786 tests in 60.320s
+FAILED (failures=7, errors=1)
+
+Ran 153 tests in 0.282s
+OK
+```
+
+A scoped command splits the same way — `--module benchpress.tests.test_deploy_manager`
+is 86 tests then 30 — so the rule holds everywhere. No `tail`, no `grep -q OK`.
+Only `$?` is honest.
 
 ## Proving the UI
 
@@ -388,7 +435,8 @@ In **`prompt.md`** — the words:
 |---|---|
 | `{{FEATURE_SUMMARY}}` | two or three sentences of orientation |
 | `{{CONTEXT_DOCS}}` | the CLAUDE.md / design docs worth reading |
-| `{{TEST_CMD}}` / `{{LINT_CMD}}` | the repo's real commands |
+| `{{TEST_CMD}}` | one scoped `--module` line per test file the phase touches — see [Tests](#tests-scoped-fenced-exit-code) |
+| `{{LINT_CMD}}` | the repo's real lint command |
 | `{{EXTRA_RULES}}` | repo-specific traps |
 | `{{SAFETY_RULES}}` | the irreversible things, each with its reason |
 | `{{HOST_NEVER_RULES}}` | the README's Never list, each with its reason |
