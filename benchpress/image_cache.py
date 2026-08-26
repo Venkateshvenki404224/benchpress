@@ -93,6 +93,7 @@ def template_spec(template: dict):
 		lab_id=template["key"],
 		title=template["title"],
 		frappe_version=template["frappe_version"],
+		memory_limit=template.get("memory_limit"),
 		apps=[frappe._dict(app) for app in template["apps"]],
 	)
 
@@ -117,12 +118,20 @@ def prewarm_catalog() -> dict:
 
 
 def build_template_image(template_key: str) -> str:
-	"""Build one catalog template under its content hash, with no Lab document involved."""
+	"""Build one catalog template under its content hash, with no Lab document involved.
+
+	The golden runs in this same job, so a fresh host's catalog comes out golden rather than
+	needing a second pass. There is no `Lab` row to record the manifest on — the image's own
+	labels are what a deploy reads anyway.
+	"""
+	from benchpress import golden
 	from benchpress.docker_manager import build_lab_image
 
-	tag = build_lab_image(template_spec(lab_templates.get_template(template_key)))
-	frappe.logger("benchpress").info(f"Pre-warmed {tag} for template {template_key}")
-	return tag
+	spec = template_spec(lab_templates.get_template(template_key))
+	spec.image_tag = build_lab_image(spec)
+	golden.add_golden(spec)
+	frappe.logger("benchpress").info(f"Pre-warmed {spec.image_tag} for template {template_key}")
+	return spec.image_tag
 
 
 def sweep_cached_images() -> dict:

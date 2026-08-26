@@ -10,6 +10,7 @@
   "docker_socket",
   "default_image",
   "default_bench_runtime",
+  "enable_golden_images",
   "column_break_docker",
   "base_domain",
   "traefik_network",
@@ -50,6 +51,13 @@
    "fieldtype": "Select",
    "label": "Default Bench Runtime",
    "options": "runc\nsysbox"
+  },
+  {
+   "default": "1",
+   "description": "Bake a lab's finished site into its image on every build, so a deploy restores the database instead of creating it. Turning it off shortens builds on a disk-constrained host; images that already carry a golden keep restoring from it.",
+   "fieldname": "enable_golden_images",
+   "fieldtype": "Check",
+   "label": "Enable Golden Images"
   },
   {
    "fieldname": "column_break_docker",

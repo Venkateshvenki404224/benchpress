@@ -31,6 +31,11 @@ GOLDEN_DIR = "/opt/benchpress/golden"
 DUMP_PATH = f"{GOLDEN_DIR}/site.sql.gz"
 MANIFEST_PATH = f"{GOLDEN_DIR}/manifest.json"
 
+# Whether a tag carries a golden is read from these, never from `Lab.golden_manifest`: the row is
+# a claim about an image, and the image is the artefact a deploy actually runs.
+GOLDEN_LABEL = "benchpress.golden"
+GOLDEN_MARIADB_LABEL = "benchpress.golden.mariadb"
+
 # The three names this feature owns, and the only ones it ever drops or removes. A tenant's
 # database is `_<sha1>` from `mariadb_manager.get_database_name` and stays unreachable from here.
 GOLDEN_SITE_PREFIX = "bpgolden-"
@@ -93,6 +98,50 @@ def build_golden_job(lab_name: str, user: str | None = None) -> None:
 	append_log(f"=== Build complete: golden in {lab.image_tag} ===", "success")
 	frappe.db.set_value("Build Log", build_log_name, "log_type", "success")
 	frappe.db.commit()  # nosemgrep -- the log records a finished run
+
+
+def add_golden(lab_doc, log_fn=None) -> dict | None:
+	"""Build this lab's golden as part of something larger, and never fail that something.
+
+	Returns the manifest, or None when the setting is off or the golden step failed. A lab whose
+	image built and whose golden did not is a working lab with a slow deploy; raising here would
+	take a working image away from every tenant of that lab because an optimisation failed.
+	"""
+	if not golden_images_enabled():
+		_log(log_fn, "Golden images are turned off in BenchPress Settings — skipping the golden step")
+		return None
+
+	_log(log_fn, f"=== Baking the golden site into {lab_doc.image_tag} ===")
+	try:
+		manifest = build_golden(lab_doc, log_fn=log_fn)
+	except Exception as e:
+		_log(log_fn, f"Golden step failed: {e!s} — the image is usable and deploys will be slow")
+		frappe.log_error(title=f"Golden step failed: {lab_doc.lab_id}", message=frappe.get_traceback())
+		return None
+
+	_log(log_fn, json.dumps(manifest))
+	return manifest
+
+
+def golden_images_enabled() -> bool:
+	"""Whether a build also bakes a golden — `BenchPress Settings.enable_golden_images`."""
+	return bool(frappe.get_cached_value("BenchPress Settings", "BenchPress Settings", "enable_golden_images"))
+
+
+def image_has_golden(tag: str) -> bool:
+	"""Whether this image carries a golden dump, asked of the image and not of the `Lab` row."""
+	try:
+		return docker_manager.get_client().images.get(tag).labels.get(GOLDEN_LABEL) == "1"
+	except docker.errors.ImageNotFound:
+		return False
+
+
+def golden_tags() -> set[str]:
+	"""Every lab tag on this host carrying a golden, in the one round trip `cached_tags` makes."""
+	images = docker_manager.get_client().images.list(name=f"{image_cache.CACHE_REPOSITORY}/*")
+	return {
+		tag for image in images if (image.labels or {}).get(GOLDEN_LABEL) == "1" for tag in (image.tags or [])
+	}
 
 
 def _start_scratch_container(lab_doc):
@@ -269,19 +318,25 @@ def _build_context(container_id: str, image_tag: str, manifest: dict) -> io.Byte
 			for member in golden:
 				out.addfile(member, golden.extractfile(member) if member.isfile() else None)
 		_add_file(out, "golden/manifest.json", json.dumps(manifest, indent=2).encode())
-		_add_file(out, "Dockerfile", _dockerfile(image_tag).encode())
+		_add_file(out, "Dockerfile", _dockerfile(image_tag, manifest).encode())
 		_add_file(out, "setup-site.sh", _setup_site_source().encode(), mode=0o755)
 	context.seek(0)
 	return context
 
 
-def _dockerfile(image_tag: str) -> str:
-	"""The appended layer: the dump, and the branch of setup-site.sh that reads it.
+def _dockerfile(image_tag: str, manifest: dict) -> str:
+	"""The appended layer: the dump, the branch of setup-site.sh that reads it, and the labels.
 
 	The script travels with the dump because every lab image on this host predates the restore
-	branch, and this feature never rebuilds one.
+	branch, and this feature never rebuilds one. The labels are how a deploy asks the image
+	itself whether it has a golden.
 	"""
-	return f"FROM {image_tag}\nCOPY golden {GOLDEN_DIR}\nCOPY setup-site.sh {SETUP_SITE_PATH}\n"
+	return (
+		f"FROM {image_tag}\n"
+		f"COPY golden {GOLDEN_DIR}\n"
+		f"COPY setup-site.sh {SETUP_SITE_PATH}\n"
+		f'LABEL {GOLDEN_LABEL}="1" {GOLDEN_MARIADB_LABEL}="{manifest["mariadb_version"]}"\n'
+	)
 
 
 def _setup_site_source() -> str:

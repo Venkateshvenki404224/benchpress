@@ -29,6 +29,7 @@
   "shell",
   "image_section",
   "image_tag",
+  "golden_manifest",
   "lease_section",
   "default_lease_plan",
   "max_lease_minutes",
@@ -172,6 +173,14 @@
    "fieldname": "image_tag",
    "fieldtype": "Data",
    "label": "Image Tag",
+   "read_only": 1
+  },
+  {
+   "description": "The golden dump baked into the image this lab last built. A record of what was built, never an instruction: a deploy reads the image's own labels.",
+   "fieldname": "golden_manifest",
+   "fieldtype": "Code",
+   "label": "Golden Manifest",
+   "options": "JSON",
    "read_only": 1
   },
   {

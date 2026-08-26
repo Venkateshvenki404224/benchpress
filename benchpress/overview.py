@@ -36,6 +36,7 @@ INFRASTRUCTURE_LABELS = {
 	"clock_skew": "Clock skew",
 	"redis": "Redis",
 	"container_runtimes": "Container runtimes",
+	"golden_images": "Golden images",
 	"vpn_server": "WireGuard",
 }
 
@@ -269,7 +270,7 @@ def _bench_labels(bench_names: list[str]) -> dict:
 
 
 def _infrastructure(admin: bool) -> list[dict] | None:
-	"""The nine real diagnostics checks — admins only, never a placeholder."""
+	"""The ten real diagnostics checks — admins only, never a placeholder."""
 	if not admin:
 		return None
 	from benchpress.diagnostics import display_row, run_diagnostics

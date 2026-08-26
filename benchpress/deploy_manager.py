@@ -1036,10 +1036,17 @@ def _prepare_lab_image(lab, pipeline, user: str) -> None:
 	`Lab.reset_status_if_spec_changed`), throws right away instead of eating a 10-40 minute build
 	inside what the caller expects to be a fast operation.
 	"""
+	from benchpress.golden import image_has_golden
+
 	tag, hit = image_cache.resolve(lab)
 	if not hit or lab.status != "Ready" or lab.image_tag != tag:
 		frappe.throw(_("No built image for lab '{0}'. Build it first from the Lab record.").format(lab.title))
 	pipeline.log(f"Using built image {tag}")
+	if not image_has_golden(tag):
+		pipeline.log(
+			f"No golden dump in {tag} — this site is built from scratch. "
+			"Rebuild the lab, or run Build golden, to make its deploys ~5x faster."
+		)
 
 
 def _build_lab_with_logs(lab, log_fn) -> None:
@@ -1060,6 +1067,32 @@ def _build_lab_with_logs(lab, log_fn) -> None:
 	frappe.db.commit()
 	if log_fn:
 		log_fn(f"Lab image ready: {image_tag}")
+
+	# After the lab is Ready with its tag saved: the golden step appends a layer to that tag,
+	# and needs the row that names it.
+	_add_golden(lab, log_fn)
+
+
+def _add_golden(lab, log_fn) -> None:
+	"""Bake the golden into the image this build just produced, and record what was baked.
+
+	Never raises, and the `except` is not belt and braces: everything above it has already been
+	committed, so letting the row write escape would make `_run_build` mark a finished image as a
+	failed build and put the lab's status back.
+	"""
+	from benchpress import golden
+
+	try:
+		manifest = golden.add_golden(lab, log_fn)
+		lab.reload()
+		# Written either way: this build replaced the image under the same tag, so a manifest left
+		# over from the last one would claim a golden that is no longer in there.
+		lab.golden_manifest = json.dumps(manifest, indent=2) if manifest else None
+		lab.save(ignore_permissions=True)
+		frappe.db.commit()
+	except Exception:
+		frappe.db.rollback()
+		frappe.log_error(title=f"Golden manifest not recorded: {lab.name}", message=frappe.get_traceback())
 
 
 def _open_build_log(lab, user: str) -> tuple[DeployLogWriter, str]:
