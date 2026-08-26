@@ -302,29 +302,29 @@ def _verify_dump(container_id: str, db_server, lab_doc, log_fn) -> dict:
 	return {"tables": tables, "installed_apps": sorted(installed_apps), "restore_seconds": restore_seconds}
 
 
+def _verify_client(db_server) -> str:
+	"""The client both verification steps run, as the scratch user the restore is granted to."""
+	connection = db_server.get_connection_config()
+	return f'mariadb -h {connection["db_host"]} -P {connection["db_port"]} -u "$GOLDEN_USER"'
+
+
 def _restore_command(db_server, database: str) -> str:
 	"""Pipe the dump back in through gzip, the way `bench new-site --source-sql` will."""
-	connection = db_server.get_connection_config()
-	return "\n".join(
-		[
-			"set -euo pipefail",
-			f"gzip -cd {DUMP_PATH} | mariadb -h {connection['db_host']} -P {connection['db_port']}"
-			f' -u "$GOLDEN_USER" --default-character-set=utf8mb4 {database}',
-		]
-	)
+	client = _verify_client(db_server)
+	restore = f"gzip -cd {DUMP_PATH} | {client} --default-character-set=utf8mb4 {database}"
+	return "\n".join(["set -euo pipefail", restore])
 
 
 def _restored_command(db_server, database: str) -> str:
 	"""Count what the restore brought back, on one marked line."""
-	connection = db_server.get_connection_config()
-	client = f'mariadb -h {connection["db_host"]} -P {connection["db_port"]} -u "$GOLDEN_USER" -N -B'
-	tables = (
-		f'tables=$({client} -e "SELECT COUNT(*) FROM information_schema.tables'
-		f" WHERE table_schema='{database}'\")"
-	)
+	client = f"{_verify_client(db_server)} -N -B"
+	count = f"SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='{database}'"
+	tables = f'tables=$({client} -e "{count}")'
 	# `app_name`, not `name`: a row in this child table is named by a hash.
-	apps = f"apps=$({client} {database} -e 'SELECT app_name FROM `tabInstalled Application`' | tr '\\n' ' ')"
-	return "\n".join(["set -euo pipefail", tables, apps, f'echo "{VERIFY_MARKER} $tables $apps"'])
+	names = "SELECT app_name FROM `tabInstalled Application`"
+	apps = f"apps=$({client} {database} -e '{names}' | tr '\\n' ' ')"
+	report = f'echo "{VERIFY_MARKER} $tables $apps"'
+	return "\n".join(["set -euo pipefail", tables, apps, report])
 
 
 def _read_verified(output: str) -> tuple[int, list[str]]:
