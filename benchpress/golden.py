@@ -192,18 +192,21 @@ def _dump_command(db_server, site: str) -> str:
 		f'c = json.load(open("sites/{site}/site_config.json")); '
 		'print(c["db_name"], c.get("db_user") or c["db_name"], c["db_password"])\''
 	)
+	dump = (
+		f'mariadb-dump -h {host} -P {port} -u "$user" --single-transaction --quick'
+		f' --default-character-set=utf8mb4 {LEAN_DUMP_FLAGS} "$db" | gzip -c > {DUMP_PATH}'
+	)
+	version = f"version=$(mariadb -h {host} -P {port} -u \"$user\" -N -B -e 'SELECT VERSION()')"
+	meta = f'echo "{META_MARKER} $(stat -c %s {DUMP_PATH}) $(sha256sum {DUMP_PATH} | cut -d" " -f1) $version"'
 	return "\n".join(
 		[
 			"set -euo pipefail",
 			f'credentials="$({read_credentials})"',
 			'read -r db user password <<< "$credentials"',
 			'export MYSQL_PWD="$password"',
-			f'mariadb-dump -h {host} -P {port} -u "$user" --single-transaction --quick'
-			f" --default-character-set=utf8mb4 {LEAN_DUMP_FLAGS}"
-			f' "$db" | gzip -c > {DUMP_PATH}',
-			f"version=$(mariadb -h {host} -P {port} -u \"$user\" -N -B -e 'SELECT VERSION()')",
-			f'echo "{META_MARKER} $(stat -c %s {DUMP_PATH})'
-			f' $(sha256sum {DUMP_PATH} | cut -d" " -f1) $version"',
+			dump,
+			version,
+			meta,
 		]
 	)
 
