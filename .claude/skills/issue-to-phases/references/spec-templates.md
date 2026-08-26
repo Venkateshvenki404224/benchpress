@@ -124,9 +124,9 @@ boundary as an oversight.>
 
 <Where the phase touches a test module fenced for live-site coupling, say so:>
 
-> **Fenced test module:** `benchpress.tests.<module>` asserts against the whole
-> site, so it fails on any bench with real rows. This phase gates on CI for it.
-> See [Tests](ralph-loop.md#tests-scoped-fenced-exit-code).
+> **Fenced test module:** `benchpress.tests.<module>` cannot pass on a developer
+> site. This phase gates on CI for it. See
+> [Tests](ralph-loop.md#tests-scoped-fenced-exit-code) for the reason.
 
 <Where the phase moves a function that a scheduler entry or an `enqueue` call
 names by string, spell the closing order out — it is the step a phase drops:>

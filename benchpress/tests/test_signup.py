@@ -27,6 +27,7 @@ from unittest.mock import MagicMock, patch
 
 import frappe
 from frappe.tests import IntegrationTestCase
+from frappe.utils import now_datetime
 
 from benchpress import signup, waitlist
 from benchpress.credits import account, admission, guard, onboarding
@@ -42,9 +43,10 @@ WEBSITE_SETTINGS = "Website Settings"
 EMAIL = "signup-test@example.com"
 OAUTH_EMAIL = "signup-oauth@example.com"
 DESK_EMAIL = "signup-desk@example.com"
+NOTIFIED_EMAIL = "signup-notified@example.com"
 BLOCKED_DOMAIN = "signup-throwaway.example"
 BLOCKED_EMAIL = f"nobody@{BLOCKED_DOMAIN}"
-EVERY_EMAIL = (EMAIL, OAUTH_EMAIL, DESK_EMAIL, BLOCKED_EMAIL)
+EVERY_EMAIL = (EMAIL, OAUTH_EMAIL, DESK_EMAIL, NOTIFIED_EMAIL, BLOCKED_EMAIL)
 
 GRANT_CREDITS = 40.0
 FREE_CEILING = 2
@@ -121,7 +123,7 @@ class TestSelfServeSignup(IntegrationTestCase):
 		`.message` off what this returns when there is a document.
 		"""
 		mailer = patch("frappe.sendmail", return_value=None)
-		mailer.start()
+		self.mailer = mailer.start()
 		self.addCleanup(mailer.stop)
 		self.addCleanup(setattr, frappe.flags, "mute_emails", frappe.flags.mute_emails)
 		frappe.flags.mute_emails = True
@@ -168,6 +170,10 @@ class TestSelfServeSignup(IntegrationTestCase):
 					frappe.delete_doc(doctype, email, force=True, ignore_permissions=True)
 
 	# --- Assertions the whole module shares -----------------------------------
+
+	def mails_to(self, email: str) -> int:
+		"""Sends to one address. The waitlist notice goes out to the whole list at once."""
+		return len([call for call in self.mailer.call_args_list if call.kwargs["recipients"] == [email]])
 
 	def assert_granted_once(self, email: str) -> None:
 		grants = frappe.get_all(
@@ -383,16 +389,26 @@ class TestSelfServeSignup(IntegrationTestCase):
 		self.assertTrue(waitlist.join(EMAIL)["joined"])
 
 	def test_a_retirement_notice_goes_out_once_per_entry(self):
+		"""Once per *entry*, so the count that matters is per address, not the site-wide total.
+
+		`notify_of_signup` mails every un-invited row on the waitlist, and a dev site holds real
+		ones. The already-invited entry is the control: it proves the one-shot is stored on the row
+		rather than inferred from the run.
+		"""
 		self.set_setting("waitlist_open", 1)
 		waitlist.join(EMAIL)
+		waitlist.join(NOTIFIED_EMAIL)
+		invited_on = now_datetime()
+		frappe.db.set_value(WAITLIST, NOTIFIED_EMAIL, "invite_sent_on", invited_on, update_modified=False)
 		self.set_setting("waitlist_open", 0)
 
-		first = waitlist.notify_of_signup()
-		second = waitlist.notify_of_signup()
+		waitlist.notify_of_signup()
+		waitlist.notify_of_signup()
 
-		self.assertEqual(first["notified"], 1)
-		self.assertEqual(second["notified"], 0, "an operator re-running this must not mail anybody twice")
+		self.assertEqual(self.mails_to(EMAIL), 1, "an operator re-running this must not mail anybody twice")
+		self.assertEqual(self.mails_to(NOTIFIED_EMAIL), 0, "an invited entry is never mailed again")
 		self.assertIsNotNone(frappe.db.get_value(WAITLIST, EMAIL, "invite_sent_on"))
+		self.assertEqual(frappe.db.get_value(WAITLIST, NOTIFIED_EMAIL, "invite_sent_on"), invited_on)
 
 	def test_the_retirement_notice_is_denied_to_a_non_admin(self):
 		frappe.set_user("Guest")

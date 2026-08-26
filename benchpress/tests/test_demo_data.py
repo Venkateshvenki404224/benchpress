@@ -14,6 +14,32 @@ def demo_lab_ids():
 	return [spec["lab_id"] for spec in demo_data.LAB_SPECS]
 
 
+def demo_universe():
+	"""The rows this module owns, per seeded doctype: the field to filter on, and its values.
+
+	A dev site carries real labs, benches and logs, and the seeder is run by hand against it. Every
+	count and every scan below narrows to these rows, or it reads whatever else is on the site.
+	`Lab` is named after its `lab_id`, so the seeded ids are their own filter.
+	"""
+	labs = demo_lab_ids()
+	benches = frappe.get_all("Bench Instance", filters={"lab": ["in", labs]}, pluck="name")
+	return {
+		"Lab": ("lab_id", labs),
+		"Bench Instance": ("lab", labs),
+		"Bench Site": ("bench", benches),
+		"Deploy Log": ("bench", benches),
+		"Build Log": ("lab", labs),
+	}
+
+
+def demo_rows(doctype, fields):
+	"""Seeded rows only. An empty universe is asked for nothing — `in ()` is not a query."""
+	field, values = demo_universe()[doctype]
+	if not values:
+		return []
+	return frappe.get_all(doctype, filters={field: ["in", values]}, fields=fields)
+
+
 def delete_all(doctype, filters):
 	for name in frappe.get_all(doctype, filters=filters, pluck="name"):
 		frappe.delete_doc(doctype, name, force=True, ignore_permissions=True)
@@ -36,7 +62,8 @@ def purge_demo_data():
 
 
 def record_counts():
-	return {doctype: frappe.db.count(doctype) for doctype in SEEDED_DOCTYPES}
+	"""Delta-compared, so it tolerates old rows — but not a concurrent deploy writing its own."""
+	return {doctype: len(demo_rows(doctype, ["name"])) for doctype in SEEDED_DOCTYPES}
 
 
 class TestDemoData(IntegrationTestCase):
@@ -44,6 +71,9 @@ class TestDemoData(IntegrationTestCase):
 
 	def setUp(self):
 		purge_demo_data()
+
+	def seeded_statuses(self, doctype) -> set:
+		return {row.status for row in demo_rows(doctype, ["status"])}
 
 	def test_seeding_is_idempotent(self):
 		before = record_counts()
@@ -62,22 +92,22 @@ class TestDemoData(IntegrationTestCase):
 
 	def test_every_widget_status_is_represented(self):
 		demo_data.create_demo_data()
-		self.assertTrue(frappe.db.count("Lab", {"status": "Ready"}))
-		self.assertTrue(frappe.db.count("Bench Instance", {"status": "Running"}))
-		self.assertTrue(frappe.db.count("Bench Instance", {"status": "Error"}))
-		self.assertTrue(frappe.db.count("Bench Site", {"status": "Active"}))
+		self.assertIn("Ready", self.seeded_statuses("Lab"))
+		self.assertIn("Running", self.seeded_statuses("Bench Instance"))
+		self.assertIn("Error", self.seeded_statuses("Bench Instance"))
+		self.assertIn("Active", self.seeded_statuses("Bench Site"))
 
 	def test_deploy_logs_span_the_chart_timespan(self):
 		"""A single-day pile of logs would draw one spike instead of a curve."""
 		demo_data.create_demo_data()
-		days = frappe.get_all("Deploy Log", fields=["timestamp"], pluck="timestamp")
-		self.assertGreater(len({day.date() for day in days}), 1)
+		days = {row.timestamp.date() for row in demo_rows("Deploy Log", ["timestamp"])}
+		self.assertGreater(len(days), 1)
 
 	def test_a_seeded_run_lasts_minutes_not_weeks(self):
 		"""Duration is `modified - timestamp`, so a backdated log must settle its own `modified`."""
 		demo_data.create_demo_data()
 		for doctype in ("Deploy Log", "Build Log"):
-			for log in frappe.get_all(doctype, fields=["name", "timestamp", "modified"]):
+			for log in demo_rows(doctype, ["name", "timestamp", "modified"]):
 				seconds = time_diff_in_seconds(log.modified, log.timestamp)
 				self.assertGreater(seconds, 0, f"{doctype} {log.name} settled before it started")
 				self.assertLess(seconds, 3600, f"{doctype} {log.name} claims a {seconds / 3600:.0f}h run")
