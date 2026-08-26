@@ -90,6 +90,29 @@ One branch, one rolling PR, retitled each phase. Never a second PR.
 - Conventional Commits: `type(scope): summary`. Write the message with the
   `technical-writing` skill.
 
+## CI is part of the work, not a report on it
+
+Every push runs the repo's checks on the PR. **A phase is not finished until they
+are green**, and you find that out inside your own iteration rather than leaving
+it for whoever opens the PR.
+
+```bash
+gh pr checks {{BRANCH}}                     # bucket per check
+gh pr checks {{BRANCH}} --watch             # block until the run finishes
+gh run view --job <id> --log-failed         # the actual failure, not the summary
+```
+
+Three rules, each of which has cost a real iteration:
+
+- **Push, then wait.** The run takes minutes. Ending your turn on "CI is running"
+  ends it with the outcome unknown, and the loop's own gate will retract your
+  marker while you are not there to fix it.
+- **A check that was already red is yours.** "It was failing before my branch" is
+  not a defence: nothing merges past a red check, so the branch that needs it green
+  is the branch in front of you. Fix it in its own commit and say so in the message.
+- **Reproduce locally before pushing again.** The lint command in *Tests and lint*
+  is the one the runner uses. A push-and-see loop burns ten minutes per guess.
+
 ## Spec status — use the script, never edit by hand
 
 Status lives in three places that must agree: the bucket folder, the README
@@ -103,7 +126,7 @@ cd {{APP_DIR}}
 python3 {{PROMOTE}} {{SPEC_SLUG}} --to in-progress --detail "P{{PHASE_NUMBER}} started"
 # Every later phase, when it lands:
 python3 {{PROMOTE}} {{SPEC_SLUG}} --to in-progress --detail "P{{PHASE_NUMBER}} done"
-# The FINAL phase ({{PHASE_COUNT}}), once merged or the PR is ready:
+# The FINAL phase ({{PHASE_COUNT}}) — ONLY once `gh pr checks {{BRANCH}}` is all green:
 python3 {{PROMOTE}} {{SPEC_SLUG}} --to completed \
   --detail "all phases in {{BASE_BRANCH}} (PR #<n>)" --note "<one line for the index>"
 # Verify before writing your done marker:
@@ -112,6 +135,10 @@ python3 {{PROMOTE}} {{SPEC_SLUG}} --check
 
 The loop gates on this. A phase that leaves the spec in the wrong bucket has its
 done marker retracted, so skipping it costs an iteration.
+
+`completed/` means the whole feature is shippable, so a spec moves there only with
+a green CI run behind it. A red PR filed under "completed" is the same lie as a
+shipped feature filed under "not started".
 
 {{SAFETY_RULES}}
 
@@ -175,8 +202,9 @@ mutating the system that the next iteration's smoke check is about to read.
 
 ## Completion contract
 
-Run your phase's Verification section for real, against the live system. ONLY when
-every item passes, write a one-line summary to `{{DONE_MARKER}}`.
+Run your phase's Verification section for real, against the live system, and wait
+for the PR's checks to come back green. ONLY when every item passes **and CI is
+green**, write a one-line summary to `{{DONE_MARKER}}`.
 
 The loop then runs its **own** independent smoke check. If that fails it deletes
 your marker and the phase continues. Do not create the marker early or

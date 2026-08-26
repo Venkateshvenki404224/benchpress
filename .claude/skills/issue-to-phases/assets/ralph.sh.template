@@ -39,6 +39,10 @@ NOTES_PREFIX="{{NOTES_PREFIX}}"      # keeps notes from colliding with other loo
 BRANCH="{{BRANCH}}"
 BASE_BRANCH="{{BASE_BRANCH}}"
 
+# How long smoke_check waits for the PR's checks to finish before calling the
+# phase incomplete. Size it to the slowest workflow on the repo, not the fastest.
+CI_WAIT_SECONDS=1800
+
 # The running UI, for the browser checks. Leave empty on a spec with no UI surface.
 APP_URL="{{APP_URL}}"
 
@@ -93,6 +97,51 @@ browser_ready() {
   command -v agent-browser >/dev/null 2>&1
 }
 
+# The PR's checks as one word: green | red | pending | none.
+#
+# `gh pr checks` exits non-zero whenever anything is failing OR pending, so its
+# exit code cannot tell "still running" from "broken". The buckets can.
+ci_status() {
+  local json
+  json="$( cd "$APP_DIR" && timeout 120 gh pr checks "$BRANCH" --json bucket 2>/dev/null || true )"
+  if [ -z "$json" ] || [ "$json" = "[]" ]; then
+    # No checks reported yet is not the same as no PR: a workflow takes ~30s to
+    # register after a push, and failing on that would retract a good marker.
+    ( cd "$APP_DIR" && timeout 60 gh pr view "$BRANCH" --json number >/dev/null 2>&1 ) \
+      && echo pending || echo none
+    return 0
+  fi
+  printf '%s' "$json" | python3 -c '
+import json, sys
+buckets = [c.get("bucket") for c in json.load(sys.stdin)]
+if not buckets:            print("pending")
+elif "fail" in buckets or "cancel" in buckets: print("red")
+elif "pending" in buckets: print("pending")
+else:                      print("green")
+' 2>/dev/null || echo pending
+  return 0
+}
+
+# A phase is not done while CI is still deciding, and not done at all if CI is red.
+# Polls rather than `--watch`, so the wait is bounded and the log says what it is
+# waiting for.
+ci_green() {
+  local waited=0 status
+  while [ "$waited" -lt "$CI_WAIT_SECONDS" ]; do
+    status="$(ci_status)"
+    case "$status" in
+      green) return 0 ;;
+      red)   echo "[ralph]        CI is red — see: gh pr checks $BRANCH" ; return 1 ;;
+      none)  echo "[ralph]        no pull request for $BRANCH" ; return 1 ;;
+    esac
+    echo "[ralph]        CI pending, waited ${waited}s of ${CI_WAIT_SECONDS}s"
+    sleep 60
+    waited=$((waited + 60))
+  done
+  echo "[ralph]        CI did not finish within ${CI_WAIT_SECONDS}s"
+  return 1
+}
+
 {{HELPERS}}
 
 preflight() {
@@ -132,6 +181,20 @@ smoke_check() {
       failed=1
     else
       echo "[ralph]   ok   built assets are at least as new as the source"
+    fi
+  fi
+
+  # CI. A phase whose tests pass on this host and fail on the runner is not
+  # finished — and a lint hook that has been red since before this branch is
+  # still this branch's problem, because nothing merges past it.
+  # Delete this block, ci_status and ci_green on a repo with no workflows: with
+  # nothing to report, the gate waits out its whole budget and fails every phase.
+  if [ "$phase" -ge 1 ]; then
+    if ci_green; then
+      echo "[ralph]   ok   every check on the $BRANCH pull request is green"
+    else
+      echo "[ralph]   FAIL the $BRANCH pull request does not have a green CI run"
+      failed=1
     fi
   fi
 
