@@ -12,6 +12,11 @@ Warnings are asserted for their *cardinality*, not just their content. "At most 
 is the property that decides whether these notices get read or muted, and it is the one a refactor
 loses silently.
 
+Both sweeps scan the whole site, so every assertion here narrows to the two owners this class
+creates before it counts. A second **funded** owner is the control: `enforce_limits` decides per
+owner, so a sweep that stopped everything would still satisfy an assertion about one bench under
+one owner, and only a neighbour that must survive catches it.
+
 As in `test_credit_guard`, nothing in this module commits: `IntegrationTestCase` rolls back once per
 class, so a single commit would make every retuned price durable on the site.
 """
@@ -34,6 +39,7 @@ LEDGER = "Credit Ledger Entry"
 GRANT = 40.0
 REAP_AFTER_DAYS = 7
 USER = "sweep-user@example.com"
+NEIGHBOUR = "sweep-neighbour@example.com"
 
 TUNED_SETTINGS = ("reap_after_days", "low_balance_warn_percent")
 
@@ -122,6 +128,10 @@ class TestCreditSweep(IntegrationTestCase):
 		cls.user = _ensure_user(USER)
 		cls.lab = _ensure_lab("sweep-lab", cls.user)
 		cls.bench = _ensure_bench(cls.lab, cls.user)
+		cls.neighbour = _ensure_user(NEIGHBOUR)
+		cls.neighbour_lab = _ensure_lab("sweep-neighbour-lab", cls.neighbour)
+		cls.neighbour_bench = _ensure_bench(cls.neighbour_lab, cls.neighbour)
+		cls.owned = {cls.bench.name, cls.neighbour_bench.name}
 		# Not committed: the class rollback takes these with it, and one commit here would make
 		# every retuned cap and price durable on the site.
 
@@ -129,7 +139,8 @@ class TestCreditSweep(IntegrationTestCase):
 		frappe.set_user("Administrator")
 		self.restore_economics()
 		self.wipe_credits()
-		self.reset_bench()
+		self.reset_benches()
+		self.fund(GRANT, self.neighbour)  # before the spies: funding an account enqueues nothing
 		self.enqueued = self.spy("frappe.enqueue")
 		self.alerts = self.spy("benchpress.notifications.notify_owner")
 		self.emails = self.spy("benchpress.notifications.email_owner")
@@ -153,19 +164,19 @@ class TestCreditSweep(IntegrationTestCase):
 	def test_a_spent_balance_stops_a_running_instance(self):
 		self.enable_credits()
 		self.fund(0)
-		self.assertEqual(sweep.enforce_limits()["stopped"], [self.bench.name])
+		self.assertEqual(self.ours(sweep.enforce_limits()["stopped"]), [self.bench.name])
 		self.assert_enqueued("benchpress.deploy_manager.stop_bench")
 
 	def test_a_funded_owner_keeps_running(self):
 		self.enable_credits()
 		self.fund(GRANT)
-		self.assertEqual(sweep.enforce_limits()["stopped"], [])
+		self.assertEqual(self.ours(sweep.enforce_limits()["stopped"]), [])
 
 	def test_an_owner_with_no_account_row_is_not_stopped(self):
 		"""Credits were only just switched on; there is no balance to be out of yet."""
 		self.enable_credits()
 		self.assertFalse(frappe.db.exists(ACCOUNT, self.user))
-		self.assertEqual(sweep.enforce_limits()["stopped"], [])
+		self.assertEqual(self.ours(sweep.enforce_limits()["stopped"]), [])
 
 	# --- The two rules the sweep must never break ----------------------------
 
@@ -180,13 +191,14 @@ class TestCreditSweep(IntegrationTestCase):
 		self.enable_credits()
 		self.fund(0)
 		sweep.enforce_limits()
-		self.assertEqual(self.enqueued.call_args.kwargs["queue"], "long")
-		self.assertTrue(self.enqueued.call_args.kwargs["deduplicate"])
+		stop = self.enqueue_for(self.bench.name)
+		self.assertEqual(stop.kwargs["queue"], "long")
+		self.assertTrue(stop.kwargs["deduplicate"])
 
 	def test_the_stop_cannot_start_before_the_decision_commits(self):
 		"""`stop_bench` re-reads the row, so a job that runs first acts on a decision that may roll back."""
 		sweep._enqueue_stop(self.bench.name)
-		self.assertTrue(self.enqueued.call_args.kwargs["enqueue_after_commit"])
+		self.assertTrue(self.enqueue_for(self.bench.name).kwargs["enqueue_after_commit"])
 
 	def test_the_sweep_does_not_scale_in_query_count(self):
 		"""One query per load, whatever the fleet size — never a `get_doc` per instance."""
@@ -211,8 +223,10 @@ class TestCreditSweep(IntegrationTestCase):
 
 		sweep.enforce_limits()
 		sweep.enforce_limits()
-		self.assertEqual(self.alerts.call_count, 1)
-		self.assertIn("Credits running low", self.alerts.call_args.args[1])
+		warnings = self.alerts_for(self.user)
+		self.assertEqual(len(warnings), 1)
+		self.assertIn("Credits running low", warnings[0].args[1])
+		self.assertEqual(self.alerts_for(self.neighbour), [], "the funded owner is the control")
 
 	def test_the_low_balance_warning_re_arms_when_the_balance_recovers(self):
 		self.enable_credits()
@@ -228,7 +242,7 @@ class TestCreditSweep(IntegrationTestCase):
 		self.enable_credits()
 		self.fund(GRANT)
 		sweep.enforce_limits()
-		self.alerts.assert_not_called()
+		self.assertEqual(self.alerts_for(self.user), [])
 
 	# --- The reaper -----------------------------------------------------------
 
@@ -236,34 +250,37 @@ class TestCreditSweep(IntegrationTestCase):
 		self.enable_credits()
 		self.stopped_for_days(REAP_AFTER_DAYS + 1)
 		result = reaper.reap_stopped_instances()
-		self.assertEqual(result["reaped"], [self.bench.name])
+		self.assertEqual(self.ours(result["reaped"]), [self.bench.name])
 		self.assert_enqueued("benchpress.credits.reaper.reap_bench")
 
 	def test_a_recently_stopped_instance_is_left_alone(self):
 		self.enable_credits()
 		self.stopped_for_days(1)
-		self.assertEqual(reaper.reap_stopped_instances(), {"reaped": [], "warned": []})
+		result = reaper.reap_stopped_instances()
+		self.assertEqual(self.ours(result["reaped"]), [])
+		self.assertEqual(self.ours(result["warned"]), [])
 
 	def test_a_running_instance_is_never_reaped(self):
 		self.enable_credits()
 		self.stopped_for_days(REAP_AFTER_DAYS + 1)
 		frappe.db.set_value(BENCH, self.bench.name, "status", "Running", update_modified=False)
-		self.assertEqual(reaper.reap_stopped_instances()["reaped"], [])
+		self.assertEqual(self.ours(reaper.reap_stopped_instances()["reaped"]), [])
 
 	def test_the_reaper_emails_two_days_out_exactly_once(self):
 		self.enable_credits()
 		self.stopped_for_days(REAP_AFTER_DAYS - 1)
 
-		self.assertEqual(reaper.reap_stopped_instances()["warned"], [self.bench.name])
-		self.assertEqual(reaper.reap_stopped_instances()["warned"], [])
-		self.assertEqual(self.emails.call_count, 1, "an email a day about the same deletion is spam")
-		self.assertIn("will be deleted", self.emails.call_args.args[1])
+		self.assertEqual(self.ours(reaper.reap_stopped_instances()["warned"]), [self.bench.name])
+		self.assertEqual(self.ours(reaper.reap_stopped_instances()["warned"]), [])
+		notices = self.emails_for(self.user)
+		self.assertEqual(len(notices), 1, "an email a day about the same deletion is spam")
+		self.assertIn("will be deleted", notices[0].args[1])
 
 	def test_the_reaper_does_not_warn_before_the_window(self):
 		self.enable_credits()
 		self.stopped_for_days(REAP_AFTER_DAYS - 4)
-		self.assertEqual(reaper.reap_stopped_instances()["warned"], [])
-		self.emails.assert_not_called()
+		self.assertEqual(self.ours(reaper.reap_stopped_instances()["warned"]), [])
+		self.assertEqual(self.emails_for(self.user), [])
 
 	def test_a_zero_reap_window_never_reaps(self):
 		self.enable_credits()
@@ -320,14 +337,35 @@ class TestCreditSweep(IntegrationTestCase):
 		frappe.db.set_single_value(CREDIT_SETTINGS, field, value)
 		frappe.clear_cache(doctype=CREDIT_SETTINGS)
 
-	def fund(self, credits) -> None:
-		account.ensure_account(self.user)
+	def fund(self, credits, user: str | None = None) -> None:
+		user = user or self.user
+		account.ensure_account(user)
 		frappe.db.set_value(
 			ACCOUNT,
-			self.user,
+			user,
 			{"balance": credits, "low_balance_warned": 0},
 			update_modified=False,
 		)
+
+	# --- The fixture universe -------------------------------------------------
+	#
+	# Both sweeps return every bench on the site, and both notify every owner on it. Narrowing to
+	# the rows this class owns keeps the cardinality assertions meaningful instead of vacuous.
+
+	def ours(self, bench_names: list) -> list:
+		return [name for name in bench_names if name in self.owned]
+
+	def alerts_for(self, user: str) -> list:
+		return [call for call in self.alerts.call_args_list if call.args[0] == user]
+
+	def emails_for(self, user: str) -> list:
+		return [call for call in self.emails.call_args_list if call.args[0] == user]
+
+	def enqueue_for(self, bench_name: str):
+		"""This bench's own enqueue call. On a site with real rows it is never the last one."""
+		calls = [call for call in self.enqueued.call_args_list if call.kwargs.get("bench_name") == bench_name]
+		self.assertEqual(len(calls), 1, f"expected exactly one enqueue for {bench_name}")
+		return calls[0]
 
 	def warn_threshold(self) -> float:
 		percent = config.settings().low_balance_warn_percent
@@ -340,22 +378,24 @@ class TestCreditSweep(IntegrationTestCase):
 			BENCH, self.bench.name, "modified", add_days(now_datetime(), -days), update_modified=False
 		)
 
-	def reset_bench(self) -> None:
-		frappe.db.set_value(
-			BENCH,
-			self.bench.name,
-			{
-				"status": "Running",
-				"started_at": now_datetime(),
-				"reap_warned_at": None,
-				"database_server": None,
-			},
-			update_modified=True,
-		)
+	def reset_benches(self) -> None:
+		for name in self.owned:
+			frappe.db.set_value(
+				BENCH,
+				name,
+				{
+					"status": "Running",
+					"started_at": now_datetime(),
+					"reap_warned_at": None,
+					"database_server": None,
+				},
+				update_modified=True,
+			)
 
 	def assert_enqueued(self, method: str) -> None:
-		self.assertEqual(self.enqueued.call_args.args[0], method)
-		self.assertEqual(self.enqueued.call_args.kwargs["queue"], "long")
+		call = self.enqueue_for(self.bench.name)
+		self.assertEqual(call.args[0], method)
+		self.assertEqual(call.kwargs["queue"], "long")
 
 	def count_queries(self, action) -> int:
 		count = 0
@@ -380,5 +420,5 @@ class TestCreditSweep(IntegrationTestCase):
 				frappe.delete_doc(doctype, name, force=True, ignore_permissions=True)
 
 	def wipe_credits(self) -> None:
-		frappe.db.delete(LEDGER, {"account": USER})
-		frappe.db.delete(ACCOUNT, {"user": USER})
+		frappe.db.delete(LEDGER, {"account": ("in", [USER, NEIGHBOUR])})
+		frappe.db.delete(ACCOUNT, {"user": ("in", [USER, NEIGHBOUR])})

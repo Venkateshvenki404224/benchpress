@@ -148,18 +148,33 @@ docker compose exec backend bench --site frontend run-tests --module benchpress.
 Three rules, and each one has cost a real run.
 
 **Never `--app benchpress`.** The whole suite is CI's job. It takes 60 seconds
-against the live site, and eight of its tests fail on any developer site with
-real rows, for a reason no phase can fix — the fence list below.
+against the live site, one of its tests fails there for good (the fence list
+below), and the rest of the run does not repeat. Three runs of the same tree gave
+one failure, then four, then one: `test_api` blew a 600 ms budget at 1,473 ms
+under whole-suite load, and `test_credit_guard` got a Docker 404 that it does not
+get on its own. Scoped `--module` runs of the same tests were stable every time.
+A red whole-suite run here tells a loop nothing it can act on.
 
-**Never name a fenced module.** `test_credit_sweep`, `test_demo_data`,
-`test_lease` and `test_signup` call a production function that scans the whole
-site, then assert on the whole result. `enforce_limits()["stopped"] == [my bench]`
-is true on an empty site and false as soon as one real bench exists. Cardinality
-is the property under test, so the assertions are correct and only unrunnable
-here. CI stays green because `ci.yml` builds a fresh `test_site` first. A phase
-that must touch one of these gates on CI alone, and its phase spec says so.
-Tracked as [#196](https://github.com/Venkateshvenki404224/benchpress/issues/196):
-delete a module from this list when that issue fixes it, not before.
+**Never name a fenced module.** `test_lease` is the only one left.
+`test_a_restarted_bench_gets_a_fresh_deadline_and_is_not_reclaimed` errors here
+because `guard._enforce` holds credits against the caller instead of the bench
+owner, so an admin restarting a bench they do not own is priced against the wrong
+account. That is a production bug, not a test one, and no phase spec works around
+it. CI stays green only because a fresh `Administrator` on `test_site` collects
+the signup grant. Tracked as
+[#202](https://github.com/Venkateshvenki404224/benchpress/issues/202) — item 9's
+spec fixes it and deletes this entry. A phase that must touch `test_lease` gates
+on CI alone, and its phase spec says so.
+
+`test_credit_sweep`, `test_demo_data` and `test_signup` were fenced here until
+[#203](https://github.com/Venkateshvenki404224/benchpress/issues/203) fixed them,
+and the fix is the pattern to copy. They called a production function that scans
+the whole site, then asserted on the whole result. That was never "correct but
+unrunnable here": on CI's empty site `enforce_limits()["stopped"] == [my bench]`
+passes for a sweep that stopped every bench on it too. Narrow every assertion to
+a fixture universe the test owns, and give each discrimination test a control row
+that must survive. `enforce_limits` decides per **owner**, so the control there is
+a second funded owner, never a second bench under the same one.
 
 **Read the exit code, never the output.** `run-tests` prints one summary per test
 category, so any target holding both integration and unit tests prints two. The
