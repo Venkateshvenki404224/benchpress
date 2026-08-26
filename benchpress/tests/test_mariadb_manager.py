@@ -63,34 +63,26 @@ class TestMariadbManager(IntegrationTestCase):
 
 		execute_sql("db-server-name", "SELECT 1")
 
-		# First exec_run call should base64-decode the SQL into a temp file
-		first_call_args = mock_container.exec_run.call_args_list[0]
-		cmd = first_call_args[1].get("cmd") or first_call_args[0][0]
-		cmd_str = " ".join(cmd)
+		call = mock_container.exec_run.call_args_list[0]
+		cmd_str = " ".join(call.kwargs.get("cmd") or call.args[0])
 		self.assertIn("base64 -d", cmd_str)
+		self.assertNotIn("SELECT 1", cmd_str)
 
 	@patch("benchpress.mariadb_manager.get_client")
 	@patch("benchpress.mariadb_manager.frappe.get_doc")
-	def test_execute_sql_cleans_up_tmp_file_on_error(self, mock_get_doc, mock_get_client):
+	def test_execute_sql_is_one_round_trip_and_leaves_no_temp_file(self, mock_get_doc, mock_get_client):
 		from benchpress.mariadb_manager import execute_sql
 
 		mock_get_doc.return_value = self._make_mock_db_server()
 		mock_container = MagicMock()
-		# Second exec_run (the actual SQL) raises an error
-		mock_container.exec_run.side_effect = [
-			(0, b""),  # write temp file
-			RuntimeError("DB exploded"),  # run SQL
-			(0, b""),  # rm -f in finally
-		]
+		mock_container.exec_run.return_value = (0, b"ok")
 		mock_get_client.return_value.containers.get.return_value = mock_container
 
-		with self.assertRaises(RuntimeError):
-			execute_sql("db-server-name", "DROP TABLE important")
+		execute_sql("db-server-name", "DROP TABLE important")
 
-		# rm -f should still be called (finally block)
-		last_call = mock_container.exec_run.call_args_list[-1]
-		cmd = last_call[1].get("cmd") or last_call[0][0]
-		self.assertIn("rm", cmd)
+		self.assertEqual(mock_container.exec_run.call_count, 1)
+		call = mock_container.exec_run.call_args_list[0]
+		self.assertNotIn("/tmp/", " ".join(call.kwargs.get("cmd") or call.args[0]))
 
 	@patch("benchpress.mariadb_manager.get_client")
 	@patch("benchpress.mariadb_manager.frappe.get_doc")
@@ -107,7 +99,7 @@ class TestMariadbManager(IntegrationTestCase):
 
 		execute_sql("db-server-name", "SELECT 1")
 
-		sql_call = mock_container.exec_run.call_args_list[1]
+		sql_call = mock_container.exec_run.call_args_list[0]
 		self.assertEqual(sql_call.kwargs.get("environment"), {"MYSQL_PWD": sentinel})
 		for call in mock_container.exec_run.call_args_list:
 			cmd = call.kwargs.get("cmd") or call.args[0]

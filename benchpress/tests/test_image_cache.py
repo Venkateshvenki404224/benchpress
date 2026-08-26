@@ -365,16 +365,32 @@ class TestPrewarmCatalog(IntegrationTestCase):
 		for call in enqueue.call_args_list:
 			self.assertEqual(call.kwargs["queue"], "long")
 
+	def _prewarm_one(self, template_key="crm"):
+		from benchpress import golden
+
+		client = _client_with_tags()
+		with (
+			patch("benchpress.docker_manager.get_client", return_value=client),
+			patch.object(golden, "add_golden") as add_golden,
+		):
+			return image_cache.build_template_image(template_key), client, add_golden
+
 	def test_a_template_build_tags_by_the_template_s_own_key(self):
 		from benchpress import lab_templates
 
-		client = _client_with_tags()
-		with patch("benchpress.docker_manager.get_client", return_value=client):
-			tag = image_cache.build_template_image("crm")
+		tag, client, _add_golden = self._prewarm_one()
 
 		expected = image_cache.cache_tag(image_cache.template_spec(lab_templates.get_template("crm")))
 		self.assertEqual(tag, expected)
 		self.assertEqual(client.api.build.call_args.kwargs["tag"], expected)
+
+	def test_a_prewarmed_image_comes_out_golden_in_the_same_job(self):
+		"""Otherwise a fresh host's whole catalog needs a second pass someone has to remember."""
+		tag, _client, add_golden = self._prewarm_one()
+
+		spec = add_golden.call_args.args[0]
+		self.assertEqual(spec.image_tag, tag)
+		self.assertEqual(spec.memory_limit, "1g")
 
 
 class TestSweepCachedImages(IntegrationTestCase):

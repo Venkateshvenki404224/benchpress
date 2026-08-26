@@ -42,9 +42,13 @@ PTY_ROOT_RESERVE = 1024
 CONNTRACK_PER_BENCH = 256
 
 
-def check_row(check: str, ok: bool, hint: str) -> dict:
-	"""One check result. Shared by every caller so the shape cannot drift."""
-	return {"check": check, "status": "pass" if ok else "fail", "hint": hint}
+def check_row(check: str, ok: bool, hint: str, severity: str = "Error") -> dict:
+	"""One check result. Shared by every caller so the shape cannot drift.
+
+	`severity` is what a failed row reads as on screen. It exists for the checks whose failure is
+	a degraded state rather than a broken one, and only `display_row` looks at it.
+	"""
+	return {"check": check, "status": "pass" if ok else "fail", "hint": hint, "severity": severity}
 
 
 def display_row(check: dict, label: str) -> dict:
@@ -52,13 +56,13 @@ def display_row(check: dict, label: str) -> dict:
 	return {
 		"check": check["check"],
 		"label": label,
-		"status": "Active" if check["status"] == "pass" else "Error",
+		"status": "Active" if check["status"] == "pass" else check.get("severity", "Error"),
 		"hint": check["hint"],
 	}
 
 
 def run_diagnostics() -> list[dict]:
-	"""Read-only environment checks. Each row: {check, status: pass|fail, hint}.
+	"""Read-only environment checks. Each row: {check, status: pass|fail, hint, severity}.
 
 	Never raises and never mutates infrastructure.
 	"""
@@ -71,6 +75,7 @@ def run_diagnostics() -> list[dict]:
 		_check_clock_skew(),
 		_check_redis(),
 		_check_container_runtimes(),
+		_check_golden_images(),
 		check_vpn_server(),
 	]
 
@@ -237,6 +242,34 @@ def _check_container_runtimes() -> dict:
 		return check_row("container_runtimes", True, f"Docker has {', '.join(required)} registered")
 	except Exception as e:
 		return check_row("container_runtimes", False, f"Could not read Docker runtimes: {e}")
+
+
+def _check_golden_images() -> dict:
+	"""How much of the catalog restores its site instead of creating it.
+
+	Warning, never Error: a lab with no golden deploys exactly as it always has, just slowly.
+	The labels come off the image list `cached_tags` already asks Docker for.
+	"""
+	try:
+		from benchpress.golden import golden_tags
+		from benchpress.image_cache import cached_tags
+
+		tags = cached_tags()
+		if not tags:
+			return check_row("golden_images", True, "No lab image is built yet")
+		missing = sorted(tags - golden_tags())
+		coverage = f"{len(tags) - len(missing)} of {len(tags)} built labs carry a golden dump"
+		if missing:
+			return check_row(
+				"golden_images",
+				False,
+				f"{coverage} — {', '.join(missing)} build their site from scratch on every deploy. "
+				"Rebuild those labs, or run Build golden on each.",
+				severity="Warning",
+			)
+		return check_row("golden_images", True, coverage)
+	except Exception as e:
+		return check_row("golden_images", False, f"Could not read golden image labels: {e}")
 
 
 def check_vpn_server() -> dict:

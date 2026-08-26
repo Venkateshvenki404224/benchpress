@@ -18,6 +18,7 @@ class Lab(Document):
 		self.apply_instance_size()
 		self.validate_cpu_cores()
 		self.reset_status_if_spec_changed()
+		self.clear_golden_manifest_if_image_changed()
 
 	def reset_status_if_spec_changed(self):
 		"""A `Ready` lab's image tag is static now (`benchpress/<lab_id>:lab`, not a content
@@ -29,7 +30,16 @@ class Lab(Document):
 		before = self.get_doc_before_save()
 		if before and build_spec(self) != build_spec(before):
 			self.status = "Draft"
+			# The golden in the old image was built from the old spec, so it no longer describes
+			# what this lab asks for.
+			self.golden_manifest = None
 			frappe.msgprint(_("Lab spec changed — rebuild the image before deploying."))
+
+	def clear_golden_manifest_if_image_changed(self):
+		"""The manifest describes one image. A different tag has its own golden, or none."""
+		before = self.get_doc_before_save()
+		if before and before.image_tag != self.image_tag:
+			self.golden_manifest = None
 
 	def apply_instance_size(self):
 		"""Copy the chosen size's resources onto the two fields Docker actually reads.

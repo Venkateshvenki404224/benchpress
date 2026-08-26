@@ -96,6 +96,26 @@ def build_lab_image(lab_name: str) -> dict:
 
 
 @frappe.whitelist()
+def build_lab_golden(lab_name: str) -> dict:
+	"""Queue the golden build for one lab, appending it to the image the lab already has."""
+	require_admin()
+	lab = frappe.get_doc("Lab", lab_name)
+	tag, hit = image_cache.resolve(lab)
+	if lab.status != "Ready" or not hit or lab.image_tag != tag:
+		frappe.throw(_("No built image for lab '{0}'. Build it first from the Lab record.").format(lab.title))
+	frappe.enqueue(
+		"benchpress.golden.build_golden_job",
+		lab_name=lab_name,
+		user=frappe.session.user,
+		queue="long",
+		timeout=image_cache.BUILD_TIMEOUT,
+		job_id=f"golden:{lab_name}",
+		deduplicate=True,
+	)
+	return {"name": lab_name, "status": "Queued"}
+
+
+@frappe.whitelist()
 def prewarm_catalog() -> dict:
 	"""Build the shared image for every catalog template that has none yet.
 

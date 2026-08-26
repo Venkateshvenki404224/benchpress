@@ -10,6 +10,8 @@
   "docker_socket",
   "default_image",
   "default_bench_runtime",
+  "enable_golden_images",
+  "restore_from_golden",
   "column_break_docker",
   "base_domain",
   "traefik_network",
@@ -50,6 +52,20 @@
    "fieldtype": "Select",
    "label": "Default Bench Runtime",
    "options": "runc\nsysbox"
+  },
+  {
+   "default": "1",
+   "description": "Bake a lab's finished site into its image on every build, so a deploy restores the database instead of creating it. Turning it off shortens builds on a disk-constrained host; images that already carry a golden keep restoring from it.",
+   "fieldname": "enable_golden_images",
+   "fieldtype": "Check",
+   "label": "Enable Golden Images"
+  },
+  {
+   "default": "1",
+   "description": "Restore a bench's site from its lab image's golden dump when the image carries one. Turning it off makes every deploy build the site from scratch, which is how a suspect golden is taken out of service without rebuilding anything.",
+   "fieldname": "restore_from_golden",
+   "fieldtype": "Check",
+   "label": "Restore From Golden"
   },
   {
    "fieldname": "column_break_docker",

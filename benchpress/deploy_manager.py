@@ -3,6 +3,7 @@
 
 import json
 import os
+import re
 import secrets
 import shlex
 import socket
@@ -36,6 +37,7 @@ from benchpress.mariadb_manager import (
 	create_mariadb_user,
 	drop_mariadb_user,
 	ensure_infrastructure,
+	server_version,
 	wait_for_mariadb,
 )
 from benchpress.notifications import notify_owner
@@ -83,6 +85,9 @@ NOTHING_TO_ROLL_BACK = "Cleanup: nothing to roll back — no container was creat
 SITE_HTTP_PORT = 8000
 
 ADOPTED_MARKER = "already exists — adopting it"
+GOLDEN_MARKER = "Restored from golden dump"
+# What the Deploy Log says when the golden branch ran. `golden_drill` reads runs back by it.
+GOLDEN_RESTORED = "restored from the image's golden dump"
 
 # Module constant, not inlined, so tests can monkeypatch it to a tmp path.
 # Flat, not a subdirectory: Traefik's file provider does not recurse, so this must be the
@@ -533,11 +538,22 @@ _notify_owner = notify_owner
 
 
 def create_site_in_container(
-	container_id: str, db_server, site_name: str, admin_password: str, apps_csv: str
+	container_id: str,
+	db_server,
+	site_name: str,
+	admin_password: str,
+	apps_csv: str,
+	database: str | None = None,
+	use_golden: bool = True,
 ) -> tuple[int, str]:
-	"""Run setup-site.sh inside a bench container using a temporary MariaDB user."""
+	"""Run setup-site.sh inside a bench container using a temporary MariaDB user.
+
+	`database` overrides the name derived from the site, which the golden build needs so its
+	scratch database is one this app is allowed to drop. `use_golden=False` makes the script
+	create the site even in an image that carries a golden dump.
+	"""
 	bench_dir = "/home/frappe/frappe-bench"
-	db_name, temp_user, temp_password = create_mariadb_user(db_server.name, site_name)
+	db_name, temp_user, temp_password = create_mariadb_user(db_server.name, site_name, database)
 	try:
 		return exec_in_container(
 			container_id,
@@ -552,10 +568,60 @@ def create_site_in_container(
 				"DB_NAME": db_name,
 				"MARIADB_ROOT_USERNAME": temp_user,
 				"MARIADB_ROOT_PASSWORD": temp_password,
+				"USE_GOLDEN": "1" if use_golden else "0",
 			},
 		)
 	finally:
 		drop_mariadb_user(db_server.name, site_name, db_name)
+
+
+def _golden_matches_server(tag: str, db_server) -> tuple[bool, str]:
+	"""Whether this image's dump may be restored into this server, and why not.
+
+	The dump is the one artefact in the image whose validity depends on something outside it,
+	so this is where a golden is refused. Every refusal is a slow deploy, never a failed one.
+	"""
+	from benchpress import golden
+
+	if not golden.restore_enabled():
+		return (
+			False,
+			"Restoring from a golden dump is turned off in BenchPress Settings — creating the site instead",
+		)
+	dump = golden.golden_mariadb_version(tag)
+	if not dump:
+		return False, ""  # the image step already named the missing golden and its remedy
+	server = server_version(db_server.name)
+	if not _major_version(dump) or not _major_version(server):
+		return False, (
+			f"Could not compare the golden dump's MariaDB ({dump or 'unknown'}) with this "
+			f"server's ({server or 'unknown'}) — creating the site instead"
+		)
+	if _major_version(dump) != _major_version(server):
+		return False, (
+			f"Golden dump was taken from MariaDB {_major_version(dump)} and this server is "
+			f"{_major_version(server)} — creating the site instead"
+		)
+	return True, ""
+
+
+def _major_version(version: str) -> str:
+	"""`10.6` out of `10.6.28-MariaDB-ubu2204`, or empty when there is no version in there.
+
+	Major only: a patch bump is the same schema contract, and refusing on one would take every
+	golden on the host out of service the next time the server is updated.
+	"""
+	match = re.match(r"\d+\.\d+", version or "")
+	return match[0] if match else ""
+
+
+def _site_outcome(output: str, site_name: str) -> str:
+	"""Which of setup-site.sh's three branches ran. The Deploy Log is where that answer survives."""
+	if GOLDEN_MARKER in output:
+		return f"Site {site_name} {GOLDEN_RESTORED}"
+	if ADOPTED_MARKER in output:
+		return "Existing site adopted"
+	return "Site created successfully"
 
 
 def _log_deploy_skipped(bench_name: str) -> None:
@@ -648,7 +714,11 @@ def _deploy_bench(bench_name: str) -> None:
 		pipeline.step("image")
 		_prepare_lab_image(lab, pipeline, bench.owner)
 
+		# Both halves of the previous deploy go together, and before the new container
+		# exists: the site database is the other thing a redeploy replaces, and dropping a
+		# few hundred tables is teardown, not part of creating the site that follows.
 		_remove_stale_container(bench)
+		_drop_site_database(bench)
 		pipeline.step("container")
 		container_id = create_bench_container(bench, lab)
 		created_container_id = container_id
@@ -689,6 +759,7 @@ def _deploy_bench(bench_name: str) -> None:
 			"socketio_port": 9000,
 			"webserver_port": SITE_HTTP_PORT,
 			"default_site": site_name,
+			"developer_mode": 1,
 		}
 		pipeline.step("site_config")
 		write_file_to_container(
@@ -697,16 +768,17 @@ def _deploy_bench(bench_name: str) -> None:
 		pipeline.log(f"{bench_dir}/sites/common_site_config.json written")
 
 		pipeline.step("site")
-		# Drop the leftover of an interrupted run; `bench new-site` refuses to overwrite it.
-		_drop_site_database(bench)
 		apps_csv = ",".join(a.app_name for a in lab.apps if a.app_name.lower() != "frappe")
 		pipeline.log(f"Site {site_name} with {apps_csv or 'frappe'}")
+		use_golden, refusal = _golden_matches_server(lab.image_tag, db_server)
+		if refusal:
+			pipeline.log(refusal)
 		exit_code, output = create_site_in_container(
-			container_id, db_server, site_name, admin_password, apps_csv
+			container_id, db_server, site_name, admin_password, apps_csv, use_golden=use_golden
 		)
 		if exit_code != 0:
 			raise Exception(f"Site setup failed (exit {exit_code}): {output}")
-		pipeline.log("Existing site adopted" if ADOPTED_MARKER in output else "Site created successfully")
+		pipeline.log(_site_outcome(output, site_name))
 		_record_primary_site(bench, lab, admin_password)
 
 		pipeline.step("assets")
@@ -1011,10 +1083,17 @@ def _prepare_lab_image(lab, pipeline, user: str) -> None:
 	`Lab.reset_status_if_spec_changed`), throws right away instead of eating a 10-40 minute build
 	inside what the caller expects to be a fast operation.
 	"""
+	from benchpress.golden import image_has_golden
+
 	tag, hit = image_cache.resolve(lab)
 	if not hit or lab.status != "Ready" or lab.image_tag != tag:
 		frappe.throw(_("No built image for lab '{0}'. Build it first from the Lab record.").format(lab.title))
 	pipeline.log(f"Using built image {tag}")
+	if not image_has_golden(tag):
+		pipeline.log(
+			f"No golden dump in {tag} — this site is built from scratch. "
+			"Rebuild the lab, or run Build golden, to make its deploys ~5x faster."
+		)
 
 
 def _build_lab_with_logs(lab, log_fn) -> None:
@@ -1035,6 +1114,32 @@ def _build_lab_with_logs(lab, log_fn) -> None:
 	frappe.db.commit()
 	if log_fn:
 		log_fn(f"Lab image ready: {image_tag}")
+
+	# After the lab is Ready with its tag saved: the golden step appends a layer to that tag,
+	# and needs the row that names it.
+	_add_golden(lab, log_fn)
+
+
+def _add_golden(lab, log_fn) -> None:
+	"""Bake the golden into the image this build just produced, and record what was baked.
+
+	Never raises, and the `except` is not belt and braces: everything above it has already been
+	committed, so letting the row write escape would make `_run_build` mark a finished image as a
+	failed build and put the lab's status back.
+	"""
+	from benchpress import golden
+
+	try:
+		manifest = golden.add_golden(lab, log_fn)
+		lab.reload()
+		# Written either way: this build replaced the image under the same tag, so a manifest left
+		# over from the last one would claim a golden that is no longer in there.
+		lab.golden_manifest = json.dumps(manifest, indent=2) if manifest else None
+		lab.save(ignore_permissions=True)
+		frappe.db.commit()
+	except Exception:
+		frappe.db.rollback()
+		frappe.log_error(title=f"Golden manifest not recorded: {lab.name}", message=frappe.get_traceback())
 
 
 def _open_build_log(lab, user: str) -> tuple[DeployLogWriter, str]:

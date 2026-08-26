@@ -1,7 +1,7 @@
 # Copyright (c) 2026, Venkatesh and Contributors
 # See license.txt
 
-"""run_diagnostics contract: nine rows, fixed order, never raises, never mutates."""
+"""run_diagnostics contract: ten rows, fixed order, never raises, never mutates."""
 
 import inspect
 import unittest
@@ -11,7 +11,8 @@ from unittest.mock import MagicMock, patch
 import docker
 import frappe
 
-from benchpress.diagnostics import run_diagnostics
+from benchpress.diagnostics import check_row, display_row, run_diagnostics
+from benchpress.image_cache import clear_cached_tags
 
 CHECK_ORDER = [
 	"docker_socket",
@@ -22,6 +23,7 @@ CHECK_ORDER = [
 	"clock_skew",
 	"redis",
 	"container_runtimes",
+	"golden_images",
 	"vpn_server",
 ]
 COUNT_WORDS = {6: "six", 7: "seven", 8: "eight", 9: "nine", 10: "ten"}
@@ -43,9 +45,14 @@ DB_CLOCK = datetime(2026, 8, 24, 23, 11, 53)
 IST_OFFSET = timedelta(hours=5, minutes=30)
 
 
+def _lab_image(tag, golden=True):
+	return MagicMock(tags=[tag], labels={"benchpress.golden": "1"} if golden else {})
+
+
 def _healthy_client(bridge_endpoints=4):
 	client = MagicMock()
 	client.containers.get.return_value = MagicMock(status="running")
+	client.images.list.return_value = [_lab_image("benchpress/crm:lab")]
 	network = MagicMock()
 	network.attrs = {"Containers": {f"c{i}": {"Name": f"c{i}"} for i in range(bridge_endpoints)}}
 	client.networks.get.return_value = network
@@ -103,6 +110,8 @@ class TestDiagnostics(unittest.TestCase):
 			frappe_mock.utils.now_datetime.return_value = app_clock or DB_CLOCK
 			frappe_mock.qb.select.side_effect = db_clock_error
 			frappe_mock.qb.select.return_value.run.return_value = ((db_clock or DB_CLOCK,),)
+			# The golden row reads the memoised image list, which outlives one `_run`.
+			clear_cached_tags()
 			rows = run_diagnostics()
 		return {row["check"]: row for row in rows}, rows
 
@@ -111,7 +120,7 @@ class TestDiagnostics(unittest.TestCase):
 		self.assertEqual([row["check"] for row in rows], CHECK_ORDER)
 		for row in rows:
 			self.assertEqual(row["status"], "pass")
-			self.assertEqual(set(row), {"check", "status", "hint"})
+			self.assertEqual(set(row), {"check", "status", "hint", "severity"})
 
 	def test_docker_down_marks_docker_checks_failed_without_raising(self):
 		# completing without an exception IS the core assertion
@@ -163,6 +172,7 @@ class TestDiagnostics(unittest.TestCase):
 		client.ping.side_effect = Exception("down")
 		client.networks.get.side_effect = docker.errors.NotFound("no network")
 		client.containers.get.side_effect = docker.errors.NotFound("gone")
+		client.images.list.side_effect = Exception("down")
 		_by_check, rows = self._run(
 			client=client,
 			runtimes={"names": set(), "default": "runc"},
@@ -233,6 +243,31 @@ class TestDiagnostics(unittest.TestCase):
 		by_check, _rows = self._run(ceilings={})
 		self.assertEqual(by_check["kernel_ceilings"]["status"], "fail")
 		self.assertIn("unreadable", by_check["kernel_ceilings"]["hint"])
+
+	def test_a_lab_with_no_golden_is_named_and_is_never_an_error(self):
+		client = _healthy_client()
+		client.images.list.return_value = [
+			_lab_image("benchpress/crm:lab"),
+			_lab_image("benchpress/erpnext:lab", golden=False),
+		]
+
+		by_check, _rows = self._run(client=client)
+
+		row = by_check["golden_images"]
+		self.assertEqual(row["status"], "fail")
+		self.assertEqual(row["severity"], "Warning")
+		self.assertIn("1 of 2 built labs carry a golden dump", row["hint"])
+		self.assertIn("benchpress/erpnext:lab", row["hint"])
+
+	def test_a_warning_row_reaches_the_screen_as_a_warning(self):
+		row = check_row("golden_images", False, "1 of 2", severity="Warning")
+
+		self.assertEqual(display_row(row, "Golden images")["status"], "Warning")
+
+	def test_a_failed_check_with_no_severity_still_reads_as_an_error(self):
+		self.assertEqual(
+			display_row({"check": "redis", "status": "fail", "hint": ""}, "Redis")["status"], "Error"
+		)
 
 	def test_the_diagnostics_row_count_moved_in_both_places(self):
 		"""One count, stated twice: the test_api fixture and the overview docstring."""
