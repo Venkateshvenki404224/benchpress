@@ -334,3 +334,11 @@ static markup of a session that is not running anywhere.
   it is a prerequisite to fix before [#129](https://github.com/Venkateshvenki404224/benchpress/issues/129)
   puts a public hostname in front of it.
 - **Container volumes**: `benchpress-{bench_name}-data` → `/home/frappe`
+- **No component may assume a port can be opened inward to a bench host.** Control flows
+  outward. Every bench-running process connects out to Redis and MariaDB, `lease.stop_queue_for`
+  ([lease.py:325](benchpress/credits/lease.py#L325)) addresses a node by queue name and never by
+  host, and `lease.assert_local` ([lease.py:336](benchpress/credits/lease.py#L336)) refuses a
+  command that reached the wrong daemon. `BenchPress Settings.docker_socket` holds a **local**
+  socket path (`unix:///var/run/docker.sock`), read at
+  [docker_manager.py:132](benchpress/docker_manager.py#L132). Pointing it at a `tcp://` address on
+  another host is the one edit that breaks the rule.
