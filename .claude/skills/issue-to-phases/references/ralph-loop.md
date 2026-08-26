@@ -12,6 +12,7 @@ block.
 - [Proving the UI](#proving-the-ui)
 - [Why a loop stalls](#why-a-loop-stalls)
 - [Preflight and rollback](#preflight-and-rollback)
+- [The two host gates](#the-two-host-gates)
 - [The phase prompt](#the-phase-prompt)
 - [Filling in the template](#filling-in-the-template)
 - [Before you hand it over](#before-you-hand-it-over)
@@ -191,6 +192,121 @@ composing it.
 State the order plainly: **restore first, diagnose after.** A rolled-back
 iteration that leaves the system working is a good iteration.
 
+## The two host gates
+
+A spec's `## Host steps` section names three lists — Precondition, Leftover,
+Never. See
+[references/spec-templates.md](spec-templates.md#the--host-steps-section) for how
+to write them. The loop turns two of those lists into gates. Prose alone was the
+old convention, and prose does not stop a loop.
+
+### Gate 1 — the precondition gate
+
+In `preflight`, before anything changes. The command is read-only, needs no root,
+and is **scoped to this spec**, never to the whole host.
+
+```bash
+# Exits non-zero when this spec's host precondition is unmet. Read-only, no root.
+PRECONDITION_CMD='...'
+PRECONDITION_FIX='sudo benchpress_devops/scripts/<script>.sh'
+
+preflight() {
+  if ! eval "$PRECONDITION_CMD"; then
+    echo "[ralph] host precondition unmet. Run this, then re-run me:"
+    echo "[ralph]   $PRECONDITION_FIX"
+    exit 1
+  fi
+  ...
+}
+```
+
+The scoping rule has teeth. `entry.py --check-host` exits 1 on this host right
+now: six of twelve knobs are low and `/etc/sysctl.d` holds no
+`99-benchpress-density.conf`, because item 5's leftover has never been run. A
+whole-host gate would refuse to start every later loop until unrelated debt was
+paid.
+
+A spec with no precondition leaves `PRECONDITION_CMD` empty and deletes the
+refusal.
+
+### Gate 2 — the host-diff gate
+
+In `smoke_check`, at every phase, and **fatal**. It snapshots exactly the surfaces
+the Never list names, and nothing else.
+
+```bash
+# Exactly the surfaces the Never list names, and nothing else.
+host_snapshot() {
+  cat /etc/docker/daemon.json 2>/dev/null || true
+  ls /etc/sysctl.d 2>/dev/null || true
+  systemctl show docker --property=ActiveEnterTimestamp 2>/dev/null || true
+  return 0
+}
+
+# inside smoke_check, before every other gate:
+host_snapshot > "$SNAP_DIR/host.now"
+if ! diff -q "$SNAP_DIR/host.before" "$SNAP_DIR/host.now" >/dev/null; then
+  echo "[ralph] the host changed under the loop — STOPPING:"
+  diff "$SNAP_DIR/host.before" "$SNAP_DIR/host.now" || true
+  echo "[ralph] review the diff, undo it by hand, then re-run."
+  exit 2
+fi
+```
+
+**Fatal, not retract-and-retry.** Every other gate deletes the done marker and
+lets the next iteration try again. This one exits 2, the blocked-marker path. A
+host change is not something the next iteration can undo, so retracting would burn
+every remaining iteration against an unfixable condition — and would keep an
+unattended agent working on a host it has already changed.
+
+`preflight` writes the `host.before` baseline. A human's legitimate run of a
+precondition script **before** the loop starts is therefore inside the baseline,
+so it never fires falsely.
+
+### Why the named-artifact gate rots
+
+The obvious gate is to check for the artifact the host step produces. It is wrong,
+and the density loop is the worked example:
+
+```bash
+host_sysctl_applied() { [ -f /etc/sysctl.d/99-benchpress-density.conf ]; }
+```
+
+That fails when the file **exists**, which conflates "the loop did this" with
+"this is done". The same spec tells a human to run `sudo tune-host.sh`, and that
+script creates the file. From the moment the human obeys the spec, the loop fails
+its smoke check at every phase on a correctly tuned host. The gate also catches
+only the one step its author thought of.
+
+A snapshot diff has neither fault. It has no opinion about who made a change or
+which change it was, and an unforeseen host change is caught along with the
+foreseen one.
+
+The snapshots are close to free. The density loop's `preflight` already writes
+eight `.before` files — `networks`, `legacy-members`, `containers`, `links`,
+`sysctl`, `sysctl.d`, `daemon.json` and `head` — and no `.before` file is read
+anywhere in that script. They are a human's rollback aid. This gate turns them
+into a gate.
+
+### Gate 3 is prose, and it is still needed
+
+`prompt.md` restates the Never list in its Safety section, each entry with its
+reason, because that is the text the agent actually reads. A rule without a reason
+invites a clever exception.
+
+### A leftover's durable home is tracked code, never a spec folder
+
+`specs/` is gitignored in full and a completed spec is deleted, so a spec is
+disposable scaffolding. A leftover is per-host state that outlives it: a second
+host owes every leftover, not the ones this host happened to skip.
+
+So the phase that creates the debt also ships a **read-only, non-root checker in
+tracked code** and a line in the **operations runbook**. Item 5 shipped both —
+`entry.py --check-host` and `benchpress_devops/PRODUCTION.md` §5.18. A spec whose
+leftover no tracked command can detect is not finished, and no `promote_spec.py`
+change is involved: `specs/STATUS.md`'s `⚠ by hand:` prefix is a working-tree
+convenience, not the record.
+
 ## The phase prompt
 
 **The prompt is not in ralph.sh.** It lives in `prompt.md` beside it, copied from
@@ -226,6 +342,9 @@ contract, escape hatch. What you write per spec:
   reasons. "Never X" alone invites a clever exception; "Never X, because Y" does
   not. Cover: what must never be deleted, what must never be restarted, which
   commands are out of bounds and why, and anything with a rate limit or a cost.
+- **`{{HOST_NEVER_RULES}}`** — the README's Never list, verbatim, each with its
+  reason. This is the prose half of the host-diff gate. The two must name the same
+  surfaces, or the loop stops on something the prompt never warned about.
 - **`{{EXTRA_RULES}}`** — repo-specific traps. Which lint command is wrong to run.
   Which services hold a stale module until restarted. Anything that has bitten
   someone.
@@ -259,6 +378,8 @@ In **`ralph.sh`** — the wiring:
 | `{{APP_URL}}` | the running UI, for the browser checks — empty on a spec with no UI |
 | `{{SRC_GLOB}}` / `{{BUILT_MARKER}}` | frontend source tree and one built asset, for `assets_stale` |
 | `{{RISK_LINE}}` | one line telling the user what this loop will change |
+| `PRECONDITION_CMD` / `PRECONDITION_FIX` | the spec's host precondition and the command that fixes it — empty on a spec with none |
+| `host_snapshot` | the surfaces the Never list names, and nothing else |
 | `{{HELPERS}}`, `{{PREFLIGHT}}`, `{{SMOKE_CHECKS}}` | bash, per above |
 
 In **`prompt.md`** — the words:
@@ -270,6 +391,7 @@ In **`prompt.md`** — the words:
 | `{{TEST_CMD}}` / `{{LINT_CMD}}` | the repo's real commands |
 | `{{EXTRA_RULES}}` | repo-specific traps |
 | `{{SAFETY_RULES}}` | the irreversible things, each with its reason |
+| `{{HOST_NEVER_RULES}}` | the README's Never list, each with its reason |
 | `{{ROLLBACK}}` | the exact restore command, with paths |
 | `<!-- PHASE n -->` blocks | per-phase warnings |
 
@@ -286,7 +408,7 @@ the first one's notes.
 
 ## Before you hand it over
 
-Five checks, all cheap, and each has caught a real bug:
+Six checks, all cheap, and each has caught a real bug:
 
 ```bash
 bash -n ralph.sh                      # 1. syntax
@@ -316,7 +438,11 @@ bash /tmp/harness.sh
    tree, naming the specific things the phase will fix. That pair is the
    calibration. Paste the output when you hand the loop over.
 
-4. **`chmod +x ralph.sh`.**
+4. **Run `host_snapshot` by hand** and confirm every source reads without root.
+   A source that needs root turns the gate into a permission error at every phase.
+   Run `PRECONDITION_CMD` too, and confirm its exit code matches reality.
+
+5. **`chmod +x ralph.sh`.**
 
 Then tell the user how to watch it and how to stop it, and say plainly what it
 will change.

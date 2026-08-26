@@ -46,6 +46,13 @@ CI_WAIT_SECONDS=1800
 # The running UI, for the browser checks. Leave empty on a spec with no UI surface.
 APP_URL="{{APP_URL}}"
 
+# This spec's host precondition, from the README's `## Host steps` section.
+# Read-only, no root, and SCOPED TO THIS SPEC — a whole-host readiness check
+# refuses to start every later loop until unrelated debt is paid.
+# Leave both empty on a spec with no precondition.
+PRECONDITION_CMD='{{PRECONDITION_CMD}}'
+PRECONDITION_FIX='{{PRECONDITION_FIX}}'
+
 PROMOTE="$APP_DIR/.claude/skills/issue-to-phases/scripts/promote_spec.py"
 
 PHASE_FILES=(
@@ -95,6 +102,18 @@ assets_stale() {
 browser_ready() {
   [ -n "$APP_URL" ] || return 0          # no UI surface on this spec
   command -v agent-browser >/dev/null 2>&1
+}
+
+# ADAPT: exactly the surfaces the README's Never list names, and nothing else.
+# Every source must read without root, or the gate becomes a permission error at
+# every phase. Deliberately not a check for the artifact a host step produces:
+# that conflates "the loop did this" with "this is done", and fails forever once
+# a human legitimately runs the step.
+host_snapshot() {
+  cat /etc/docker/daemon.json 2>/dev/null || true
+  ls /etc/sysctl.d 2>/dev/null || true
+  systemctl show docker --property=ActiveEnterTimestamp 2>/dev/null || true
+  return 0
 }
 
 # The PR's checks as one word: green | red | pending | none.
@@ -147,6 +166,13 @@ ci_green() {
 preflight() {
   [ -f "$SNAP_DIR/.taken" ] && return 0
   echo "[ralph] preflight: snapshotting state before anything changes"
+  # A human's legitimate run of the fix belongs before this point, so it lands
+  # inside the host baseline below and never trips the host-diff gate.
+  if [ -n "$PRECONDITION_CMD" ] && ! eval "$PRECONDITION_CMD"; then
+    echo "[ralph] ERROR: host precondition unmet. Run this, then re-run me:"
+    echo "[ralph]   $PRECONDITION_FIX"
+    exit 1
+  fi
   if ! browser_ready; then
     echo "[ralph] ERROR: APP_URL is set but agent-browser is not installed."
     echo "[ralph] Install it before starting: npm i -g agent-browser && agent-browser install"
@@ -157,6 +183,7 @@ preflight() {
   # against. Rollback should be a file copy, not an act of memory.
 {{PREFLIGHT}}
   ( cd "$APP_DIR" && git rev-parse HEAD ) > "$SNAP_DIR/head.before" 2>/dev/null || true
+  host_snapshot > "$SNAP_DIR/host.before"
   touch "$SNAP_DIR/.taken"
 }
 
@@ -167,6 +194,20 @@ preflight() {
 # feature exists — a gate that passes on an unmodified tree is testing nothing.
 smoke_check() {
   local phase="$1" failed=0
+
+  # The host gate, before every other gate, and FATAL rather than
+  # retract-and-retry. A host change is not something the next iteration can
+  # undo, so retracting would burn every remaining iteration against an
+  # unfixable condition and keep an unattended agent working on a host it has
+  # already changed. Exit 2 is the blocked-marker path.
+  host_snapshot > "$SNAP_DIR/host.now"
+  if ! diff -q "$SNAP_DIR/host.before" "$SNAP_DIR/host.now" >/dev/null 2>&1; then
+    echo "[ralph] the host changed under the loop — STOPPING:"
+    diff "$SNAP_DIR/host.before" "$SNAP_DIR/host.now" | sed 's/^/[ralph]        /' || true
+    echo "[ralph] review the diff, undo it by hand, then re-run."
+    exit 2
+  fi
+  echo "[ralph]   ok   the host is unchanged since preflight"
 
   # ADAPT: the feature's own correctness gates.
 {{SMOKE_CHECKS}}
