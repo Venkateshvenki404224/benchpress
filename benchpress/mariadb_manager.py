@@ -9,7 +9,6 @@ import secrets
 import subprocess
 import tarfile
 import time
-import uuid
 from pathlib import Path
 
 import frappe
@@ -54,26 +53,27 @@ def _random_string(length: int = 16) -> str:
 
 
 def execute_sql(db_server_name: str, sql: str) -> tuple[int, str]:
-	"""Execute SQL on MariaDB container via temp file (injection-safe).
+	"""Execute SQL on the MariaDB container, piped in base64 so nothing is shell-interpolated.
 
-	Uses base64 encoding to avoid shell interpolation of SQL content.
+	One `docker exec`, not three: a round trip costs over a hundred milliseconds, and site
+	creation makes several of these calls inside a step this app measures in seconds. Piping
+	also leaves no temp file to clean up on the failure path.
 	"""
 	db_server = frappe.get_doc("Database Server", db_server_name)
 	client = get_client()
 	container = client.containers.get(db_server.container_id)
-	root_pw = db_server.get_root_password()
 
-	tmp = f"/tmp/_bp_query_{uuid.uuid4().hex}.sql"
 	encoded = base64.b64encode(sql.encode()).decode()
-	try:
-		container.exec_run(cmd=["bash", "-c", f"echo '{encoded}' | base64 -d > {tmp}"])
-		exit_code, output = container.exec_run(
-			cmd=["bash", "-c", f"mariadb -u root < {tmp}"],
-			environment={"MYSQL_PWD": root_pw},
-		)
-	finally:
-		container.exec_run(cmd=["rm", "-f", tmp])
+	exit_code, output = container.exec_run(
+		cmd=["bash", "-c", f"echo '{encoded}' | base64 -d | mariadb -u root"],
+		environment={"MYSQL_PWD": db_server.get_root_password()},
+	)
 	return exit_code, output.decode("utf-8", errors="replace")
+
+
+def _script(*statements: str) -> str:
+	"""Several statements as one `execute_sql`, so a sequence costs one round trip and not one each."""
+	return ";\n".join(statements) + ";\n"
 
 
 def _write_env_file(root_password: str, version: str = "10.6", mem_limit: str = "1g") -> None:
@@ -220,18 +220,19 @@ def create_mariadb_user(
 	database = database or get_database_name(site_name)
 	user = f"{database}_limited"
 	password = _random_string(16)
-	queries = [
-		f"CREATE OR REPLACE USER '{user}'@'%' IDENTIFIED BY '{password}'",
-		f"CREATE OR REPLACE DATABASE `{user}`",
-		f"GRANT ALL ON `{user}`.* TO '{user}'@'%'",
-		f"GRANT RELOAD, CREATE USER ON *.* TO '{user}'@'%'",
-		f"GRANT ALL ON `{database}`.* TO '{user}'@'%' WITH GRANT OPTION",
-		"FLUSH PRIVILEGES",
-	]
-	for query in queries:
-		exit_code, output = execute_sql(db_server_name, query)
-		if exit_code != 0:
-			frappe.throw(_("Failed to create temp user: {0}").format(output))
+	exit_code, output = execute_sql(
+		db_server_name,
+		_script(
+			f"CREATE OR REPLACE USER '{user}'@'%' IDENTIFIED BY '{password}'",
+			f"CREATE OR REPLACE DATABASE `{user}`",
+			f"GRANT ALL ON `{user}`.* TO '{user}'@'%'",
+			f"GRANT RELOAD, CREATE USER ON *.* TO '{user}'@'%'",
+			f"GRANT ALL ON `{database}`.* TO '{user}'@'%' WITH GRANT OPTION",
+			"FLUSH PRIVILEGES",
+		),
+	)
+	if exit_code != 0:
+		frappe.throw(_("Failed to create temp user: {0}").format(output))
 	return database, user, password
 
 
@@ -241,25 +242,30 @@ def drop_mariadb_user(db_server_name: str, site_name: str, database: str | None 
 	"""
 	database = database or get_database_name(site_name)
 	user = f"{database}_limited"
-	queries = [
-		f"DROP DATABASE IF EXISTS `{user}`",
-		f"DROP USER IF EXISTS '{user}'@'%'",
-		"FLUSH PRIVILEGES",
-	]
-	for query in queries:
-		execute_sql(db_server_name, query)
+	execute_sql(
+		db_server_name,
+		_script(
+			f"DROP DATABASE IF EXISTS `{user}`",
+			f"DROP USER IF EXISTS '{user}'@'%'",
+			"FLUSH PRIVILEGES",
+		),
+	)
 
 
-def drop_site_database(db_server_name: str, site_name: str) -> None:
-	"""Drop site database and user when a bench/site is deleted."""
-	db_name = get_database_name(site_name)
-	queries = [
-		f"DROP DATABASE IF EXISTS `{db_name}`",
-		f"DROP USER IF EXISTS '{db_name}'@'%'",
-		"FLUSH PRIVILEGES",
-	]
-	for query in queries:
-		execute_sql(db_server_name, query)
+def drop_site_database(db_server_name: str, site_name: str, database: str | None = None) -> None:
+	"""Drop site database and user when a bench/site is deleted.
+
+	`database` overrides the name derived from the site, for a caller that chose its own.
+	"""
+	db_name = database or get_database_name(site_name)
+	execute_sql(
+		db_server_name,
+		_script(
+			f"DROP DATABASE IF EXISTS `{db_name}`",
+			f"DROP USER IF EXISTS '{db_name}'@'%'",
+			"FLUSH PRIVILEGES",
+		),
+	)
 
 
 def check_mariadb_health(db_server_name: str) -> bool:

@@ -83,6 +83,7 @@ NOTHING_TO_ROLL_BACK = "Cleanup: nothing to roll back — no container was creat
 SITE_HTTP_PORT = 8000
 
 ADOPTED_MARKER = "already exists — adopting it"
+GOLDEN_MARKER = "Restored from golden dump"
 
 # Module constant, not inlined, so tests can monkeypatch it to a tmp path.
 # Flat, not a subdirectory: Traefik's file provider does not recurse, so this must be the
@@ -533,11 +534,22 @@ _notify_owner = notify_owner
 
 
 def create_site_in_container(
-	container_id: str, db_server, site_name: str, admin_password: str, apps_csv: str
+	container_id: str,
+	db_server,
+	site_name: str,
+	admin_password: str,
+	apps_csv: str,
+	database: str | None = None,
+	use_golden: bool = True,
 ) -> tuple[int, str]:
-	"""Run setup-site.sh inside a bench container using a temporary MariaDB user."""
+	"""Run setup-site.sh inside a bench container using a temporary MariaDB user.
+
+	`database` overrides the name derived from the site, which the golden build needs so its
+	scratch database is one this app is allowed to drop. `use_golden=False` makes the script
+	create the site even in an image that carries a golden dump.
+	"""
 	bench_dir = "/home/frappe/frappe-bench"
-	db_name, temp_user, temp_password = create_mariadb_user(db_server.name, site_name)
+	db_name, temp_user, temp_password = create_mariadb_user(db_server.name, site_name, database)
 	try:
 		return exec_in_container(
 			container_id,
@@ -552,10 +564,20 @@ def create_site_in_container(
 				"DB_NAME": db_name,
 				"MARIADB_ROOT_USERNAME": temp_user,
 				"MARIADB_ROOT_PASSWORD": temp_password,
+				"USE_GOLDEN": "1" if use_golden else "0",
 			},
 		)
 	finally:
 		drop_mariadb_user(db_server.name, site_name, db_name)
+
+
+def _site_outcome(output: str, site_name: str) -> str:
+	"""Which of setup-site.sh's three branches ran. The Deploy Log is where that answer survives."""
+	if GOLDEN_MARKER in output:
+		return f"Site {site_name} restored from the image's golden dump"
+	if ADOPTED_MARKER in output:
+		return "Existing site adopted"
+	return "Site created successfully"
 
 
 def _log_deploy_skipped(bench_name: str) -> None:
@@ -648,7 +670,11 @@ def _deploy_bench(bench_name: str) -> None:
 		pipeline.step("image")
 		_prepare_lab_image(lab, pipeline, bench.owner)
 
+		# Both halves of the previous deploy go together, and before the new container
+		# exists: the site database is the other thing a redeploy replaces, and dropping a
+		# few hundred tables is teardown, not part of creating the site that follows.
 		_remove_stale_container(bench)
+		_drop_site_database(bench)
 		pipeline.step("container")
 		container_id = create_bench_container(bench, lab)
 		created_container_id = container_id
@@ -689,6 +715,7 @@ def _deploy_bench(bench_name: str) -> None:
 			"socketio_port": 9000,
 			"webserver_port": SITE_HTTP_PORT,
 			"default_site": site_name,
+			"developer_mode": 1,
 		}
 		pipeline.step("site_config")
 		write_file_to_container(
@@ -697,8 +724,6 @@ def _deploy_bench(bench_name: str) -> None:
 		pipeline.log(f"{bench_dir}/sites/common_site_config.json written")
 
 		pipeline.step("site")
-		# Drop the leftover of an interrupted run; `bench new-site` refuses to overwrite it.
-		_drop_site_database(bench)
 		apps_csv = ",".join(a.app_name for a in lab.apps if a.app_name.lower() != "frappe")
 		pipeline.log(f"Site {site_name} with {apps_csv or 'frappe'}")
 		exit_code, output = create_site_in_container(
@@ -706,7 +731,7 @@ def _deploy_bench(bench_name: str) -> None:
 		)
 		if exit_code != 0:
 			raise Exception(f"Site setup failed (exit {exit_code}): {output}")
-		pipeline.log("Existing site adopted" if ADOPTED_MARKER in output else "Site created successfully")
+		pipeline.log(_site_outcome(output, site_name))
 		_record_primary_site(bench, lab, admin_password)
 
 		pipeline.step("assets")
