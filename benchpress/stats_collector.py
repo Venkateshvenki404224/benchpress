@@ -8,6 +8,18 @@ from frappe.utils import now_datetime
 from benchpress.docker_manager import container_is_gone, get_container_health, get_container_stats
 
 
+def enqueue_stats_sweep() -> None:
+	"""Sampling cron: hand the Docker polling to `queue-long`."""
+	# The enqueuer, never `collect_bench_stats` itself — see the rule above `scheduler_events`
+	# in `hooks.py`. Deduplicated: a sweep still running when the next tick fires keeps the slot.
+	frappe.enqueue(
+		"benchpress.stats_collector.collect_bench_stats",
+		queue="long",
+		job_id="bench_stats_sweep",
+		deduplicate=True,
+	)
+
+
 def collect_bench_stats() -> None:
 	"""Poll Docker for every Running bench: resource usage, health, and reconciliation.
 

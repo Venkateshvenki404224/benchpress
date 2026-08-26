@@ -16,6 +16,8 @@ from frappe import _
 
 from benchpress.docker_manager import ensure_network, get_client
 
+BACKUP_TIMEOUT = 3600
+
 DEFAULT_MARIADB_CONFIG = """[mysqld]
 character-set-server=utf8mb4
 collation-server=utf8mb4_unicode_ci
@@ -353,6 +355,18 @@ def get_container_logs(db_server_name: str, tail: int = 100) -> str:
 	return container.logs(tail=tail).decode("utf-8", errors="replace")
 
 
+def enqueue_health_check() -> None:
+	"""Convergence cron: hand the health check to `queue-long`."""
+	# The enqueuer, never `scheduled_health_check` itself — see the rule above `scheduler_events`
+	# in `hooks.py`.
+	frappe.enqueue(
+		"benchpress.mariadb_manager.scheduled_health_check",
+		queue="long",
+		job_id="mariadb_health_check",
+		deduplicate=True,
+	)
+
+
 def scheduled_health_check():
 	"""Cron job — check all active DB servers, attempt restart if down."""
 	servers = frappe.get_all(
@@ -475,6 +489,20 @@ def restore_database_server(db_server_name: str, backup_file: str) -> None:
 		container.exec_run(cmd=["rm", "-f", f"/tmp/{dump_name}"])
 	if exit_code != 0:
 		frappe.throw(_("Restore failed: {0}").format(output.decode()))
+
+
+def enqueue_backup() -> None:
+	"""Nightly cron: hand the dump to `queue-long`."""
+	# The enqueuer, never `scheduled_backup` itself — see the rule above `scheduler_events` in
+	# `hooks.py`. The dump is buffered in worker memory, so it gets its own timeout rather than
+	# the queue default: this is every tenant's site database in one file.
+	frappe.enqueue(
+		"benchpress.mariadb_manager.scheduled_backup",
+		queue="long",
+		timeout=BACKUP_TIMEOUT,
+		job_id="mariadb_backup",
+		deduplicate=True,
+	)
 
 
 def scheduled_backup():

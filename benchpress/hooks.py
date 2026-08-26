@@ -200,6 +200,20 @@ website_route_rules = [
 # Scheduled Tasks
 # ---------------
 
+# A scheduled entry that touches Docker must name an enqueuer, never the work itself.
+#
+# `ScheduledJobType.get_queue_name()` returns `long` only for a frequency string containing `Long`
+# or `Maintenance`, so every entry below lands on `default` — which `queue-long` (Docker socket
+# mounted) and `queue-short` (no socket, no `group_add`) both consume. The two workers race the
+# same pop and the idle one usually wins, so the busier the platform, the more reliably the job
+# lands on the worker that cannot do it. It fails as a socket `FileNotFoundError`, which names
+# neither the queue nor the scheduler.
+#
+# The socket-mounted services are `queue-long` and `queue-stops`. So the entry is a small function
+# that calls `frappe.enqueue(..., queue="long")`, and the Docker call lives on the other side of
+# it. `enqueue_stats_sweep`, `enqueue_route_reconcile`, `enqueue_health_check`, `enqueue_backup`
+# and the two in `image_cache` are all that shape.
+
 scheduler_events = {
 	# "all": [
 	# 	"benchpress.tasks.all"
@@ -210,8 +224,6 @@ scheduler_events = {
 	# "hourly": [
 	# 	"benchpress.tasks.hourly"
 	# ],
-	# Both hand the real work to `queue-long`: the scheduler's own worker is
-	# `queue-short`, which has no Docker socket mounted.
 	"weekly": [
 		"benchpress.image_cache.enqueue_prewarm_catalog",
 		"benchpress.image_cache.enqueue_sweep",
@@ -220,18 +232,19 @@ scheduler_events = {
 	# 	"benchpress.tasks.monthly"
 	# ],
 	"cron": {
+		# `DEFAULT_SCHEDULER_TICK` is four minutes here, so this fires every four, not every one.
+		# The format stays `*/1` so shortening the tick needs no edit.
 		"*/1 * * * *": [
-			"benchpress.stats_collector.collect_bench_stats",
+			"benchpress.stats_collector.enqueue_stats_sweep",
 		],
 		"*/5 * * * *": [
-			"benchpress.mariadb_manager.scheduled_health_check",
+			"benchpress.mariadb_manager.enqueue_health_check",
 			# Never on the `*/1` stats cron: that job spends ~2s per container on the Docker
 			# socket, and a decision queued behind Docker I/O arrives late. The clock is not
 			# this job's business — `drain` owns expiry; this one checks balances.
 			"benchpress.credits.sweep.enforce_limits",
-			# The enqueuer, never `reconcile_instance_routes` itself: scheduled jobs land on
-			# `default`, which `queue-short` also consumes, and that container has no route
-			# mount. Lifecycle triggers already converge in seconds — this is the net under them.
+			# `queue-short` has no route mount either. Lifecycle triggers already converge in
+			# seconds — this is the net under them.
 			"benchpress.deploy_manager.enqueue_route_reconcile",
 			# The net under the lease warden, not the primary path: `DEFAULT_SCHEDULER_TICK` is
 			# four minutes here, so no cron entry can promise better than that. The warden claims
@@ -244,7 +257,7 @@ scheduler_events = {
 			"benchpress.credits.admission_repair.reconcile_admissions",
 		],
 		"0 2 * * *": [
-			"benchpress.mariadb_manager.scheduled_backup",
+			"benchpress.mariadb_manager.enqueue_backup",
 		],
 	},
 }
