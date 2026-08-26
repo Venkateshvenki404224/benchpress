@@ -97,6 +97,9 @@ def build_golden_job(lab_name: str, user: str | None = None) -> None:
 	append_log(json.dumps(manifest))
 	append_log(f"=== Build complete: golden in {lab.image_tag} ===", "success")
 	frappe.db.set_value("Build Log", build_log_name, "log_type", "success")
+	# The row is only ever a record, so it is written the same way whether the golden came from
+	# a build or from this action — otherwise the admin screen reads empty for a lab that has one.
+	frappe.db.set_value("Lab", lab_name, "golden_manifest", json.dumps(manifest, indent=2))
 	frappe.db.commit()  # nosemgrep -- the log records a finished run
 
 
@@ -129,10 +132,14 @@ def golden_images_enabled() -> bool:
 
 
 def image_has_golden(tag: str) -> bool:
-	"""Whether this image carries a golden dump, asked of the image and not of the `Lab` row."""
+	"""Whether this image carries a golden dump, asked of the image and not of the `Lab` row.
+
+	False on any Docker error, a missing image included. Every caller's safe direction is the
+	cold path, and no deploy may fail because an optimisation could not be checked for.
+	"""
 	try:
 		return docker_manager.get_client().images.get(tag).labels.get(GOLDEN_LABEL) == "1"
-	except docker.errors.ImageNotFound:
+	except Exception:
 		return False
 
 

@@ -162,6 +162,13 @@ class TestGoldenLabels(unittest.TestCase):
 		with patch.object(golden.docker_manager, "get_client", return_value=client):
 			self.assertFalse(golden.image_has_golden("benchpress/ghost:lab"))
 
+	def test_a_docker_that_cannot_answer_sends_the_deploy_down_the_cold_path(self):
+		"""The alternative is a deploy that fails because an optimisation could not be checked."""
+		client = MagicMock()
+		client.images.get.side_effect = docker.errors.APIError("daemon busy")
+		with patch.object(golden.docker_manager, "get_client", return_value=client):
+			self.assertFalse(golden.image_has_golden("benchpress/crm:lab"))
+
 	def test_coverage_counts_the_labelled_tags_only(self):
 		client = MagicMock()
 		client.images.list.return_value = [
