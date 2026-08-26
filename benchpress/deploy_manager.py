@@ -3,6 +3,7 @@
 
 import json
 import os
+import re
 import secrets
 import shlex
 import socket
@@ -36,6 +37,7 @@ from benchpress.mariadb_manager import (
 	create_mariadb_user,
 	drop_mariadb_user,
 	ensure_infrastructure,
+	server_version,
 	wait_for_mariadb,
 )
 from benchpress.notifications import notify_owner
@@ -84,6 +86,8 @@ SITE_HTTP_PORT = 8000
 
 ADOPTED_MARKER = "already exists — adopting it"
 GOLDEN_MARKER = "Restored from golden dump"
+# What the Deploy Log says when the golden branch ran. `golden_drill` reads runs back by it.
+GOLDEN_RESTORED = "restored from the image's golden dump"
 
 # Module constant, not inlined, so tests can monkeypatch it to a tmp path.
 # Flat, not a subdirectory: Traefik's file provider does not recurse, so this must be the
@@ -571,10 +575,50 @@ def create_site_in_container(
 		drop_mariadb_user(db_server.name, site_name, db_name)
 
 
+def _golden_matches_server(tag: str, db_server) -> tuple[bool, str]:
+	"""Whether this image's dump may be restored into this server, and why not.
+
+	The dump is the one artefact in the image whose validity depends on something outside it,
+	so this is where a golden is refused. Every refusal is a slow deploy, never a failed one.
+	"""
+	from benchpress import golden
+
+	if not golden.restore_enabled():
+		return (
+			False,
+			"Restoring from a golden dump is turned off in BenchPress Settings — creating the site instead",
+		)
+	dump = golden.golden_mariadb_version(tag)
+	if not dump:
+		return False, ""  # the image step already named the missing golden and its remedy
+	server = server_version(db_server.name)
+	if not _major_version(dump) or not _major_version(server):
+		return False, (
+			f"Could not compare the golden dump's MariaDB ({dump or 'unknown'}) with this "
+			f"server's ({server or 'unknown'}) — creating the site instead"
+		)
+	if _major_version(dump) != _major_version(server):
+		return False, (
+			f"Golden dump was taken from MariaDB {_major_version(dump)} and this server is "
+			f"{_major_version(server)} — creating the site instead"
+		)
+	return True, ""
+
+
+def _major_version(version: str) -> str:
+	"""`10.6` out of `10.6.28-MariaDB-ubu2204`, or empty when there is no version in there.
+
+	Major only: a patch bump is the same schema contract, and refusing on one would take every
+	golden on the host out of service the next time the server is updated.
+	"""
+	match = re.match(r"\d+\.\d+", version or "")
+	return match[0] if match else ""
+
+
 def _site_outcome(output: str, site_name: str) -> str:
 	"""Which of setup-site.sh's three branches ran. The Deploy Log is where that answer survives."""
 	if GOLDEN_MARKER in output:
-		return f"Site {site_name} restored from the image's golden dump"
+		return f"Site {site_name} {GOLDEN_RESTORED}"
 	if ADOPTED_MARKER in output:
 		return "Existing site adopted"
 	return "Site created successfully"
@@ -726,8 +770,11 @@ def _deploy_bench(bench_name: str) -> None:
 		pipeline.step("site")
 		apps_csv = ",".join(a.app_name for a in lab.apps if a.app_name.lower() != "frappe")
 		pipeline.log(f"Site {site_name} with {apps_csv or 'frappe'}")
+		use_golden, refusal = _golden_matches_server(lab.image_tag, db_server)
+		if refusal:
+			pipeline.log(refusal)
 		exit_code, output = create_site_in_container(
-			container_id, db_server, site_name, admin_password, apps_csv
+			container_id, db_server, site_name, admin_password, apps_csv, use_golden=use_golden
 		)
 		if exit_code != 0:
 			raise Exception(f"Site setup failed (exit {exit_code}): {output}")

@@ -16,6 +16,7 @@ import hashlib
 import io
 import json
 import tarfile
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -25,7 +26,13 @@ from frappe import _
 
 from benchpress import deploy_manager, docker_manager, image_cache, placement
 from benchpress.image_cache import clear_cached_tags
-from benchpress.mariadb_manager import drop_site_database, ensure_infrastructure
+from benchpress.mariadb_manager import (
+	create_mariadb_user,
+	drop_mariadb_user,
+	drop_site_database,
+	ensure_infrastructure,
+	execute_sql,
+)
 
 GOLDEN_DIR = "/opt/benchpress/golden"
 DUMP_PATH = f"{GOLDEN_DIR}/site.sql.gz"
@@ -41,13 +48,15 @@ GOLDEN_MARIADB_LABEL = "benchpress.golden.mariadb"
 GOLDEN_SITE_PREFIX = "bpgolden-"
 GOLDEN_CONTAINER_PREFIX = "bpgolden-"
 GOLDEN_DB_PREFIX = "_bpgolden"
+VERIFY_DB_PREFIX = "_bpgolden_verify_"
 
 BENCH_DIR = "/home/frappe/frappe-bench"
 SETUP_SITE_PATH = "/opt/benchpress/scripts/setup-site.sh"
 
-# The dump exec reports itself on one marked line, because a MariaDB client warning on stderr
-# lands in the same stream as the output.
+# The dump and the verification restore each report themselves on one marked line, because a
+# MariaDB client warning on stderr lands in the same stream as the output.
 META_MARKER = "GOLDEN_META"
+VERIFY_MARKER = "GOLDEN_VERIFY"
 
 # The restore is DDL-bound: a schema-only dump of the same site restores in the same time as
 # the full one, because the cost is 281 `CREATE TABLE`s. These three drop the statements that
@@ -68,6 +77,7 @@ def build_golden(lab_doc, log_fn=None) -> dict:
 	try:
 		_create_site(container.id, db_server, site, database, lab_doc, log_fn)
 		manifest = _dump_site(container.id, db_server, site, lab_doc, log_fn)
+		manifest.update(_verify_dump(container.id, db_server, lab_doc, log_fn))
 		_append_layer(container.id, lab_doc.image_tag, manifest, log_fn)
 		return manifest
 	finally:
@@ -131,16 +141,31 @@ def golden_images_enabled() -> bool:
 	return bool(frappe.get_cached_value("BenchPress Settings", "BenchPress Settings", "enable_golden_images"))
 
 
-def image_has_golden(tag: str) -> bool:
-	"""Whether this image carries a golden dump, asked of the image and not of the `Lab` row.
+def restore_enabled() -> bool:
+	"""Whether a deploy restores from a golden — `BenchPress Settings.restore_from_golden`."""
+	return bool(frappe.get_cached_value("BenchPress Settings", "BenchPress Settings", "restore_from_golden"))
 
-	False on any Docker error, a missing image included. Every caller's safe direction is the
-	cold path, and no deploy may fail because an optimisation could not be checked for.
+
+def image_has_golden(tag: str) -> bool:
+	"""Whether this image carries a golden dump, asked of the image and not of the `Lab` row."""
+	return _image_labels(tag).get(GOLDEN_LABEL) == "1"
+
+
+def golden_mariadb_version(tag: str) -> str:
+	"""The MariaDB server this image's dump was taken from; empty when it carries no golden."""
+	return _image_labels(tag).get(GOLDEN_MARIADB_LABEL, "")
+
+
+def _image_labels(tag: str) -> dict:
+	"""One image's labels, empty on any Docker error — a missing image included.
+
+	Every caller's safe direction is the cold path, and no deploy may fail because an
+	optimisation could not be checked for.
 	"""
 	try:
-		return docker_manager.get_client().images.get(tag).labels.get(GOLDEN_LABEL) == "1"
+		return docker_manager.get_client().images.get(tag).labels or {}
 	except Exception:
-		return False
+		return {}
 
 
 def golden_tags() -> set[str]:
@@ -233,6 +258,96 @@ def _dump_site(container_id: str, db_server, site: str, lab_doc, log_fn) -> dict
 	manifest = _manifest(lab_doc, _read_meta(output))
 	_log(log_fn, f"Dumped {manifest['dump_bytes']} bytes from MariaDB {manifest['mariadb_version']}")
 	return manifest
+
+
+def _verify_dump(container_id: str, db_server, lab_doc, log_fn) -> dict:
+	"""Restore the dump into a scratch database and report what came back.
+
+	Raises when the restore brings back no tables, or fewer apps than the lab installs. The
+	golden is then never appended and the image keeps the cold path, which works.
+	"""
+	site = f"{GOLDEN_SITE_PREFIX}verify-{lab_doc.lab_id}"
+	database = f"{VERIFY_DB_PREFIX}{lab_doc.lab_id}"
+	_database, user, password = create_mariadb_user(db_server.name, site, database)
+	try:
+		exit_code, output = execute_sql(db_server.name, f"CREATE OR REPLACE DATABASE `{database}`;\n")
+		if exit_code != 0:
+			raise Exception(f"Could not create {database} (exit {exit_code}): {output}")
+		started = time.monotonic()
+		exit_code, output = docker_manager.exec_in_container(
+			container_id,
+			_restore_command(db_server, database),
+			user="frappe",
+			environment={"MYSQL_PWD": password, "GOLDEN_USER": user},
+		)
+		restore_seconds = round(time.monotonic() - started, 1)
+		if exit_code != 0:
+			raise Exception(f"Golden dump would not restore (exit {exit_code}): {output}")
+		exit_code, output = docker_manager.exec_in_container(
+			container_id,
+			_restored_command(db_server, database),
+			user="frappe",
+			environment={"MYSQL_PWD": password, "GOLDEN_USER": user},
+		)
+		if exit_code != 0:
+			raise Exception(f"Could not read the restored database (exit {exit_code}): {output}")
+		tables, installed_apps = _read_verified(output)
+	finally:
+		# The scratch database and its limited user both sit in the server every tenant shares.
+		drop_site_database(db_server.name, site, database)
+		drop_mariadb_user(db_server.name, site, database)
+
+	_assert_restored(lab_doc, tables, installed_apps)
+	_log(log_fn, f"Restored {tables} tables and {', '.join(installed_apps)} in {restore_seconds}s")
+	return {"tables": tables, "installed_apps": sorted(installed_apps), "restore_seconds": restore_seconds}
+
+
+def _restore_command(db_server, database: str) -> str:
+	"""Pipe the dump back in through gzip, the way `bench new-site --source-sql` will."""
+	connection = db_server.get_connection_config()
+	return "\n".join(
+		[
+			"set -euo pipefail",
+			f"gzip -cd {DUMP_PATH} | mariadb -h {connection['db_host']} -P {connection['db_port']}"
+			f' -u "$GOLDEN_USER" --default-character-set=utf8mb4 {database}',
+		]
+	)
+
+
+def _restored_command(db_server, database: str) -> str:
+	"""Count what the restore brought back, on one marked line."""
+	connection = db_server.get_connection_config()
+	client = f'mariadb -h {connection["db_host"]} -P {connection["db_port"]} -u "$GOLDEN_USER" -N -B'
+	tables = (
+		f'tables=$({client} -e "SELECT COUNT(*) FROM information_schema.tables'
+		f" WHERE table_schema='{database}'\")"
+	)
+	# `app_name`, not `name`: a row in this child table is named by a hash.
+	apps = f"apps=$({client} {database} -e 'SELECT app_name FROM `tabInstalled Application`' | tr '\\n' ' ')"
+	return "\n".join(["set -euo pipefail", tables, apps, f'echo "{VERIFY_MARKER} $tables $apps"'])
+
+
+def _read_verified(output: str) -> tuple[int, list[str]]:
+	"""`(tables, apps)` off the read-back exec's one marked line."""
+	for line in reversed(output.splitlines()):
+		if line.startswith(VERIFY_MARKER):
+			_marker, tables, *apps = line.split()
+			return int(tables), apps
+	raise Exception(f"The restored database reported no {VERIFY_MARKER} line: {output}")
+
+
+def _assert_restored(lab_doc, tables: int, installed_apps: list[str]) -> None:
+	"""Refuse a dump that came back empty or short of the lab's own apps.
+
+	`bench new-site --source-sql` reports success on an empty restore, so the exit code proves
+	nothing and this is the only place the dump is ever asked what it contains.
+	"""
+	if not tables:
+		raise Exception("Golden dump restored no tables")
+	expected = {row.app_name.strip().lower() for row in lab_doc.apps} | {"frappe"}
+	missing = expected - {app.lower() for app in installed_apps}
+	if missing:
+		raise Exception(f"Golden dump restored without {', '.join(sorted(missing))}")
 
 
 def _dump_command(db_server, site: str) -> str:

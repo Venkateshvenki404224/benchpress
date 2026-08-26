@@ -296,6 +296,7 @@ flowchart LR
 - **Resource Controls** -- CPU cores and memory limits per lab, enforced by Docker `--cpus` and `--memory` flags
 - **Container Management** -- Start, stop, restart, redeploy, and delete benches from the dashboard
 - **Automatic Site Provisioning** -- Each bench gets its Frappe site created automatically on deploy, with the lab's apps installed
+- **Golden Images** -- A lab's build bakes the finished site's database into the lab's own image, so a deploy restores it instead of creating 281 tables through the ORM. Measured on a 2-vCPU host, a CRM lab's site step goes from **37.2 s to 9.1 s** and the whole deploy from 43.3 s to 13.3 s. Re-run it yourself with `python3 scripts/golden_drill.py --lab crm --runs 3 --i-know-this-is <your base domain>`, and add `--cold` for the control. A lab with no golden still deploys -- it is just slower
 - **VPN Device Management** -- Register persistent devices (Laptop, Mobile, etc.), generate WireGuard configs per device, and manage device lifecycle from a dedicated page
 - **Confirmation Dialogs** -- Destructive actions (deploy, stop, delete) require explicit confirmation before execution
 - **Stats Monitoring** -- CPU and memory usage polled every minute from the Docker stats API, displayed as progress bars

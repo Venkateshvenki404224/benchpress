@@ -160,7 +160,29 @@ Layer 5: Create site (create-site.sh)
 
 **Container entrypoint** (`entry.sh`): Starts MariaDB, Redis, SSH, then `tail -f /dev/null` to keep alive.
 
-**Post-deploy site creation** (`setup-site.sh`): Used when creating additional sites in a running container.
+**Site creation on deploy** (`setup-site.sh`): the deploy execs this inside the new container,
+and it takes one of three paths.
+
+| Path | When | Cost on a CRM lab |
+|------|------|-------------------|
+| **Adopt** | The container already has `sites/<site>/site_config.json` — a redeploy that kept its data | Re-sets the admin password, nothing else |
+| **Restore** | The image carries `/opt/benchpress/golden/site.sql.gz` and the deploy allows it | `bench new-site --source-sql`, **9.1 s** |
+| **Create** | Anything else | `bench new-site` plus `install-app` per app, **37.2 s** |
+
+The golden dump is baked by `benchpress/golden.py` at the end of every image build: it runs the
+lab's site once in a throwaway container, dumps that database, restores the dump into a scratch
+database to prove it before trusting it, and appends one `FROM <tag>` + `COPY` layer to the tag
+the build just produced. It never rebuilds the image.
+
+Two switches in **BenchPress Settings** govern it, and they are separate on purpose:
+`enable_golden_images` decides whether a build bakes one, `restore_from_golden` whether a deploy
+reads one. A host that turns baking off keeps restoring from the images it already has.
+
+`deploy_manager._golden_matches_server` is the last gate. The dump is the one artefact in an
+image whose validity depends on something outside it, so a deploy compares the MariaDB **major**
+version the dump came from against the server it is restoring into and takes the create path
+with the reason in the log when they differ. A patch-level difference is not a mismatch —
+refusing on one would take every golden on the host out of service on a routine server update.
 
 ---
 

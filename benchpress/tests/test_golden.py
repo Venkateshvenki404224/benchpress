@@ -12,10 +12,12 @@ import docker
 import frappe
 from frappe.tests import IntegrationTestCase
 
-from benchpress import deploy_manager, golden
+from benchpress import deploy_manager, golden, golden_drill
 from benchpress.golden import GOLDEN_DB_PREFIX, GOLDEN_DIR, build_golden, golden_database
 
 MANIFEST = {"lab_id": "crm", "mariadb_version": "10.6.28-MariaDB", "dump_bytes": 3}
+
+VERIFY_OUTPUT = "mariadb: Deprecated program name\nGOLDEN_VERIFY 281 frappe crm\n"
 
 
 def _lab(**extra):
@@ -290,3 +292,197 @@ class TestGoldenOnEveryBuild(IntegrationTestCase):
 		lab.save(ignore_permissions=True)
 
 		self.assertFalse(lab.golden_manifest)
+
+
+class TestGoldenVerification(unittest.TestCase):
+	"""A dump is never appended on the strength of an exit code — `--source-sql` exits 0 on nothing."""
+
+	def test_the_read_back_is_taken_off_the_marked_line(self):
+		self.assertEqual(golden._read_verified(VERIFY_OUTPUT), (281, ["frappe", "crm"]))
+
+	def test_a_read_back_that_reported_nothing_raises(self):
+		with self.assertRaises(Exception):
+			golden._read_verified("ERROR 1146: Table 'tabInstalled Application' doesn't exist\n")
+
+	def test_an_empty_restore_is_refused(self):
+		with self.assertRaises(Exception):
+			golden._assert_restored(_lab(), 0, ["frappe", "crm"])
+
+	def test_a_restore_without_the_labs_apps_is_refused(self):
+		with self.assertRaises(Exception):
+			golden._assert_restored(_lab(), 281, ["frappe"])
+
+	def test_a_restore_carrying_more_than_the_lab_asked_for_passes(self):
+		golden._assert_restored(_lab(), 281, ["Frappe", "crm", "erpnext"])
+
+	def test_the_restore_reads_the_dump_the_deploy_will_read(self):
+		command = golden._restore_command(_db_server(), "_bpgolden_verify_crm")
+
+		self.assertIn(f"gzip -cd {golden.DUMP_PATH}", command)
+		self.assertIn("| mariadb -h benchpress-mariadb -P 3306", command)
+		self.assertIn("_bpgolden_verify_crm", command)
+
+	def test_the_apps_are_read_from_the_column_that_holds_them(self):
+		"""`tabInstalled Application.name` is a row hash; the app's name is `app_name`."""
+		self.assertIn(
+			"SELECT app_name FROM `tabInstalled Application`",
+			golden._restored_command(_db_server(), "_bpgolden_verify_crm"),
+		)
+
+
+class TestGoldenVerificationCleanup(IntegrationTestCase):
+	def test_the_scratch_database_and_its_user_go_even_when_the_restore_fails(self):
+		with (
+			patch.object(golden, "create_mariadb_user", return_value=("db", "db_limited", "pw")),
+			patch.object(golden, "execute_sql", return_value=(0, "")),
+			patch.object(golden.docker_manager, "exec_in_container", return_value=(1, "gzip: bad")),
+			patch.object(golden, "drop_site_database") as drop_database,
+			patch.object(golden, "drop_mariadb_user") as drop_user,
+		):
+			with self.assertRaises(Exception):
+				golden._verify_dump("cid", _db_server(), _lab(), None)
+
+		drop_database.assert_called_once_with(
+			"benchpress-mariadb", "bpgolden-verify-crm", "_bpgolden_verify_crm"
+		)
+		drop_user.assert_called_once_with("benchpress-mariadb", "bpgolden-verify-crm", "_bpgolden_verify_crm")
+
+	def test_a_dump_that_does_not_verify_is_never_appended(self):
+		container = MagicMock()
+		with (
+			patch.object(golden, "ensure_infrastructure", return_value="benchpress-mariadb"),
+			patch.object(frappe, "get_doc", return_value=_db_server()),
+			patch.object(golden, "_start_scratch_container", return_value=container),
+			patch.object(golden, "_create_site"),
+			patch.object(golden, "_dump_site", return_value=dict(MANIFEST)),
+			patch.object(golden, "_verify_dump", side_effect=Exception("restored no tables")),
+			patch.object(golden, "_append_layer") as append,
+			patch.object(golden, "drop_site_database"),
+		):
+			with self.assertRaises(Exception):
+				build_golden(_lab())
+
+		append.assert_not_called()
+
+	def test_what_the_restore_proved_travels_in_the_manifest(self):
+		container = MagicMock()
+		verified = {"tables": 281, "installed_apps": ["crm", "frappe"], "restore_seconds": 6.6}
+		with (
+			patch.object(golden, "ensure_infrastructure", return_value="benchpress-mariadb"),
+			patch.object(frappe, "get_doc", return_value=_db_server()),
+			patch.object(golden, "_start_scratch_container", return_value=container),
+			patch.object(golden, "_create_site"),
+			patch.object(golden, "_dump_site", return_value=dict(MANIFEST)),
+			patch.object(golden, "_verify_dump", return_value=verified),
+			patch.object(golden, "_append_layer"),
+			patch.object(golden, "drop_site_database"),
+		):
+			manifest = build_golden(_lab())
+
+		self.assertEqual(manifest["tables"], 281)
+		self.assertEqual(manifest["installed_apps"], ["crm", "frappe"])
+		self.assertEqual(manifest["restore_seconds"], 6.6)
+
+
+class TestGoldenVersionGate(unittest.TestCase):
+	"""The one check that cannot be made inside the image: the server it is restored into."""
+
+	def _decide(self, dump: str, server: str, enabled: bool = True):
+		with (
+			patch.object(golden, "restore_enabled", return_value=enabled),
+			patch.object(golden, "golden_mariadb_version", return_value=dump),
+			patch.object(deploy_manager, "server_version", return_value=server),
+		):
+			return deploy_manager._golden_matches_server("benchpress/crm:lab", _db_server())
+
+	def test_the_same_major_restores(self):
+		self.assertEqual(self._decide("10.6.28-MariaDB-ubu2204", "10.6.28-MariaDB-ubu2204"), (True, ""))
+
+	def test_a_patch_bump_is_not_a_mismatch(self):
+		"""Refusing on one would take every golden on the host out of service on a server update."""
+		use_golden, refusal = self._decide("10.6.31-MariaDB", "10.6.28-MariaDB-ubu2204")
+
+		self.assertTrue(use_golden)
+		self.assertEqual(refusal, "")
+
+	def test_a_different_major_takes_the_cold_path_and_says_why(self):
+		use_golden, refusal = self._decide("11.4.5-MariaDB", "10.6.28-MariaDB-ubu2204")
+
+		self.assertFalse(use_golden)
+		self.assertIn("11.4", refusal)
+		self.assertIn("10.6", refusal)
+
+	def test_a_server_that_will_not_name_itself_takes_the_cold_path(self):
+		use_golden, refusal = self._decide("10.6.28-MariaDB", "")
+
+		self.assertFalse(use_golden)
+		self.assertIn("Could not compare", refusal)
+
+	def test_an_image_with_no_golden_is_already_reported_by_the_image_step(self):
+		self.assertEqual(self._decide("", "10.6.28-MariaDB"), (False, ""))
+
+	def test_the_switch_off_creates_the_site_even_where_a_golden_exists(self):
+		use_golden, refusal = self._decide("10.6.28-MariaDB", "10.6.28-MariaDB", enabled=False)
+
+		self.assertFalse(use_golden)
+		self.assertIn("turned off", refusal)
+
+
+class TestGoldenDrillMeasure(IntegrationTestCase):
+	"""The drill reads a run out of its own Deploy Log, through the pipeline's own parser."""
+
+	LOG = (
+		"=== Deploy started ===\n"
+		"=== Step 7/11: Creating the site [site @1.9s] ===\n"
+		"Site golddrill-crm.benchpress.cloud restored from the image's golden dump\n"
+		"=== Step 8/11: Preparing assets [assets @11.6s] ===\n"
+		"=== Step 11/11: Deploy complete [complete @12.4s] ===\n"
+	)
+
+	def _measure(self, message: str) -> dict:
+		with patch.object(frappe, "get_all", return_value=[frappe._dict(name="dl", message=message)]):
+			return golden_drill.measure("bench")
+
+	def test_the_site_step_is_the_gap_to_the_next_marker(self):
+		measured = self._measure(self.LOG)
+
+		self.assertEqual(measured["site_seconds"], 9.7)
+		self.assertEqual(measured["total_seconds"], 12.4)
+		self.assertTrue(measured["restored"])
+
+	def test_a_cold_run_reports_itself_as_one(self):
+		cold = self.LOG.replace("restored from the image's golden dump", "created successfully")
+
+		self.assertFalse(self._measure(cold)["restored"])
+
+	def test_a_run_that_never_reached_the_site_step_measures_nothing(self):
+		measured = self._measure("=== Step 2/11: Preparing the lab image [image @0.4s] ===\n")
+
+		self.assertIsNone(measured["site_seconds"])
+		self.assertIsNone(measured["total_seconds"])
+
+
+class TestGoldenSwitchDefaults(IntegrationTestCase):
+	"""A `Check` default only reaches a Single when something writes it."""
+
+	def test_the_patch_turns_both_switches_on_where_nothing_has_set_them(self):
+		from benchpress.patches.default_golden_switches import FIELDS, execute
+
+		with (
+			patch.object(frappe.db, "get_singles_dict", return_value={}),
+			patch.object(frappe.db, "set_single_value") as write,
+		):
+			execute()
+
+		self.assertEqual([call.args[1] for call in write.call_args_list], list(FIELDS))
+
+	def test_a_switch_an_admin_turned_off_is_left_off(self):
+		from benchpress.patches.default_golden_switches import execute
+
+		with (
+			patch.object(frappe.db, "get_singles_dict", return_value={"restore_from_golden": 0}),
+			patch.object(frappe.db, "set_single_value") as write,
+		):
+			execute()
+
+		self.assertEqual([call.args[1] for call in write.call_args_list], ["enable_golden_images"])

@@ -268,6 +268,23 @@ def drop_site_database(db_server_name: str, site_name: str, database: str | None
 	)
 
 
+def server_version(db_server_name: str) -> str:
+	"""The server's own `SELECT VERSION()`, or empty when it cannot be read.
+
+	Empty rather than a raise: the caller compares this with the version a golden dump was taken
+	from, and its safe direction is to create the site instead of restoring into a server it
+	could not identify.
+	"""
+	try:
+		exit_code, output = execute_sql(db_server_name, "SELECT VERSION()")
+	except Exception:
+		return ""
+	if exit_code != 0:
+		return ""
+	# Last line first: the client prints its own deprecation warning into the same stream.
+	return next((line.strip() for line in reversed(output.splitlines()) if line[:1].isdigit()), "")
+
+
 def check_mariadb_health(db_server_name: str) -> bool:
 	"""Check if MariaDB is responding."""
 	try:
