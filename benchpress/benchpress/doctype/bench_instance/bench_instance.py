@@ -8,6 +8,7 @@ from frappe import _
 from frappe.model.document import Document
 from frappe.utils.background_jobs import is_job_enqueued
 
+from benchpress import lifecycle
 from benchpress.benchpress.doctype.bench_instance import get_instance_id
 from benchpress.credits.guard import instance_lease_cost, requires_admission
 from benchpress.permissions import is_admin
@@ -176,8 +177,6 @@ class BenchInstance(Document):
 	@frappe.whitelist()
 	@requires_admission(cost=instance_lease_cost)
 	def enqueue_start(self):
-		from benchpress import lifecycle
-
 		if not self.container_id:
 			frappe.throw(_("No container to start."))
 		lifecycle.running(self)

@@ -6,7 +6,7 @@ from frappe import _
 from frappe.query_builder import DocType
 from frappe.query_builder.functions import Count
 
-from benchpress import addressing, image_cache, lab_detail, lab_templates, labs, site_names
+from benchpress import addressing, image_cache, lab_detail, lab_templates, labs, lifecycle, site_names
 from benchpress.benchpress.doctype.bench_instance.bench_instance import DEPLOY_JOB_TIMEOUT
 
 # Every field the renew path decides from, read once under the row lock.
@@ -308,8 +308,6 @@ def _start_bench(bench, action: str) -> dict:
 	This is the start path the SPA uses, so it is where the cap and the hold have to be. Stopping
 	and deleting stay outside the gate: stopping is what a refused caller is being told to do.
 	"""
-	from benchpress import lifecycle
-
 	_require_container(bench)
 	lifecycle.running(bench, action=action)
 	return {"name": bench.name, "status": bench.status}
@@ -575,8 +573,6 @@ def _restart_in_grace(bench) -> None:
 	`bench` is the locked row read rather than a document, so the transition runs on a loaded
 	one and the status it wrote is reflected back for the caller's response.
 	"""
-	from benchpress import lifecycle
-
 	doc = frappe.get_doc("Bench Instance", bench.name)
 	lifecycle.running(doc)
 	bench.status = doc.status

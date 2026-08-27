@@ -725,11 +725,11 @@ class TestApi(IntegrationTestCase):
 
 	def test_bench_action_start_stop_restart_and_timing(self):
 		with (
-			patch("benchpress.docker_manager.start_container"),
+			patch("benchpress.lifecycle.start_container"),
 			# Stop routes through `deploy_manager.stop_bench`, which bound its Docker call at
 			# import — so the patch has to land on that module, not on `docker_manager`.
 			patch("benchpress.deploy_manager.stop_container"),
-			patch("benchpress.docker_manager.restart_container"),
+			patch("benchpress.lifecycle.restart_container"),
 			patch("benchpress.docker_manager.remove_container"),
 		):
 			for action, expected in (("start", "Running"), ("stop", "Stopped"), ("restart", "Running")):
@@ -767,9 +767,9 @@ class TestApi(IntegrationTestCase):
 		for action in ("start", "stop", "restart"):
 			with (
 				self.subTest(action=action),
-				patch("benchpress.docker_manager.start_container") as start,
+				patch("benchpress.lifecycle.start_container") as start,
 				patch("benchpress.deploy_manager.stop_container") as stop,
-				patch("benchpress.docker_manager.restart_container") as restart,
+				patch("benchpress.lifecycle.restart_container") as restart,
 			):
 				with self.assertRaises(frappe.ValidationError) as caught:
 					api.bench_action(bench.name, action)

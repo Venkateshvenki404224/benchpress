@@ -193,7 +193,7 @@ class IntegrationTestBenchInstance(IntegrationTestCase):
 		with self.assertRaises(frappe.ValidationError):
 			bench.enqueue_start()
 
-	@patch("benchpress.docker_manager.start_container")
+	@patch("benchpress.lifecycle.start_container")
 	def test_enqueue_start_starts_container_and_sets_running(self, mock_start):
 		bench = self._insert_bench()
 		bench.container_id = "test-container-abc"

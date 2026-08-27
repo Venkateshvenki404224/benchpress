@@ -11,12 +11,13 @@ from unittest.mock import patch
 import frappe
 from frappe.tests import IntegrationTestCase
 
-from benchpress import lifecycle
+from benchpress import api, lifecycle
 from benchpress.credits import lease
 from benchpress.tests.fakes import FakeDockerMixin
 from benchpress.tests.test_deploy_manager import _delete_bench_sites, _fresh_bench, _make_lab
 
 BENCH = "Bench Instance"
+SETTINGS = "BenchPress Settings"
 LIFECYCLE_MODULE = "lifecycle.py"
 
 
@@ -63,7 +64,7 @@ def _set_values_status(node: ast.Call, status: str) -> bool:
 	if getattr(node.func, "attr", None) != "set_value":
 		return False
 	args = node.args[2:] + [kw.value for kw in node.keywords]
-	field, value = (args + [None, None])[:2]
+	field, value = (*args, None, None)[:2]
 	if _is(field, "status") and _is(value, status):
 		return True
 	return any(isinstance(arg, ast.Dict) and _dict_maps_status(arg, status) for arg in args)
@@ -75,8 +76,7 @@ def _is(node, value: str) -> bool:
 
 def _dict_maps_status(node: ast.Dict, status: str) -> bool:
 	return any(
-		_is(key, "status") and _is(value, status)
-		for key, value in zip(node.keys, node.values, strict=True)
+		_is(key, "status") and _is(value, status) for key, value in zip(node.keys, node.values, strict=True)
 	)
 
 
@@ -157,21 +157,39 @@ class TestRunning(FakeDockerMixin, IntegrationTestCase):
 			lifecycle.running(bench)
 		self.assertEqual(seen["status"], "Stopped")
 
-	def test_a_bench_with_a_passed_deadline_ends_with_one_in_the_future(self):
-		"""The grace-restart observable: before this module it kept the deadline that stopped it."""
-		if not _credits_enabled():
-			self.skipTest("credits are off on this site, so no lease is armed")
+	def _enable_credits(self) -> None:
+		"""Armed for this test only, and restored through a commit because the code commits."""
+		original = frappe.db.get_single_value(SETTINGS, "enable_credits")
+		self.addCleanup(self._write_credits_switch, original)
+		self._write_credits_switch(1)
+
+	def _write_credits_switch(self, value) -> None:
+		frappe.db.set_single_value(SETTINGS, "enable_credits", value)
+		frappe.db.commit()  # nosemgrep -- the restore must outlive the per-test rollback
+		frappe.clear_cache(doctype=SETTINGS)
+
+	def test_a_passed_deadline_is_replaced_rather_than_carried_into_running(self):
+		"""The grace-restart observable: the next sweep stopped a bench that kept the old one."""
+		self._enable_credits()
 		bench = self._stopped_bench()
 		lease.arm_at(bench, lease.now_ts() - 60)
-		frappe.db.set_value(BENCH, bench.name, "lease_state", None)
+		lease.disarm(bench)
 		bench.reload()
 		with patch.object(lifecycle.ingress, "enqueue_route_sync", autospec=True):
 			lifecycle.running(bench)
 		bench.reload()
 		self.assertGreater(frappe.utils.cint(bench.expires_at_ts), lease.now_ts())
 
-
-def _credits_enabled() -> bool:
-	from benchpress.credits import config
-
-	return config.credits_enabled()
+	def test_the_grace_restart_buys_its_metering_window(self):
+		"""`_restart_in_grace` reached `Running` without one, so the next sweep stopped it again."""
+		self._enable_credits()
+		bench = self._stopped_bench()
+		lease.arm_at(bench, lease.now_ts() - 60)
+		lease.disarm(bench)
+		row = frappe.db.get_value(BENCH, bench.name, api.RENEW_FIELDS, as_dict=True)
+		with patch.object(lifecycle.ingress, "enqueue_route_sync", autospec=True):
+			api._restart_in_grace(row)
+		self.assertEqual(row.status, "Running")
+		self.assertGreater(
+			frappe.utils.cint(frappe.db.get_value(BENCH, bench.name, "expires_at_ts")), lease.now_ts()
+		)
