@@ -16,6 +16,7 @@ from frappe.tests import IntegrationTestCase
 
 from benchpress import ingress
 from benchpress.benchpress.doctype.bench_instance import get_instance_id
+from benchpress.tests.fakes import FakeDockerMixin, sql_of
 from benchpress.tests.test_docker_manager import exec_commands, exec_environments
 
 # Any dotted quad, anywhere in the rendered file. The property routes must hold is that no
@@ -141,7 +142,7 @@ def _exec_results(failures: dict | None):
 	return run
 
 
-class TestDeployManager(IntegrationTestCase):
+class TestDeployManager(FakeDockerMixin, IntegrationTestCase):
 	@classmethod
 	def setUpClass(cls):
 		super().setUpClass()
@@ -153,6 +154,8 @@ class TestDeployManager(IntegrationTestCase):
 					"doctype": "Database Server",
 					"container_name": "test-db-server",
 					"mariadb_version": "10.6",
+					"status": "Active",
+					"mariadb_root_password": "test-root-password",
 				}
 			).insert(ignore_permissions=True)
 		cls.db_server_name = frappe.db.get_value(
@@ -174,13 +177,18 @@ class TestDeployManager(IntegrationTestCase):
 	def _fresh_bench(self):
 		return _fresh_bench(self, self.lab.name)
 
+	def _shared_mariadb_up(self):
+		"""A live container for every `Database Server` row, since a deploy resolves the oldest."""
+		for container_name in frappe.get_all("Database Server", pluck="container_name"):
+			self.docker.add_container(container_name)
+
 	# --- stop_bench ---
 
-	@patch("benchpress.deploy_manager.stop_container")
-	def test_stop_bench_sets_status_stopped(self, mock_stop):
+	def test_stop_bench_sets_status_stopped(self):
 		from benchpress.deploy_manager import stop_bench
 
 		bench = self._fresh_bench()
+		self.docker.add_container("container-xyz")
 		bench.container_id = "container-xyz"
 		bench.status = "Running"
 		bench.save(ignore_permissions=True)
@@ -190,20 +198,19 @@ class TestDeployManager(IntegrationTestCase):
 		bench.reload()
 		self.assertEqual(bench.status, "Stopped")
 
-	@patch("benchpress.deploy_manager.stop_container")
-	def test_stop_bench_calls_stop_container(self, mock_stop):
+	def test_stop_bench_calls_stop_container(self):
 		from benchpress.deploy_manager import stop_bench
 
 		bench = self._fresh_bench()
+		self.docker.add_container("container-stop-test")
 		bench.container_id = "container-stop-test"
 		bench.save(ignore_permissions=True)
 		frappe.db.commit()
 
 		stop_bench(bench.name)
-		mock_stop.assert_called_once_with("container-stop-test")
+		self.assertEqual(self.docker.stopped, ["container-stop-test"])
 
-	@patch("benchpress.deploy_manager.stop_container")
-	def test_stop_bench_skips_container_stop_when_no_container_id(self, mock_stop):
+	def test_stop_bench_skips_container_stop_when_no_container_id(self):
 		from benchpress.deploy_manager import stop_bench
 
 		bench = self._fresh_bench()
@@ -212,16 +219,16 @@ class TestDeployManager(IntegrationTestCase):
 		frappe.db.commit()
 
 		stop_bench(bench.name)
-		mock_stop.assert_not_called()
+		self.assertEqual(self.docker.stopped, [])
 		bench.reload()
 		self.assertEqual(bench.status, "Stopped")
 
-	@patch("benchpress.deploy_manager.stop_container")
-	def test_stop_bench_deactivates_every_site_on_the_bench(self, mock_stop):
+	def test_stop_bench_deactivates_every_site_on_the_bench(self):
 		"""Nothing answers inside a stopped container, so no row may stay Active."""
 		from benchpress.deploy_manager import stop_bench
 
 		bench = self._fresh_bench()
+		self.docker.add_container("container-stop-sites")
 		bench.container_id = "container-stop-sites"
 		bench.status = "Running"
 		bench.save(ignore_permissions=True)
@@ -236,15 +243,11 @@ class TestDeployManager(IntegrationTestCase):
 		self.assertEqual(statuses, ["Inactive", "Inactive"])
 
 	@patch("benchpress.deploy_manager._deploy_bench")
-	@patch("benchpress.deploy_manager.remove_container")
-	@patch("benchpress.deploy_manager.stop_container")
-	@patch("benchpress.docker_manager.get_client")
-	def test_redeploy_bench_resets_status_to_draft_before_deploy(
-		self, mock_client, mock_stop, mock_remove, mock_deploy
-	):
+	def test_redeploy_bench_resets_status_to_draft_before_deploy(self, mock_deploy):
 		from benchpress.deploy_manager import redeploy_bench
 
 		bench = self._fresh_bench()
+		self.docker.add_container("old-container")
 		bench.container_id = "old-container"
 		bench.status = "Running"
 		bench.save(ignore_permissions=True)
@@ -263,39 +266,39 @@ class TestDeployManager(IntegrationTestCase):
 		self.assertEqual(status_at_deploy["status"], "Draft")
 
 	@patch("benchpress.deploy_manager._deploy_bench")
-	@patch("benchpress.deploy_manager.remove_container")
-	@patch("benchpress.deploy_manager.stop_container")
-	@patch("benchpress.docker_manager.get_client")
-	def test_redeploy_bench_never_touches_volumes(self, mock_client, mock_stop, mock_remove, mock_deploy):
+	def test_redeploy_bench_never_touches_volumes(self, mock_deploy):
 		from benchpress.deploy_manager import redeploy_bench
 
 		bench = self._fresh_bench()
+		self.docker.add_container("old-container")
 		bench.container_id = "old-container"
 		bench.save(ignore_permissions=True)
 		frappe.db.commit()
 
 		redeploy_bench(bench.name)
 
-		mock_client.return_value.volumes.get.assert_not_called()
+		self.assertEqual(self.docker.volume_gets, [])
 
 	@patch("benchpress.deploy_manager._deploy_bench")
-	@patch("benchpress.deploy_manager.remove_container")
-	@patch("benchpress.deploy_manager.stop_container")
-	@patch("benchpress.docker_manager.get_client")
-	@patch("benchpress.mariadb_manager.drop_site_database")
-	def test_redeploy_bench_drops_site_database(
-		self, mock_drop_db, mock_client, mock_stop, mock_remove, mock_deploy
-	):
+	def test_redeploy_bench_drops_site_database(self, mock_deploy):
 		from benchpress.deploy_manager import redeploy_bench
+		from benchpress.mariadb_manager import get_database_name
 
 		bench = self._fresh_bench()
+		self.docker.add_container("old-container")
+		self._shared_mariadb_up()
 		frappe.db.set_value("Bench Instance", bench.name, "container_id", "old-container")
 		frappe.db.set_value("Bench Instance", bench.name, "database_server", self.db_server_name)
 		frappe.db.commit()
 		bench.reload()
 
 		redeploy_bench(bench.name)
-		mock_drop_db.assert_called_once_with(self.db_server_name, bench.site_name)
+
+		db_container = self.docker.containers.get("test-db-server")
+		self.assertIn(
+			f"DROP DATABASE IF EXISTS `{get_database_name(bench.site_name)}`",
+			sql_of(db_container.execs[-1]),
+		)
 
 	# --- deploy concurrency lock (issue #92) ---
 
@@ -340,8 +343,7 @@ class TestDeployManager(IntegrationTestCase):
 		self.assertEqual(mock_deploy.call_count, 2)
 
 	@patch("benchpress.deploy_manager._deploy_bench")
-	@patch("benchpress.deploy_manager.remove_container")
-	def test_redeploy_skipped_when_lock_held(self, mock_remove, mock_deploy):
+	def test_redeploy_skipped_when_lock_held(self, mock_deploy):
 		from benchpress.deploy_manager import redeploy_bench
 
 		bench = self._fresh_bench()
@@ -350,7 +352,7 @@ class TestDeployManager(IntegrationTestCase):
 		with self._held_deploy_lock(bench.name):
 			redeploy_bench(bench.name)
 
-		mock_remove.assert_not_called()
+		self.assertEqual(self.docker.removed, [])
 		mock_deploy.assert_not_called()
 
 	def _deploy_log(self, bench_name):
@@ -368,41 +370,25 @@ class TestDeployManager(IntegrationTestCase):
 
 		bench = self._fresh_bench()
 		self._cleanup_deploy_logs(bench.name)
+		self._shared_mariadb_up()
 		frappe.db.set_value(
 			"Bench Instance",
 			bench.name,
-			{"container_ip": "172.30.0.50", "wg_ip": "10.8.0.20"},
+			{"container_id": "old-container", "container_ip": "172.30.0.50", "wg_ip": "10.8.0.20"},
 		)
 		frappe.db.commit()
+		# The daemon takes the create and refuses the start, so the run fails owning a container.
+		self.docker.refuse_start(bench.bench_name, "cannot join network: operation not permitted")
 
 		with (
 			_cached_image(self.lab.name),
-			patch.object(deploy_manager, "ensure_infrastructure", autospec=True) as mock_infra,
-			patch.object(deploy_manager, "wait_for_mariadb", autospec=True),
 			patch.object(ingress, "ensure_anchor", autospec=True),
-			patch.object(deploy_manager, "_remove_stale_container", autospec=True),
-			patch.object(deploy_manager, "host_runtimes", autospec=True) as mock_runtimes,
-			patch.object(deploy_manager, "container_runtime", autospec=True) as mock_runtime_of,
-			patch.object(deploy_manager, "create_bench_container", autospec=True) as mock_create,
-			# The deploy starts through the roll wrapper, so the bridge it lands on is a
-			# read-back rather than the id that went in.
-			patch.object(deploy_manager, "start_bench_container", new=lambda cid, bench, lab: cid),
-			patch.object(deploy_manager, "container_network", new=lambda cid: "benchpress-0"),
-			patch.object(deploy_manager, "wait_for_container_running", autospec=True) as mock_wait,
-			patch.object(deploy_manager, "remove_container", autospec=True) as mock_remove_container,
 			patch.object(deploy_manager, "_notify_owner", autospec=True),
-			patch("benchpress.vpn_adapter.remove_bench_peer", autospec=True) as mock_remove_peer,
 		):
-			mock_infra.return_value = self.db_server_name
-			mock_runtimes.return_value = {"names": {"runc", "sysbox-runc"}, "default": "runc"}
-			mock_runtime_of.return_value = "sysbox-runc"
-			mock_create.return_value = "cid-cleanup"
-			mock_wait.side_effect = Exception("container did not report running")
-
 			deploy_manager.deploy_bench(bench.name)
 
-		mock_remove_container.assert_called_once_with("cid-cleanup")
-		mock_remove_peer.assert_called_once()
+		self.assertEqual(self.docker.removed, [bench.bench_name])
+		self.assertIn("Cleanup: VPN peer removed", self._deploy_log(bench.name))
 		bench.reload()
 		self.assertEqual(bench.status, "Error")
 		self.assertIsNone(bench.container_id)
@@ -427,19 +413,17 @@ class TestDeployManager(IntegrationTestCase):
 		)
 		frappe.db.commit()
 
+		# Shared Redis never comes up, so the run fails on its first step, owning nothing.
+		self.compose_cmd.return_value = (1, "no such service: redis")
+
 		with (
 			_cached_image(self.lab.name),
-			patch.object(deploy_manager, "ensure_infrastructure", autospec=True) as mock_infra,
-			patch.object(deploy_manager, "remove_container", autospec=True) as mock_remove_container,
 			patch.object(deploy_manager, "_notify_owner", autospec=True),
-			patch("benchpress.vpn_adapter.remove_bench_peer", autospec=True) as mock_remove_peer,
 		):
-			mock_infra.side_effect = Exception("infrastructure unavailable")
-
 			deploy_manager.deploy_bench(bench.name)
 
-		mock_remove_container.assert_not_called()
-		mock_remove_peer.assert_not_called()
+		self.assertEqual(self.docker.removed, [])
+		self.assertNotIn("Cleanup: VPN peer removed", self._deploy_log(bench.name))
 		self.assertIn(deploy_manager.NOTHING_TO_ROLL_BACK, self._deploy_log(bench.name))
 		bench.reload()
 		self.assertEqual(bench.status, "Error")
