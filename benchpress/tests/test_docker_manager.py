@@ -22,6 +22,7 @@ from benchpress.docker_manager import (
 	wait_for_container_running,
 )
 from benchpress.request_cache import clear_local_cache
+from benchpress.tests.fakes import FakeDockerMixin
 
 
 def _client_returning(status):
@@ -185,26 +186,19 @@ def _make_lab(lab_id, **extra):
 	return doc
 
 
-class TestDockerManagerBlockIO(IntegrationTestCase):
+class TestDockerManagerBlockIO(FakeDockerMixin, IntegrationTestCase):
 	@classmethod
 	def setUpClass(cls):
 		super().setUpClass()
 		frappe.set_user("Administrator")
 
 	def _container_create_kwargs(self, lab, runtime="runc", bridge_network="benchpress-0"):
-		"""Run create_bench_container with Docker mocked and return the
-		kwargs passed to client.containers.create."""
+		"""Run create_bench_container against the fake and return the create kwargs."""
 		bench = types.SimpleNamespace(
 			bench_name="blockio-test-bench", runtime=runtime, bridge_network=bridge_network
 		)
-		with (
-			patch("benchpress.docker_manager.get_client") as mock_client,
-			patch("benchpress.placement.ensure_bench_network_for"),
-			patch("benchpress.docker_manager._get_host_block_devices", return_value=["/dev/sda"]),
-		):
-			mock_client.return_value.containers.create.return_value = MagicMock(id="cid")
-			docker_manager.create_bench_container(bench, lab)
-			return mock_client.return_value.containers.create.call_args.kwargs
+		docker_manager.create_bench_container(bench, lab)
+		return self.docker.created[-1]
 
 	def test_no_volume_is_mounted_over_the_bench(self):
 		"""A named volume over /home/frappe forces a full bench copy on every create."""
@@ -214,6 +208,17 @@ class TestDockerManagerBlockIO(IntegrationTestCase):
 		kwargs = self._container_create_kwargs(lab)
 
 		self.assertNotIn("volumes", kwargs)
+
+	def test_the_container_is_stamped_with_the_managed_labels(self):
+		"""`containers.list` filtering and every reconcile pass key off these."""
+		lab = _make_lab("labels")
+		self.addCleanup(frappe.delete_doc, "Lab", lab.name, force=True, ignore_permissions=True)
+
+		kwargs = self._container_create_kwargs(lab)
+
+		self.assertEqual(kwargs["labels"]["benchpress.managed"], "true")
+		self.assertEqual(kwargs["labels"]["benchpress.bench_name"], "blockio-test-bench")
+		self.assertEqual(kwargs["labels"]["benchpress.lab"], "labels")
 
 	def test_lab_block_io_limits_passed_to_container(self):
 		lab = _make_lab("blockio-custom", iops_limit=500, bps_limit=2 * 1024 * 1024)

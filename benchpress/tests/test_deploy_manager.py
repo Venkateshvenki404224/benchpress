@@ -16,6 +16,7 @@ from frappe.tests import IntegrationTestCase
 
 from benchpress import ingress
 from benchpress.benchpress.doctype.bench_instance import get_instance_id
+from benchpress.tests.fakes import FakeDockerMixin
 from benchpress.tests.test_docker_manager import exec_commands, exec_environments
 
 # Any dotted quad, anywhere in the rendered file. The property routes must hold is that no
@@ -141,7 +142,7 @@ def _exec_results(failures: dict | None):
 	return run
 
 
-class TestDeployManager(IntegrationTestCase):
+class TestDeployManager(FakeDockerMixin, IntegrationTestCase):
 	@classmethod
 	def setUpClass(cls):
 		super().setUpClass()
@@ -238,10 +239,7 @@ class TestDeployManager(IntegrationTestCase):
 	@patch("benchpress.deploy_manager._deploy_bench")
 	@patch("benchpress.deploy_manager.remove_container")
 	@patch("benchpress.deploy_manager.stop_container")
-	@patch("benchpress.docker_manager.get_client")
-	def test_redeploy_bench_resets_status_to_draft_before_deploy(
-		self, mock_client, mock_stop, mock_remove, mock_deploy
-	):
+	def test_redeploy_bench_resets_status_to_draft_before_deploy(self, mock_stop, mock_remove, mock_deploy):
 		from benchpress.deploy_manager import redeploy_bench
 
 		bench = self._fresh_bench()
@@ -265,8 +263,7 @@ class TestDeployManager(IntegrationTestCase):
 	@patch("benchpress.deploy_manager._deploy_bench")
 	@patch("benchpress.deploy_manager.remove_container")
 	@patch("benchpress.deploy_manager.stop_container")
-	@patch("benchpress.docker_manager.get_client")
-	def test_redeploy_bench_never_touches_volumes(self, mock_client, mock_stop, mock_remove, mock_deploy):
+	def test_redeploy_bench_never_touches_volumes(self, mock_stop, mock_remove, mock_deploy):
 		from benchpress.deploy_manager import redeploy_bench
 
 		bench = self._fresh_bench()
@@ -276,16 +273,13 @@ class TestDeployManager(IntegrationTestCase):
 
 		redeploy_bench(bench.name)
 
-		mock_client.return_value.volumes.get.assert_not_called()
+		self.assertEqual(self.docker.volume_gets, [])
 
 	@patch("benchpress.deploy_manager._deploy_bench")
 	@patch("benchpress.deploy_manager.remove_container")
 	@patch("benchpress.deploy_manager.stop_container")
-	@patch("benchpress.docker_manager.get_client")
 	@patch("benchpress.mariadb_manager.drop_site_database")
-	def test_redeploy_bench_drops_site_database(
-		self, mock_drop_db, mock_client, mock_stop, mock_remove, mock_deploy
-	):
+	def test_redeploy_bench_drops_site_database(self, mock_drop_db, mock_stop, mock_remove, mock_deploy):
 		from benchpress.deploy_manager import redeploy_bench
 
 		bench = self._fresh_bench()
