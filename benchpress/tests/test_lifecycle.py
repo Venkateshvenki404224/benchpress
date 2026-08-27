@@ -88,7 +88,7 @@ class TestRunning(FakeDockerMixin, IntegrationTestCase):
 		super().setUpClass()
 		frappe.set_user("Administrator")
 		cls.lab = _make_lab("test-lab-lifecycle")
-		frappe.db.commit()
+		frappe.db.commit()  # nosemgrep -- the fixtures outlive the per-test rollback
 
 	@classmethod
 	def tearDownClass(cls):
@@ -98,7 +98,7 @@ class TestRunning(FakeDockerMixin, IntegrationTestCase):
 			_delete_bench_sites(name)
 			frappe.delete_doc(BENCH, name, force=True, ignore_permissions=True)
 		cls.lab.delete(ignore_permissions=True)
-		frappe.db.commit()
+		frappe.db.commit()  # nosemgrep -- the teardown must outlive the per-test rollback too
 		super().tearDownClass()
 
 	def _stopped_bench(self):
@@ -107,7 +107,7 @@ class TestRunning(FakeDockerMixin, IntegrationTestCase):
 		bench.container_id = container.id
 		bench.status = "Stopped"
 		bench.save(ignore_permissions=True)
-		frappe.db.commit()
+		frappe.db.commit()  # nosemgrep -- the transition under test commits, so its fixture has to be durable
 		self.addCleanup(frappe.db.commit)
 		return bench
 

@@ -47,7 +47,7 @@ def running(bench, *, action: str = "start") -> None:
 	# bench that had none.
 	metering.on_bench_running(bench)
 	bench.save(ignore_permissions=True)
-	frappe.db.commit()  # nosemgrep: the route job below re-reads `status`
+	frappe.db.commit()  # nosemgrep -- the route job re-reads `status`, so it must not start before this
 	# After the commit, because the job re-reads `status`.
 	ingress.enqueue_route_sync(bench.name)
 
@@ -97,7 +97,7 @@ def _deploy_bench(bench_name: str) -> None:
 		}
 	)
 	deploy_log.insert(ignore_permissions=True)
-	frappe.db.commit()
+	frappe.db.commit()  # nosemgrep -- the SPA opens the log by name, so the row has to exist before the run continues
 	deploy_log_name = deploy_log.name
 
 	# Scoped to the bench's owner: a deploy log is that user's, and nobody
@@ -119,7 +119,7 @@ def _deploy_bench(bench_name: str) -> None:
 			placement.record_bridge_network(bench, placement.pick_network())
 		bench.status = "Deploying"
 		bench.save(ignore_permissions=True)
-		frappe.db.commit()
+		frappe.db.commit()  # nosemgrep -- `Deploying` has to be visible while the minutes below run
 
 		admin_password = secrets.token_urlsafe(10)
 		bench.admin_password = admin_password
@@ -139,7 +139,7 @@ def _deploy_bench(bench_name: str) -> None:
 
 		bench.database_server = db_server_name
 		bench.save(ignore_permissions=True)
-		frappe.db.commit()
+		frappe.db.commit()  # nosemgrep -- the server the rest of the run uses, published before it is used
 
 		# Ahead of the image step on purpose: the build is where the minutes go,
 		# and a bench the host cannot isolate has no business paying for one.
@@ -170,14 +170,14 @@ def _deploy_bench(bench_name: str) -> None:
 		bench.node = lease.local_node()
 		bench.container_image = lab.image_tag
 		bench.save(ignore_permissions=True)
-		frappe.db.commit()
+		frappe.db.commit()  # nosemgrep -- the container id, so a crash after this point leaves something to clean up
 
 		pipeline.step("container_ip")
 		container_ip = wait_for_container_running(container_id, bench.bridge_network, timeout=60)
 		bench.container_ip = container_ip
 		pipeline.log(f"container_ip {container_ip}")
 		bench.save(ignore_permissions=True)
-		frappe.db.commit()
+		frappe.db.commit()  # nosemgrep -- the address the route file is written from
 
 		bench.public_url = addressing.public_site_url(bench.name, settings.base_domain)
 		ingress.publish(bench.name, settings.base_domain)
@@ -275,7 +275,7 @@ def _deploy_bench(bench_name: str) -> None:
 		# everything that reads the marker rather than the metadata.
 		pipeline.step("complete", "success")
 		frappe.db.set_value("Deploy Log", deploy_log_name, "log_type", "success")
-		frappe.db.commit()
+		frappe.db.commit()  # nosemgrep -- the success marker, read by everything watching the run
 		notify_owner(
 			bench.owner,
 			f"Bench deployed: {bench.bench_name} ({bench.site_name})",
@@ -294,10 +294,10 @@ def _deploy_bench(bench_name: str) -> None:
 		# Beside the settle, not behind it: `on_bench_stopped` is free on a bench that never
 		# held a lease, which is every deploy that fails before Running.
 		admission.release(bench.name)
-		frappe.db.commit()
+		frappe.db.commit()  # nosemgrep -- the failure state, before the log lines that explain it
 		append_log(f"=== Deploy failed: {e!s} ===", "error")
 		frappe.db.set_value("Deploy Log", deploy_log_name, "log_type", "error")
-		frappe.db.commit()
+		frappe.db.commit()  # nosemgrep -- the log's own outcome, so a watcher sees why the run stopped
 		frappe.log_error(
 			title=f"BenchPress deploy failed: {bench_name}",
 			message=frappe.get_traceback(),
