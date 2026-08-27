@@ -20,7 +20,6 @@ sweep, the scheduler decides and `queue-long` acts: this worker has no Docker so
 import frappe
 from frappe.utils import add_days, cint, get_datetime, now_datetime, time_diff_in_hours
 
-from benchpress import lifecycle
 from benchpress.credits import config, notify
 
 BENCH = "Bench Instance"
@@ -45,6 +44,10 @@ def reap_bench(bench_name: str) -> None:
 	bench = frappe.get_doc(BENCH, bench_name)
 	if bench.status != "Stopped":
 		return  # started again between the decision and this job; it has earned another window
+	# Inside the function, not at module scope: the scheduler imports this module and has no
+	# Docker socket, and `test_scheduler_entries` holds that line.
+	from benchpress import lifecycle
+
 	lifecycle.torn_down(bench)
 	notify.announce_reap(bench)
 
