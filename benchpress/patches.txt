@@ -27,4 +27,3 @@ benchpress.patches.drop_burn_fields
 benchpress.patches.name_bench_sites_by_site_name
 benchpress.patches.backfill_bench_bridge_network
 benchpress.patches.default_golden_switches
-benchpress.patches.drop_bench_site_full_domain
