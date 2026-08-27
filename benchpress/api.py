@@ -267,9 +267,9 @@ def _assert_site_name_changeable(doc) -> None:
 	"""Refuse to rename a bench whose current name might still own a live database.
 
 	`Draft` is the only status that guarantees no live site exists under `doc.site_name`:
-	either nothing was ever deployed, or `teardown_bench` ran and actually dropped the
+	either nothing was ever deployed, or `lifecycle.torn_down` ran and actually dropped the
 	database before resetting status. `lifecycle.stopped` marks the instance `Stopped` and
-	deactivates its `Bench Site` rows WITHOUT dropping the database (only `teardown_bench`
+	deactivates its `Bench Site` rows WITHOUT dropping the database (only `torn_down`
 	does that) — so `Stopped` must still block a rename, or the old database would be
 	silently orphaned. The caller stops/deletes the instance first to rename it.
 	"""
@@ -335,14 +335,13 @@ def _stop_bench(bench) -> dict:
 def _delete_bench(bench) -> dict:
 	"""Remove an instance and everything it owns, then the row itself.
 
-	Container, volume, site database and metering session go through
-	`deploy_manager.teardown_bench`, the one teardown path, where every removal is
-	best-effort. Only what it does not cover is left here.
+	Container, volume, site database and metering session go through `lifecycle.torn_down`,
+	the one teardown path, where every removal is best-effort. Only what it does not cover is
+	left here.
 	"""
-	from benchpress.deploy_manager import teardown_bench
 	from benchpress.vpn_adapter import remove_bench_peer
 
-	teardown_bench(bench)
+	lifecycle.torn_down(bench)
 	# Before the instance: it reads the `Bench Site` rows, which `BenchInstance.on_trash` removes.
 	_drop_bench_site_databases(bench)
 	remove_bench_peer(bench)

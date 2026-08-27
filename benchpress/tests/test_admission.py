@@ -455,7 +455,7 @@ class TestAdmission(IntegrationTestCase):
 		admission.claim(USER, bench.name, 0)
 		frappe.set_user(USER)
 		with (
-			patch("benchpress.deploy_manager.stop_container"),
+			patch("benchpress.lifecycle.stop_container"),
 			patch("frappe.enqueue"),
 			patch("frappe.db.commit"),
 		):
@@ -549,16 +549,16 @@ class TestAdmission(IntegrationTestCase):
 		)
 
 	def teardown(self, bench, **kwargs) -> None:
-		from benchpress.deploy_manager import teardown_bench
+		from benchpress import lifecycle
 
 		with (
-			patch("benchpress.deploy_manager.stop_container"),
-			patch("benchpress.deploy_manager.remove_container"),
-			patch("benchpress.deploy_manager._drop_site_database"),
+			patch("benchpress.lifecycle.stop_container"),
+			patch("benchpress.lifecycle.remove_container"),
+			patch("benchpress.lifecycle._drop_site_database"),
 			patch("benchpress.ingress.withdraw"),
 			patch("frappe.db.commit"),
 		):
-			teardown_bench(frappe.get_doc(BENCH, bench.name), **kwargs)
+			lifecycle.torn_down(frappe.get_doc(BENCH, bench.name), **kwargs)
 
 	def running_bench(self, bench):
 		frappe.db.set_value(

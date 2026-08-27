@@ -883,7 +883,7 @@ class TestRouteSyncTriggers(IntegrationTestCase):
 	def test_teardown_deletes_directly_and_enqueues_nothing(self):
 		"""Teardown already runs on `queue-long`, and it must not depend on a second job
 		surviving to remove live routing state."""
-		from benchpress.deploy_manager import teardown_bench
+		from benchpress import lifecycle
 
 		bench = self._bench()
 		bench.container_id = None
@@ -894,7 +894,7 @@ class TestRouteSyncTriggers(IntegrationTestCase):
 			route_file = target_dir / f"{bench.name}.yml"
 
 			with patch("frappe.enqueue") as enqueue:
-				teardown_bench(bench)
+				lifecycle.torn_down(bench)
 
 			self.assertFalse(route_file.exists())
 			enqueue.assert_not_called()

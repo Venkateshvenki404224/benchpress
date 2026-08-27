@@ -9,16 +9,14 @@ import shlex
 import frappe
 from frappe import _
 
-from benchpress import addressing, image_cache, ingress, lifecycle, site_names
-from benchpress.credits import admission, lease, metering
+from benchpress import addressing, image_cache, site_names
+from benchpress.credits import metering
 from benchpress.deploy_pipeline import DeployLogWriter
 from benchpress.docker_manager import (
 	build_lab_image,
 	exec_in_container,
 	host_runtimes,
-	remove_container,
 	resolve_runtime,
-	stop_container,
 	write_file_to_container,
 )
 from benchpress.mariadb_manager import (
@@ -65,42 +63,10 @@ def _remove_stale_container(bench) -> None:
 		pass  # best-effort
 
 
-NOTHING_TO_ROLL_BACK = "Cleanup: nothing to roll back — no container was created"
-
 ADOPTED_MARKER = "already exists — adopting it"
 GOLDEN_MARKER = "Restored from golden dump"
 # What the Deploy Log says when the golden branch ran. `golden_drill` reads runs back by it.
 GOLDEN_RESTORED = "restored from the image's golden dump"
-
-
-def _cleanup_failed_deploy(bench, container_id, append_log) -> None:
-	"""Best-effort teardown of resources created by this failed run.
-
-	Fires only when this run created a container — earlier failures leave the
-	previous deploy's container and peer untouched. Never raises: the except
-	block must still record Error state.
-
-	Either way the outcome is written to the log, so the screen reporting the
-	failure can state what was rolled back instead of inferring it from silence.
-	"""
-	if not container_id:
-		append_log(NOTHING_TO_ROLL_BACK)
-		return
-	try:
-		remove_container(container_id)
-		append_log("Cleanup: removed container created by this run")
-	except Exception:
-		pass  # best-effort
-	try:
-		from benchpress.vpn_adapter import remove_bench_peer
-
-		remove_bench_peer(bench)
-		append_log("Cleanup: VPN peer removed")
-	except Exception:
-		pass  # best-effort
-	bench.container_id = None
-	bench.container_ip = None
-	bench.wg_ip = None
 
 
 def build_linkuser_args(bench, lab, settings) -> list[str]:
@@ -338,67 +304,6 @@ def _setup_container_vpn(bench, container_id: str, pipeline) -> None:
 	pipeline.log(f"VPN peer {peer['peer']} registered, claimed IP {peer['assigned_ip']}")
 	configure_container(container_id, peer["private_key"], peer["assigned_ip"], bench.bridge_network)
 	pipeline.log(f"Container VPN: {peer['assigned_ip']}")
-
-
-def teardown_bench(bench, *, release_admission: bool = True) -> None:
-	"""Return an instance to `Draft`: container, volume and site database all gone.
-
-	The one teardown path in the app. A redeploy runs it before building the instance again, and
-	the reaper runs it and stops there — which is what makes a reaped instance one click from
-	running: the `Lab` it was built from, with its apps, branches, version and size, is untouched.
-
-	Every removal is best-effort. A volume that was already gone, or a database that never
-	existed, must not leave the instance stuck describing resources it no longer has.
-
-	`release_admission=False` keeps the concurrency slot, and only `_redeploy_bench` passes it:
-	a redeploy is this plus a deploy, and the caller must not lose their own slot in between.
-	"""
-	if bench.container_id:
-		try:
-			stop_container(bench.container_id)
-		except Exception:
-			pass  # best-effort
-		try:
-			remove_container(bench.container_id)
-		except Exception:
-			pass  # best-effort
-
-	try:
-		# Direct, not enqueued: teardown must not leave live routing behind if a job is lost.
-		ingress.withdraw(bench.name)
-	except Exception:
-		pass  # best-effort
-
-	_drop_site_database(bench)
-	# Marked, not deleted: a redeploy refreshes them, and the reaper leaves the instance
-	# one click from running.
-	lifecycle._deactivate_bench_sites(bench)
-
-	# The container this bench was burning for is gone, so the session ends here. Without
-	# this the burning flag would survive the teardown and the fresh container — which
-	# `_deploy_bench` bills through the same idempotence guard — would run unmetered.
-	metering.on_bench_stopped(bench)
-
-	if release_admission:
-		admission.release(bench.name)
-
-	bench.container_id = None
-	bench.container_image = None
-	bench.status = "Draft"
-	bench.started_at = None
-	bench.save(ignore_permissions=True)
-	frappe.db.commit()  # nosemgrep -- the caller may redeploy next, which must see Draft
-
-
-def _drop_site_database(bench) -> None:
-	if not (bench.database_server and bench.site_name):
-		return
-	from benchpress.mariadb_manager import drop_site_database
-
-	try:
-		drop_site_database(bench.database_server, bench.site_name)
-	except Exception:
-		pass  # best-effort
 
 
 def _prepare_lab_image(lab, pipeline, user: str) -> None:

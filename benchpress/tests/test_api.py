@@ -749,7 +749,7 @@ class TestApi(IntegrationTestCase):
 		self.addCleanup(frappe.delete_doc, "Bench Site", site.name, force=True, ignore_permissions=True)
 		self.addCleanup(frappe.db.commit)
 
-		with patch("benchpress.deploy_manager.stop_container"):
+		with patch("benchpress.lifecycle.stop_container"):
 			api.bench_action(self.action_bench.name, "stop")
 
 		self.assertEqual(frappe.db.get_value("Bench Site", site.name, "status"), "Inactive")
@@ -766,7 +766,7 @@ class TestApi(IntegrationTestCase):
 			with (
 				self.subTest(action=action),
 				patch("benchpress.lifecycle.start_container") as start,
-				patch("benchpress.deploy_manager.stop_container") as stop,
+				patch("benchpress.lifecycle.stop_container") as stop,
 				patch("benchpress.lifecycle.restart_container") as restart,
 			):
 				with self.assertRaises(frappe.ValidationError) as caught:

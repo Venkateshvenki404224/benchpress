@@ -31,7 +31,7 @@ import frappe
 from frappe.tests import IntegrationTestCase
 from frappe.utils import add_days, flt, now_datetime
 
-from benchpress import api, deploy_manager, ingress, lab_detail, lifecycle
+from benchpress import api, ingress, lab_detail, lifecycle
 from benchpress.benchpress.doctype.bench_instance import get_instance_id
 from benchpress.credits import account, config, drain, lease, metering
 from benchpress.credits.seed import ensure_ledger_index, seed_default_lease_plan, seed_defaults
@@ -1123,13 +1123,13 @@ class TestLease(IntegrationTestCase):
 		metering.on_bench_running(self.running_bench())
 
 		with (
-			patch.object(deploy_manager, "stop_container"),
-			patch.object(deploy_manager, "remove_container"),
+			patch.object(lifecycle, "stop_container"),
+			patch.object(lifecycle, "remove_container"),
 			patch.object(ingress, "withdraw"),
-			patch.object(deploy_manager, "_drop_site_database"),
+			patch.object(lifecycle, "_drop_site_database"),
 			patch.object(frappe.db, "commit"),
 		):
-			deploy_manager.teardown_bench(frappe.get_doc(BENCH, self.bench.name))
+			lifecycle.torn_down(frappe.get_doc(BENCH, self.bench.name))
 		self.assertEqual(self.deadline(), 0)
 
 		frappe.db.set_value(BENCH, self.bench.name, "status", "Running", update_modified=False)

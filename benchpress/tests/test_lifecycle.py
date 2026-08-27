@@ -4,6 +4,7 @@
 """One writer per bench transition, and the side effects that writer must not forget."""
 
 import ast
+import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -11,7 +12,7 @@ from unittest.mock import patch
 import frappe
 from frappe.tests import IntegrationTestCase
 
-from benchpress import api, lifecycle
+from benchpress import api, ingress, lifecycle
 from benchpress.credits import account, admission, lease
 from benchpress.tests.fakes import FakeDockerMixin
 from benchpress.tests.test_deploy_manager import (
@@ -19,6 +20,7 @@ from benchpress.tests.test_deploy_manager import (
 	_fresh_bench,
 	_make_bench_site,
 	_make_lab,
+	_mounted,
 )
 
 BENCH = "Bench Instance"
@@ -112,6 +114,21 @@ class TransitionFixtures:
 		cls.lab.delete(ignore_permissions=True)
 		frappe.db.commit()  # nosemgrep -- the teardown must outlive the per-test rollback too
 		super().tearDownClass()
+
+	def _claimed_bench(self, bench):
+		"""Give this bench a slot, so a release has something to give back."""
+		account.ensure_account(bench.owner)
+		admission.claim(bench.owner, bench.name, 0)
+		self.addCleanup(self._drop_claim, bench.name)
+		frappe.db.commit()  # nosemgrep -- the transition commits, so the claim it releases must be durable
+		return bench
+
+	def _drop_claim(self, bench_name: str) -> None:
+		admission.release(bench_name)
+		frappe.db.commit()  # nosemgrep -- a leaked slot would outlive the rollback and the test
+
+	def _slots(self, owner: str) -> int:
+		return frappe.utils.cint(frappe.db.get_value("Credit Account", owner, "active_instances"))
 
 	def _bench(self, status: str, container_status: str, *, container: bool = True):
 		bench = _fresh_bench(self, self.lab.name)
@@ -224,22 +241,6 @@ class TestStopped(TransitionFixtures, FakeDockerMixin, IntegrationTestCase):
 	def _running_bench(self, *, container: bool = True):
 		return self._bench("Running", "running", container=container)
 
-	def _claimed_bench(self):
-		"""A running bench holding a slot, so the release has something to give back."""
-		bench = self._running_bench()
-		account.ensure_account(bench.owner)
-		admission.claim(bench.owner, bench.name, 0)
-		self.addCleanup(self._drop_claim, bench.name)
-		frappe.db.commit()  # nosemgrep -- the transition commits, so the claim it releases must be durable
-		return bench
-
-	def _drop_claim(self, bench_name: str) -> None:
-		admission.release(bench_name)
-		frappe.db.commit()  # nosemgrep -- a leaked slot would outlive the rollback and the test
-
-	def _slots(self, owner: str) -> int:
-		return frappe.utils.cint(frappe.db.get_value("Credit Account", owner, "active_instances"))
-
 	def test_a_stop_writes_stopped_and_stops_the_container(self):
 		bench = self._running_bench()
 		with patch.object(lifecycle.ingress, "enqueue_route_sync", autospec=True):
@@ -273,7 +274,7 @@ class TestStopped(TransitionFixtures, FakeDockerMixin, IntegrationTestCase):
 
 	def test_a_stop_gives_back_the_admission_slot(self):
 		"""Stopped is free: a caller at their cap who stopped everything could never start again."""
-		bench = self._claimed_bench()
+		bench = self._claimed_bench(self._running_bench())
 		before = self._slots(bench.owner)
 		with patch.object(lifecycle.ingress, "enqueue_route_sync", autospec=True):
 			lifecycle.stopped(bench.name)
@@ -307,3 +308,138 @@ class TestStopped(TransitionFixtures, FakeDockerMixin, IntegrationTestCase):
 		frappe.db.rollback()
 		self.assertEqual(frappe.db.get_value(BENCH, bench.name, "expiry_attempts"), 1)
 		self.assertEqual(frappe.db.get_value(BENCH, bench.name, "status"), "Running")
+
+
+class TestTornDown(TransitionFixtures, FakeDockerMixin, IntegrationTestCase):
+	"""Teardown's effects, and the two things it must leave behind for the next click."""
+
+	lab_id = "test-lab-lifecycle-teardown"
+
+	def _deployed_bench(self):
+		return self._bench("Running", "running")
+
+	def test_a_teardown_writes_draft_and_removes_the_container(self):
+		bench = self._deployed_bench()
+
+		lifecycle.torn_down(bench)
+
+		self.assertEqual(frappe.db.get_value(BENCH, bench.name, "status"), "Draft")
+		self.assertIsNone(bench.container_id)
+		self.assertEqual(self.docker.stopped, [bench.bench_name])
+		self.assertEqual(self.docker.removed, [bench.bench_name])
+
+	def test_a_teardown_of_a_reaped_instance_repeats_harmlessly(self):
+		"""The reaper and a redeploy can both reach an instance whose container is already gone."""
+		bench = self._bench("Stopped", "exited", container=False)
+
+		lifecycle.torn_down(bench)
+
+		self.assertEqual(frappe.db.get_value(BENCH, bench.name, "status"), "Draft")
+		self.assertEqual(self.docker.removed, [])
+
+	def test_a_teardown_deactivates_every_site(self):
+		bench = self._deployed_bench()
+		_make_bench_site(bench.name, f"one-{bench.name}.localhost")
+		_make_bench_site(bench.name, f"two-{bench.name}.localhost")
+
+		lifecycle.torn_down(bench)
+
+		statuses = frappe.get_all(SITE, filters={"bench": bench.name}, pluck="status")
+		self.assertEqual(set(statuses), {"Inactive"})
+
+	def test_a_teardown_keeps_the_site_rows_it_deactivated(self):
+		"""The row is the site-name claim, so deleting it would lose the name to the next caller."""
+		bench = self._deployed_bench()
+		_make_bench_site(bench.name, f"claim-{bench.name}.localhost")
+
+		lifecycle.torn_down(bench)
+
+		self.assertEqual(frappe.db.count(SITE, {"bench": bench.name}), 1)
+
+	def test_a_teardown_never_touches_volumes(self):
+		"""A reaped instance is one click from running, and the volume is what holds the work."""
+		bench = self._deployed_bench()
+
+		lifecycle.torn_down(bench)
+
+		self.assertEqual(self.docker.volume_gets, [])
+
+	def test_a_teardown_gives_back_the_admission_slot(self):
+		bench = self._claimed_bench(self._deployed_bench())
+		before = self._slots(bench.owner)
+
+		lifecycle.torn_down(bench)
+
+		self.assertEqual(self._slots(bench.owner), before - 1)
+		self.assertFalse(frappe.db.exists(ADMISSION, bench.name))
+
+	def test_a_redeploy_holds_its_slot_across_the_teardown(self):
+		"""Releasing between the two halves hands the slot away and leaves the caller over cap."""
+		bench = self._claimed_bench(self._deployed_bench())
+		before = self._slots(bench.owner)
+
+		lifecycle.torn_down(bench, release_admission=False)
+
+		self.assertEqual(self._slots(bench.owner), before)
+		self.assertTrue(frappe.db.exists(ADMISSION, bench.name))
+
+	def test_a_teardown_clears_the_metering_deadline(self):
+		"""The container it was burning for is gone, so the window must not survive into the next."""
+		bench = self._claimed_bench(self._deployed_bench())
+		frappe.db.set_value(BENCH, bench.name, "expires_at_ts", lease.now_ts() + 3600, update_modified=False)
+		frappe.db.commit()  # nosemgrep -- the transition reads the row it clears
+		bench.reload()
+
+		lifecycle.torn_down(bench)
+
+		self.assertEqual(frappe.utils.cint(frappe.db.get_value(BENCH, bench.name, "expires_at_ts")), 0)
+
+	def test_a_teardown_removes_the_instance_route_file(self):
+		"""Freed container IPs get reused by Docker, so a stale route file would keep pointing the
+		old public hostname at whoever gets that IP next."""
+		bench = self._bench("Running", "running", container=False)
+
+		with tempfile.TemporaryDirectory() as tmp:
+			with patch.object(ingress, "TRAEFIK_DYNAMIC_DIR", _mounted(tmp)):
+				ingress.publish(bench.name, "benchpress.cloud")
+				route_file = Path(tmp) / "instances" / f"{bench.name}.yml"
+				self.assertTrue(route_file.exists())
+
+				lifecycle.torn_down(bench)
+
+				self.assertFalse(route_file.exists())
+
+	def test_a_teardown_keeps_the_wildcard_anchor(self):
+		"""The anchor outlives every bench — it is what keeps the certificate renewing, so a
+		reaper that tidied it away would silently stop renewal."""
+		bench = self._bench("Running", "running", container=False)
+
+		with tempfile.TemporaryDirectory() as tmp:
+			with patch.object(ingress, "TRAEFIK_DYNAMIC_DIR", _mounted(tmp)):
+				ingress.ensure_anchor("benchpress.cloud")
+				ingress.publish(bench.name, "benchpress.cloud")
+				anchor = Path(tmp) / "instances" / "wildcard-anchor.yml"
+
+				lifecycle.torn_down(bench)
+
+				self.assertFalse((Path(tmp) / "instances" / f"{bench.name}.yml").exists())
+				self.assertTrue(anchor.exists())
+
+	def test_a_teardown_does_not_raise_when_no_route_file_exists(self):
+		"""The `base_domain = localhost` case: nothing wrote a route file, so teardown no-ops."""
+		bench = self._bench("Running", "running", container=False)
+
+		with tempfile.TemporaryDirectory() as tmp:
+			with patch.object(ingress, "TRAEFIK_DYNAMIC_DIR", _mounted(tmp)):
+				lifecycle.torn_down(bench)
+
+		self.assertEqual(frappe.db.get_value(BENCH, bench.name, "status"), "Draft")
+
+	def test_the_route_goes_directly_rather_than_through_a_job(self):
+		"""Teardown already runs on `queue-long`; live routing must not depend on a second job."""
+		bench = self._deployed_bench()
+
+		with patch("frappe.enqueue") as enqueue:
+			lifecycle.torn_down(bench)
+
+		enqueue.assert_not_called()

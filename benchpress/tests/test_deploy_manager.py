@@ -205,34 +205,28 @@ class TestDeployManager(FakeDockerMixin, IntegrationTestCase):
 		mock_deploy.assert_called_once_with(bench.name)
 		self.assertEqual(status_at_deploy["status"], "Draft")
 
-	@patch("benchpress.lifecycle._deploy_bench")
-	def test_redeploy_bench_never_touches_volumes(self, mock_deploy):
-		from benchpress.lifecycle import redeploy_bench
-
+	def test_redeploy_bench_never_touches_volumes(self):
 		bench = self._fresh_bench()
-		self.docker.add_container("old-container")
-		bench.container_id = "old-container"
+		bench.container_id = self.docker.add_container("old-container").id
 		bench.save(ignore_permissions=True)
 		frappe.db.commit()
 
-		redeploy_bench(bench.name)
+		lifecycle.torn_down(bench, release_admission=False)
 
 		self.assertEqual(self.docker.volume_gets, [])
 
-	@patch("benchpress.lifecycle._deploy_bench")
-	def test_redeploy_bench_drops_site_database(self, mock_deploy):
-		from benchpress.lifecycle import redeploy_bench
+	def test_redeploy_bench_drops_site_database(self):
 		from benchpress.mariadb_manager import get_database_name
 
 		bench = self._fresh_bench()
-		self.docker.add_container("old-container")
+		container = self.docker.add_container("old-container")
 		self._shared_mariadb_up()
-		frappe.db.set_value("Bench Instance", bench.name, "container_id", "old-container")
+		frappe.db.set_value("Bench Instance", bench.name, "container_id", container.id)
 		frappe.db.set_value("Bench Instance", bench.name, "database_server", self.db_server_name)
 		frappe.db.commit()
 		bench.reload()
 
-		redeploy_bench(bench.name)
+		lifecycle.torn_down(bench, release_admission=False)
 
 		db_container = self.docker.containers.get("test-db-server")
 		self.assertIn(
@@ -336,8 +330,6 @@ class TestDeployManager(FakeDockerMixin, IntegrationTestCase):
 		self.assertIn("Cleanup: removed container created by this run", self._deploy_log(bench.name))
 
 	def test_deploy_failure_before_container_skips_cleanup(self):
-		from benchpress import deploy_manager
-
 		bench = self._fresh_bench()
 		self._cleanup_deploy_logs(bench.name)
 		frappe.db.set_value(
@@ -362,7 +354,7 @@ class TestDeployManager(FakeDockerMixin, IntegrationTestCase):
 
 		self.assertEqual(self.docker.removed, [])
 		self.assertNotIn("Cleanup: VPN peer removed", self._deploy_log(bench.name))
-		self.assertIn(deploy_manager.NOTHING_TO_ROLL_BACK, self._deploy_log(bench.name))
+		self.assertIn(lifecycle.NOTHING_TO_ROLL_BACK, self._deploy_log(bench.name))
 		bench.reload()
 		self.assertEqual(bench.status, "Error")
 		self.assertEqual(bench.container_id, "old-container")
@@ -541,7 +533,6 @@ class TestDeployStepMarkers(IntegrationTestCase):
 			patch.object(ingress, "TRAEFIK_DYNAMIC_DIR", self.route_dir),
 			patch.object(lifecycle, "ensure_infrastructure", autospec=True) as mock_infra,
 			patch.object(lifecycle, "wait_for_mariadb", autospec=True),
-			patch.object(deploy_manager, "_remove_stale_container", autospec=True),
 			patch.object(deploy_manager, "host_runtimes", autospec=True) as mock_runtimes,
 			patch.object(lifecycle, "container_runtime", autospec=True) as mock_runtime_of,
 			patch.object(lifecycle, "create_bench_container", autospec=True) as mock_create,
@@ -556,7 +547,7 @@ class TestDeployStepMarkers(IntegrationTestCase):
 			# One mock, two bindings: the deploy runs in `lifecycle` and the code-server step it
 			# calls stayed in `deploy_manager`, and both imported the wrapper by name.
 			patch.object(deploy_manager, "create_site_in_container", autospec=True) as mock_site,
-			patch.object(deploy_manager, "remove_container", autospec=True),
+			patch.object(lifecycle, "remove_container", autospec=True),
 			# The transition reissues `start` on the container the deploy already brought up.
 			patch.object(lifecycle, "start_container", autospec=True),
 			patch.object(lifecycle, "notify_owner", autospec=True),
@@ -881,6 +872,42 @@ class TestDeployStepMarkers(IntegrationTestCase):
 		self.assertIn("Traefik wildcard anchor written for *.benchpress.cloud", self._log(bench.name))
 		self.assertNotIn("certResolver", (self.route_dir / f"{bench.name}.yml").read_text())
 
+	# --- what a failed deploy must not leave behind (issue #190) ---
+
+	def _failed_after_the_route(self, bench):
+		"""A deploy that dies at the SSH step, which is past both the route and the site row."""
+		self._set_base_domain("benchpress.cloud")
+		self._run_deploy(bench, exec_failures={"linkuser.sh": (1, "linkuser exploded")})
+		self.assertEqual(self._bench_field(bench, "status"), "Error")
+
+	def test_a_failed_deploy_leaves_no_route_file_answering(self):
+		"""The leak: the route file outlived the deploy that wrote it, so a public hostname kept
+		answering for a bench with no container."""
+		bench = self._bench()
+
+		self._failed_after_the_route(bench)
+
+		written = sorted(p.name for p in self.route_dir.iterdir())
+		self.assertEqual(written, ["wildcard-anchor.yml"])
+
+	def test_a_failed_deploy_leaves_no_site_row_reading_active(self):
+		"""`_record_primary_site` writes `Active` before the steps that can still fail."""
+		bench = self._bench()
+
+		self._failed_after_the_route(bench)
+
+		status = frappe.db.get_value("Bench Site", {"bench": bench.name}, "status")
+		self.assertEqual(status, "Inactive")
+
+	def test_a_failed_deploy_keeps_the_site_name_for_the_retry(self):
+		"""Deactivated, not deleted: the row is the claim, so the retry still owns its own name."""
+		bench = self._bench()
+
+		self._failed_after_the_route(bench)
+
+		site = frappe.get_doc("Bench Site", {"bench": bench.name})
+		self.assertEqual(site.site_name, self._bench_field(bench, "site_name"))
+
 	def test_a_public_deploy_states_which_certificate_serves_the_url(self):
 		"""Phase 2: the routers name no resolver, so the deploy has to say the store held a
 		certificate — otherwise the first evidence it did not is a user meeting a 526."""
@@ -1080,7 +1107,6 @@ class TestTerminalStateNotifications(IntegrationTestCase):
 			_cached_image(self.lab.name),
 			patch.object(lifecycle, "ensure_infrastructure", autospec=True) as mock_infra,
 			patch.object(lifecycle, "wait_for_mariadb", autospec=True),
-			patch.object(deploy_manager, "_remove_stale_container", autospec=True),
 			patch.object(deploy_manager, "host_runtimes", autospec=True) as mock_runtimes,
 			patch.object(lifecycle, "container_runtime", autospec=True) as mock_runtime_of,
 			patch.object(lifecycle, "create_bench_container", autospec=True) as mock_create,
@@ -1161,7 +1187,7 @@ class TestTerminalStateNotifications(IntegrationTestCase):
 		self.assertFalse(frappe.db.exists("Notification Log", {"for_user": self.owner}))
 
 
-class TestRecordPrimarySite(IntegrationTestCase):
+class TestRecordPrimarySite(FakeDockerMixin, IntegrationTestCase):
 	"""The site a deploy makes must be visible, and pressing Deploy twice must not duplicate it."""
 
 	@classmethod
@@ -1243,15 +1269,14 @@ class TestRecordPrimarySite(IntegrationTestCase):
 
 		self.assertEqual(frappe.db.get_value("Bench Site", {"bench": bench.name}, "status"), "Inactive")
 
-	@patch("benchpress.lifecycle.stop_container")
-	def test_a_deploy_returns_a_stopped_site_to_active(self, mock_stop):
+	def test_a_deploy_returns_a_stopped_site_to_active(self):
 		"""The round trip, which needs no code of its own: `_record_primary_site` already writes
 		`Active`, so a stop followed by a deploy must land back where it started."""
 		from benchpress.deploy_manager import _record_primary_site
 		from benchpress.lifecycle import stopped
 
 		bench = self._bench()
-		bench.container_id = "container-round-trip"
+		bench.container_id = self.docker.add_container(bench.bench_name).id
 		bench.save(ignore_permissions=True)
 		_record_primary_site(bench, self.lab, "secret-one")
 		frappe.db.commit()
@@ -1281,53 +1306,3 @@ class TestRecordPrimarySite(IntegrationTestCase):
 		dropped = {call.args[1] for call in mock_drop.call_args_list}
 		self.assertEqual(dropped, {bench.site_name})
 		self.assertNotIn(f"{bench.site_name}.example.com", dropped)
-
-	def test_teardown_removes_the_instance_route_file(self):
-		"""Freed container IPs get reused by Docker — a stale route file left after teardown
-		would keep pointing the old public hostname at whoever gets that IP next. See
-		phase-3-teardown-cleanup.md."""
-		from benchpress import deploy_manager
-		from benchpress.deploy_manager import teardown_bench
-
-		bench = self._bench()
-
-		with tempfile.TemporaryDirectory() as tmp:
-			with patch.object(ingress, "TRAEFIK_DYNAMIC_DIR", _mounted(tmp)):
-				ingress.publish(bench.name, "benchpress.cloud")
-				route_file = Path(tmp) / "instances" / f"{bench.name}.yml"
-				self.assertTrue(route_file.exists())
-
-				teardown_bench(bench)
-
-				self.assertFalse(route_file.exists())
-
-	def test_teardown_keeps_the_wildcard_anchor(self):
-		"""The anchor outlives every bench — it is what keeps the certificate renewing,
-		so a reaper that tidies it away would silently stop renewal."""
-		from benchpress import deploy_manager
-		from benchpress.deploy_manager import teardown_bench
-
-		bench = self._bench()
-
-		with tempfile.TemporaryDirectory() as tmp:
-			with patch.object(ingress, "TRAEFIK_DYNAMIC_DIR", _mounted(tmp)):
-				ingress.ensure_anchor("benchpress.cloud")
-				ingress.publish(bench.name, "benchpress.cloud")
-				anchor = Path(tmp) / "instances" / "wildcard-anchor.yml"
-
-				teardown_bench(bench)
-
-				self.assertFalse((Path(tmp) / "instances" / f"{bench.name}.yml").exists())
-				self.assertTrue(anchor.exists())
-
-	def test_teardown_does_not_raise_when_no_route_file_exists(self):
-		"""The `base_domain = localhost` case: phase 1 never wrote a route file, so teardown
-		must no-op cleanly rather than raising on a missing path."""
-		from benchpress import deploy_manager
-		from benchpress.deploy_manager import teardown_bench
-
-		bench = self._bench()
-
-		with tempfile.TemporaryDirectory() as tmp:
-			with patch.object(ingress, "TRAEFIK_DYNAMIC_DIR", _mounted(tmp)):
-				teardown_bench(bench)

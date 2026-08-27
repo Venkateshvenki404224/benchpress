@@ -223,7 +223,6 @@ class TestDeployReusesTheSharedImage(IntegrationTestCase):
 			patch("benchpress.docker_manager.get_client", return_value=client),
 			patch.object(lifecycle, "ensure_infrastructure", autospec=True) as mock_infra,
 			patch.object(lifecycle, "wait_for_mariadb", autospec=True),
-			patch.object(deploy_manager, "_remove_stale_container", autospec=True),
 			patch.object(lifecycle, "create_bench_container", autospec=True) as mock_create,
 			# The deploy starts through the roll wrapper, so the bridge it lands on is a
 			# read-back rather than the id that went in.

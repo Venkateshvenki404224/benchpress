@@ -5,6 +5,8 @@ import frappe
 from frappe import _
 from frappe.model.document import Document
 
+from benchpress.mariadb_manager import SERVER_ERROR
+
 
 class DatabaseServer(Document):
 	def before_insert(self):
@@ -28,7 +30,7 @@ class DatabaseServer(Document):
 		}
 
 	def set_error(self, message: str):
-		self.status = "Error"
+		self.status = SERVER_ERROR
 		self.error_message = message
 		self.save(ignore_permissions=True)
 		frappe.db.commit()

@@ -20,6 +20,7 @@ from benchpress.docker_manager import (
 	container_runtime,
 	create_bench_container,
 	exec_in_container,
+	remove_container,
 	restart_container,
 	start_bench_container,
 	start_container,
@@ -29,6 +30,8 @@ from benchpress.docker_manager import (
 )
 from benchpress.mariadb_manager import ensure_infrastructure, wait_for_mariadb
 from benchpress.notifications import notify_owner
+
+NOTHING_TO_ROLL_BACK = "Cleanup: nothing to roll back — no container was created"
 
 
 def running(bench, *, action: str = "start") -> None:
@@ -97,6 +100,103 @@ def _deactivate_bench_sites(bench) -> None:
 	frappe.db.set_value("Bench Site", {"bench": bench.name}, "status", "Inactive", update_modified=False)
 
 
+def torn_down(bench, *, release_admission: bool = True) -> None:
+	"""Return an instance to `Draft`: container, volume and site database all gone.
+
+	`release_admission=False` keeps the slot for `_redeploy_bench`, which is this plus a deploy.
+	"""
+	if bench.container_id:
+		try:
+			stop_container(bench.container_id)
+		except Exception:
+			pass  # best-effort
+		_remove_container(bench.container_id)
+
+	_drop_site_database(bench)
+	bench.container_id = None
+	bench.container_image = None
+	bench.started_at = None
+	_ended(bench, "Draft", release_admission=release_admission)
+
+
+def errored(bench, container_id: str | None, append_log) -> None:
+	"""Roll back a deploy that failed, keeping the site name so a retry still owns it.
+
+	`container_id` is this run's; `bench.container_id` may still name the previous deploy's.
+	"""
+	if not container_id:
+		append_log(NOTHING_TO_ROLL_BACK)
+	else:
+		_remove_container(container_id)
+		append_log("Cleanup: removed container created by this run")
+		if _remove_bench_peer(bench):
+			append_log("Cleanup: VPN peer removed")
+		# Only this run's addresses are cleared: a failure before the container leaves the
+		# previous deploy's, and that container is still running.
+		bench.container_id = None
+		bench.container_ip = None
+		bench.wg_ip = None
+
+	# No `_drop_site_database` here: the `Bench Site` row is the name claim, and the retry drops
+	# the database itself before it recreates the site.
+	_ended(bench, "Error", release_admission=True)
+
+
+def _ended(bench, status: str, *, release_admission: bool) -> None:
+	"""Write the end of a bench's life, with the side effects both endings share.
+
+	`status` is the only difference: `Draft` discards the instance, `Error` leaves it for a retry.
+	"""
+	try:
+		# Direct, not enqueued: a lost job would leave a public hostname answering for a bench
+		# that no longer runs.
+		ingress.withdraw(bench.name)
+	except Exception:
+		pass  # best-effort
+
+	# Marked, not deleted: the row is the site-name claim, and a redeploy refreshes it.
+	_deactivate_bench_sites(bench)
+	# The container this bench was burning for is gone, so the session ends here. Without this
+	# the burning flag would survive into the next container, which `_deploy_bench` bills
+	# through the same idempotence guard, and it would run unmetered.
+	metering.on_bench_stopped(bench)
+	if release_admission:
+		admission.release(bench.name)
+
+	bench.status = status
+	bench.save(ignore_permissions=True)
+	frappe.db.commit()  # nosemgrep -- the caller may redeploy next, which must see this status
+
+
+def _remove_container(container_id: str) -> None:
+	try:
+		remove_container(container_id)
+	except Exception:
+		pass  # best-effort
+
+
+def _remove_bench_peer(bench) -> bool:
+	"""Drop the WireGuard peer, reporting whether it went, since the caller logs the outcome."""
+	from benchpress.vpn_adapter import remove_bench_peer
+
+	try:
+		remove_bench_peer(bench)
+		return True
+	except Exception:
+		return False
+
+
+def _drop_site_database(bench) -> None:
+	if not (bench.database_server and bench.site_name):
+		return
+	from benchpress.mariadb_manager import drop_site_database
+
+	try:
+		drop_site_database(bench.database_server, bench.site_name)
+	except Exception:
+		pass  # best-effort
+
+
 def deploy_bench(bench_name: str) -> None:
 	"""Deploy a bench, refusing to run concurrently with another deploy of the same bench."""
 	from benchpress.deploy_manager import _log_deploy_skipped
@@ -115,8 +215,6 @@ def _deploy_bench(bench_name: str) -> None:
 	# would make a cycle the moment anything there needs a transition.
 	from benchpress.deploy_manager import (
 		_assert_runtime_registered,
-		_cleanup_failed_deploy,
-		_drop_site_database,
 		_golden_matches_server,
 		_prepare_lab_image,
 		_record_primary_site,
@@ -330,16 +428,9 @@ def _deploy_bench(bench_name: str) -> None:
 
 	except Exception as e:
 		bench.reload()
-		_cleanup_failed_deploy(bench, created_container_id, append_log)
-		bench.status = "Error"
-		bench.save(ignore_permissions=True)
-		# Settle whatever did run and charge nothing further: a failed deploy is free, and a
+		# Settles metering and releases the slot on the way past: a failed deploy is free, and a
 		# failed *re*deploy of an instance that was already burning must not keep burning.
-		metering.on_bench_stopped(bench)
-		# Beside the settle, not behind it: `on_bench_stopped` is free on a bench that never
-		# held a lease, which is every deploy that fails before Running.
-		admission.release(bench.name)
-		frappe.db.commit()  # nosemgrep -- the failure state, before the log lines that explain it
+		errored(bench, created_container_id, append_log)
 		append_log(f"=== Deploy failed: {e!s} ===", "error")
 		frappe.db.set_value("Deploy Log", deploy_log_name, "log_type", "error")
 		frappe.db.commit()  # nosemgrep -- the log's own outcome, so a watcher sees why the run stopped
@@ -361,9 +452,7 @@ def redeploy_bench(bench_name: str) -> None:
 
 
 def _redeploy_bench(bench_name: str) -> None:
-	from benchpress.deploy_manager import teardown_bench
-
 	# The slot is held across the whole redeploy: releasing between the two halves would hand it
 	# to somebody else and leave this caller one over their limit when their own deploy lands.
-	teardown_bench(frappe.get_doc("Bench Instance", bench_name), release_admission=False)
+	torn_down(frappe.get_doc("Bench Instance", bench_name), release_admission=False)
 	_deploy_bench(bench_name)

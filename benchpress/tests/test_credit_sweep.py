@@ -297,8 +297,8 @@ class TestCreditSweep(IntegrationTestCase):
 
 		with (
 			patch("frappe.db.commit"),
-			patch("benchpress.deploy_manager.stop_container") as stop,
-			patch("benchpress.deploy_manager.remove_container") as remove,
+			patch("benchpress.lifecycle.stop_container") as stop,
+			patch("benchpress.lifecycle.remove_container") as remove,
 			patch("benchpress.docker_manager.get_client") as client,
 			patch("benchpress.mariadb_manager.drop_site_database") as drop,
 		):
@@ -315,7 +315,7 @@ class TestCreditSweep(IntegrationTestCase):
 		"""Between the decision and the job, one click can make the decision wrong."""
 		self.enable_credits()
 		frappe.db.set_value(BENCH, self.bench.name, "status", "Running", update_modified=False)
-		with patch("benchpress.deploy_manager.teardown_bench") as teardown:
+		with patch("benchpress.lifecycle.torn_down") as teardown:
 			reaper.reap_bench(self.bench.name)
 		teardown.assert_not_called()
 
