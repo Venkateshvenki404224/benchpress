@@ -138,6 +138,7 @@ permission_query_conditions = {
 	"Build Log": "benchpress.permissions.build_log_query_conditions",
 	"Credit Account": "benchpress.permissions.credit_account_query_conditions",
 	"Credit Ledger Entry": "benchpress.permissions.credit_ledger_query_conditions",
+	"Bench Event": "benchpress.permissions.bench_event_query_conditions",
 }
 
 # Not the `has_permission` key inside `add_to_apps_screen` above — that one gates the apps screen.
@@ -146,6 +147,7 @@ has_permission = {
 	"Credit Ledger Entry": "benchpress.permissions.credit_ledger_has_permission",
 	"Deploy Log": "benchpress.permissions.deploy_log_has_permission",
 	"Build Log": "benchpress.permissions.build_log_has_permission",
+	"Bench Event": "benchpress.permissions.bench_event_has_permission",
 }
 
 # DocType Class
@@ -321,4 +323,7 @@ ignore_links_on_delete = ["Deploy Log", "Build Log", "Database Server"]
 default_log_clearing_doctypes = {
 	"Deploy Log": 7,
 	"Build Log": 7,
+	# Longer than the logs: this is the evidence trail for a failure that may not be looked
+	# at the same week.
+	"Bench Event": 30,
 }
