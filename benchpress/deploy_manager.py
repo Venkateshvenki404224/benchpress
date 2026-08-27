@@ -12,7 +12,7 @@ from frappe import _
 from frappe.utils.file_lock import LockTimeoutError
 from frappe.utils.synchronization import filelock
 
-from benchpress import addressing, image_cache, ingress, placement
+from benchpress import addressing, image_cache, ingress, placement, site_names
 from benchpress.credits import admission, lease, metering
 from benchpress.deploy_pipeline import DeployLogWriter, DeployPipeline
 from benchpress.docker_manager import (
@@ -547,7 +547,7 @@ def _record_primary_site(bench, lab, admin_password: str) -> None:
 	`BenchPress User` read `if_owner`, so an admin redeploying somebody else's instance would
 	take the row over and empty that tenant's Sites tab.
 	"""
-	site = _claimed_site(bench)
+	site = site_names.claimed(bench)
 	site.status = "Active"
 	site.admin_password = admin_password
 	site.owner = bench.owner
@@ -557,24 +557,6 @@ def _record_primary_site(bench, lab, admin_password: str) -> None:
 	site.save(ignore_permissions=True)
 	# No commit: the next log line commits, and committing here outlives a test rollback
 	# that discards the parent instance.
-
-
-def _claimed_site(bench):
-	"""The row `api.create_bench` claimed for this name, claiming it here if nothing did.
-
-	Raises when the name belongs to another bench. This is the last line of defence rather than
-	the constraint - the primary key is that - and a deploy that would write over somebody
-	else's site must fail loudly instead.
-	"""
-	if not frappe.db.exists("Bench Site", bench.site_name):
-		# A Desk deploy never went through `create_bench`, so nothing claimed the name for it.
-		from benchpress.api import _claim_site_name
-
-		_claim_site_name(bench)
-	site = frappe.get_doc("Bench Site", bench.site_name)
-	if site.bench != bench.name:
-		raise Exception(f"Site {bench.site_name} belongs to {site.bench}")
-	return site
 
 
 def _site_app_names(lab) -> list[str]:

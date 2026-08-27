@@ -34,7 +34,7 @@ DRILL_ROLE = "BenchPress User"
 LAB_PREFIX = "drill-"
 
 # The one name `site-name` mode makes every request ask for. A bare label, because
-# `docker_manager.resolve_site_name` adds the domain and rejects anything carrying its own.
+# `site_names.qualify` adds the domain and rejects anything carrying its own.
 SITE_LABEL = "drill-site"
 
 # A mode that measures anything other than the count has to lift the count, or it would pass by

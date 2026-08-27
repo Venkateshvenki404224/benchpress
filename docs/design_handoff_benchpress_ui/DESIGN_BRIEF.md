@@ -102,7 +102,7 @@ but `Unhealthy`. The current UI never shows this. It should.
 
 ### Bench Site — *the Frappe site inside the bench*
 
-Fields: `site_name`, `full_domain`, `bench`, `admin_password`,
+Fields: `site_name`, `bench`, `admin_password`,
 `apps_installed`.
 
 **Status: `Creating` → `Active` → `Inactive` → `Error`**

@@ -108,7 +108,7 @@ def _load_environments() -> list[dict]:
 
 def _site_label(bench: dict, site: dict | None) -> str:
 	if site:
-		return site.get("full_domain") or site.get("site_name") or ""
+		return site.get("site_name") or ""
 	return bench.domain or bench.site_name or ""
 
 
@@ -122,7 +122,7 @@ def _primary_sites(bench_names: list[str]) -> dict:
 	sites = frappe.get_all(
 		"Bench Site",
 		filters={"bench": ("in", bench_names)},
-		fields=["bench", "site_name", "full_domain", "status"],
+		fields=["bench", "site_name", "status"],
 		order_by="creation asc",
 	)
 	primary = {}

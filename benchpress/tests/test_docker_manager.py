@@ -168,33 +168,6 @@ class TestWaitForContainerRunning(unittest.TestCase):
 		self.assertEqual(sleep.call_count, 30)
 
 
-class TestResolveSiteName(unittest.TestCase):
-	def test_returns_none_for_empty_input(self):
-		self.assertIsNone(docker_manager.resolve_site_name(None))
-		self.assertIsNone(docker_manager.resolve_site_name(""))
-		self.assertIsNone(docker_manager.resolve_site_name("   "))
-
-	@patch("benchpress.docker_manager.frappe.db.get_single_value", return_value="benchpress.cloud")
-	def test_lowercases_and_appends_base_domain(self, get_single_value):
-		self.assertEqual(docker_manager.resolve_site_name("Acme"), "acme.benchpress.cloud")
-
-	@patch("benchpress.docker_manager.frappe.db.get_single_value", return_value=None)
-	def test_falls_back_to_localhost_when_base_domain_unset(self, get_single_value):
-		self.assertEqual(docker_manager.resolve_site_name("acme"), "acme.localhost")
-
-	def test_rejects_a_dotted_label(self):
-		with self.assertRaises(frappe.ValidationError):
-			docker_manager.resolve_site_name("acme.example.com")
-
-	def test_rejects_invalid_characters(self):
-		with self.assertRaises(frappe.ValidationError):
-			docker_manager.resolve_site_name("Acme_1")
-
-	def test_rejects_a_label_over_max_length(self):
-		with self.assertRaises(frappe.ValidationError):
-			docker_manager.resolve_site_name("a" * 64)
-
-
 def _make_lab(lab_id, **extra):
 	if frappe.db.exists("Lab", lab_id):
 		frappe.delete_doc("Lab", lab_id, force=True, ignore_permissions=True)

@@ -9,7 +9,7 @@
 			>
 				<div class="min-w-0 flex-1">
 					<p class="truncate text-body font-medium text-ink-gray-9">
-						{{ site.full_domain || site.site_name }}
+						{{ site.site_name }}
 					</p>
 					<div class="mt-1 flex flex-wrap gap-1">
 						<AppChip v-for="app in site.apps" :key="app" :app="app" />

@@ -6,7 +6,7 @@ from frappe import _
 from frappe.query_builder import DocType
 from frappe.query_builder.functions import Count
 
-from benchpress import addressing, image_cache, lab_detail, lab_templates, labs
+from benchpress import addressing, image_cache, lab_detail, lab_templates, labs, site_names
 from benchpress.benchpress.doctype.bench_instance.bench_instance import DEPLOY_JOB_TIMEOUT
 
 # Every field the renew path decides from, read once under the row lock.
@@ -190,7 +190,6 @@ def _counts_by_bench(doctype: str, column: str, bench_names: list[str]) -> dict[
 def create_bench(data: str) -> dict:
 	require_app_user()
 	from benchpress.benchpress.doctype.bench_instance import get_instance_id
-	from benchpress.docker_manager import resolve_site_name
 
 	data = frappe.parse_json(data)
 
@@ -201,7 +200,7 @@ def create_bench(data: str) -> dict:
 	lab = frappe.get_cached_doc("Lab", lab_name)
 	requested_site_name = data.get("site_name") or data.get("site")
 
-	site_name = resolve_site_name(requested_site_name)
+	site_name = site_names.qualify(requested_site_name)
 	instance_id = get_instance_id(frappe.session.user, lab_name)
 	if frappe.db.exists("Bench Instance", instance_id):
 		doc = _redeploy_instance(instance_id, site_name)
@@ -214,7 +213,7 @@ def create_bench(data: str) -> dict:
 			frappe.clear_last_message()
 			doc = _redeploy_instance(instance_id, site_name)
 
-	_claim_site_name(doc)
+	site_names.claim(doc)
 
 	frappe.enqueue(
 		"benchpress.deploy_manager.deploy_bench",
@@ -262,42 +261,6 @@ def _new_instance(lab, data: dict, site_name: str | None):
 			},
 		)
 	return doc.insert()
-
-
-def _claim_site_name(bench) -> None:
-	"""Claim the site name by insert. The primary key is the check, and nothing else is.
-
-	The name is held for exactly as long as the row: `teardown_bench` keeps it so a redeploy
-	still owns its own name, and only `_delete_bench` frees it - which is when the database
-	behind it actually stops existing.
-	"""
-	try:
-		site = frappe.get_doc(
-			{
-				"doctype": "Bench Site",
-				"site_name": bench.site_name,
-				"bench": bench.name,
-				"status": "Creating",
-			}
-		).insert(ignore_permissions=True)
-	except frappe.DuplicateEntryError:
-		_refuse_taken_site_name(bench)
-		return
-	# After the insert, which stamps the session user over any owner handed to it. `Bench Site`
-	# is read `if_owner`, so an admin deploying somebody else's instance would otherwise take the
-	# row over and empty that tenant's Sites tab.
-	frappe.db.set_value("Bench Site", site.name, "owner", bench.owner, update_modified=False)
-
-
-def _refuse_taken_site_name(bench) -> None:
-	# First, and on both paths: the framework msgprints "Bench Site X already exists" before it
-	# raises, so a redeploy would carry that internal sentence on an otherwise successful reply.
-	frappe.clear_last_message()
-	# A locking read, because this session is REPEATABLE READ: a plain one answers from a
-	# snapshot taken before the winner committed, and would refuse this caller their own name.
-	if frappe.db.get_value("Bench Site", bench.site_name, "bench", for_update=True) == bench.name:
-		return
-	frappe.throw(_("Site name '{0}' is already in use. Choose a different name.").format(bench.site_name))
 
 
 def _assert_site_name_changeable(doc) -> None:
@@ -409,15 +372,7 @@ def _delete_bench(bench) -> dict:
 
 
 def _drop_bench_site_databases(bench) -> None:
-	"""Drop the database behind every site on this bench, one failure at a time.
-
-	`full_domain` is recomputed from the editable `Bench Instance.domain` on every `Bench Site`
-	save (`BenchSite.compute_full_domain`), so it drifts from the name a site's database was
-	actually created under — and `get_database_name` hashes that name, so a drifted value drops a
-	hash that never existed and orphans the real database. Both candidate names are dropped, which
-	the idempotent `DROP DATABASE IF EXISTS` makes safe: whichever one keyed the database dies, the
-	other is a no-op.
-	"""
+	"""Drop the database behind every site on this bench, one failure at a time."""
 	if not bench.database_server:
 		return
 	from benchpress.mariadb_manager import drop_site_database
@@ -425,8 +380,8 @@ def _drop_bench_site_databases(bench) -> None:
 	# `get_all`, not `get_list`: a teardown has to be exhaustive, and `Bench Site` is read
 	# `if_owner`, so an admin deleting somebody else's instance would silently skip their sites
 	# and leave the databases behind.
-	sites = frappe.get_all("Bench Site", filters={"bench": bench.name}, fields=["site_name", "full_domain"])
-	for name in {n for site in sites for n in (site.site_name, site.full_domain) if n}:
+	sites = frappe.get_all("Bench Site", filters={"bench": bench.name}, fields=["site_name"])
+	for name in {site.site_name for site in sites if site.site_name}:
 		try:
 			drop_site_database(bench.database_server, name)
 		except Exception:
