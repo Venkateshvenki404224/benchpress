@@ -27,6 +27,12 @@ Costs are **holds, not debits**. Nothing here writes to a balance; `metering` st
 charge. What a start must prove is the price of one lease — the number the size picker quoted
 and the number the deploy is about to spend — and admission reserves it until that deploy
 spends it.
+
+Every one of those numbers is judged against the **payer**, not the session user: the bench's
+owner where the call carries a bench, the session user where it does not. The hold is the only
+thing in this app that can refuse a start, so pricing it against the caller removes the refusal
+for the account `metering` goes on to debit — which is how an owner reached -4.0 credits while
+somebody else held 75.
 """
 
 import functools
@@ -42,16 +48,20 @@ from benchpress.permissions import has_app_permission
 
 ACCOUNT = "Credit Account"
 BENCH = "Bench Instance"
+LAB = "Lab"
 LEDGER = "Credit Ledger Entry"
 SITE = "Bench Site"
 
 
-def requires_admission(cost=None, caps=()):
-	"""Refuse what the caller cannot pay for, or already has too many of.
+def requires_admission(cost=None, caps=(), payer=None):
+	"""Refuse what the payer cannot afford, or already has too many of.
 
-	`cost` and each entry in `caps` are called with the wrapped call's arguments by name, so they
-	read `data=` or `self=` rather than indexing a tuple. With the switch off only the slot claim
-	runs, and on a call about no instance that is nothing at all.
+	`cost`, `payer` and each entry in `caps` are called with the wrapped call's arguments by name,
+	so they read `data=` or `self=` rather than indexing a tuple. With the switch off only the slot
+	claim runs, and on a call about no instance that is nothing at all.
+
+	`payer` defaults to `payer_of_call`. An endpoint passes its own only when the account it
+	charges is not derivable from a bench, which today is the image build.
 
 	A caller without an app role is passed straight through to the endpoint's own guard. The gate
 	must never be the first thing a Guest meets: it would answer a permission question with an
@@ -63,7 +73,7 @@ def requires_admission(cost=None, caps=()):
 		@functools.wraps(method)
 		def wrapper(*args, **kwargs):
 			if has_app_permission():
-				_enforce(method, cost, caps, args, kwargs)
+				_enforce(method, cost, caps, payer or payer_of_call, args, kwargs)
 			return method(*args, **kwargs)
 
 		return wrapper
@@ -71,7 +81,7 @@ def requires_admission(cost=None, caps=()):
 	return decorator
 
 
-def _enforce(method, cost, caps, args, kwargs) -> None:
+def _enforce(method, cost, caps, payer, args, kwargs) -> None:
 	"""Claim the slot and the credits together, then the caps that are about something else.
 
 	The claim runs whatever the switch says, because concurrency is capacity rather than
@@ -83,16 +93,17 @@ def _enforce(method, cost, caps, args, kwargs) -> None:
 	admitted twice by two requests that read the same figures.
 	"""
 	arguments = _arguments_by_name(method, args, kwargs)
+	pays = payer(**arguments)
 	subject = _subject_instance(**arguments)
 	needed = flt(cost(**arguments)) if cost and config.credits_enabled() else 0.0
-	admission.claim(frappe.session.user, subject, concurrency_limit(), needed)
+	admission.claim(pays, subject, concurrency_limit(pays), needed)
 	if not config.credits_enabled():
 		return
 	for cap in caps:
 		cap(**arguments)
 	if needed and not subject:
 		# A custom image build holds no slot, so nothing held its price either: it stays a check.
-		require_balance(frappe.session.user, needed)
+		require_balance(pays, needed)
 
 
 def _arguments_by_name(method, args, kwargs) -> dict:
@@ -102,26 +113,73 @@ def _arguments_by_name(method, args, kwargs) -> dict:
 	return bound.arguments
 
 
+# --- Who pays -----------------------------------------------------------------
+
+
+def payer_of_call(**call) -> str:
+	"""The account a call is charged to: the bench's owner, or the session user where there is no bench.
+
+	`api.create_bench` needs no override — `get_instance_id` derives the instance from the caller,
+	so on a create the caller is already the owner.
+	"""
+	bench = _called_on(call)
+	return bench.owner if bench is not None else frappe.session.user
+
+
+def lab_owner(**call) -> str:
+	"""The payer for an image build: `metering.on_image_built` charges the lab's author.
+
+	The endpoint is `require_admin()`, so the caller and the author differ whenever an admin
+	builds somebody else's lab.
+	"""
+	return frappe.db.get_value(LAB, call.get("lab_name"), "owner") or frappe.session.user
+
+
 # --- What an action must be able to afford ------------------------------------
 
 
 def instance_lease_cost(**call) -> float:
-	"""One lease on this instance's lab, for a call that was handed the document itself."""
-	return lab_lease_cost(_called_on(call).lab)
+	"""One lease on a bench that already exists, priced at the size its container was given."""
+	bench = _called_on(call)
+	return _lease_cost(bench.lab, config.size_for_instance(bench))
 
 
-def payload_lease_cost(**call) -> float:
-	"""The same price for `api.create_bench`, whose lab arrives inside the JSON payload."""
-	return lab_lease_cost(frappe.parse_json(call.get("data")).get("lab"))
+def deploy_lease_cost(**call) -> float:
+	"""One lease on the container a deploy is about to create, priced at the size it will get.
+
+	A hold priced under what the deploy will spend refuses nothing, and the hold is the only refusal.
+	"""
+	return _lease_cost(_lab_of_call(**call), deploy_size(**call))
 
 
-def lab_lease_cost(lab_name) -> float:
-	"""What one window on this lab costs — what the start is about to spend, not a rate."""
+def deploy_size(**call):
+	"""The `Instance Size` a deploy resolves to: the one it names, else the lab's own chain."""
+	named = config.size_by_name(_payload(**call).get("instance_size"))
+	if named:
+		return named
+	lab_name = _lab_of_call(**call)
+	return config.size_for_lab(frappe.get_cached_doc(LAB, lab_name)) if lab_name else None
+
+
+def _lease_cost(lab_name, size) -> float:
+	"""What one window on this lab costs at `size` — what the start is about to spend, not a rate."""
 	if not lab_name:
 		return 0.0
-	lab = frappe.get_cached_doc("Lab", lab_name)
-	plan = lease.plan_for(lab)
-	return lease.cost_of(lab, plan) if plan else 0.0
+	lab = frappe.get_cached_doc(LAB, lab_name)
+	plan = lease.plan_for(lab, size)
+	return lease.cost_of(lab, plan, size) if plan else 0.0
+
+
+def _lab_of_call(**call):
+	"""The lab a call is about, whether it carries a bench document or a JSON payload."""
+	bench = _called_on(call)
+	return bench.lab if bench is not None else _payload(**call).get("lab")
+
+
+def _payload(**call) -> dict:
+	"""The JSON body an endpoint was handed, or an empty dict for a call that carries none."""
+	data = call.get("data")
+	return frappe.parse_json(data) if data else {}
 
 
 def build_charge(**call) -> float:
@@ -134,7 +192,7 @@ def build_charge(**call) -> float:
 
 def cap_sites_per_instance(**call) -> None:
 	"""`Instance Size.max_sites` for the size the instance's lab deploys at."""
-	bench_name = frappe.parse_json(call.get("data")).get("bench")
+	bench_name = _payload(**call).get("bench")
 	limit = _site_limit(bench_name)
 	if not limit:
 		return
@@ -144,6 +202,31 @@ def cap_sites_per_instance(**call) -> None:
 				"This instance already has the {0} sites its size allows. Deploy the lab at a larger size, or ask an admin to remove this instance."
 			).format(limit)
 		)
+
+
+def cap_size_tier(**call) -> None:
+	"""`Credit Settings.max_size_free` — the largest size an account that never purchased may deploy at.
+
+	Compared by `price_multiplier`, so the ceiling follows the credit ladder rather than a list order.
+	"""
+	ceiling = config.size_by_name(config.settings().max_size_free)
+	if not ceiling:
+		return
+	# Resolved the way `_enforce` resolved it. This cap only rides on calls that take the default payer.
+	if has_purchased(payer_of_call(**call)):
+		return
+	requested = deploy_size(**call)
+	if not requested or flt(requested.price_multiplier) <= flt(ceiling.price_multiplier):
+		return
+	frappe.throw(
+		_(
+			"The {0} size is not available on a free account. Deploy at {1} or smaller, or buy credits at {2} to unlock every size."
+		).format(
+			requested.size_label or requested.name,
+			ceiling.size_label or ceiling.name,
+			config.TOP_UP_ROUTE,
+		)
+	)
 
 
 def cap_devices(**call) -> None:
@@ -163,6 +246,10 @@ def cap_devices(**call) -> None:
 def cap_builds_per_day(**call) -> None:
 	"""Custom builds since midnight, counted from the rows the builds themselves write.
 
+	Counted against the lab's owner, because that is the account `on_image_built` writes them to.
+	Counted against the caller this cap could never fire at all: the endpoint is admin-only, so
+	the caller has no rows to find.
+
 	Only the explicit build action carries this cap. A build the *deploy* path performs is a cache
 	miss the user did not ask for, and its credit charge is the control there — asking Docker
 	whether a tag exists would put a socket round trip in front of every deploy request, which is
@@ -173,7 +260,7 @@ def cap_builds_per_day(**call) -> None:
 		return
 	built = frappe.db.count(
 		LEDGER,
-		{"account": frappe.session.user, "reference_doctype": "Lab", "creation": (">=", today())},
+		{"account": lab_owner(**call), "reference_doctype": "Lab", "creation": (">=", today())},
 	)
 	if built >= limit:
 		frappe.throw(
@@ -192,8 +279,7 @@ def _subject_instance(**call) -> str | None:
 	bench = _called_on(call)
 	if bench is not None:
 		return bench.name
-	data = call.get("data")
-	lab_name = frappe.parse_json(data).get("lab") if data else None
+	lab_name = _payload(**call).get("lab")
 	return get_instance_id(frappe.session.user, lab_name) if lab_name else None
 
 
@@ -202,20 +288,24 @@ def _called_on(call):
 	return call.get("self") or call.get("bench")
 
 
-def concurrency_limit() -> int:
-	"""How many instances this caller may hold at once. `0` means unlimited.
+def has_purchased(user: str) -> bool:
+	"""Whether this account has ever bought credits.
 
-	"Has paid" is the existence of a Purchase row, not a `lifetime_purchased` balance: a refund
-	clears the float, and somebody who bought and was refunded has still plainly paid.
+	The Purchase row rather than a balance: a refund clears the float, not the fact.
+	"""
+	return bool(frappe.db.exists(LEDGER, {"account": user, "entry_type": account.PURCHASE}))
 
-	With credits off there are no plans to read, so the cap is its own setting. It defaults to
-	`0`, which is what keeps an install that has never opted in behaving as it did.
+
+def concurrency_limit(user: str) -> int:
+	"""How many instances this account may hold at once. `0` means unlimited.
+
+	With credits off the cap is its own setting, which defaults to `0`.
 	"""
 	if not config.credits_enabled():
 		return cint(config.settings().max_concurrent_uncredited)
 	settings = config.settings()
-	paid = frappe.db.exists(LEDGER, {"account": frappe.session.user, "entry_type": account.PURCHASE})
-	return cint(settings.max_concurrent_paid if paid else settings.max_concurrent_free)
+	limit = settings.max_concurrent_paid if has_purchased(user) else settings.max_concurrent_free
+	return cint(limit)
 
 
 def _site_limit(bench_name) -> int:

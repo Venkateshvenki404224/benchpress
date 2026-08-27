@@ -10,7 +10,12 @@ from frappe.utils.background_jobs import is_job_enqueued
 
 from benchpress import lifecycle
 from benchpress.benchpress.doctype.bench_instance import get_instance_id
-from benchpress.credits.guard import instance_lease_cost, requires_admission
+from benchpress.credits.guard import (
+	cap_size_tier,
+	deploy_lease_cost,
+	instance_lease_cost,
+	requires_admission,
+)
 from benchpress.permissions import is_admin
 
 DEPLOY_JOB_TIMEOUT = 7200
@@ -131,7 +136,7 @@ class BenchInstance(Document):
 		return username
 
 	@frappe.whitelist()
-	@requires_admission(cost=instance_lease_cost)
+	@requires_admission(cost=deploy_lease_cost, caps=(cap_size_tier,))
 	def enqueue_deploy(self):
 		if is_job_enqueued(self._deploy_job_id()):
 			frappe.msgprint(_("A deploy is already in progress for this bench."))
@@ -153,7 +158,7 @@ class BenchInstance(Document):
 		frappe.msgprint(_("Bench stopped."))
 
 	@frappe.whitelist()
-	@requires_admission(cost=instance_lease_cost)
+	@requires_admission(cost=deploy_lease_cost, caps=(cap_size_tier,))
 	def enqueue_redeploy(self):
 		if is_job_enqueued(self._deploy_job_id()):
 			frappe.msgprint(_("A deploy is already in progress for this bench."))

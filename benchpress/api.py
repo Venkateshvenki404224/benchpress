@@ -25,8 +25,10 @@ from benchpress.credits.guard import (
 	build_charge,
 	cap_builds_per_day,
 	cap_devices,
+	cap_size_tier,
+	deploy_lease_cost,
 	instance_lease_cost,
-	payload_lease_cost,
+	lab_owner,
 	require_balance,
 	requires_admission,
 )
@@ -83,7 +85,7 @@ def create_lab_from_template(template: str, lab_id: str | None = None, title: st
 
 
 @frappe.whitelist()
-@requires_admission(cost=build_charge, caps=(cap_builds_per_day,))
+@requires_admission(cost=build_charge, caps=(cap_builds_per_day,), payer=lab_owner)
 def build_lab_image(lab_name: str) -> dict:
 	require_admin()
 	frappe.enqueue(
@@ -186,7 +188,7 @@ def _counts_by_bench(doctype: str, column: str, bench_names: list[str]) -> dict[
 
 
 @frappe.whitelist()
-@requires_admission(cost=payload_lease_cost)
+@requires_admission(cost=deploy_lease_cost, caps=(cap_size_tier,))
 def create_bench(data: str) -> dict:
 	require_app_user()
 	from benchpress.benchpress.doctype.bench_instance import get_instance_id
@@ -196,6 +198,10 @@ def create_bench(data: str) -> dict:
 	lab_name = data.get("lab")
 	if not lab_name:
 		frappe.throw(_("Lab is required to create a bench."))
+
+	size = data.get("instance_size")
+	if size and not frappe.db.exists("Instance Size", size):
+		frappe.throw(_("There is no instance size named '{0}'.").format(size))
 
 	lab = frappe.get_cached_doc("Lab", lab_name)
 	requested_site_name = data.get("site_name") or data.get("site")
@@ -218,6 +224,7 @@ def create_bench(data: str) -> dict:
 	frappe.enqueue(
 		"benchpress.lifecycle.deploy_bench",
 		bench_name=doc.name,
+		size=size,
 		queue="long",
 		timeout=DEPLOY_JOB_TIMEOUT,
 		job_id=f"deploy_bench:{doc.name}",
@@ -526,7 +533,7 @@ def renew_bench(bench_name: str, plan: str, request_id: str) -> dict:
 	stopped = bench.status == "Stopped"
 	if stopped:
 		_assert_inside_grace(bench)
-	require_balance(bench.owner, lease.cost_of(lab, chosen))
+	require_balance(bench.owner, lease.cost_of_bench(bench, lab, chosen))
 
 	charged = metering.charge_lease(bench, lab, chosen, request_id=request_id)
 	lease.extend(bench, chosen)

@@ -68,6 +68,11 @@ def default_size():
 	return size_index().get("default")
 
 
+def size_by_name(name):
+	"""One `Instance Size` by name, or `None` — the top rung of the deploy's resolution chain."""
+	return size_index()["by_name"].get(name) if name else None
+
+
 def size_for_lab(lab_doc):
 	"""The `Instance Size` a Lab deploys at. Falls back to its resources, then to the default.
 
@@ -84,6 +89,19 @@ def size_for_lab(lab_doc):
 		return chosen
 	key = size_key(lab_doc.get("memory_limit"), lab_doc.get("cpu_cores"))
 	return index["by_resources"].get(key) or index["default"]
+
+
+def size_for_instance(bench_doc):
+	"""The `Instance Size` a bench was deployed at — what billing prices, not what its Lab now says.
+
+	A Lab may be re-pointed at another size while a bench of the old one is still running, so the
+	price has to follow the numbers Docker was actually given. Falls back to the Lab for a bench
+	that predates the recorded size.
+	"""
+	chosen = size_index()["by_name"].get(bench_doc.get("instance_size"))
+	if chosen:
+		return chosen
+	return size_for_lab(frappe.get_cached_doc("Lab", bench_doc.get("lab")))
 
 
 def instance_sizes() -> list[dict]:
@@ -128,6 +146,11 @@ def build_size_index() -> dict:
 			"price_multiplier",
 			"default_lease_plan",
 			"max_sites",
+			"pids_limit",
+			"iops_limit",
+			"bps_limit",
+			"disk_limit",
+			"include_code_server",
 			"is_default",
 			"sort_order",
 		],

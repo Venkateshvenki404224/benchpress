@@ -87,6 +87,24 @@ subject — and verify it by hand before trusting it.
 an unguarded `grep` miss aborts the whole loop instead of reporting the failure
 the gate exists to catch. End helpers with `|| true` and an explicit `return 0`.
 
+**A helper whose stdout is the signal never counts with `grep -c`.** It prints
+`0` on no match, so `[ -z "$(helper)" ]` is false for a clean tree and false for
+a dirty one: the gate is unsatisfiable and fails every phase whatever the agent
+writes. Emit the matches themselves — `grep -o`, `grep -l` — and let empty mean
+clean. Guarding the exit code with `|| true` does not help, because the `0` is on
+stdout.
+
+> This one shipped. Two phase-1 gates read `grep -c … || true` and tested the
+> result with `-z`, so a correct implementation was retracted as a failure. Prove
+> every helper both ways before shipping the loop: break the thing on purpose and
+> watch the gate go red, then fix it and watch it go green. A gate only ever
+> observed on a clean tree is untested.
+
+**Beware an `awk` range whose start line also matches its end pattern.**
+`/def _enforce/,/^def [a-z_]+\(/` looks like "the body of `_enforce`" and selects
+the `def` line alone, because that line matches the end pattern too. The body is
+never read, so the gate sees nothing and reports clean.
+
 **Redirect stdin on every `docker compose exec`, or the loop hangs forever.**
 GNU `timeout` calls `setpgid()` to put its child in its own process group so it
 can kill the group. That group is *background* relative to the terminal, so the
@@ -145,26 +163,14 @@ drops first when it is concentrating on code, and a shipped feature filed under
 docker compose exec backend bench --site frontend run-tests --module benchpress.tests.test_deploy_manager
 ```
 
-Three rules, and each one has cost a real run.
+Two rules, and each one has cost a real run.
 
 **Never `--app benchpress`.** The whole suite is CI's job. It takes 60 seconds
-against the live site, one of its tests fails there for good (the fence list
-below), and the rest of the run does not repeat. Three runs of the same tree gave
+against the live site and does not repeat. Three runs of the same tree gave
 one failure, then four, then one: `test_api` blew a 600 ms budget at 1,473 ms
 under whole-suite load, and `test_credit_guard` got a Docker 404 that it does not
 get on its own. Scoped `--module` runs of the same tests were stable every time.
 A red whole-suite run here tells a loop nothing it can act on.
-
-**Never name a fenced module.** `test_lease` is the only one left.
-`test_a_restarted_bench_gets_a_fresh_deadline_and_is_not_reclaimed` errors here
-because `guard._enforce` holds credits against the caller instead of the bench
-owner, so an admin restarting a bench they do not own is priced against the wrong
-account. That is a production bug, not a test one, and no phase spec works around
-it. CI stays green only because a fresh `Administrator` on `test_site` collects
-the signup grant. Tracked as
-[#202](https://github.com/Venkateshvenki404224/benchpress/issues/202) — item 9's
-spec fixes it and deletes this entry. A phase that must touch `test_lease` gates
-on CI alone, and its phase spec says so.
 
 `test_credit_sweep`, `test_demo_data` and `test_signup` were fenced here until
 [#203](https://github.com/Venkateshvenki404224/benchpress/issues/203) fixed them,

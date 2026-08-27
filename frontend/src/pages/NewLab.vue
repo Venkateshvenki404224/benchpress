@@ -222,9 +222,8 @@ function defaultSize(sizes) {
 	return (sizes ?? []).find((size) => size.is_default) ?? (sizes ?? [])[0];
 }
 
-// The server applies this too (`Lab.apply_instance_size`), but the form has to
-// carry it: the summary rail reads the limits, and the inserted document should
-// say what the user was shown rather than rely on a save-time rewrite.
+// The only writer: the deploy reads the size itself, so nothing rewrites these at
+// save time. The inserted document has to say what the user was shown.
 watch(chosenSize, (size) => {
 	if (!size) return;
 	form.memory_limit = size.memory_limit;

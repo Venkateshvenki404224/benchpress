@@ -26,6 +26,7 @@
   "column_break_caps",
   "max_devices",
   "max_builds_per_day",
+  "max_size_free",
   "signup_section",
   "waitlist_open",
   "column_break_signup",
@@ -121,6 +122,13 @@
    "label": "Max Builds per Day"
   },
   {
+   "description": "The largest size a user who has never purchased may deploy at, compared by price multiplier. Empty = no ceiling.",
+   "fieldname": "max_size_free",
+   "fieldtype": "Link",
+   "label": "Max Size (Free)",
+   "options": "Instance Size"
+  },
+  {
    "fieldname": "signup_section",
    "fieldtype": "Section Break",
    "label": "Self-serve Signup"
@@ -184,7 +192,7 @@
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2026-08-17 12:10:00.000000",
+ "modified": "2026-08-27 16:30:00.000000",
  "modified_by": "Administrator",
  "module": "Benchpress",
  "name": "Credit Settings",

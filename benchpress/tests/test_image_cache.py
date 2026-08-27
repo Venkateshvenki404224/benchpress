@@ -21,7 +21,7 @@ import frappe
 from frappe.tests import IntegrationTestCase
 
 from benchpress import image_cache, ingress
-from benchpress.docker_manager import HOST_RUNTIMES_ATTRIBUTE
+from benchpress.docker_manager import HOST_RUNTIMES_ATTRIBUTE, CreatedContainer
 from benchpress.request_cache import clear_local_cache
 
 BUILD_STREAM = [{"stream": "Successfully built abc123"}]
@@ -226,7 +226,7 @@ class TestDeployReusesTheSharedImage(IntegrationTestCase):
 			patch.object(lifecycle, "create_bench_container", autospec=True) as mock_create,
 			# The deploy starts through the roll wrapper, so the bridge it lands on is a
 			# read-back rather than the id that went in.
-			patch.object(lifecycle, "start_bench_container", new=lambda cid, bench, lab: cid),
+			patch.object(lifecycle, "start_bench_container", new=lambda cid, bench, lab, size: cid),
 			patch.object(lifecycle, "container_network", new=lambda cid: "benchpress-0"),
 			patch.object(lifecycle, "wait_for_container_running", autospec=True) as mock_wait,
 			patch.object(deploy_manager, "_setup_container_vpn", autospec=True),
@@ -244,7 +244,7 @@ class TestDeployReusesTheSharedImage(IntegrationTestCase):
 			patch.object(ingress, "_certificate_error", autospec=True, return_value=None),
 		):
 			mock_infra.return_value = self.db_server_name
-			mock_create.return_value = "cid-image-cache"
+			mock_create.return_value = CreatedContainer("cid-image-cache", {}, {})
 			mock_wait.return_value = "172.30.0.21"
 			mock_exec.return_value = (0, "")
 			mock_site.return_value = (0, "site created")

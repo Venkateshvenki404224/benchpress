@@ -14,6 +14,7 @@ import yaml
 from frappe.tests import IntegrationTestCase
 
 from benchpress import ingress
+from benchpress.credits.config import clear_size_index
 from benchpress.tests.test_deploy_manager import _fresh_bench, _make_lab
 
 # Any dotted quad, anywhere in the rendered file. The property routes must hold is that no
@@ -32,12 +33,35 @@ def _mounted(tmp) -> Path:
 	return target_dir
 
 
+def _make_size(label, include_code_server, memory_limit):
+	"""A throwaway `Instance Size`, replaced rather than reused so its flags are known."""
+	if frappe.db.exists("Instance Size", label):
+		frappe.delete_doc("Instance Size", label, force=True, ignore_permissions=True)
+	size = frappe.new_doc("Instance Size")
+	size.update(
+		{
+			"size_label": label,
+			"memory_limit": memory_limit,
+			"cpu_cores": 3,
+			"credits_per_hour": 1.0,
+			"include_code_server": include_code_server,
+		}
+	)
+	return size.insert(ignore_permissions=True)
+
+
 class TestPublish(unittest.TestCase):
-	"""Pure-function tests, no container/DB — the URL helpers moved to test_addressing.py."""
+	"""Pure-function tests, no container/DB — the URL helpers moved to test_addressing.py.
+
+	The IDE flag is forced here; whether a bench has one is `TestIdeRouter`'s subject.
+	"""
 
 	def test_publish_writes_router_and_service(self):
 		with tempfile.TemporaryDirectory() as tmp:
-			with patch.object(ingress, "TRAEFIK_DYNAMIC_DIR", _mounted(tmp)):
+			with (
+				patch.object(ingress, "TRAEFIK_DYNAMIC_DIR", _mounted(tmp)),
+				patch.object(ingress, "has_ide", return_value=True),
+			):
 				ingress.publish("inst-1", "benchpress.cloud")
 				config = yaml.safe_load((Path(tmp) / "instances" / "inst-1.yml").read_text())
 
@@ -66,7 +90,10 @@ class TestPublish(unittest.TestCase):
 		or a dev checkout would raise where it used to write nothing."""
 		with tempfile.TemporaryDirectory() as tmp:
 			target_dir = Path(tmp) / "instances"
-			with patch.object(ingress, "TRAEFIK_DYNAMIC_DIR", target_dir):
+			with (
+				patch.object(ingress, "TRAEFIK_DYNAMIC_DIR", target_dir),
+				patch.object(ingress, "has_ide", return_value=True),
+			):
 				ingress.publish("inst-1", "localhost")
 
 			self.assertFalse(target_dir.exists())
@@ -80,7 +107,10 @@ class TestPublish(unittest.TestCase):
 		the regression is a resolver at *any* depth, not one known key.
 		"""
 		with tempfile.TemporaryDirectory() as tmp:
-			with patch.object(ingress, "TRAEFIK_DYNAMIC_DIR", _mounted(tmp)):
+			with (
+				patch.object(ingress, "TRAEFIK_DYNAMIC_DIR", _mounted(tmp)),
+				patch.object(ingress, "has_ide", return_value=True),
+			):
 				ingress.publish("inst-1", "benchpress.cloud")
 				written_text = (Path(tmp) / "instances" / "inst-1.yml").read_text()
 
@@ -93,7 +123,10 @@ class TestPublish(unittest.TestCase):
 		"""The property this phase exists to create. Both services name the container, which
 		Docker's embedded DNS resolves, so no lifecycle transition can make the file stale."""
 		with tempfile.TemporaryDirectory() as tmp:
-			with patch.object(ingress, "TRAEFIK_DYNAMIC_DIR", _mounted(tmp)):
+			with (
+				patch.object(ingress, "TRAEFIK_DYNAMIC_DIR", _mounted(tmp)),
+				patch.object(ingress, "has_ide", return_value=True),
+			):
 				ingress.publish("inst-1", "benchpress.cloud")
 				written_text = (Path(tmp) / "instances" / "inst-1.yml").read_text()
 
@@ -111,7 +144,10 @@ class TestPublish(unittest.TestCase):
 		half-written file is a config-parse error on the one internet-facing container."""
 		with tempfile.TemporaryDirectory() as tmp:
 			target_dir = _mounted(tmp)
-			with patch.object(ingress, "TRAEFIK_DYNAMIC_DIR", target_dir):
+			with (
+				patch.object(ingress, "TRAEFIK_DYNAMIC_DIR", target_dir),
+				patch.object(ingress, "has_ide", return_value=True),
+			):
 				ingress.publish("inst-1", "benchpress.cloud")
 				ingress.publish("inst-1", "benchpress.cloud")
 
@@ -123,13 +159,161 @@ class TestPublish(unittest.TestCase):
 		route every five minutes — so an identical write has to be a no-op."""
 		with tempfile.TemporaryDirectory() as tmp:
 			target_dir = _mounted(tmp)
-			with patch.object(ingress, "TRAEFIK_DYNAMIC_DIR", target_dir):
+			with (
+				patch.object(ingress, "TRAEFIK_DYNAMIC_DIR", target_dir),
+				patch.object(ingress, "has_ide", return_value=True),
+			):
 				ingress.publish("inst-1", "benchpress.cloud")
 				mtime = (target_dir / "inst-1.yml").stat().st_mtime_ns
 
 				ingress.publish("inst-1", "benchpress.cloud")
 
 				self.assertEqual((target_dir / "inst-1.yml").stat().st_mtime_ns, mtime)
+
+
+class TestIdeRouter(IntegrationTestCase):
+	"""Whether `ide-<id>` exists at all — see specs/…/phase-3-code-server-router.md.
+
+	The live bug: `enable_code_server` gated the process and nothing else, so a lab with the
+	IDE off still published a public hostname pointing at a port nothing listens on.
+	"""
+
+	@classmethod
+	def setUpClass(cls):
+		super().setUpClass()
+		frappe.set_user("Administrator")
+		# Resources no seeded size claims, so `size_for_lab`'s by-resources rung cannot pick
+		# one of these by accident.
+		cls.ide_size = _make_size("Phase Three IDE", 1, "777m")
+		cls.no_ide_size = _make_size("Phase Three No IDE", 0, "778m")
+		cls.lab = _make_lab("test-lab-ide-router")
+		# A second lab, because one bench exists per (user, lab) and the fleet read has to be
+		# shown resolving more than one bench in the same query.
+		cls.other_lab = _make_lab("test-lab-ide-router-other")
+		frappe.db.commit()
+
+	@classmethod
+	def tearDownClass(cls):
+		frappe.set_user("Administrator")
+		for lab in (cls.lab, cls.other_lab):
+			for name in frappe.get_all("Bench Instance", filters={"lab": lab.name}, pluck="name"):
+				frappe.delete_doc("Bench Instance", name, force=True, ignore_permissions=True)
+			lab.delete(ignore_permissions=True)
+		for size in (cls.ide_size, cls.no_ide_size):
+			frappe.delete_doc("Instance Size", size.name, force=True, ignore_permissions=True)
+		frappe.db.commit()
+		clear_size_index()
+		super().tearDownClass()
+
+	def setUp(self):
+		super().setUp()
+		clear_size_index()
+
+	def _bench(self, *, lab_size, lab_flag=1, bench_size=None, lab=None):
+		lab_name = (lab or self.lab).name
+		frappe.db.set_value("Lab", lab_name, {"instance_size": lab_size, "enable_code_server": lab_flag})
+		bench = _fresh_bench(self, lab_name)
+		bench.status = "Running"
+		bench.container_ip = "172.30.0.21"
+		bench.instance_size = bench_size
+		bench.save(ignore_permissions=True)
+		frappe.db.commit()
+		return bench
+
+	def _http(self, target_dir, bench):
+		return yaml.safe_load((target_dir / f"{bench.name}.yml").read_text())["http"]
+
+	def _assert_site_only(self, target_dir, bench):
+		text = (target_dir / f"{bench.name}.yml").read_text()
+		http = yaml.safe_load(text)["http"]
+		self.assertEqual(set(http["routers"]), {f"site-{bench.name}"})
+		self.assertEqual(set(http["services"]), {f"site-{bench.name}"})
+		# No router and no service, so Traefik matches nothing and answers 404 rather than
+		# the 502 a router pointing at a dead port would give.
+		self.assertNotIn("ide-", text)
+
+	def test_a_bench_with_an_ide_gets_both_routers(self):
+		bench = self._bench(lab_size=self.ide_size.name)
+
+		with _route_dir() as (ingress, target_dir):
+			ingress.publish(bench.name, "benchpress.cloud")
+			http = self._http(target_dir, bench)
+
+		self.assertEqual(set(http["routers"]), {f"site-{bench.name}", f"ide-{bench.name}"})
+		self.assertEqual(set(http["services"]), {f"site-{bench.name}", f"ide-{bench.name}"})
+
+	def test_a_lab_with_code_server_off_publishes_no_ide_hostname(self):
+		bench = self._bench(lab_size=self.ide_size.name, lab_flag=0)
+
+		with _route_dir() as (ingress, target_dir):
+			ingress.publish(bench.name, "benchpress.cloud")
+
+			self._assert_site_only(target_dir, bench)
+
+	def test_a_size_with_code_server_off_publishes_no_ide_hostname(self):
+		bench = self._bench(lab_size=self.no_ide_size.name)
+
+		with _route_dir() as (ingress, target_dir):
+			ingress.publish(bench.name, "benchpress.cloud")
+
+			self._assert_site_only(target_dir, bench)
+
+	def test_the_size_the_bench_deployed_at_beats_the_labs_current_one(self):
+		"""Billing prices the recorded size, and the routers follow the same rule: re-pointing
+		a Lab must not change what a bench that is already running publishes."""
+		bench = self._bench(lab_size=self.ide_size.name, bench_size=self.no_ide_size.name)
+
+		with _route_dir() as (ingress, target_dir):
+			ingress.publish(bench.name, "benchpress.cloud")
+
+			self._assert_site_only(target_dir, bench)
+
+	def test_the_reconcile_writes_the_same_bytes_the_deploy_wrote(self):
+		"""The derivability assertion, and nothing else catches it: the `*/5` pass has none of
+		the deploy's context, so a flag it resolved differently rewrites this file every pass —
+		and Traefik reloads on mtime."""
+		for size, routers in ((self.ide_size.name, 2), (self.no_ide_size.name, 1)):
+			with self.subTest(size=size):
+				bench = self._bench(lab_size=size)
+
+				with _route_dir() as (ingress, target_dir):
+					ingress.publish(bench.name, "benchpress.cloud")
+					route = target_dir / f"{bench.name}.yml"
+					deployed = route.read_bytes()
+					mtime = route.stat().st_mtime_ns
+
+					ingress.reconcile()
+
+					self.assertEqual(route.read_bytes(), deployed)
+					self.assertEqual(route.stat().st_mtime_ns, mtime)
+
+				self.assertEqual(len(yaml.safe_load(deployed)["http"]["routers"]), routers)
+
+	def test_the_flag_is_resolved_in_the_fleet_read(self):
+		"""One query for every bench: resolving per bench would cost the `*/5` pass one query
+		each, which is 300 a pass at the load profile this exists for."""
+		self._bench(lab_size=self.ide_size.name)
+		self._bench(lab_size=self.no_ide_size.name, lab=self.other_lab)
+
+		with _route_dir() as (ingress, _target_dir):
+			with patch.object(ingress, "_fleet_rows", wraps=ingress._fleet_rows) as fleet_rows:
+				result = ingress.reconcile()
+
+		self.assertEqual(fleet_rows.call_count, 1)
+		self.assertGreaterEqual(result["written"], 2)
+
+	def test_a_lab_answers_the_same_rule_before_any_bench_exists(self):
+		"""The Lab detail screen has no bench to ask about and must not offer an IDE row for a
+		size that has none."""
+		frappe.db.set_value(
+			"Lab", self.lab.name, {"instance_size": self.no_ide_size.name, "enable_code_server": 1}
+		)
+
+		self.assertFalse(ingress.lab_has_ide(frappe.get_doc("Lab", self.lab.name)))
+
+		frappe.db.set_value("Lab", self.lab.name, "instance_size", self.ide_size.name)
+
+		self.assertTrue(ingress.lab_has_ide(frappe.get_doc("Lab", self.lab.name)))
 
 
 class TestWildcardAnchor(unittest.TestCase):

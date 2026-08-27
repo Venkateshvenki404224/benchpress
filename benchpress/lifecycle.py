@@ -14,6 +14,7 @@ from frappe.utils.synchronization import filelock
 
 from benchpress import addressing, ingress, placement
 from benchpress.credits import admission, lease, metering
+from benchpress.credits.config import size_by_name, size_for_lab
 from benchpress.deploy_pipeline import DeployLogWriter, DeployPipeline
 from benchpress.docker_manager import (
 	container_network,
@@ -197,24 +198,37 @@ def _drop_site_database(bench) -> None:
 		pass  # best-effort
 
 
-def deploy_bench(bench_name: str) -> None:
-	"""Deploy a bench, refusing to run concurrently with another deploy of the same bench."""
+def _log_limits(pipeline, size, created) -> None:
+	"""Name the size and the knobs it applied, then every quota this host would not enforce."""
+	label = size.size_label if size else "no size"
+	applied = " ".join(f"{knob}={value}" for knob, value in created.applied.items())
+	pipeline.log(f"limits {label} — {applied}")
+	for knob, reason in created.skipped.items():
+		pipeline.log(f"limit skipped — {knob} {reason}")
+
+
+def deploy_bench(bench_name: str, size: str | None = None) -> None:
+	"""Deploy a bench, refusing to run concurrently with another deploy of the same bench.
+
+	`size` is the `Instance Size` the caller asked for; `None` falls through to the lab's own chain.
+	"""
 	from benchpress.deploy_manager import _log_deploy_skipped
 
 	try:
 		with filelock(f"bench_deploy_{bench_name}", timeout=1):
-			_deploy_bench(bench_name)
+			_deploy_bench(bench_name, size)
 	except LockTimeoutError:
 		_log_deploy_skipped(bench_name)
 
 
-def _deploy_bench(bench_name: str) -> None:
+def _deploy_bench(bench_name: str, size_name: str | None = None) -> None:
 	"""Deploy pipeline — shared MariaDB, site created at runtime via press agent pattern."""
 	# Permanent, not a step on the way to a module-scope import: image building and site
 	# creation are the remainder `deploy_manager` keeps, and importing them at module scope
 	# would make a cycle the moment anything there needs a transition.
 	from benchpress.deploy_manager import (
 		_assert_runtime_registered,
+		_forget_code_server_url,
 		_golden_matches_server,
 		_prepare_lab_image,
 		_record_primary_site,
@@ -299,13 +313,18 @@ def _deploy_bench(bench_name: str) -> None:
 		_remove_stale_container(bench)
 		_drop_site_database(bench)
 		pipeline.step("container")
-		container_id = create_bench_container(bench, lab)
-		created_container_id = container_id
+		# Resolved here and recorded, never copied onto the Lab: a size edited in Desk reaches
+		# this deploy, and billing keeps pricing what Docker was actually given.
+		size = size_by_name(size_name) or size_for_lab(lab)
+		bench.instance_size = size.name if size else None
+		created = create_bench_container(bench, lab, size)
+		container_id = created_container_id = created.container_id
+		_log_limits(pipeline, size, created)
 		# Read back rather than assumed: the stored log answers what a bench was
 		# isolated by long after the run.
 		pipeline.log(f"container runtime {container_runtime(container_id)}")
 
-		container_id = created_container_id = start_bench_container(container_id, bench, lab)
+		container_id = created_container_id = start_bench_container(container_id, bench, lab, size)
 		placement.record_bridge_network(bench, container_network(container_id))
 		pipeline.log(f"bench bridge {bench.bridge_network}")
 
@@ -405,10 +424,13 @@ def _deploy_bench(bench_name: str) -> None:
 			raise Exception(f"serve.sh failed (exit {exit_code}): {output}")
 		pipeline.log(f"Site served on port {addressing.SITE_HTTP_PORT}")
 
-		if getattr(lab, "enable_code_server", 0):
+		# The same resolver the route file was written from, so the router and the process
+		# cannot disagree about whether this bench has an IDE.
+		if ingress.has_ide(bench.name):
 			_start_code_server(bench, container_id, pipeline, settings)
 		else:
-			pipeline.log("Code server is disabled for this lab — skipped")
+			_forget_code_server_url(bench)
+			pipeline.log("Code server is disabled for this lab or its instance size — skipped")
 
 		# Everything above this line is free however long it took, because a deploy that never
 		# gets here never reaches `Running`.

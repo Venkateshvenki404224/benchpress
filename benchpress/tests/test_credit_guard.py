@@ -48,6 +48,12 @@ MAX_SITES = 3
 USER = "guard-user@example.com"
 ADMIN = "guard-admin@example.com"
 
+# A tier above the seeded ones, priced four times the base. The three seeded sizes all carry a
+# multiplier of 1.0, so nothing shipped can express "a size this account has not paid for".
+BIG_SIZE = "Guard Large"
+BIG_MULTIPLIER = 4.0
+BIG_LEASE_COST = LEASE_COST * BIG_MULTIPLIER
+
 # Every economic number this module retunes. `IntegrationTestCase` rolls back once per *class*,
 # not per test, so a test's edits are visible to its siblings until then — each one is snapshotted
 # before the first test and written back in `setUp`.
@@ -58,6 +64,7 @@ TUNED_SETTINGS = (
 	"max_builds_per_day",
 	"custom_build_credits",
 	"default_lease_plan",
+	"max_size_free",
 )
 
 
@@ -80,6 +87,25 @@ def _ensure_guard_plan() -> str:
 		.insert(ignore_permissions=True)
 		.name
 	)
+
+
+def _ensure_big_size() -> str:
+	"""A size whose price multiplier is `BIG_MULTIPLIER` by construction."""
+	values = {
+		"size_label": BIG_SIZE,
+		"memory_limit": "8g",
+		"cpu_cores": 8,
+		"price_multiplier": BIG_MULTIPLIER,
+		"max_sites": MAX_SITES,
+		"is_default": 0,
+		"sort_order": 90,
+	}
+	if frappe.db.exists("Instance Size", BIG_SIZE):
+		frappe.db.set_value("Instance Size", BIG_SIZE, values, update_modified=False)
+	else:
+		frappe.get_doc({"doctype": "Instance Size", **values}).insert(ignore_permissions=True)
+	config.clear_size_index()
+	return BIG_SIZE
 
 
 def _ensure_user(email: str, role: str | None = None) -> str:
@@ -146,6 +172,7 @@ class TestCreditGuard(IntegrationTestCase):
 			field: frappe.db.get_single_value(CREDIT_SETTINGS, field) for field in TUNED_SETTINGS
 		}
 		cls.max_sites_at_start = frappe.db.get_value("Instance Size", "Small", "max_sites")
+		cls.big_size = _ensure_big_size()
 		cls.user = _ensure_user(USER, "BenchPress User")
 		cls.admin = _ensure_user(ADMIN, "BenchPress Admin")
 		cls.lab = _ensure_lab("guard-lab", cls.user)
@@ -176,6 +203,7 @@ class TestCreditGuard(IntegrationTestCase):
 			self.set_setting(field, value)
 		self.set_setting("default_lease_plan", _ensure_guard_plan())
 		self.set_size_field("max_sites", self.max_sites_at_start)
+		self.set_lab_size("Small")
 
 	def tearDown(self):
 		frappe.set_user("Administrator")
@@ -310,7 +338,7 @@ class TestCreditGuard(IntegrationTestCase):
 	def test_the_build_cap_refuses_one_over(self):
 		self.enable_credits()
 		self.set_setting("max_builds_per_day", 2)
-		self.record_builds(2, owner=self.admin)
+		self.record_builds(2, owner=self.user)
 		frappe.set_user(self.admin)
 		with self.assertRaises(frappe.ValidationError) as refusal:
 			api.build_lab_image(self.lab.name)
@@ -319,7 +347,7 @@ class TestCreditGuard(IntegrationTestCase):
 	def test_the_build_cap_allows_one_under(self):
 		self.enable_credits()
 		self.set_setting("max_builds_per_day", 2)
-		self.record_builds(1, owner=self.admin)
+		self.record_builds(1, owner=self.user)
 		frappe.set_user(self.admin)
 		with patch("frappe.enqueue"):
 			self.assertEqual(api.build_lab_image(self.lab.name)["status"], "Building")
@@ -327,7 +355,7 @@ class TestCreditGuard(IntegrationTestCase):
 	def test_zero_means_unlimited_builds(self):
 		self.enable_credits()
 		self.set_setting("max_builds_per_day", 0)
-		self.record_builds(5, owner=self.admin)
+		self.record_builds(5, owner=self.user)
 		frappe.set_user(self.admin)
 		with patch("frappe.enqueue"):
 			api.build_lab_image(self.lab.name)
@@ -335,7 +363,7 @@ class TestCreditGuard(IntegrationTestCase):
 	def test_yesterdays_builds_do_not_count_against_today(self):
 		self.enable_credits()
 		self.set_setting("max_builds_per_day", 1)
-		self.record_builds(1, owner=self.admin, creation=add_days(today(), -1))
+		self.record_builds(1, owner=self.user, creation=add_days(today(), -1))
 		frappe.set_user(self.admin)
 		with patch("frappe.enqueue"):
 			api.build_lab_image(self.lab.name)
@@ -344,8 +372,135 @@ class TestCreditGuard(IntegrationTestCase):
 		"""`custom_build_credits = 0` makes builds free, not uncountable."""
 		self.enable_credits()
 		self.set_setting("custom_build_credits", 0)
-		account.charge(self.admin, 0, "Custom image build for a free size", ("Lab", self.lab.name))
-		self.assertEqual(self.build_row_count(self.admin), 1)
+		account.charge(self.user, 0, "Custom image build for a free size", ("Lab", self.lab.name))
+		self.assertEqual(self.build_row_count(self.user), 1)
+
+	# --- The tier ceiling: what a free account may name ----------------------
+
+	def test_a_free_account_is_refused_a_size_above_the_ceiling(self):
+		"""Funded far past the price, so only the ceiling can be what refuses this."""
+		self.enable_credits()
+		self.set_setting("max_size_free", "Small")
+		self.set_balance(GRANT * 100)
+		frappe.set_user(self.user)
+
+		with self.assertRaises(frappe.ValidationError) as refusal:
+			self.deploy_at(BIG_SIZE)
+
+		message = str(refusal.exception)
+		self.assertIn("not available on a free account", message)
+		self.assertIn("Small", message, "a refusal must name the size that is allowed")
+		self.assertNotIn("Not enough credits", message, "the ceiling must not read as a shortfall")
+
+	def test_a_free_account_may_deploy_at_the_ceiling_itself(self):
+		"""The positive control: the same call one tier down."""
+		self.enable_credits()
+		self.set_setting("max_size_free", "Small")
+		self.set_balance(GRANT)
+		frappe.set_user(self.user)
+		with patch("frappe.enqueue"):
+			self.deploy_at("Small")
+
+	def test_an_empty_ceiling_gates_nothing(self):
+		self.enable_credits()
+		self.set_setting("max_size_free", None)
+		self.set_balance(GRANT * 100)
+		frappe.set_user(self.user)
+		with patch("frappe.enqueue"):
+			self.deploy_at(BIG_SIZE)
+
+	def test_a_purchase_lifts_the_ceiling(self):
+		self.enable_credits()
+		self.set_setting("max_size_free", "Small")
+		self.record_purchase()
+		self.set_balance(GRANT * 100)
+		frappe.set_user(self.user)
+		with patch("frappe.enqueue"):
+			self.deploy_at(BIG_SIZE)
+
+	def test_a_purchased_account_short_of_the_price_is_refused_on_affordability(self):
+		"""The other refusal, and it has to read differently: topping up is what fixes this one."""
+		self.enable_credits()
+		self.set_setting("max_size_free", "Small")
+		self.record_purchase()
+		self.set_balance(BIG_LEASE_COST - 1)
+		frappe.set_user(self.user)
+
+		with self.assertRaises(frappe.ValidationError) as refusal:
+			self.deploy_at(BIG_SIZE)
+
+		message = str(refusal.exception)
+		self.assertIn("Not enough credits", message)
+		self.assertIn("short", message)
+		self.assertNotIn("not available on a free account", message)
+
+	def test_the_ceiling_is_not_consulted_with_credits_off(self):
+		"""A self-hoster running without credits must meet no gate at all."""
+		self.set_credits_enabled(0)
+		self.set_setting("max_size_free", "Small")
+		frappe.set_user(self.user)
+		with patch("frappe.enqueue"):
+			self.deploy_at(BIG_SIZE)
+
+	def test_the_ceiling_reaches_a_size_the_lab_names_itself(self):
+		"""A size chosen on the Lab is still the size this deploy asks for."""
+		self.enable_credits()
+		self.set_setting("max_size_free", "Small")
+		self.set_balance(GRANT * 100)
+		self.set_lab_size(BIG_SIZE)
+		frappe.set_user(self.user)
+
+		with self.assertRaises(frappe.ValidationError) as refusal:
+			api.create_bench(json.dumps({"lab": self.lab.name}))
+		self.assertIn("not available on a free account", str(refusal.exception))
+
+	def test_a_start_is_not_gated_by_the_ceiling(self):
+		"""This phase gates deploys. A bench that is already running keeps starting."""
+		self.enable_credits()
+		self.set_setting("max_size_free", "Small")
+		self.set_balance(GRANT * 100)
+		frappe.db.set_value(BENCH, self.bench.name, "instance_size", BIG_SIZE, update_modified=False)
+		frappe.set_user(self.user)
+		with patch("frappe.enqueue"), patch("benchpress.lifecycle.running"):
+			self.bench_document().enqueue_start()
+
+	# --- The hold is priced at the size the call asks for --------------------
+
+	def test_the_hold_is_priced_at_the_size_the_call_names(self):
+		"""Refused at the big size, admitted at the lab's own — on one unchanged balance."""
+		self.enable_credits()
+		self.set_setting("max_size_free", None)
+		self.set_balance(BIG_LEASE_COST - 1)
+		frappe.set_user(self.user)
+
+		self.assertRaises(frappe.ValidationError, self.deploy_at, BIG_SIZE)
+		with patch("frappe.enqueue"):
+			api.create_bench(json.dumps({"lab": self.lab.name}))
+
+	def test_the_signup_grant_alone_affords_two_of_the_largest_size(self):
+		"""The measurement the ceiling exists for: 40 credits is exactly two 20-credit leases."""
+		self.enable_credits()
+		self.set_setting("max_size_free", None)
+		self.set_balance(GRANT)
+		frappe.set_user(self.user)
+		with patch("frappe.enqueue"):
+			self.deploy_at(BIG_SIZE)
+			self.deploy_at(BIG_SIZE, lab=self.other_lab)
+
+	def test_the_ceiling_is_what_stops_the_grant_buying_the_host(self):
+		self.enable_credits()
+		self.set_setting("max_size_free", "Small")
+		self.set_balance(GRANT)
+		frappe.set_user(self.user)
+		self.assertRaises(frappe.ValidationError, self.deploy_at, BIG_SIZE)
+
+	def test_a_size_that_does_not_exist_is_refused_by_name(self):
+		self.enable_credits()
+		self.set_balance(GRANT)
+		frappe.set_user(self.user)
+		with self.assertRaises(frappe.ValidationError) as refusal:
+			self.deploy_at("Guard Nonexistent")
+		self.assertIn("Guard Nonexistent", str(refusal.exception))
 
 	# --- The gate never answers a permission question ------------------------
 
@@ -374,6 +529,21 @@ class TestCreditGuard(IntegrationTestCase):
 	def set_size_field(self, field: str, value) -> None:
 		frappe.db.set_value("Instance Size", "Small", field, value, update_modified=False)
 		config.clear_size_index()
+
+	def set_lab_size(self, size_name: str) -> None:
+		frappe.db.set_value("Lab", self.lab.name, "instance_size", size_name, update_modified=False)
+		frappe.clear_cache(doctype="Lab")
+
+	def deploy_at(self, size_name: str, lab=None):
+		"""`create_bench` naming a size, which is the only path that can name one."""
+		lab = lab or self.lab
+		return api.create_bench(json.dumps({"lab": lab.name, "instance_size": size_name}))
+
+	def record_purchase(self, user: str | None = None) -> None:
+		"""The Purchase row that makes an account "has paid" for every cap that asks."""
+		user = user or self.user
+		account.ensure_account(user)
+		account.purchase(user, 1, "Guard purchase", ("Lab", self.lab.name))
 
 	def set_balance(self, credits, user: str | None = None) -> None:
 		user = user or self.user
@@ -406,6 +576,9 @@ class TestCreditGuard(IntegrationTestCase):
 
 	def record_builds(self, count: int, owner: str, creation=None) -> None:
 		"""The rows a custom build writes, which is what the daily cap counts.
+
+		`owner` is the lab's owner rather than the admin who presses build: `on_image_built`
+		charges the author, so those are the only rows the cap can ever find.
 
 		Funded well past the build fee on purpose: these tests are about the cap, and a shortfall
 		refusal would pass them for the wrong reason.

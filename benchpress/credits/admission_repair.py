@@ -16,7 +16,7 @@ on the `*/5` cron beside the balance sweep, not on the daily list.
 It is pure database work: a handful of grouped reads, no Docker call anywhere, which is why it is safe
 on `queue-short` for exactly the reason `sweep.enforce_limits` is.
 
-Four rules, in order. Expiring first and healing last is what makes a double release harmless:
+Five rules, in order. Expiring first and healing last is what makes a double release harmless:
 the counter follows the rows, so it cannot be driven negative by a release that ran twice.
 """
 
@@ -49,17 +49,24 @@ CLAIM_GRACE_MINUTES = 15
 
 
 def reconcile_admissions() -> dict:
-	"""Expire stranded claims, retire stranded sites, adopt orphaned instances, heal the counters."""
+	"""Expire stranded claims, retire stranded sites, adopt orphans, re-key misattributions, heal the counters."""
 	released = _release_stranded()
 	retired = _retire_stranded_sites()
 	adopted = _adopt_orphans()
+	rekeyed = _rekey_misattributed()
 	healed = _heal_counters()
-	if released or retired or adopted or healed:
+	if released or retired or adopted or rekeyed or healed:
 		frappe.logger("benchpress").warning(
 			f"admission drift: released {len(released)}, retired {len(retired)}, "
-			f"adopted {len(adopted)}, healed {len(healed)}"
+			f"adopted {len(adopted)}, rekeyed {len(rekeyed)}, healed {len(healed)}"
 		)
-	return {"released": released, "retired": retired, "adopted": adopted, "healed": healed}
+	return {
+		"released": released,
+		"retired": retired,
+		"adopted": adopted,
+		"rekeyed": rekeyed,
+		"healed": healed,
+	}
 
 
 def _retire_stranded_sites() -> list[str]:
@@ -124,6 +131,33 @@ def _adopt_orphans() -> list[str]:
 	return adopted
 
 
+def _rekey_misattributed() -> list[str]:
+	"""Move every claim held against somebody other than its bench's owner onto that owner.
+
+	The rest of this pass cannot see the drift: `_heal_counters` sums rows by their own `account`,
+	so a claim on the wrong account and the wrong counter that follows from it agree with each
+	other forever. Only the rows move here, and the heal that runs next is what makes both
+	accounts' counters right — which is why this rule cannot be the last one.
+
+	`claimed_at` is left alone. The grace period in `_release_stranded` is about how long the
+	deploy has had, not about when the repair noticed.
+	"""
+	claims = frappe.get_all(ADMISSION, fields=["bench", "account"])
+	if not claims:
+		return []
+	owners = _bench_owners([claim.bench for claim in claims])
+	rekeyed = []
+	for claim in claims:
+		owner = owners.get(claim.bench)
+		if not owner or owner == claim.account:
+			continue
+		# The link needs somewhere to point, exactly as adoption opens one for a bench it finds.
+		account.ensure_account(owner)
+		frappe.db.set_value(ADMISSION, claim.bench, "account", owner, update_modified=False)
+		rekeyed.append(claim.bench)
+	return rekeyed
+
+
 def _heal_counters() -> list[str]:
 	"""Set every account's slot count and hold to what its own rows add up to."""
 	held = _claims_by_account()
@@ -147,6 +181,11 @@ def _heal_counters() -> list[str]:
 def _bench_statuses(bench_names: list[str]) -> dict[str, str]:
 	rows = frappe.get_all(BENCH, filters={"name": ("in", bench_names)}, fields=["name", "status"])
 	return {row.name: row.status for row in rows}
+
+
+def _bench_owners(bench_names: list[str]) -> dict[str, str]:
+	rows = frappe.get_all(BENCH, filters={"name": ("in", bench_names)}, fields=["name", "owner"])
+	return {row.name: row.owner for row in rows}
 
 
 def _claims_by_account() -> dict[str, dict]:

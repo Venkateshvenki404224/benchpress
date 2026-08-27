@@ -15,8 +15,14 @@ from pathlib import Path
 
 import frappe
 import yaml
+from frappe.utils import cint
 
 from benchpress import addressing, placement
+
+# By name rather than `from benchpress.credits import config`: a route mapping is what
+# `config` wants to name in this file, and a module bound to that name turns the next such
+# local into an F823.
+from benchpress.credits.config import size_for_lab, size_index
 
 # Module constant, not inlined, so tests can monkeypatch it to a tmp path.
 # Flat, not a subdirectory: Traefik's file provider does not recurse, so this must be the
@@ -54,8 +60,8 @@ class TraefikRouteDirectoryMissing(Exception):
 	"""
 
 
-def publish(instance_id: str, base_domain: str) -> None:
-	"""Write Traefik file-provider routes for this instance's site and its code-server IDE.
+def publish(instance_id: str, base_domain: str, ide: bool | None = None) -> None:
+	"""Write Traefik file-provider routes for this instance's site, and its IDE when it has one.
 
 	`tls: {}` turns TLS on and names no resolver, so these routers serve whatever
 	certificate the store already holds for the requested SNI. Deliberate, and the point
@@ -64,44 +70,75 @@ def publish(instance_id: str, base_domain: str) -> None:
 	`ensure_anchor` is what puts `*.{base_domain}` in the store, and it is the
 	only place in this app that names a resolver.
 
-	The file is a pure function of `(instance_id, base_domain)`: it names the container,
-	never an address, so no lifecycle transition can make it stale. The container name
-	*is* `instance_id` — `create_bench_container` names it `bench_doc.bench_name` and
-	`BenchInstance.autoname` sets `name = bench_name`.
+	The file names the container, never an address, so no lifecycle transition can make
+	it stale. The container name *is* `instance_id` — `create_bench_container` names it
+	`bench_doc.bench_name` and `BenchInstance.autoname` sets `name = bench_name`.
 	"""
 	if not base_domain or base_domain == "localhost":
 		return
 
-	config = {
-		"http": {
-			"routers": {
-				f"site-{instance_id}": {
-					"rule": f"Host(`{instance_id}.{base_domain}`)",
-					"entryPoints": ["websecure"],
-					"service": f"site-{instance_id}",
-					"tls": {},
-				},
-				f"ide-{instance_id}": {
-					"rule": f"Host(`ide-{instance_id}.{base_domain}`)",
-					"entryPoints": ["websecure"],
-					"service": f"ide-{instance_id}",
-					"tls": {},
-				},
-			},
-			# Resolved by Docker's embedded DNS: traefik is on the `benchpress` network.
-			"services": {
-				f"site-{instance_id}": {
-					"loadBalancer": {
-						"servers": [{"url": f"http://{instance_id}:{addressing.SITE_HTTP_PORT}"}]
-					}
-				},
-				f"ide-{instance_id}": {
-					"loadBalancer": {"servers": [{"url": f"http://{instance_id}:{addressing.IDE_HTTP_PORT}"}]}
-				},
-			},
+	# What `_routable_instances` already resolved for this bench, else the same read for one.
+	# Never the caller's own idea of the flag: the */5 pass writes this file without the
+	# deploy's context, and two writers that disagree overwrite each other every five minutes.
+	if ide is None:
+		ide = has_ide(instance_id)
+
+	routers = {
+		f"site-{instance_id}": {
+			"rule": f"Host(`{instance_id}.{base_domain}`)",
+			"entryPoints": ["websecure"],
+			"service": f"site-{instance_id}",
+			"tls": {},
 		}
 	}
-	_atomic_write(TRAEFIK_DYNAMIC_DIR / f"{instance_id}.yml", yaml.safe_dump(config))
+	# Resolved by Docker's embedded DNS: traefik is on the `benchpress` network.
+	services = {
+		f"site-{instance_id}": {
+			"loadBalancer": {"servers": [{"url": f"http://{instance_id}:{addressing.SITE_HTTP_PORT}"}]}
+		}
+	}
+
+	if ide:
+		routers[f"ide-{instance_id}"] = {
+			"rule": f"Host(`ide-{instance_id}.{base_domain}`)",
+			"entryPoints": ["websecure"],
+			"service": f"ide-{instance_id}",
+			"tls": {},
+		}
+		services[f"ide-{instance_id}"] = {
+			"loadBalancer": {"servers": [{"url": f"http://{instance_id}:{addressing.IDE_HTTP_PORT}"}]}
+		}
+
+	_atomic_write(
+		TRAEFIK_DYNAMIC_DIR / f"{instance_id}.yml",
+		yaml.safe_dump({"http": {"routers": routers, "services": services}}),
+	)
+
+
+def has_ide(instance_id: str) -> bool:
+	"""Whether this bench runs code-server — the one-bench case of `_routable_instances`."""
+	rows = _fleet_rows(names=[instance_id])
+	return _ide_for(rows[0]) if rows else False
+
+
+def lab_has_ide(lab_doc) -> bool:
+	"""Whether a bench of this Lab would run code-server, before one exists to ask about."""
+	return _ide_for(lab_doc)
+
+
+def _ide_for(row) -> bool:
+	"""The one rule: the Lab asks for an IDE and the size it resolves to includes one.
+
+	`row` is a joined fleet row or a Lab document, so every caller answers from one rule.
+	"""
+	if not cint(row.get("enable_code_server")):
+		return False
+	# The size the bench was deployed at, else its Lab's — the order billing prices at, so
+	# re-pointing a Lab leaves a running bench's routers alone.
+	size = size_index()["by_name"].get(row.get("bench_size")) or size_for_lab(row)
+	if not size:
+		return True
+	return bool(cint(size.include_code_server))
 
 
 def withdraw(instance_id: str) -> None:
@@ -338,9 +375,9 @@ def reconcile() -> dict:
 		return {"anchored": None, "written": None, "deleted": None, "kept": None, **attached}
 
 	anchored = ensure_anchor(base_domain)
-	routable = _routable_instance_ips()
-	for instance_id in routable:
-		publish(instance_id, base_domain)
+	routable = _routable_instances()
+	for instance_id, ide in routable.items():
+		publish(instance_id, base_domain, ide=ide)
 
 	stale = published() - routable.keys()
 	for instance_id in stale:
@@ -355,18 +392,41 @@ def reconcile() -> dict:
 	}
 
 
-def _routable_instance_ips() -> dict[str, str]:
-	"""Every bench that should own a route file, mapped to the address it should point at.
+def _routable_instances() -> dict[str, bool]:
+	"""Every bench that should own a route file, mapped to whether it gets an IDE router too.
 
 	`Running` and nothing else. A `Stopped`, `Draft` or `Error` bench has no container
 	answering, and its recorded `container_ip` is a freed address Docker is free to hand
 	to somebody else's bench — which is the misroute, not a dead link. A row with no IP
 	at all is dropped for the same reason a route to nowhere is worse than no route.
 	"""
+	return {row.name: _ide_for(row) for row in _fleet_rows(status="Running") if row.container_ip}
+
+
+def _fleet_rows(names: list[str] | None = None, status: str | None = None) -> list[dict]:
+	"""Bench rows beside the Lab fields the IDE flag resolves from, in one query per read.
+
+	One join rather than a read per bench: the */5 pass resolves the whole fleet here, and at
+	300 benches a per-bench read would be 300 queries a pass.
+	"""
 	instance = frappe.qb.DocType("Bench Instance")
-	rows = (
+	lab = frappe.qb.DocType("Lab")
+	query = (
 		frappe.qb.from_(instance)
-		.select(instance.name, instance.container_ip)
-		.where(instance.status == "Running")
-	).run(as_dict=True)
-	return {row.name: row.container_ip for row in rows if row.container_ip}
+		.left_join(lab)
+		.on(instance.lab == lab.name)
+		.select(
+			instance.name,
+			instance.container_ip,
+			instance.instance_size.as_("bench_size"),
+			lab.enable_code_server,
+			lab.instance_size,
+			lab.memory_limit,
+			lab.cpu_cores,
+		)
+	)
+	if names is not None:
+		query = query.where(instance.name.isin(names))
+	if status is not None:
+		query = query.where(instance.status == status)
+	return query.run(as_dict=True)
