@@ -83,100 +83,6 @@ GOLDEN_MARKER = "Restored from golden dump"
 GOLDEN_RESTORED = "restored from the image's golden dump"
 
 
-def sync_instance_route(bench_name: str) -> str:
-	"""Make this bench's route file agree with its status; returns `written`, `deleted` or `skipped`.
-
-	The one decision point for whether a bench should own a route at all, so a lifecycle
-	transition has one thing to remember rather than a write call in the start path and a
-	delete call in the stop path. A bench that no longer exists reads as no status, which
-	deletes — the same answer as `Stopped`, and the reason this does not raise.
-
-	Reach it through `enqueue_route_sync`, never directly from a web request.
-	"""
-	base_domain = frappe.get_cached_doc("BenchPress Settings").base_domain
-	if not base_domain or base_domain == "localhost":
-		return "skipped"
-
-	if frappe.db.get_value("Bench Instance", bench_name, "status") == "Running":
-		ingress.publish(bench_name, base_domain)
-		return "written"
-
-	ingress.withdraw(bench_name)
-	return "deleted"
-
-
-def enqueue_route_sync(bench_name: str) -> None:
-	"""Hand the route write to `queue-long` — see `TraefikRouteDirectoryMissing`."""
-	frappe.enqueue(
-		"benchpress.deploy_manager.sync_instance_route",
-		bench_name=bench_name,
-		queue="long",
-		job_id=f"route_sync:{bench_name}",
-		deduplicate=True,
-		enqueue_after_commit=True,  # the job re-reads `status`, so it must not start before the commit
-	)
-
-
-def enqueue_route_reconcile() -> None:
-	"""Convergence cron: hand the whole-directory pass to `queue-long`."""
-	# Scheduled jobs land on `default`, which `queue-short` also consumes — so the cron entry
-	# is this enqueuer and never the pass itself. See `TraefikRouteDirectoryMissing`.
-	frappe.enqueue(
-		"benchpress.deploy_manager.reconcile_instance_routes",
-		queue="long",
-		job_id="route_reconcile",
-		deduplicate=True,
-	)
-
-
-def reconcile_instance_routes() -> dict:
-	"""Make the Traefik route directory agree with the database.
-
-	The Bench Instance table is the truth and the directory follows it. Containers are not
-	inspected — an orphaned container is a real problem, but it is todo item 8's, and a
-	pass that quietly took on two jobs would be harder to trust with either. Returns counts
-	rather than a bare success: a reaper that reports "issued" instead of "converged" is how
-	a directory drifts for weeks without anyone noticing.
-
-	Deleting is the load-bearing half. Routes name containers, so a file left behind is a
-	502 rather than another tenant's site — but it is still a public hostname answering
-	for a bench that no longer exists, and only this pass removes one nothing deleted.
-
-	Running on `queue-long` is also what keeps this from racing a deploy — both are `long`
-	jobs on a single worker, so a bench part-way through `_deploy_bench` is never read here
-	between its container being created and its status reaching `Running`.
-
-	Run it by hand with:
-	    bench --site frontend execute benchpress.deploy_manager.reconcile_instance_routes
-	"""
-	# Ahead of the base_domain guard because this half is about container networking rather
-	# than routing: a bench that cannot reach MariaDB is broken on a dev checkout too.
-	attached = _reconcile_bridge_attachments()
-
-	base_domain = frappe.get_cached_doc("BenchPress Settings").base_domain
-	anchored = ingress.ensure_anchor(base_domain)
-	if not base_domain or base_domain == "localhost":
-		# A dev checkout has no route directory and must stay byte-for-byte unaffected —
-		# skipped silently, exactly as the writers skip it.
-		return {"anchored": anchored, "written": 0, "deleted": 0, "kept": 0, **attached}
-
-	routable = _routable_instance_ips()
-	for instance_id in routable:
-		ingress.publish(instance_id, base_domain)
-
-	stale = ingress.published() - routable.keys()
-	for instance_id in stale:
-		ingress.withdraw(instance_id)
-
-	return {
-		"anchored": anchored,
-		"written": len(routable),
-		"deleted": len(stale),
-		"kept": ingress.protected_present(),
-		**attached,
-	}
-
-
 def _reconcile_bridge_attachments() -> dict[str, dict[str, list[str]]]:
 	"""Put the three infrastructure containers back on every bench bridge that lost one.
 
@@ -215,23 +121,6 @@ def _record_bridge_network(bench, network: str) -> None:
 		return
 	frappe.db.set_value("Bench Instance", bench.name, "bridge_network", network, update_modified=False)
 	bench.bridge_network = network
-
-
-def _routable_instance_ips() -> dict[str, str]:
-	"""Every bench that should own a route file, mapped to the address it should point at.
-
-	`Running` and nothing else. A `Stopped`, `Draft` or `Error` bench has no container
-	answering, and its recorded `container_ip` is a freed address Docker is free to hand
-	to somebody else's bench — which is the misroute, not a dead link. A row with no IP
-	at all is dropped for the same reason a route to nowhere is worse than no route.
-	"""
-	instance = frappe.qb.DocType("Bench Instance")
-	rows = (
-		frappe.qb.from_(instance)
-		.select(instance.name, instance.container_ip)
-		.where(instance.status == "Running")
-	).run(as_dict=True)
-	return {row.name: row.container_ip for row in rows if row.container_ip}
 
 
 def _cleanup_failed_deploy(bench, container_id, append_log) -> None:
@@ -1022,4 +911,4 @@ def stop_bench(bench_name: str, from_claim: bool = False) -> None:
 	if expired:
 		lease.announce_expired(bench)
 	frappe.db.commit()  # nosemgrep -- intentional commit to persist status before response
-	enqueue_route_sync(bench.name)
+	ingress.enqueue_route_sync(bench.name)

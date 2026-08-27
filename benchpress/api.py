@@ -345,7 +345,7 @@ def _start_bench(bench, action: str) -> dict:
 	This is the start path the SPA uses, so it is where the cap and the hold have to be. Stopping
 	and deleting stay outside the gate: stopping is what a refused caller is being told to do.
 	"""
-	from benchpress.deploy_manager import enqueue_route_sync
+	from benchpress import ingress
 	from benchpress.docker_manager import restart_container, start_container
 
 	_require_container(bench)
@@ -364,7 +364,7 @@ def _start_bench(bench, action: str) -> dict:
 	frappe.db.commit()
 	# A restart re-allocates the container address, and a start may be following a stop that
 	# removed the file — both need the route re-established.
-	enqueue_route_sync(bench.name)
+	ingress.enqueue_route_sync(bench.name)
 	return {"name": bench.name, "status": bench.status}
 
 
@@ -565,7 +565,7 @@ def renew_bench(bench_name: str, plan: str, request_id: str) -> dict:
 	the charge last. Raises `ValidationError` when the sweep already claimed the row, when the
 	plan would push the lease past the lab's ceiling, or when the grace window has closed.
 	"""
-	from benchpress.deploy_manager import enqueue_route_sync
+	from benchpress import ingress
 
 	require_bench_access(bench_name)
 	if not config.credits_enabled():
@@ -603,7 +603,7 @@ def renew_bench(bench_name: str, plan: str, request_id: str) -> dict:
 	lease.announce_renewed(bench)
 	frappe.db.commit()  # nosemgrep -- releases the row lock, and the push is hung off this commit
 	if stopped:
-		enqueue_route_sync(bench.name)
+		ingress.enqueue_route_sync(bench.name)
 	return _lease_state(bench, charged=charged)
 
 

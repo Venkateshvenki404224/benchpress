@@ -283,7 +283,7 @@ class TestLease(IntegrationTestCase):
 		"""Renew with Docker, the route job and the commit stood down, so the rollback still holds."""
 		with (
 			patch("benchpress.docker_manager.start_container") as start,
-			patch("benchpress.deploy_manager.enqueue_route_sync") as route,
+			patch("benchpress.ingress.enqueue_route_sync") as route,
 			patch("frappe.publish_realtime") as publish,
 			patch.object(frappe.db, "commit"),
 		):
@@ -513,7 +513,7 @@ class TestLease(IntegrationTestCase):
 
 		with (
 			patch("benchpress.docker_manager.start_container"),
-			patch.object(deploy_manager, "enqueue_route_sync"),
+			patch.object(ingress, "enqueue_route_sync"),
 			patch.object(frappe.db, "commit"),
 		):
 			frappe.get_doc(BENCH, self.bench.name).enqueue_start()
