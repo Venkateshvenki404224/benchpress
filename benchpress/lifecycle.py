@@ -225,6 +225,7 @@ def _deploy_bench(bench_name: str) -> None:
 	# would make a cycle the moment anything there needs a transition.
 	from benchpress.deploy_manager import (
 		_assert_runtime_registered,
+		_forget_code_server_url,
 		_golden_matches_server,
 		_prepare_lab_image,
 		_record_primary_site,
@@ -420,10 +421,13 @@ def _deploy_bench(bench_name: str) -> None:
 			raise Exception(f"serve.sh failed (exit {exit_code}): {output}")
 		pipeline.log(f"Site served on port {addressing.SITE_HTTP_PORT}")
 
-		if getattr(lab, "enable_code_server", 0):
+		# The same resolver the route file was written from, so the router and the process
+		# cannot disagree about whether this bench has an IDE.
+		if ingress.has_ide(bench.name):
 			_start_code_server(bench, container_id, pipeline, settings)
 		else:
-			pipeline.log("Code server is disabled for this lab — skipped")
+			_forget_code_server_url(bench)
+			pipeline.log("Code server is disabled for this lab or its instance size — skipped")
 
 		# Everything above this line is free however long it took, because a deploy that never
 		# gets here never reaches `Running`.

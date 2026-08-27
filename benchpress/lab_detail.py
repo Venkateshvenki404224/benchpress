@@ -18,7 +18,7 @@ output — still only have `=== … ===` markers, so both are read.
 
 import frappe
 
-from benchpress import addressing
+from benchpress import addressing, ingress
 from benchpress.credits import config, lease
 from benchpress.deploy_pipeline import scan_log
 
@@ -69,7 +69,7 @@ def get_lab(name: str) -> dict:
 		"memory_limit": size.memory_limit if size else lab.memory_limit,
 		"cpu_cores": size.cpu_cores if size else lab.cpu_cores,
 		"enable_ssh": lab.enable_ssh,
-		"enable_code_server": lab.enable_code_server,
+		"enable_code_server": ingress.lab_has_ide(lab),
 		"lease_price": _lease_price(lab),
 		# Sent beside the deadline so nothing renders a countdown against the browser's own clock.
 		"server_now_ms": lease.now_ms(),
