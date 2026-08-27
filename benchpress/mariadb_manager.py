@@ -18,6 +18,22 @@ from benchpress.docker_manager import ensure_network, get_client
 
 BACKUP_TIMEOUT = 3600
 
+REDIS_CONTAINER_NAME = "benchpress-redis"
+
+# What config/docker-compose.yml declares as command flags, in the units the servers report
+# back. A live value that disagrees means the container predates the flags, or the daemon
+# refused one, or somebody ran SET GLOBAL.
+DECLARED_MARIADB = {
+	"max_connections": "500",
+	"innodb_buffer_pool_size": "134217728",
+	"key_buffer_size": "16777216",
+}
+DECLARED_REDIS = {
+	"maxmemory": "268435456",
+	"maxmemory-policy": "allkeys-lru",
+}
+HIT_RATE_COUNTERS = ("Innodb_buffer_pool_read_requests", "Innodb_buffer_pool_reads")
+
 
 def _get_config_dir() -> str:
 	return os.path.join(frappe.get_app_path("benchpress"), "config")
@@ -363,8 +379,85 @@ def enqueue_health_check() -> None:
 	)
 
 
-def scheduled_health_check():
-	"""Cron job — check all active DB servers, attempt restart if down."""
+def _drift(declared: dict[str, str], live: dict[str, str]) -> list[str]:
+	"""Declared settings the live server disagrees with, phrased for an operator."""
+	return [
+		f"{name} is {live.get(name, 'unreadable')}, declared {value}"
+		for name, value in declared.items()
+		if live.get(name) != value
+	]
+
+
+def _mariadb_settings(db_server_name: str) -> dict[str, str]:
+	"""The declared variables and the buffer-pool counters, in one round trip."""
+	names = "', '".join([*DECLARED_MARIADB, *HIT_RATE_COUNTERS])
+	exit_code, output = execute_sql(
+		db_server_name,
+		_script(
+			f"SHOW GLOBAL VARIABLES WHERE Variable_name IN ('{names}')",
+			f"SHOW GLOBAL STATUS WHERE Variable_name IN ('{names}')",
+		),
+	)
+	if exit_code != 0:
+		raise Exception(f"could not read global settings: {output}")
+	rows = (line.split("\t", 1) for line in output.splitlines() if "\t" in line)
+	# Batch mode repeats a column header per result set.
+	return {name: value for name, value in rows if name != "Variable_name"}
+
+
+def _hit_rate(settings: dict[str, str]) -> str:
+	requests = int(settings.get("Innodb_buffer_pool_read_requests", "0"))
+	reads = int(settings.get("Innodb_buffer_pool_reads", "0"))
+	if not requests:
+		return "no reads yet"
+	return f"{100 * (requests - reads) / requests:.2f}%"
+
+
+def mariadb_drift(db_server_name: str) -> tuple[list[str], str]:
+	"""Declared settings the live server disagrees with, and its buffer-pool hit rate.
+
+	The hit rate is reported, never judged: the 128M pool rests on a single 99.94%
+	measurement, and the next person should revisit it on evidence rather than on the
+	assumption that put 512M there.
+	"""
+	settings = _mariadb_settings(db_server_name)
+	return _drift(DECLARED_MARIADB, settings), _hit_rate(settings)
+
+
+def redis_drift() -> list[str]:
+	"""Declared settings the live shared Redis disagrees with."""
+	container = get_client().containers.get(REDIS_CONTAINER_NAME)
+	exit_code, output = container.exec_run(cmd=["redis-cli", "config", "get", *DECLARED_REDIS])
+	if exit_code != 0:
+		raise Exception(f"redis-cli config get failed: {output}")
+	fields = output.decode("utf-8", errors="replace").split()
+	return _drift(DECLARED_REDIS, dict(zip(fields[::2], fields[1::2], strict=True)))
+
+
+def shared_setting_drift(db_server_name: str) -> tuple[list[str], str]:
+	"""Every declared setting the live shared pair disagrees with, and the buffer-pool hit rate.
+
+	Never raises: a service it cannot read becomes a line, because the scheduler is the
+	caller and a stack trace there is a log nobody reads.
+	"""
+	lines, hit_rate = [], "unreadable"
+	try:
+		drift, hit_rate = mariadb_drift(db_server_name)
+		lines += [f"MariaDB {line}" for line in drift]
+	except Exception as e:
+		lines.append(f"MariaDB settings unreadable: {e}")
+	try:
+		lines += [f"Redis {line}" for line in redis_drift()]
+	except Exception as e:
+		lines.append(f"Redis settings unreadable: {e}")
+	return lines, hit_rate
+
+
+def scheduled_health_check() -> list[str]:
+	"""Cron job — restart any DB server that is down, then report shared-setting drift.
+
+	Returns the drift lines it logged, so `bench execute` shows them too.
+	"""
 	servers = frappe.get_all(
 		"Database Server",
 		filters={"status": ["in", ["Active", "Error"]]},
@@ -383,6 +476,17 @@ def scheduled_health_check():
 				title=f"MariaDB health check failed: {s.name}",
 				message=frappe.get_traceback(),
 			)
+
+	if not servers:
+		return []
+
+	drift, hit_rate = shared_setting_drift(servers[0].name)
+	if drift:
+		frappe.log_error(
+			title="Shared service settings drift",
+			message="\n".join([*drift, f"InnoDB buffer pool hit rate {hit_rate}"]),
+		)
+	return drift
 
 
 def _host_backup_dir() -> str:
