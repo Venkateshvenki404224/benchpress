@@ -342,3 +342,13 @@ static markup of a session that is not running anywhere.
   socket path (`unix:///var/run/docker.sock`), read at
   [docker_manager.py:132](benchpress/docker_manager.py#L132). Pointing it at a `tcp://` address on
   another host is the one edit that breaks the rule.
+- **No secret may reach a `docker exec` command line, a healthcheck command line, or a file
+  written through an exec.** Pass it as `environment=`, send a hash the server accepts, or upload
+  it with `put_archive`. Docker publishes every exec command into its event stream in full and
+  untruncated, and publishes no environment at all, so anything on that line is readable by
+  anything holding the socket. A sentinel test guards each site
+  ([test_docker_manager.py](benchpress/tests/test_docker_manager.py),
+  [test_vpn_adapter.py](benchpress/tests/test_vpn_adapter.py),
+  [test_mariadb_manager.py](benchpress/tests/test_mariadb_manager.py),
+  [test_deploy_manager.py](benchpress/tests/test_deploy_manager.py)). Base64 is not a defence:
+  `mariadb_manager.execute_sql` encodes its script and the encoding is on the line too.

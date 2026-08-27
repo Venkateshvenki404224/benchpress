@@ -6,6 +6,7 @@ import os
 import re
 import subprocess
 import time
+from pathlib import PurePosixPath
 
 import docker
 import frappe
@@ -526,21 +527,32 @@ def exec_in_container(
 	return exit_code, _decoded(output)
 
 
-def write_file_to_container(container_id: str, content: str, path: str) -> None:
-	"""Write a file into a running container using docker exec, raising when it did not land.
+# The exec environment, not its command line: Docker publishes every exec command into its
+# event stream in full and untruncated, and does not publish the environment at all.
+FILE_CONTENT_VAR = "BENCHPRESS_FILE_CONTENT"
 
-	The exec result used to be discarded, which made a failed write invisible: every caller
-	writes a file something later depends on — `common_site_config.json`, `wg0.conf`, the
-	code-server config — so a silent failure surfaced as a site that cannot find redis, a
-	tunnel serving the wrong key, or an IDE that never starts, long after the deploy said
-	it was fine.
+
+def write_file_to_container(container_id: str, content: str, path: str, *, mode: int | None = None) -> None:
+	"""Write a file into a running container, raising when it did not land.
+
+	The content travels in the exec environment. As a heredoc it was part of the command
+	line, so every file this ever wrote was published to anything reading Docker events —
+	a bench's WireGuard private key and its code-server password among them.
+
+	`mode` is applied only when given, so a file that already exists keeps the mode it had.
+
+	Not `put_archive`, which emits no event at all: sysbox re-mounts the container root over
+	Docker's own snapshot, so an upload lands in the snapshot and stays invisible inside.
 	"""
-	client = get_client()
-	container = client.containers.get(container_id)
-	escaped = content.replace("'", "'\\''")
+	container = get_client().containers.get(container_id)
+	directory = PurePosixPath(path).parent
+	command = f'mkdir -p {directory} && printf %s "${FILE_CONTENT_VAR}" > {path}'
+	if mode is not None:
+		command += f" && chmod {mode:o} {path}"
 	exit_code, output = container.exec_run(
-		cmd=["bash", "-c", f"mkdir -p $(dirname {path}) && cat > {path} << 'WGEOF'\n{escaped}\nWGEOF"],
+		cmd=["bash", "-c", command],
 		user="root",
+		environment={FILE_CONTENT_VAR: content},
 	)
 	if exit_code != 0:
 		raise Exception(f"Writing {path} failed (exit {exit_code}): {_decoded(output)}")

@@ -65,23 +65,69 @@ IP_ATTRS = {"NetworkSettings": {"Networks": {"benchpress": {"IPAddress": "172.30
 NO_IP_ATTRS = {"NetworkSettings": {"Networks": {"benchpress": {"IPAddress": ""}}}}
 
 
-class TestWriteFileToContainer(unittest.TestCase):
-	"""The exec result used to be discarded, so a file that never landed looked written."""
+def exec_commands(container):
+	"""Every command a mocked container was asked to exec, as text."""
+	return [" ".join(call.kwargs["cmd"]) for call in container.exec_run.call_args_list]
 
-	def _client_exec_returning(self, result):
+
+def exec_environments(container):
+	"""Every environment a mocked container's execs carried."""
+	return [call.kwargs.get("environment") or {} for call in container.exec_run.call_args_list]
+
+
+class TestWriteFileToContainer(unittest.TestCase):
+	"""Docker publishes an exec's command line and not its environment, so the file rides in the environment."""
+
+	def _container(self, result=(0, b"")):
 		client = MagicMock()
-		client.containers.get.return_value.exec_run.return_value = result
-		return client
+		container = client.containers.get.return_value
+		container.exec_run.return_value = result
+		return client, container
+
+	@patch("benchpress.docker_manager.get_client")
+	def test_the_content_goes_into_the_environment_and_into_no_command(self, get_client):
+		sentinel = "sB1XnOtAr3alPr1vat3K3y="
+		client, container = self._container()
+		get_client.return_value = client
+
+		docker_manager.write_file_to_container("cid", f"PrivateKey = {sentinel}\n", "/etc/wireguard/wg0.conf")
+
+		environment = exec_environments(container)[0]
+		self.assertIn(sentinel, environment[docker_manager.FILE_CONTENT_VAR])
+		for command in exec_commands(container):
+			self.assertNotIn(sentinel, command)
+
+	@patch("benchpress.docker_manager.get_client")
+	def test_a_mode_is_applied_in_the_same_exec(self, get_client):
+		"""The caller's second exec to repair the mode is what this replaces."""
+		client, container = self._container()
+		get_client.return_value = client
+
+		docker_manager.write_file_to_container("cid", "conf", "/etc/wireguard/wg0.conf", mode=0o600)
+
+		self.assertIn("chmod 600 /etc/wireguard/wg0.conf", exec_commands(container)[0])
+
+	@patch("benchpress.docker_manager.get_client")
+	def test_no_mode_leaves_an_existing_file_the_mode_it_had(self, get_client):
+		"""`common_site_config.json` and `linkuser.sh` ship in the image already; a
+		default here would silently restate their modes."""
+		client, container = self._container()
+		get_client.return_value = client
+
+		docker_manager.write_file_to_container("cid", "{}", "/home/frappe/x.json")
+
+		self.assertNotIn("chmod", exec_commands(container)[0])
 
 	@patch("benchpress.docker_manager.get_client")
 	def test_a_zero_exit_returns_without_complaint(self, get_client):
-		get_client.return_value = self._client_exec_returning((0, b""))
+		get_client.return_value = self._container()[0]
 
 		docker_manager.write_file_to_container("cid", "hello", "/etc/wireguard/wg0.conf")
 
 	@patch("benchpress.docker_manager.get_client")
 	def test_a_non_zero_exit_raises_naming_the_path_and_the_output(self, get_client):
-		get_client.return_value = self._client_exec_returning((1, b"Read-only file system"))
+		"""A bench whose wg0.conf did not land has no tunnel, and nothing else would say so."""
+		get_client.return_value = self._container((1, b"Read-only file system"))[0]
 
 		with self.assertRaises(Exception) as caught:
 			docker_manager.write_file_to_container("cid", "hello", "/etc/wireguard/wg0.conf")

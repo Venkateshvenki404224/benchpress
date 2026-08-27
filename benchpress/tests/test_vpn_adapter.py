@@ -8,6 +8,7 @@ from frappe.tests import IntegrationTestCase
 
 from benchpress import vpn_adapter
 from benchpress.deploy_pipeline import DeployPipeline
+from benchpress.tests.test_docker_manager import exec_commands, exec_environments
 from benchpress.vpn_adapter import (
 	configure_container,
 	create_container_peer,
@@ -201,11 +202,26 @@ class TestConfigureContainer(IntegrationTestCase):
 	def test_writes_conf_and_brings_tunnel_up(self, mock_write, mock_exec, _render):
 		configure_container("cid123", "PRIV==", "172.27.0.5")
 
-		mock_write.assert_called_once_with("cid123", "CONF", "/etc/wireguard/wg0.conf")
+		mock_write.assert_called_once_with("cid123", "CONF", "/etc/wireguard/wg0.conf", mode=0o600)
 		commands = [call.args[1] for call in mock_exec.call_args_list]
-		self.assertIn("chmod 600 /etc/wireguard/wg0.conf", commands)
 		self.assertIn("wg-quick up wg0", commands)
 		self.assertLess(commands.index("wg-quick down wg0 || true"), commands.index("wg-quick up wg0"))
+
+	@patch("benchpress.vpn_adapter.render_container_config")
+	@patch("benchpress.docker_manager.get_client")
+	def test_the_private_key_goes_into_the_environment_and_into_no_command(self, get_client, render):
+		"""Docker publishes every exec command line, and a bench's tunnel key was in one."""
+		sentinel = "sB1XnOtAr3alPr1vat3K3y="
+		render.side_effect = lambda key, ip, network=None: f"[Interface]\nPrivateKey = {key}\n"
+		container = get_client.return_value.containers.get.return_value
+		container.exec_run.return_value = (0, b"")
+
+		configure_container("cid123", sentinel, "172.27.0.5")
+
+		written = [env for env in exec_environments(container) if sentinel in str(env)]
+		self.assertEqual(len(written), 1)
+		for command in exec_commands(container):
+			self.assertNotIn(sentinel, command)
 
 	@patch("benchpress.vpn_adapter.render_container_config", return_value="CONF")
 	@patch("benchpress.docker_manager.exec_in_container")
@@ -216,29 +232,17 @@ class TestConfigureContainer(IntegrationTestCase):
 		The interface is legitimately absent on a first deploy, and `|| true` is what makes
 		that tolerance visible rather than a discarded exit code.
 		"""
-		# chmod, a down that reports the interface was never there, then a good up.
-		mock_exec.side_effect = [(0, ""), (1, "wg-quick: `wg0' is not a WireGuard interface"), (0, "")]
+		# A down that reports the interface was never there, then a good up.
+		mock_exec.side_effect = [(1, "wg-quick: `wg0' is not a WireGuard interface"), (0, "")]
 
 		configure_container("cid123", "PRIV==", "172.27.0.5")
 
 	@patch("benchpress.vpn_adapter.render_container_config", return_value="CONF")
 	@patch("benchpress.docker_manager.exec_in_container")
 	@patch("benchpress.docker_manager.write_file_to_container")
-	def test_raises_when_the_conf_cannot_be_secured(self, _write, mock_exec, _render):
-		"""A world-readable wg0.conf hands the tunnel's private key to every account in the box."""
-		mock_exec.side_effect = [(1, "chmod: Operation not permitted")]
-
-		with self.assertRaises(Exception) as caught:
-			configure_container("cid123", "PRIV==", "172.27.0.5")
-
-		self.assertIn("Securing wg0.conf failed", str(caught.exception))
-
-	@patch("benchpress.vpn_adapter.render_container_config", return_value="CONF")
-	@patch("benchpress.docker_manager.exec_in_container")
-	@patch("benchpress.docker_manager.write_file_to_container")
 	def test_raises_when_wg_quick_fails(self, _write, mock_exec, _render):
-		# chmod, the tolerated down, then the up that decides the outcome.
-		mock_exec.side_effect = [(0, ""), (0, ""), (1, "wg-quick: boom")]
+		# The tolerated down, then the up that decides the outcome.
+		mock_exec.side_effect = [(0, ""), (1, "wg-quick: boom")]
 
 		with self.assertRaises(Exception) as caught:
 			configure_container("cid123", "PRIV==", "172.27.0.5")

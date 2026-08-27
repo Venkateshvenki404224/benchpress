@@ -78,6 +78,15 @@ def _script(*statements: str) -> str:
 	return ";\n".join(statements) + ";\n"
 
 
+def _native_password_hash(password: str) -> str:
+	"""MariaDB's own `mysql_native_password` hash: `*` and SHA1(SHA1(password)) in upper hex.
+
+	Safe to publish, which is the whole point of using it. The server hashes what a client
+	sends once more before comparing, so a client presenting this value is refused.
+	"""
+	return "*" + hashlib.sha1(hashlib.sha1(password.encode()).digest()).hexdigest().upper()
+
+
 def _write_env_file(root_password: str, version: str = "10.6", mem_limit: str = "1g") -> None:
 	"""Write .env file for docker compose in the config directory."""
 	env_path = os.path.join(_get_config_dir(), ".env")
@@ -225,7 +234,10 @@ def create_mariadb_user(
 	exit_code, output = execute_sql(
 		db_server_name,
 		_script(
-			f"CREATE OR REPLACE USER '{user}'@'%' IDENTIFIED BY '{password}'",
+			# The hash, not the plaintext: `execute_sql` puts this script on a `docker exec`
+			# command line, and Docker publishes every one of those into its event stream.
+			f"CREATE OR REPLACE USER '{user}'@'%' "
+			f"IDENTIFIED VIA mysql_native_password USING '{_native_password_hash(password)}'",
 			f"CREATE OR REPLACE DATABASE `{user}`",
 			f"GRANT ALL ON `{user}`.* TO '{user}'@'%'",
 			f"GRANT RELOAD, CREATE USER ON *.* TO '{user}'@'%'",

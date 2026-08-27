@@ -136,16 +136,16 @@ fi
 # Generate .env if it doesn't exist
 if [ ! -f "$ENV_FILE" ]; then
     info "Generating .env file for shared infrastructure..."
-    MARIADB_ROOT_PASSWORD=$(openssl rand -hex 16)
+    # Straight into the file, never through a shell variable: a variable holding it
+    # can be exported into a child process or echoed by a later edit.
     cat > "$ENV_FILE" <<EOF
-MARIADB_ROOT_PASSWORD=$MARIADB_ROOT_PASSWORD
+MARIADB_ROOT_PASSWORD=$(openssl rand -hex 16)
 MARIADB_VERSION=10.6
 MARIADB_MEM_LIMIT=1g
 EOF
     success "Generated .env with random root password"
 else
     success ".env file already exists"
-    MARIADB_ROOT_PASSWORD=$(grep MARIADB_ROOT_PASSWORD "$ENV_FILE" | cut -d= -f2)
 fi
 
 # Ensure benchpress Docker network exists
@@ -174,7 +174,10 @@ success "Shared infrastructure is running"
 # Wait for MariaDB to be ready
 info "Waiting for MariaDB to accept connections..."
 for i in $(seq 1 30); do
-    if docker exec benchpress-mariadb mariadb -u root -p"$MARIADB_ROOT_PASSWORD" -e "SELECT 1" &>/dev/null; then
+    # The image's own probe, which reads its credentials from a root-owned file inside the
+    # container. Passing the root password with -p published it on every attempt, because
+    # Docker puts an exec's command line into its event stream.
+    if docker exec benchpress-mariadb healthcheck.sh --connect --innodb_initialized &>/dev/null; then
         success "MariaDB is ready"
         break
     fi

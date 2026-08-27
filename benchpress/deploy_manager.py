@@ -505,18 +505,20 @@ def _cleanup_failed_deploy(bench, container_id, append_log) -> None:
 	bench.wg_ip = None
 
 
-def build_linkuser_args(bench, lab, settings, ssh_password: str) -> list[str]:
+def build_linkuser_args(bench, lab, settings) -> list[str]:
 	"""Positional arguments for linkuser.sh, in the order the script reads them.
 
 	Order must match scripts/linkuser.sh:
-	USERNAME EMAIL LAB_NAME WG_IP SSH_PASSWORD BENCH_NAME BASE_DOMAIN LOGIN_SHELL
+	USERNAME EMAIL LAB_NAME WG_IP BENCH_NAME BASE_DOMAIN LOGIN_SHELL
+
+	The SSH password is not among them. It travels in the exec environment, which Docker
+	does not publish, while it publishes every command line in full.
 	"""
 	return [
 		bench.ssh_username,
 		bench.owner,
 		lab.title,
 		bench.wg_ip or "0.0.0.0",
-		ssh_password,
 		bench.bench_name,
 		settings.base_domain or "localhost",
 		lab.shell or "/bin/bash",
@@ -789,7 +791,7 @@ def _deploy_bench(bench_name: str) -> None:
 			bench.ssh_username = bench._derive_username(bench.owner)
 
 		ssh_password = secrets.token_urlsafe(12)
-		linkuser_args = build_linkuser_args(bench, lab, settings, ssh_password)
+		linkuser_args = build_linkuser_args(bench, lab, settings)
 		pipeline.step("ssh_user")
 		pipeline.log(f"linkuser.sh {bench.ssh_username}")
 		# The app's copy of linkuser.sh is authoritative over the one baked into the image.
@@ -800,7 +802,9 @@ def _deploy_bench(bench_name: str) -> None:
 			container_id, linkuser_script.read_text(), "/opt/benchpress/scripts/linkuser.sh"
 		)
 		linkuser_cmd = linkuser_command(linkuser_args)
-		exit_code, output = exec_in_container(container_id, linkuser_cmd, user="root")
+		exit_code, output = exec_in_container(
+			container_id, linkuser_cmd, user="root", environment={"SSH_PASSWORD": ssh_password}
+		)
 		if output:
 			pipeline.log(output.strip())
 		if exit_code != 0:
@@ -876,9 +880,9 @@ def _start_code_server(bench, container_id: str, pipeline, settings) -> None:
 	"""Configure code-server, launch it, and only then claim it is up.
 
 	Every exec is checked. The config write decides whether code-server can authenticate at
-	all, the `chown`/`chmod` decides whether it reads that file or leaks the password to every
-	account in the container, and `restart.sh` is what actually launches it — a deploy that
-	reports a `code_server_url` answering nothing is worse than one that fails here.
+	all, the `chown` decides whether it reads that file, and `restart.sh` is what actually
+	launches it — a deploy that reports a `code_server_url` answering nothing is worse than
+	one that fails here.
 
 	The address is cleared before the attempt and stored after it, so a failed launch leaves
 	the field empty and `LabHeader.showCodeServer` hides the button instead of offering a
@@ -891,10 +895,12 @@ def _start_code_server(bench, container_id: str, pipeline, settings) -> None:
 	config_yaml = f"bind-addr: 0.0.0.0:8080\nauth: password\npassword: {code_server_password}\ncert: false\n"
 	config_path = f"{cs_home}/.config/code-server/config.yaml"
 
-	write_file_to_container(container_id, config_yaml, config_path)
+	write_file_to_container(container_id, config_yaml, config_path, mode=0o600)
+	# The tar header set the mode, but `linkuser.sh` minted the tenant account and this
+	# caller does not know its id, so the ownership fix still runs as its own exec.
 	_checked_exec(
 		container_id,
-		f"chown -R {cs_user}:{cs_user} {cs_home}/.config && chmod 600 {config_path}",
+		f"chown -R {cs_user}:{cs_user} {cs_home}/.config",
 		"Securing the code-server config",
 	)
 	_checked_exec(container_id, "bash /opt/benchpress/scripts/restart.sh", "restart.sh")
