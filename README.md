@@ -725,9 +725,7 @@ benchpress/
 |   +-- hooks.py                  # App config: routes, scheduler, ignore_links_on_delete
 |   +-- mariadb_manager.py        # Shared MariaDB + Redis lifecycle (docker compose)
 |   +-- config/
-|   |   +-- docker-compose.yml    # Shared infrastructure (MariaDB + Redis)
-|   |   +-- mariadb.cnf           # MariaDB custom configuration
-|   |   +-- redis.conf            # Redis custom configuration
+|   |   +-- docker-compose.yml    # Shared infrastructure (MariaDB + Redis), tuned by command flags
 |   |   +-- .env.example          # Environment variable template
 |   |   +-- benchpress-infra.service  # Systemd unit for auto-start on boot
 |   +-- lab-templates/
@@ -909,7 +907,7 @@ Device management is backed by the **VPN Peer** DocType in the vpn_management ap
 | Schedule | Function | Description |
 |----------|----------|-------------|
 | Every 1 minute | `benchpress.stats_collector.enqueue_stats_sweep` | Enqueues `collect_bench_stats`, which polls Docker CPU/memory/health for running containers (VPN transfer counters are updated by vpn_management's own `poll_status` job) |
-| Every 5 minutes | `benchpress.mariadb_manager.enqueue_health_check` | Enqueues `scheduled_health_check`: shared MariaDB health, restart if down |
+| Every 5 minutes | `benchpress.mariadb_manager.enqueue_health_check` | Enqueues `scheduled_health_check`: shared MariaDB health, restart if down, and logs any live setting that disagrees with the declared flags |
 | Daily at 2 AM | `benchpress.mariadb_manager.enqueue_backup` | Enqueues `scheduled_backup`: full MariaDB backup with 7-day retention |
 
 Every entry here is an enqueuer, not the work itself. Scheduled jobs land on the `default` queue,

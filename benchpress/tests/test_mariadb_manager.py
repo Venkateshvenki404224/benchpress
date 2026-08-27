@@ -373,27 +373,164 @@ class TestMariadbManager(IntegrationTestCase):
 		self.assertIn("DROP DATABASE", combined)
 		self.assertIn("DROP USER", combined)
 
-	@patch("benchpress.mariadb_manager._get_config_dir")
-	def test_write_mariadb_config_writes_custom_config_verbatim(self, mock_config_dir):
-		"""Database Server.custom_config flows verbatim into the mounted mariadb.cnf."""
-		from benchpress.mariadb_manager import _write_mariadb_config
 
-		with tempfile.TemporaryDirectory() as tmp:
-			mock_config_dir.return_value = tmp
-			custom = "[mysqld]\nmax_connections=1234\ninnodb_buffer_pool_size=1073741824\n"
-			_write_mariadb_config(custom)
-			with open(os.path.join(tmp, "mariadb.cnf")) as f:
-				written = f.read()
-		self.assertEqual(written, custom)
+# What the server answers, batch mode's per-result-set header row included.
+LIVE_SETTINGS = "\n".join(
+	[
+		"Variable_name\tValue",
+		"innodb_buffer_pool_size\t134217728",
+		"key_buffer_size\t16777216",
+		"max_connections\t500",
+		"Variable_name\tValue",
+		"Innodb_buffer_pool_read_requests\t100000",
+		"Innodb_buffer_pool_reads\t60",
+	]
+)
+STOCK_SETTINGS = "\n".join(
+	[
+		"Variable_name\tValue",
+		"innodb_buffer_pool_size\t134217728",
+		"key_buffer_size\t134217728",
+		"max_connections\t151",
+		"Variable_name\tValue",
+		"Innodb_buffer_pool_read_requests\t0",
+		"Innodb_buffer_pool_reads\t0",
+	]
+)
 
-	@patch("benchpress.mariadb_manager._get_config_dir")
-	def test_write_mariadb_config_falls_back_to_default(self, mock_config_dir):
-		"""An empty custom_config falls back to DEFAULT_MARIADB_CONFIG."""
-		from benchpress.mariadb_manager import DEFAULT_MARIADB_CONFIG, _write_mariadb_config
 
-		with tempfile.TemporaryDirectory() as tmp:
-			mock_config_dir.return_value = tmp
-			_write_mariadb_config(None)
-			with open(os.path.join(tmp, "mariadb.cnf")) as f:
-				written = f.read()
-		self.assertEqual(written, DEFAULT_MARIADB_CONFIG)
+class TestSharedSettingDrift(IntegrationTestCase):
+	def _redis_answering(self, mock_get_client, payload: bytes):
+		container = MagicMock()
+		container.exec_run.return_value = (0, payload)
+		mock_get_client.return_value.containers.get.return_value = container
+		return container
+
+	@patch("benchpress.mariadb_manager.execute_sql")
+	def test_a_mariadb_on_the_declared_settings_reports_no_drift(self, mock_execute_sql):
+		from benchpress.mariadb_manager import mariadb_drift
+
+		mock_execute_sql.return_value = (0, LIVE_SETTINGS)
+
+		drift, hit_rate = mariadb_drift("db-1")
+
+		self.assertEqual(drift, [])
+		self.assertEqual(hit_rate, "99.94%")
+
+	@patch("benchpress.mariadb_manager.execute_sql")
+	def test_a_stock_mariadb_names_every_setting_that_disagrees(self, mock_execute_sql):
+		from benchpress.mariadb_manager import mariadb_drift
+
+		mock_execute_sql.return_value = (0, STOCK_SETTINGS)
+
+		drift, hit_rate = mariadb_drift("db-1")
+
+		self.assertEqual(
+			drift,
+			[
+				"max_connections is 151, declared 500",
+				"key_buffer_size is 134217728, declared 16777216",
+			],
+		)
+		self.assertEqual(hit_rate, "no reads yet")
+
+	@patch("benchpress.mariadb_manager.execute_sql")
+	def test_the_drift_read_costs_one_round_trip(self, mock_execute_sql):
+		"""It runs on the scheduler every five minutes, so both queries go in one exec."""
+		from benchpress.mariadb_manager import mariadb_drift
+
+		mock_execute_sql.return_value = (0, LIVE_SETTINGS)
+		mariadb_drift("db-1")
+
+		sql = mock_execute_sql.call_args.args[1]
+		self.assertEqual(mock_execute_sql.call_count, 1)
+		self.assertIn("SHOW GLOBAL VARIABLES", sql)
+		self.assertIn("SHOW GLOBAL STATUS", sql)
+
+	@patch("benchpress.mariadb_manager.get_client")
+	def test_a_redis_on_the_declared_settings_reports_no_drift(self, mock_get_client):
+		from benchpress.mariadb_manager import redis_drift
+
+		self._redis_answering(mock_get_client, b"maxmemory\n268435456\nmaxmemory-policy\nallkeys-lru\n")
+
+		self.assertEqual(redis_drift(), [])
+
+	@patch("benchpress.mariadb_manager.get_client")
+	def test_an_unbounded_redis_names_both_settings(self, mock_get_client):
+		"""The live fault this spec exists to end: no ceiling and nothing evictable."""
+		from benchpress.mariadb_manager import redis_drift
+
+		self._redis_answering(mock_get_client, b"maxmemory\n0\nmaxmemory-policy\nnoeviction\n")
+
+		self.assertEqual(
+			redis_drift(),
+			[
+				"maxmemory is 0, declared 268435456",
+				"maxmemory-policy is noeviction, declared allkeys-lru",
+			],
+		)
+
+	@patch("benchpress.mariadb_manager.redis_drift", side_effect=Exception("redis is gone"))
+	@patch("benchpress.mariadb_manager.mariadb_drift", side_effect=Exception("db is gone"))
+	def test_a_pair_it_cannot_read_is_a_line_and_not_an_exception(self, _mariadb, _redis):
+		from benchpress.mariadb_manager import shared_setting_drift
+
+		lines, hit_rate = shared_setting_drift("db-1")
+
+		self.assertEqual(
+			lines,
+			["MariaDB settings unreadable: db is gone", "Redis settings unreadable: redis is gone"],
+		)
+		self.assertEqual(hit_rate, "unreadable")
+
+	@patch("benchpress.mariadb_manager.redis_drift", return_value=["maxmemory is 0, declared 268435456"])
+	@patch("benchpress.mariadb_manager.mariadb_drift", return_value=([], "99.94%"))
+	def test_both_services_report_under_their_own_name(self, _mariadb, _redis):
+		from benchpress.mariadb_manager import shared_setting_drift
+
+		lines, hit_rate = shared_setting_drift("db-1")
+
+		self.assertEqual(lines, ["Redis maxmemory is 0, declared 268435456"])
+		self.assertEqual(hit_rate, "99.94%")
+
+	def _health_check_with(self, drift):
+		"""scheduled_health_check over one healthy server, with a cache that really remembers."""
+		cache = {}
+		with (
+			patch("benchpress.mariadb_manager.check_mariadb_health", return_value=True),
+			patch("benchpress.mariadb_manager.shared_setting_drift", side_effect=drift),
+			patch("benchpress.mariadb_manager.frappe") as mock_frappe,
+		):
+			mock_frappe.get_all.return_value = [frappe._dict(name="db-1")]
+			mock_frappe.cache.return_value.get_value.side_effect = cache.get
+			mock_frappe.cache.return_value.set_value.side_effect = cache.__setitem__
+			from benchpress.mariadb_manager import scheduled_health_check
+
+			returned = [scheduled_health_check() for _ in drift]
+		return returned, mock_frappe.log_error
+
+	def test_an_unchanged_drift_is_logged_once_and_not_every_five_minutes(self):
+		"""288 copies of one true row a day is the Error Log this check exists to be read in."""
+		drifted = (["Redis maxmemory is 0, declared 268435456"], "99.94%")
+
+		returned, log_error = self._health_check_with([drifted, drifted])
+
+		self.assertEqual(returned, [drifted[0], drifted[0]])
+		self.assertEqual(log_error.call_count, 1)
+		message = log_error.call_args.kwargs["message"]
+		self.assertIn("Redis maxmemory is 0, declared 268435456", message)
+		self.assertIn("InnoDB buffer pool hit rate 99.94%", message)
+
+	def test_a_drift_that_changes_is_logged_again(self):
+		redis_only = (["Redis maxmemory is 0, declared 268435456"], "99.94%")
+		both = (["MariaDB max_connections is 151, declared 500", *redis_only[0]], "99.94%")
+
+		_returned, log_error = self._health_check_with([redis_only, both])
+
+		self.assertEqual(log_error.call_count, 2)
+		self.assertIn("max_connections is 151", log_error.call_args.kwargs["message"])
+
+	def test_a_pair_that_agrees_logs_nothing(self):
+		_returned, log_error = self._health_check_with([([], "99.94%")])
+
+		log_error.assert_not_called()

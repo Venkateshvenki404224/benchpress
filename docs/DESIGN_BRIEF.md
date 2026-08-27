@@ -111,7 +111,7 @@ Fields: `site_name`, `full_domain`, `bench`, `admin_password`,
 
 Infrastructure, admin-only concern. Fields: `container_name`,
 `mariadb_version`, `port`, `container_ip`, `memory_limit`, `volume_name`,
-`custom_config`, `error_message`.
+`error_message`.
 
 **Status: `Pending` → `Active` → `Stopped` → `Error`**
 

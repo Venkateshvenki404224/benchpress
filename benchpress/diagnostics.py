@@ -21,10 +21,15 @@ from benchpress.docker_manager import (
 	get_client,
 	host_runtimes,
 )
-from benchpress.mariadb_manager import check_mariadb_health
+from benchpress.mariadb_manager import (
+	REDIS_CONTAINER_NAME,
+	check_mariadb_health,
+	mariadb_drift,
+	redis_drift,
+)
 from benchpress.vpn_adapter import DEFAULT_INTERFACE
 
-REDIS_CONTAINER_NAME = "benchpress-redis"
+DRIFT_FIX = "Recreate the shared pair: docker compose up -d in benchpress/config"
 
 # Not an operator preference: past this, arithmetic on a stored deadline is wrong.
 # Two seconds absorbs MariaDB truncating NOW() to whole seconds; what it catches
@@ -179,13 +184,19 @@ def _check_mariadb() -> dict:
 				"No Database Server record — shared MariaDB is provisioned on first deploy",
 			)
 		server = servers[0]
-		if check_mariadb_health(server.name):
-			return check_row("mariadb", True, f"MariaDB responding at {server.container_name}")
-		return check_row(
-			"mariadb",
-			False,
-			f"MariaDB at {server.container_name} is not answering SELECT 1 (doc status: {server.status})",
-		)
+		if not check_mariadb_health(server.name):
+			return check_row(
+				"mariadb",
+				False,
+				f"MariaDB at {server.container_name} is not answering SELECT 1 (doc status: {server.status})",
+			)
+		drift, hit_rate = mariadb_drift(server.name)
+		summary = f"MariaDB responding at {server.container_name}, buffer pool hit rate {hit_rate}"
+		if drift:
+			return check_row(
+				"mariadb", False, f"{summary}, but {'; '.join(drift)}. {DRIFT_FIX}", severity="Warning"
+			)
+		return check_row("mariadb", True, f"{summary}, on the declared settings")
 	except Exception as e:
 		return check_row("mariadb", False, f"Could not check MariaDB: {e}")
 
@@ -213,11 +224,24 @@ def _check_clock_skew() -> dict:
 
 
 def _check_redis() -> dict:
+	"""Running is not enough — a stock Redis is unbounded and never evicts.
+
+	Drift is a Warning, never an Error: the cache still serves every bench, and it stays
+	drifted until a human recreates the pair.
+	"""
 	try:
 		container = get_client().containers.get(REDIS_CONTAINER_NAME)
-		if container.status == "running":
-			return check_row("redis", True, f"{REDIS_CONTAINER_NAME} is running")
-		return check_row("redis", False, f"{REDIS_CONTAINER_NAME} status is {container.status}")
+		if container.status != "running":
+			return check_row("redis", False, f"{REDIS_CONTAINER_NAME} status is {container.status}")
+		drift = redis_drift()
+		if drift:
+			return check_row(
+				"redis",
+				False,
+				f"{REDIS_CONTAINER_NAME} is running, but {'; '.join(drift)}. {DRIFT_FIX}",
+				severity="Warning",
+			)
+		return check_row("redis", True, f"{REDIS_CONTAINER_NAME} is running on the declared settings")
 	except docker.errors.NotFound:
 		return check_row(
 			"redis",

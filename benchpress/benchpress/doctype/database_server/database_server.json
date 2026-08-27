@@ -21,8 +21,6 @@
   "memory_limit",
   "volume_name",
   "created_at",
-  "configuration_section",
-  "custom_config",
   "error_section",
   "error_message"
  ],
@@ -121,19 +119,6 @@
    "fieldtype": "Datetime",
    "label": "Created At",
    "read_only": 1
-  },
-  {
-   "collapsible": 1,
-   "fieldname": "configuration_section",
-   "fieldtype": "Section Break",
-   "label": "MariaDB Configuration"
-  },
-  {
-   "description": "Full MariaDB server config (INI). Seeded with sensible defaults on creation; edit to tune the server (e.g. max_connections, buffer pool). Re-run setup to apply.",
-   "fieldname": "custom_config",
-   "fieldtype": "Code",
-   "label": "Custom Config",
-   "options": "INI"
   },
   {
    "collapsible": 1,

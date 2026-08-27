@@ -39,6 +39,8 @@ HEALTHY_CEILINGS = {
 	"net.netfilter.nf_conntrack_max": 1048576,
 }
 DB_ROW = frappe._dict(name="db-server-1", status="Running", container_name="benchpress-mariadb")
+# (no drifted setting, buffer-pool hit rate) — what `mariadb_drift` answers on a healthy pair.
+NO_DRIFT = ([], "99.94%")
 
 # What this host really answers: MariaDB is UTC, Python is Asia/Calcutta.
 DB_CLOCK = datetime(2026, 8, 24, 23, 11, 53)
@@ -74,6 +76,8 @@ class TestDiagnostics(unittest.TestCase):
 		db_clock=None,
 		db_clock_error=None,
 		ceilings=None,
+		mariadb_drift=None,
+		redis_drift=None,
 	):
 		"""Run run_diagnostics with everything healthy unless overridden.
 
@@ -90,6 +94,8 @@ class TestDiagnostics(unittest.TestCase):
 				return_value=HOST_RUNTIMES if runtimes is None else runtimes,
 			),
 			patch("benchpress.diagnostics.check_mariadb_health", return_value=mariadb_healthy),
+			patch("benchpress.diagnostics.mariadb_drift", return_value=mariadb_drift or NO_DRIFT),
+			patch("benchpress.diagnostics.redis_drift", return_value=redis_drift or []),
 			# The capacity check reaches the daemon through docker_manager's own client rather
 			# than the one above, so the same client is injected there — and left unmocked
 			# beyond that, so `networks.create.assert_not_called()` really covers it.
@@ -276,3 +282,42 @@ class TestDiagnostics(unittest.TestCase):
 
 		self.assertEqual([row["check"] for row in DIAGNOSTICS_ROWS], CHECK_ORDER)
 		self.assertIn(COUNT_WORDS[len(CHECK_ORDER)], inspect.getdoc(_infrastructure))
+
+	def test_the_mariadb_row_always_reports_the_buffer_pool_hit_rate(self):
+		"""The 128M pool rests on one measurement, so the number stays in front of the operator."""
+		by_check, _rows = self._run()
+
+		self.assertEqual(by_check["mariadb"]["status"], "pass")
+		self.assertIn("99.94%", by_check["mariadb"]["hint"])
+
+	def test_a_drifted_mariadb_is_a_warning_that_names_the_setting(self):
+		by_check, _rows = self._run(mariadb_drift=(["max_connections is 151, declared 500"], "88.00%"))
+
+		row = by_check["mariadb"]
+		self.assertEqual(row["status"], "fail")
+		self.assertEqual(row["severity"], "Warning")
+		self.assertIn("max_connections is 151, declared 500", row["hint"])
+		self.assertIn("88.00%", row["hint"])
+		self.assertIn("docker compose up -d", row["hint"])
+
+	def test_a_redis_on_the_declared_settings_passes(self):
+		by_check, _rows = self._run()
+
+		self.assertEqual(by_check["redis"]["status"], "pass")
+		self.assertIn("declared settings", by_check["redis"]["hint"])
+
+	def test_a_running_but_unbounded_redis_is_a_warning_naming_both_settings(self):
+		"""Running was the whole old check, and a stock Redis passed it."""
+		by_check, _rows = self._run(
+			redis_drift=[
+				"maxmemory is 0, declared 268435456",
+				"maxmemory-policy is noeviction, declared allkeys-lru",
+			]
+		)
+
+		row = by_check["redis"]
+		self.assertEqual(row["status"], "fail")
+		self.assertEqual(row["severity"], "Warning")
+		self.assertIn("maxmemory is 0", row["hint"])
+		self.assertIn("noeviction", row["hint"])
+		self.assertIn("docker compose up -d", row["hint"])
