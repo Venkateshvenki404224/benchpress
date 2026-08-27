@@ -139,22 +139,47 @@ def lab_owner(**call) -> str:
 
 
 def instance_lease_cost(**call) -> float:
-	"""One lease on this instance's lab, for a call that was handed the document itself."""
-	return lab_lease_cost(_called_on(call).lab)
+	"""One lease on a bench that already exists, priced at the size its container was given."""
+	bench = _called_on(call)
+	return _lease_cost(bench.lab, config.size_for_instance(bench))
 
 
-def payload_lease_cost(**call) -> float:
-	"""The same price for `api.create_bench`, whose lab arrives inside the JSON payload."""
-	return lab_lease_cost(frappe.parse_json(call.get("data")).get("lab"))
+def deploy_lease_cost(**call) -> float:
+	"""One lease on the container a deploy is about to create, priced at the size it will get.
+
+	A hold priced under what the deploy will spend refuses nothing, and the hold is the only refusal.
+	"""
+	return _lease_cost(_lab_of_call(**call), deploy_size(**call))
 
 
-def lab_lease_cost(lab_name) -> float:
-	"""What one window on this lab costs — what the start is about to spend, not a rate."""
+def deploy_size(**call):
+	"""The `Instance Size` a deploy resolves to: the one it names, else the lab's own chain."""
+	named = config.size_by_name(_payload(**call).get("instance_size"))
+	if named:
+		return named
+	lab_name = _lab_of_call(**call)
+	return config.size_for_lab(frappe.get_cached_doc(LAB, lab_name)) if lab_name else None
+
+
+def _lease_cost(lab_name, size) -> float:
+	"""What one window on this lab costs at `size` — what the start is about to spend, not a rate."""
 	if not lab_name:
 		return 0.0
-	lab = frappe.get_cached_doc("Lab", lab_name)
-	plan = lease.plan_for(lab)
-	return lease.cost_of(lab, plan) if plan else 0.0
+	lab = frappe.get_cached_doc(LAB, lab_name)
+	plan = lease.plan_for(lab, size)
+	return lease.cost_of(lab, plan, size) if plan else 0.0
+
+
+def _lab_of_call(**call):
+	"""The lab a call is about, whether it carries a bench document or a JSON payload."""
+	bench = _called_on(call)
+	return bench.lab if bench is not None else _payload(**call).get("lab")
+
+
+def _payload(**call) -> dict:
+	"""The JSON body an endpoint was handed, or an empty dict for a call that carries none."""
+	data = call.get("data")
+	return frappe.parse_json(data) if data else {}
 
 
 def build_charge(**call) -> float:
@@ -167,7 +192,7 @@ def build_charge(**call) -> float:
 
 def cap_sites_per_instance(**call) -> None:
 	"""`Instance Size.max_sites` for the size the instance's lab deploys at."""
-	bench_name = frappe.parse_json(call.get("data")).get("bench")
+	bench_name = _payload(**call).get("bench")
 	limit = _site_limit(bench_name)
 	if not limit:
 		return
@@ -177,6 +202,31 @@ def cap_sites_per_instance(**call) -> None:
 				"This instance already has the {0} sites its size allows. Deploy the lab at a larger size, or ask an admin to remove this instance."
 			).format(limit)
 		)
+
+
+def cap_size_tier(**call) -> None:
+	"""`Credit Settings.max_size_free` — the largest size an account that never purchased may deploy at.
+
+	Compared by `price_multiplier`, so the ceiling follows the credit ladder rather than a list order.
+	"""
+	ceiling = config.size_by_name(config.settings().max_size_free)
+	if not ceiling:
+		return
+	# Resolved the way `_enforce` resolved it. This cap only rides on calls that take the default payer.
+	if has_purchased(payer_of_call(**call)):
+		return
+	requested = deploy_size(**call)
+	if not requested or flt(requested.price_multiplier) <= flt(ceiling.price_multiplier):
+		return
+	frappe.throw(
+		_(
+			"The {0} size is not available on a free account. Deploy at {1} or smaller, or buy credits at {2} to unlock every size."
+		).format(
+			requested.size_label or requested.name,
+			ceiling.size_label or ceiling.name,
+			config.TOP_UP_ROUTE,
+		)
+	)
 
 
 def cap_devices(**call) -> None:
@@ -229,8 +279,7 @@ def _subject_instance(**call) -> str | None:
 	bench = _called_on(call)
 	if bench is not None:
 		return bench.name
-	data = call.get("data")
-	lab_name = frappe.parse_json(data).get("lab") if data else None
+	lab_name = _payload(**call).get("lab")
 	return get_instance_id(frappe.session.user, lab_name) if lab_name else None
 
 
@@ -239,20 +288,24 @@ def _called_on(call):
 	return call.get("self") or call.get("bench")
 
 
+def has_purchased(user: str) -> bool:
+	"""Whether this account has ever bought credits.
+
+	The Purchase row rather than a balance: a refund clears the float, not the fact.
+	"""
+	return bool(frappe.db.exists(LEDGER, {"account": user, "entry_type": account.PURCHASE}))
+
+
 def concurrency_limit(user: str) -> int:
 	"""How many instances this account may hold at once. `0` means unlimited.
 
-	"Has paid" is the existence of a Purchase row, not a `lifetime_purchased` balance: a refund
-	clears the float, and somebody who bought and was refunded has still plainly paid.
-
-	With credits off there are no plans to read, so the cap is its own setting. It defaults to
-	`0`, which is what keeps an install that has never opted in behaving as it did.
+	With credits off the cap is its own setting, which defaults to `0`.
 	"""
 	if not config.credits_enabled():
 		return cint(config.settings().max_concurrent_uncredited)
 	settings = config.settings()
-	paid = frappe.db.exists(LEDGER, {"account": user, "entry_type": account.PURCHASE})
-	return cint(settings.max_concurrent_paid if paid else settings.max_concurrent_free)
+	limit = settings.max_concurrent_paid if has_purchased(user) else settings.max_concurrent_free
+	return cint(limit)
 
 
 def _site_limit(bench_name) -> int:

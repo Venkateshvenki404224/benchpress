@@ -68,6 +68,11 @@ def default_size():
 	return size_index().get("default")
 
 
+def size_by_name(name):
+	"""One `Instance Size` by name, or `None` — the top rung of the deploy's resolution chain."""
+	return size_index()["by_name"].get(name) if name else None
+
+
 def size_for_lab(lab_doc):
 	"""The `Instance Size` a Lab deploys at. Falls back to its resources, then to the default.
 

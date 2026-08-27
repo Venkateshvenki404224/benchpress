@@ -73,13 +73,12 @@ def now_ms() -> int:
 # --- Pricing and configuration -------------------------------------------------
 
 
-def plan_for(lab) -> dict | None:
+def plan_for(lab, size=None) -> dict | None:
 	"""The lease plan a lab deploys at: its own, else its size's, else the default.
 
-	The same precedence rule as `config.size_for_lab`, for the same reason — what the author
-	chose wins over what their resources imply.
+	`size` defaults to the one the lab deploys at, as `cost_of` does.
 	"""
-	size = config.size_for_lab(lab)
+	size = size if size is not None else config.size_for_lab(lab)
 	chosen = (
 		lab.get("default_lease_plan")
 		or (size.get("default_lease_plan") if size else None)

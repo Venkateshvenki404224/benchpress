@@ -14,7 +14,7 @@ from frappe.utils.synchronization import filelock
 
 from benchpress import addressing, ingress, placement
 from benchpress.credits import admission, lease, metering
-from benchpress.credits.config import size_for_lab
+from benchpress.credits.config import size_by_name, size_for_lab
 from benchpress.deploy_pipeline import DeployLogWriter, DeployPipeline
 from benchpress.docker_manager import (
 	container_network,
@@ -207,18 +207,21 @@ def _log_limits(pipeline, size, created) -> None:
 		pipeline.log(f"limit skipped — {knob} {reason}")
 
 
-def deploy_bench(bench_name: str) -> None:
-	"""Deploy a bench, refusing to run concurrently with another deploy of the same bench."""
+def deploy_bench(bench_name: str, size: str | None = None) -> None:
+	"""Deploy a bench, refusing to run concurrently with another deploy of the same bench.
+
+	`size` is the `Instance Size` the caller asked for; `None` falls through to the lab's own chain.
+	"""
 	from benchpress.deploy_manager import _log_deploy_skipped
 
 	try:
 		with filelock(f"bench_deploy_{bench_name}", timeout=1):
-			_deploy_bench(bench_name)
+			_deploy_bench(bench_name, size)
 	except LockTimeoutError:
 		_log_deploy_skipped(bench_name)
 
 
-def _deploy_bench(bench_name: str) -> None:
+def _deploy_bench(bench_name: str, size_name: str | None = None) -> None:
 	"""Deploy pipeline — shared MariaDB, site created at runtime via press agent pattern."""
 	# Permanent, not a step on the way to a module-scope import: image building and site
 	# creation are the remainder `deploy_manager` keeps, and importing them at module scope
@@ -312,7 +315,7 @@ def _deploy_bench(bench_name: str) -> None:
 		pipeline.step("container")
 		# Resolved here and recorded, never copied onto the Lab: a size edited in Desk reaches
 		# this deploy, and billing keeps pricing what Docker was actually given.
-		size = size_for_lab(lab)
+		size = size_by_name(size_name) or size_for_lab(lab)
 		bench.instance_size = size.name if size else None
 		created = create_bench_container(bench, lab, size)
 		container_id = created_container_id = created.container_id
