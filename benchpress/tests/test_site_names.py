@@ -13,11 +13,14 @@ the second insert sees the first from the same connection. What twelve simultane
 is `scripts/admission_drill.py --mode site-name`.
 """
 
+import unittest
+from unittest.mock import patch
+
 import frappe
 from frappe.query_builder import DocType
 from frappe.tests import IntegrationTestCase
 
-from benchpress import api
+from benchpress import api, site_names
 from benchpress.benchpress.doctype.bench_instance import get_instance_id
 from benchpress.credits import admission_repair
 from benchpress.patches.name_bench_sites_by_site_name import execute as name_bench_sites
@@ -180,7 +183,7 @@ class TestSiteNameClaim(IntegrationTestCase):
 		frappe.db.set_value(BENCH, bench.name, "owner", "tenant@example.com", update_modified=False)
 		bench.owner = "tenant@example.com"
 
-		api._claim_site_name(bench)
+		site_names.claim(bench)
 
 		self.assertEqual(frappe.db.get_value(SITE, bench.site_name, "owner"), "tenant@example.com")
 
@@ -192,6 +195,41 @@ class TestSiteNameClaim(IntegrationTestCase):
 		frappe.delete_doc(BENCH, bench.name, force=True, ignore_permissions=True)
 
 		self.assertFalse(frappe.db.exists(SITE, f"freed.{DOMAIN}"))
+
+	# --- Contention -----------------------------------------------------------
+
+	def test_a_second_claim_on_one_name_is_refused(self):
+		"""The whole design is that the primary key is the check."""
+		owner = self._bench(self.labs[0], f"contended.{DOMAIN}")
+		intruder = self._bench(self.labs[1], f"contended.{DOMAIN}")
+		site_names.claim(owner)
+		self.addCleanup(frappe.delete_doc, SITE, owner.site_name, force=True, ignore_permissions=True)
+
+		with self.assertRaises(frappe.ValidationError) as refusal:
+			site_names.claim(intruder)
+
+		self.assertIn("is already in use", str(refusal.exception))
+		self.assertEqual(frappe.db.get_value(SITE, owner.site_name, "bench"), owner.name)
+
+	def test_the_bench_that_holds_the_name_can_claim_it_again(self):
+		"""A redeploy claims the name it already owns, and the duplicate is not an error."""
+		owner = self._bench(self.labs[0], f"reclaimed.{DOMAIN}")
+		site_names.claim(owner)
+		self.addCleanup(frappe.delete_doc, SITE, owner.site_name, force=True, ignore_permissions=True)
+
+		site_names.claim(owner)
+
+		self.assertEqual(frappe.db.count(SITE, {"site_name": owner.site_name}), 1)
+
+	# --- Release --------------------------------------------------------------
+
+	def test_release_frees_every_name_the_bench_holds(self):
+		bench = self._bench(self.labs[0], f"released.{DOMAIN}")
+		self._claimed(bench)
+
+		site_names.release(bench.name)
+
+		self.assertFalse(frappe.db.exists(SITE, f"released.{DOMAIN}"))
 
 	# --- The worker's last line of defence ------------------------------------
 
@@ -235,6 +273,33 @@ class TestSiteNameClaim(IntegrationTestCase):
 		admission_repair.reconcile_admissions()
 
 		self.assertEqual(frappe.db.get_value(SITE, site.name, "status"), "Creating")
+
+
+class TestQualify(unittest.TestCase):
+	def test_returns_none_for_empty_input(self):
+		self.assertIsNone(site_names.qualify(None))
+		self.assertIsNone(site_names.qualify(""))
+		self.assertIsNone(site_names.qualify("   "))
+
+	@patch("benchpress.site_names.frappe.db.get_single_value", return_value="benchpress.cloud")
+	def test_lowercases_and_appends_base_domain(self, get_single_value):
+		self.assertEqual(site_names.qualify("Acme"), "acme.benchpress.cloud")
+
+	@patch("benchpress.site_names.frappe.db.get_single_value", return_value=None)
+	def test_falls_back_to_localhost_when_base_domain_unset(self, get_single_value):
+		self.assertEqual(site_names.qualify("acme"), "acme.localhost")
+
+	def test_rejects_a_dotted_label(self):
+		with self.assertRaises(frappe.ValidationError):
+			site_names.qualify("acme.example.com")
+
+	def test_rejects_invalid_characters(self):
+		with self.assertRaises(frappe.ValidationError):
+			site_names.qualify("Acme_1")
+
+	def test_rejects_a_label_over_max_length(self):
+		with self.assertRaises(frappe.ValidationError):
+			site_names.qualify("a" * 64)
 
 
 class TestNameBenchSitesBySiteName(IntegrationTestCase):
