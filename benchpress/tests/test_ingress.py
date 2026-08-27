@@ -171,6 +171,78 @@ class TestPublish(unittest.TestCase):
 				self.assertEqual((target_dir / "inst-1.yml").stat().st_mtime_ns, mtime)
 
 
+class TestServiceHealthCheck(unittest.TestCase):
+	"""Traefik's own probe, which is the only thing that ejects a server from routing.
+
+	Docker's verdict cannot: Traefik reads the file provider and has no socket to hear it on.
+	"""
+
+	def _config(self, **settings):
+		with tempfile.TemporaryDirectory() as tmp:
+			with (
+				patch.object(ingress, "TRAEFIK_DYNAMIC_DIR", _mounted(tmp)),
+				patch.object(ingress, "has_ide", return_value=True),
+				patch.object(ingress, "frappe") as frappe_mock,
+			):
+				frappe_mock.get_cached_doc.return_value = frappe._dict(settings)
+				ingress.publish("inst-1", "benchpress.cloud")
+				return yaml.safe_load((Path(tmp) / "instances" / "inst-1.yml").read_text())
+
+	def _health(self, service, **settings):
+		return self._config(**settings)["http"]["services"][service]["loadBalancer"]["healthCheck"]
+
+	def test_both_services_carry_a_health_check(self):
+		services = self._config()["http"]["services"]
+		for name in ("site-inst-1", "ide-inst-1"):
+			self.assertIn("healthCheck", services[name]["loadBalancer"])
+
+	def test_the_site_service_probes_the_site(self):
+		self.assertEqual(self._health("site-inst-1")["path"], "/api/method/ping")
+
+	def test_the_ide_service_probes_the_ide(self):
+		"""Asserted apart from the site's: a copy-paste that gives both the same path passes
+		any test that only asks whether a health check exists."""
+		self.assertEqual(self._health("ide-inst-1")["path"], "/healthz")
+
+	def test_the_probe_rate_comes_from_settings(self):
+		health = self._health(
+			"site-inst-1", traefik_health_interval_seconds=7, traefik_health_timeout_seconds=2
+		)
+		self.assertEqual((health["interval"], health["timeout"]), ("7s", "2s"))
+
+	def test_an_install_that_never_saved_its_settings_still_gets_a_rate(self):
+		"""A Single holds only what somebody wrote, and a settings save materialises the rest
+		as zero — so both readings have to fall back rather than probe every zero seconds."""
+		self.assertEqual(self._health("ide-inst-1")["interval"], "10s")
+		self.assertEqual(self._health("ide-inst-1", traefik_health_interval_seconds=0)["interval"], "10s")
+
+	def test_the_probe_names_no_hostname(self):
+		"""It is sent to the server URL, so the Host header is the container name and the
+		bench's `default_site` resolves it. A `hostname` key would look like a fix and be none."""
+		self.assertEqual(sorted(self._health("site-inst-1")), ["interval", "path", "timeout"])
+
+	def test_the_router_half_is_untouched(self):
+		"""This phase changes what a service does and nothing about how a request is matched.
+		A lost `tls: {}` is a TLS outage and a changed rule is a bench nobody can reach."""
+		self.assertEqual(
+			self._config()["http"]["routers"],
+			{
+				"site-inst-1": {
+					"rule": "Host(`inst-1.benchpress.cloud`)",
+					"entryPoints": ["websecure"],
+					"service": "site-inst-1",
+					"tls": {},
+				},
+				"ide-inst-1": {
+					"rule": "Host(`ide-inst-1.benchpress.cloud`)",
+					"entryPoints": ["websecure"],
+					"service": "ide-inst-1",
+					"tls": {},
+				},
+			},
+		)
+
+
 class TestIdeRouter(IntegrationTestCase):
 	"""Whether `ide-<id>` exists at all — see specs/…/phase-3-code-server-router.md.
 

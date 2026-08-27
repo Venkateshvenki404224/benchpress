@@ -50,6 +50,15 @@ PROTECTED_ROUTE_FILES = frozenset({CONTROL_PLANE_ROUTE_FILE, WILDCARD_ANCHOR_FIL
 # checking anything else would prove something else.
 TRAEFIK_HOST = "traefik"
 
+# Each service probes the path it serves, verified 200 inside a live bench. Pointing both at
+# the site path would eject a working code-server every time gunicorn hiccuped, and pointing
+# the site at /healthz would eject nothing, because code-server answers it while Frappe is dead.
+SITE_HEALTH_PATH = "/api/method/ping"
+IDE_HEALTH_PATH = "/healthz"
+
+DEFAULT_TRAEFIK_HEALTH_INTERVAL = 10
+DEFAULT_TRAEFIK_HEALTH_TIMEOUT = 3
+
 
 class TraefikRouteDirectoryMissing(Exception):
 	"""Raised when the Traefik route directory is not mounted in this container.
@@ -94,7 +103,10 @@ def publish(instance_id: str, base_domain: str, ide: bool | None = None) -> None
 	# Resolved by Docker's embedded DNS: traefik is on the `benchpress` network.
 	services = {
 		f"site-{instance_id}": {
-			"loadBalancer": {"servers": [{"url": f"http://{instance_id}:{addressing.SITE_HTTP_PORT}"}]}
+			"loadBalancer": {
+				"servers": [{"url": f"http://{instance_id}:{addressing.SITE_HTTP_PORT}"}],
+				"healthCheck": _service_health(SITE_HEALTH_PATH),
+			}
 		}
 	}
 
@@ -106,13 +118,31 @@ def publish(instance_id: str, base_domain: str, ide: bool | None = None) -> None
 			"tls": {},
 		}
 		services[f"ide-{instance_id}"] = {
-			"loadBalancer": {"servers": [{"url": f"http://{instance_id}:{addressing.IDE_HTTP_PORT}"}]}
+			"loadBalancer": {
+				"servers": [{"url": f"http://{instance_id}:{addressing.IDE_HTTP_PORT}"}],
+				"healthCheck": _service_health(IDE_HEALTH_PATH),
+			}
 		}
 
 	_atomic_write(
 		TRAEFIK_DYNAMIC_DIR / f"{instance_id}.yml",
 		yaml.safe_dump({"http": {"routers": routers, "services": services}}),
 	)
+
+
+def _service_health(path: str) -> dict:
+	"""Traefik's own probe of one service — the only thing that can eject a server from routing.
+
+	Docker's verdict cannot: Traefik reads the file provider and has no socket to hear it on.
+	"""
+	settings = frappe.get_cached_doc("BenchPress Settings")
+	# `.get`, not attribute access, and `or` on the value: a Single holds only what has been
+	# written, so an untouched field reads None and a settings save materialises it as zero.
+	interval = cint(settings.get("traefik_health_interval_seconds")) or DEFAULT_TRAEFIK_HEALTH_INTERVAL
+	timeout = cint(settings.get("traefik_health_timeout_seconds")) or DEFAULT_TRAEFIK_HEALTH_TIMEOUT
+	# No `hostname` key, deliberately: the probe goes to the server URL, so the Host header is
+	# the container name, and any Host resolves to the bench's own site through `default_site`.
+	return {"path": path, "interval": f"{interval}s", "timeout": f"{timeout}s"}
 
 
 def has_ide(instance_id: str) -> bool:

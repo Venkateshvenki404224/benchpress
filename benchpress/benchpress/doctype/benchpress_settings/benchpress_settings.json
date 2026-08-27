@@ -25,6 +25,8 @@
   "bench_health_retries",
   "bench_health_start_period_seconds",
   "stats_poll_max_benches",
+  "traefik_health_interval_seconds",
+  "traefik_health_timeout_seconds",
   "resource_section",
   "container_memory_limit",
   "column_break_resource",
@@ -160,6 +162,20 @@
    "fieldname": "stats_poll_max_benches",
    "fieldtype": "Int",
    "label": "Stats Poll Max Benches"
+  },
+  {
+   "default": "10",
+   "description": "Seconds between two of Traefik's own probes of a bench. This is a fleet-wide request rate against gunicorn, not a preference: Traefik probes every server on every service, so 100 benches at 10 seconds is 20 full Frappe requests a second.",
+   "fieldname": "traefik_health_interval_seconds",
+   "fieldtype": "Int",
+   "label": "Traefik Health Interval Seconds"
+  },
+  {
+   "default": "3",
+   "description": "Seconds one Traefik probe waits before it counts as a failure. A failure ejects the server from routing and the bench answers 503 until a probe succeeds again.",
+   "fieldname": "traefik_health_timeout_seconds",
+   "fieldtype": "Int",
+   "label": "Traefik Health Timeout Seconds"
   },
   {
    "fieldname": "resource_section",
