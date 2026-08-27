@@ -270,6 +270,101 @@ class TestRecord(unittest.TestCase):
 		notify.assert_not_called()
 
 
+def _running(name=BENCH, health="Healthy"):
+	return frappe._dict(name=name, container_id="c0ffee123456", container_health=health)
+
+
+class TestReconcile(unittest.TestCase):
+	"""The blind window is closed by re-reading state, because the daemon's buffer is 74s deep."""
+
+	def _reconcile(self, stored="Healthy", observed="Healthy", down=False, last_event=None, rows=None):
+		"""One pass over one Running bench; reports the counts, the recorder and the frappe mock."""
+		with (
+			patch("benchpress.docker_events.frappe") as frappe_mock,
+			patch("benchpress.docker_events.record") as record_mock,
+			patch("benchpress.docker_events._last_event", return_value=last_event),
+			patch("benchpress.docker_events.now_datetime", return_value="2026-08-27 12:00:00"),
+			patch("benchpress.docker_events.docker_manager") as docker_mock,
+		):
+			frappe_mock.get_all.return_value = [_running(health=stored)] if rows is None else rows
+			docker_mock.get_container_health.return_value = observed
+			docker_mock.container_is_down.return_value = down
+			counts = docker_events.reconcile()
+		return counts, record_mock, frappe_mock
+
+	def test_only_the_benches_the_platform_believes_are_running_are_asked(self):
+		"""A bench stopped while the listener was blind is excluded here, and so produces nothing."""
+		_counts, _record, frappe_mock = self._reconcile()
+		self.assertEqual(frappe_mock.get_all.call_args.kwargs["filters"]["status"], "Running")
+
+	def test_a_bench_that_did_not_change_is_counted_and_left_alone(self):
+		counts, record_mock, frappe_mock = self._reconcile(
+			stored="Healthy", observed="Healthy", last_event="bench_healthy"
+		)
+		self.assertEqual(counts, {"checked": 1, "changed": 0, "recorded": 0})
+		frappe_mock.db.set_value.assert_not_called()
+		record_mock.assert_not_called()
+
+	def test_a_bench_still_unhealthy_is_not_reported_a_second_time(self):
+		"""The pass runs every five minutes; a standing failure is one event, not twelve an hour."""
+		counts, record_mock, _frappe = self._reconcile(
+			stored="Unhealthy", observed="Unhealthy", last_event="bench_unhealthy"
+		)
+		self.assertEqual(counts, {"checked": 1, "changed": 0, "recorded": 0})
+		record_mock.assert_not_called()
+
+	def test_a_failure_the_stats_poll_already_wrote_down_is_still_reported(self):
+		"""`_update_bench_health` writes the field and records nothing, and it can win the race."""
+		counts, record_mock, frappe_mock = self._reconcile(stored="Unhealthy", observed="Unhealthy")
+
+		self.assertEqual(counts, {"checked": 1, "changed": 0, "recorded": 1})
+		frappe_mock.db.set_value.assert_not_called()
+		self.assertEqual(record_mock.call_args.args[1]["kind"], "bench_unhealthy")
+
+	def test_a_site_that_stopped_answering_while_blind_is_found_and_recorded(self):
+		counts, record_mock, frappe_mock = self._reconcile(stored="Healthy", observed="Unhealthy")
+
+		self.assertEqual(counts, {"checked": 1, "changed": 1, "recorded": 1})
+		self.assertEqual(frappe_mock.db.set_value.call_args.args[2]["container_health"], "Unhealthy")
+		self.assertEqual(record_mock.call_args.args[1]["kind"], "bench_unhealthy")
+
+	def test_a_container_that_exited_while_blind_is_a_death_and_not_a_silence(self):
+		"""`get_container_health` answers Unhealthy for both, so the run state is the discriminator."""
+		_counts, record_mock, _frappe = self._reconcile(observed="Unhealthy", down=True)
+		self.assertEqual(record_mock.call_args.args[1]["kind"], "bench_died")
+
+	def test_the_incident_is_stamped_at_the_pass_and_says_where_it_came_from(self):
+		_counts, record_mock, _frappe = self._reconcile(observed="Unhealthy")
+
+		incident = record_mock.call_args.args[1]
+		self.assertEqual(incident["severity"], "error")
+		self.assertIn("reconcile", incident["detail"])
+		self.assertNotIn("at", incident)
+
+	def test_a_first_healthy_reading_writes_the_field_and_no_row(self):
+		"""`lifecycle` blanks the field on start, so every deploy would otherwise post a recovery."""
+		counts, record_mock, frappe_mock = self._reconcile(stored="", observed="Healthy")
+
+		self.assertEqual(counts, {"checked": 1, "changed": 1, "recorded": 0})
+		self.assertEqual(frappe_mock.db.set_value.call_args.args[2]["container_health"], "Healthy")
+		record_mock.assert_not_called()
+
+	def test_a_recovery_after_a_recorded_failure_is_news(self):
+		counts, record_mock, _frappe = self._reconcile(
+			stored="Unhealthy", observed="Healthy", last_event="bench_unhealthy"
+		)
+		self.assertEqual(counts["recorded"], 1)
+		self.assertEqual(record_mock.call_args.args[1]["kind"], "bench_healthy")
+
+	def test_the_counts_report_the_drift_rather_than_that_the_pass_ran(self):
+		rows = [_running(name="bench-001", health="Healthy"), _running(name="bench-002", health="")]
+		counts, _record, _frappe = self._reconcile(observed="Healthy", rows=rows)
+		self.assertEqual(counts, {"checked": 2, "changed": 1, "recorded": 0})
+
+	def test_every_kind_the_pass_can_report_carries_a_severity(self):
+		self.assertEqual(set(docker_events.SEVERITY), set(docker_events.SUBJECTS))
+
+
 class TestHeartbeat(unittest.TestCase):
 	def test_the_reader_gets_the_age_the_writer_could_not_know(self):
 		with (
@@ -284,3 +379,7 @@ class TestHeartbeat(unittest.TestCase):
 		with patch("benchpress.docker_events.frappe") as frappe_mock:
 			frappe_mock.cache.return_value.get_value.return_value = None
 			self.assertIsNone(docker_events.heartbeat_value())
+
+	def test_the_beat_outlives_the_patience_so_a_stale_one_can_name_its_own_age(self):
+		"""A key that expired first would report "never published" for a listener that just died."""
+		self.assertGreater(docker_events.HEARTBEAT_EXPIRY, docker_events.HEARTBEAT_STALE_SECONDS)

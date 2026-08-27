@@ -544,6 +544,29 @@ class TestApiAuthorization(IntegrationTestCase):
 		activity = api.get_overview()["activity"]
 		self.assertFalse([event for event in activity if event.get("bench") == self.bench.name])
 
+	def test_overview_activity_hides_another_users_bench_events(self):
+		"""The panel is the only place a tenant reads these, so the scoping is exercised there."""
+		frappe.set_user("Administrator")
+		event = frappe.get_doc(
+			{
+				"doctype": "Bench Event",
+				"bench": self.bench.name,
+				"event_type": "bench_died",
+				"severity": "error",
+				"occurred_at": frappe.utils.now_datetime(),
+			}
+		).insert(ignore_permissions=True)
+		self.addCleanup(frappe.delete_doc, "Bench Event", event.name, force=True, ignore_permissions=True)
+
+		frappe.set_user(self.user_a)
+		mine = [row for row in api.get_overview()["activity"] if "stopped unexpectedly" in row["message"]]
+		self.assertTrue(mine, "the bench's own owner must see it")
+		self.assertEqual(mine[0]["log_type"], "error")
+
+		frappe.set_user(self.user_b)
+		theirs = api.get_overview()["activity"]
+		self.assertFalse([row for row in theirs if "stopped unexpectedly" in row["message"]])
+
 	def test_app_user_allowed_to_read_vpn_status(self):
 		frappe.set_user(self.user_a)
 		status = api.get_vpn_status()

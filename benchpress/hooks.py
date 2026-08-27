@@ -257,6 +257,10 @@ scheduler_events = {
 			# Not the daily list: a slot leaked by a killed worker is a lockout for a caller at
 			# their cap, and it costs three grouped reads and no Docker call to find.
 			"benchpress.credits.admission_repair.reconcile_admissions",
+			# The net under the event listener. Enqueued, never run inline: the pass needs the
+			# Docker socket, which only `queue-long` and `backend` carry. A listener that stays
+			# down then degrades to the convergence BenchPress had before it, not to silence.
+			"benchpress.docker_events.enqueue_reconcile",
 		],
 		"0 2 * * *": [
 			"benchpress.mariadb_manager.enqueue_backup",

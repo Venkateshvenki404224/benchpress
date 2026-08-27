@@ -44,6 +44,9 @@ PRECEDENCE = ("bench_healthy", "bench_unhealthy", "bench_died", "oom_killed")
 # instead of after a poll interval.
 HEALTH_VERDICTS = {"bench_unhealthy": "Unhealthy", "bench_healthy": "Healthy"}
 
+# Derived, so an incident recorded by `reconcile` cannot disagree with the same one off the stream.
+SEVERITY = dict(INCIDENTS.values())
+
 SUBJECTS = {
 	"bench_died": "Bench {0} stopped unexpectedly.",
 	"oom_killed": "Bench {0} ran out of memory and was killed.",
@@ -60,7 +63,12 @@ TICK_SECONDS = 1
 ERROR_BACKOFF = 30
 
 HEARTBEAT_KEY = "benchpress:docker_events"
-HEARTBEAT_EXPIRY = 120
+# Ticks of grace before the heartbeat is no longer believed, and how long it outlives that so a
+# stale beat can still name its own age. Both derived from the tick: a shorter tick must not
+# quietly become a shorter patience.
+HEARTBEAT_STALE_TICKS = 60
+HEARTBEAT_STALE_SECONDS = TICK_SECONDS * HEARTBEAT_STALE_TICKS
+HEARTBEAT_EXPIRY = HEARTBEAT_STALE_SECONDS * 2
 
 
 def run() -> None:
@@ -86,6 +94,9 @@ def consume() -> None:
 	try:
 		reader = threading.Thread(target=_read_into, args=(stream, inbox), daemon=True)
 		reader.start()
+		# After the reader, not before: anything that changes while the pass runs is then already
+		# on the stream rather than in the gap between the two.
+		reconcile()
 		while True:
 			_drain(inbox, pending, stats)
 			_start_fresh()
@@ -183,11 +194,16 @@ def _settle_health(bench_name: str, row, incident: dict) -> None:
 		{"container_health": HEALTH_VERDICTS[incident["kind"]], "last_health_check": now_datetime()},
 		update_modified=False,
 	)
-	# Recovery is news only after a failure was recorded. The first verdict a deploy produces is
-	# `starting -> healthy`, and a row for every deploy is noise rather than news.
-	if incident["kind"] == "bench_healthy" and _last_event(bench_name) != "bench_unhealthy":
+	if not _is_news(incident["kind"], bench_name):
 		return
 	record(bench_name, incident)
+
+
+def _is_news(kind: str, bench_name: str) -> bool:
+	"""Whether an incident is worth a row: recovery counts only after a failure was recorded."""
+	# The first verdict a deploy produces is `starting -> healthy`, and a row for every deploy is
+	# noise rather than news.
+	return kind != "bench_healthy" or _last_event(bench_name) == "bench_unhealthy"
 
 
 def _last_event(bench_name: str) -> str | None:
@@ -240,6 +256,83 @@ def _stamp(at):
 		return now_datetime()
 	utc = datetime.fromtimestamp(cint(at), tz=UTC)
 	return convert_utc_to_system_timezone(utc).replace(tzinfo=None)
+
+
+def enqueue_reconcile() -> None:
+	"""Convergence cron: hand the pass to `queue-long`, the worker that has the Docker socket."""
+	# The enqueuer, never `reconcile` itself — see the rule above `scheduler_events` in `hooks.py`.
+	frappe.enqueue(
+		"benchpress.docker_events.reconcile",
+		queue="long",
+		job_id="docker_events_reconcile",
+		deduplicate=True,
+	)
+
+
+def reconcile() -> dict:
+	"""Re-read health for every Running bench; the event buffer is too shallow to replay.
+
+	Returns `{checked, changed, recorded}`: a pass that reported only "ran" is how drift goes
+	unnoticed.
+	"""
+	# The daemon keeps 255 events — 74 seconds on this host, and less once every bench carries a
+	# healthcheck — so `since=<disconnect>` is a head start and never a guarantee.
+	_start_fresh()
+	counts = {"checked": 0, "changed": 0, "recorded": 0}
+	for bench in _benches_to_reconcile():
+		counts["checked"] += 1
+		health = docker_manager.get_container_health(bench.container_id)
+		if health != bench.container_health:
+			counts["changed"] += 1
+			frappe.db.set_value(
+				"Bench Instance",
+				bench.name,
+				{"container_health": health, "last_health_check": now_datetime()},
+				update_modified=False,
+			)
+		kind = _drifted_to(bench.container_id, health)
+		if _is_drift(kind, bench.name):
+			record(bench.name, _drift_incident(kind, bench.container_health, health))
+			counts["recorded"] += 1
+	frappe.db.commit()  # nosemgrep -- a background pass has no request boundary to commit at
+	return counts
+
+
+def _benches_to_reconcile() -> list[dict]:
+	"""The benches the platform believes are running, which is the only set worth an opinion."""
+	# Unbounded, unlike the stats poll: an inspect is a millisecond against 1.7 s for a stats
+	# sample. A bench stopped while the listener was blind is excluded by `status`, which is what
+	# keeps an intentional stop from producing an event.
+	return frappe.get_all(
+		"Bench Instance",
+		filters={"status": "Running", "container_id": ["is", "set"]},
+		fields=["name", "container_id", "container_health"],
+	)
+
+
+def _is_drift(kind: str, bench_name: str) -> bool:
+	"""Whether a reconciled state differs from the last thing said about the bench."""
+	# Against the last event, never against `container_health`: `stats_collector` writes that
+	# field too and records nothing, so a poll winning the race would silence the pass entirely.
+	return _last_event(bench_name) != kind and _is_news(kind, bench_name)
+
+
+def _drifted_to(container_id: str, health: str) -> str:
+	"""The incident a health change amounts to, once the container is asked whether it is still up."""
+	if health == "Healthy":
+		return "bench_healthy"
+	# `container_is_down` is the discriminator rather than the health label: `get_container_health`
+	# answers Unhealthy both for a site that stopped replying and for a container that exited.
+	return "bench_died" if docker_manager.container_is_down(container_id) else "bench_unhealthy"
+
+
+def _drift_incident(kind: str, before: str, after: str) -> dict:
+	"""An incident found by re-reading state rather than by an event, stamped at the pass."""
+	return {
+		"kind": kind,
+		"severity": SEVERITY[kind],
+		"detail": f"found by reconcile: health {before or 'unset'} -> {after}",
+	}
 
 
 def _start_fresh() -> None:

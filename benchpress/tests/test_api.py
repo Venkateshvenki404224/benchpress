@@ -46,7 +46,7 @@ BUDGETS_MS = {
 	"get_deploy_history": 600,
 }
 
-# The ten rows benchpress.diagnostics always returns; the real checks talk to
+# The eleven rows benchpress.diagnostics always returns; the real checks talk to
 # Docker and MariaDB, so the Overview timing test never runs them.
 DIAGNOSTICS_ROWS = [
 	{"check": "docker_socket", "status": "pass", "hint": "Docker daemon reachable"},
@@ -58,6 +58,7 @@ DIAGNOSTICS_ROWS = [
 	{"check": "redis", "status": "fail", "hint": "benchpress-redis container not found"},
 	{"check": "container_runtimes", "status": "pass", "hint": "Docker has sysbox-runc registered"},
 	{"check": "golden_images", "status": "pass", "hint": "8 of 8 built labs carry a golden dump"},
+	{"check": "docker_events", "status": "pass", "hint": "Docker event listener reported 2s ago"},
 	{"check": "vpn_server", "status": "pass", "hint": "WireGuard server 'wg0' configured"},
 ]
 

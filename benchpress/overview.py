@@ -37,7 +37,17 @@ INFRASTRUCTURE_LABELS = {
 	"redis": "Redis",
 	"container_runtimes": "Container runtimes",
 	"golden_images": "Golden images",
+	"docker_events": "Event listener",
 	"vpn_server": "WireGuard",
+}
+
+# A bench event gets its own sentence rather than riding through `_deploy_event`, whose fallback
+# reads "is deploying" — worse than not showing a dead bench at all.
+BENCH_EVENT_MESSAGES = {
+	"bench_died": "{0} stopped unexpectedly",
+	"oom_killed": "{0} ran out of memory and was stopped",
+	"bench_unhealthy": "{0} is not responding",
+	"bench_healthy": "{0} is responding again",
 }
 
 
@@ -201,12 +211,12 @@ def format_duration(seconds: float | None) -> str:
 
 
 def _activity(admin: bool) -> list[dict]:
-	"""Deploy activity for everyone; build activity for admins only.
+	"""Deploy and bench activity for everyone; build activity for admins only.
 
 	Build Log carries no permission query condition, so including it for a
 	non-admin would leak every other user's builds.
 	"""
-	events = _deploy_events()
+	events = _deploy_events() + _bench_events()
 	if admin:
 		events += _build_events()
 	events.sort(key=lambda event: event["timestamp"], reverse=True)
@@ -236,6 +246,32 @@ def _deploy_event(log: dict, subject: str) -> dict:
 		"log_type": log.log_type,
 		"timestamp": log.timestamp,
 		"bench": log.bench,
+	}
+
+
+def _bench_events() -> list[dict]:
+	# `bench_event_query_conditions` scopes the rows, so this is safe for everyone in the way
+	# `_deploy_events` is and `_build_events` is not.
+	events = frappe.get_list(
+		"Bench Event",
+		filters={"occurred_at": (">=", window_start())},
+		fields=["name", "bench", "event_type", "severity", "occurred_at"],
+		order_by="occurred_at desc",
+		limit=ACTIVITY_LIMIT,
+	)
+	labels = _bench_labels([event.bench for event in events])
+	return [_bench_event(event, labels.get(event.bench) or event.bench) for event in events]
+
+
+def _bench_event(event: dict, subject: str) -> dict:
+	message = BENCH_EVENT_MESSAGES.get(event.event_type) or "{0} reported {1}"
+	return {
+		"message": _(message).format(subject, event.event_type),
+		# `severity` is already the feed's vocabulary, so a dead bench counts on the badge the way
+		# a failed deploy does.
+		"log_type": event.severity,
+		"timestamp": event.occurred_at,
+		"bench": event.bench,
 	}
 
 
@@ -270,7 +306,7 @@ def _bench_labels(bench_names: list[str]) -> dict:
 
 
 def _infrastructure(admin: bool) -> list[dict] | None:
-	"""The ten real diagnostics checks — admins only, never a placeholder."""
+	"""The eleven real diagnostics checks — admins only, never a placeholder."""
 	if not admin:
 		return None
 	from benchpress.diagnostics import display_row, run_diagnostics
