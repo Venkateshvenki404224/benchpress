@@ -187,14 +187,18 @@ class TestIdeRouter(IntegrationTestCase):
 		cls.ide_size = _make_size("Phase Three IDE", 1, "777m")
 		cls.no_ide_size = _make_size("Phase Three No IDE", 0, "778m")
 		cls.lab = _make_lab("test-lab-ide-router")
+		# A second lab, because one bench exists per (user, lab) and the fleet read has to be
+		# shown resolving more than one bench in the same query.
+		cls.other_lab = _make_lab("test-lab-ide-router-other")
 		frappe.db.commit()
 
 	@classmethod
 	def tearDownClass(cls):
 		frappe.set_user("Administrator")
-		for name in frappe.get_all("Bench Instance", filters={"lab": cls.lab.name}, pluck="name"):
-			frappe.delete_doc("Bench Instance", name, force=True, ignore_permissions=True)
-		cls.lab.delete(ignore_permissions=True)
+		for lab in (cls.lab, cls.other_lab):
+			for name in frappe.get_all("Bench Instance", filters={"lab": lab.name}, pluck="name"):
+				frappe.delete_doc("Bench Instance", name, force=True, ignore_permissions=True)
+			lab.delete(ignore_permissions=True)
 		for size in (cls.ide_size, cls.no_ide_size):
 			frappe.delete_doc("Instance Size", size.name, force=True, ignore_permissions=True)
 		frappe.db.commit()
@@ -205,9 +209,10 @@ class TestIdeRouter(IntegrationTestCase):
 		super().setUp()
 		clear_size_index()
 
-	def _bench(self, *, lab_size, lab_flag=1, bench_size=None):
-		frappe.db.set_value("Lab", self.lab.name, {"instance_size": lab_size, "enable_code_server": lab_flag})
-		bench = _fresh_bench(self, self.lab.name)
+	def _bench(self, *, lab_size, lab_flag=1, bench_size=None, lab=None):
+		lab_name = (lab or self.lab).name
+		frappe.db.set_value("Lab", lab_name, {"instance_size": lab_size, "enable_code_server": lab_flag})
+		bench = _fresh_bench(self, lab_name)
 		bench.status = "Running"
 		bench.container_ip = "172.30.0.21"
 		bench.instance_size = bench_size
@@ -288,13 +293,14 @@ class TestIdeRouter(IntegrationTestCase):
 		"""One query for every bench: resolving per bench would cost the `*/5` pass one query
 		each, which is 300 a pass at the load profile this exists for."""
 		self._bench(lab_size=self.ide_size.name)
+		self._bench(lab_size=self.no_ide_size.name, lab=self.other_lab)
 
 		with _route_dir() as (ingress, _target_dir):
 			with patch.object(ingress, "_fleet_rows", wraps=ingress._fleet_rows) as fleet_rows:
 				result = ingress.reconcile()
 
 		self.assertEqual(fleet_rows.call_count, 1)
-		self.assertGreater(result["written"], 1)
+		self.assertGreaterEqual(result["written"], 2)
 
 	def test_a_lab_answers_the_same_rule_before_any_bench_exists(self):
 		"""The Lab detail screen has no bench to ask about and must not offer an IDE row for a
