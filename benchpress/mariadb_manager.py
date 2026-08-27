@@ -51,6 +51,10 @@ def _compose_cmd(*args: str) -> tuple[int, str]:
 	return result.returncode, output
 
 
+def _get_container(db_server):
+	return get_client().containers.get(db_server.container_name)
+
+
 def get_database_name(site_name: str) -> str:
 	"""Generate DB name from site name using SHA1 hash.
 	Follows press agent/bench.py:256-258 pattern.
@@ -70,8 +74,7 @@ def execute_sql(db_server_name: str, sql: str) -> tuple[int, str]:
 	also leaves no temp file to clean up on the failure path.
 	"""
 	db_server = frappe.get_doc("Database Server", db_server_name)
-	client = get_client()
-	container = client.containers.get(db_server.container_id)
+	container = _get_container(db_server)
 
 	encoded = base64.b64encode(sql.encode()).decode()
 	exit_code, output = container.exec_run(
@@ -362,8 +365,7 @@ def wait_for_mariadb(
 def get_container_logs(db_server_name: str, tail: int = 100) -> str:
 	"""Return recent container logs."""
 	db_server = frappe.get_doc("Database Server", db_server_name)
-	client = get_client()
-	container = client.containers.get(db_server.container_id)
+	container = _get_container(db_server)
 	return container.logs(tail=tail).decode("utf-8", errors="replace")
 
 
@@ -531,8 +533,7 @@ def backup_database_server(db_server_name: str, output_path: str = "/var/lib/mys
 	Returns the host path; on pull failure returns the in-container path (dump kept as fallback).
 	"""
 	db_server = frappe.get_doc("Database Server", db_server_name)
-	client = get_client()
-	container = client.containers.get(db_server.container_id)
+	container = _get_container(db_server)
 	root_pw = db_server.get_root_password()
 
 	timestamp = frappe.utils.now().replace(" ", "_").replace(":", "-")
@@ -566,8 +567,7 @@ def cleanup_old_backups(
 ) -> None:
 	"""Retain only the last `keep` backups on host disk; container prune catches failed-pull leftovers."""
 	db_server = frappe.get_doc("Database Server", db_server_name)
-	client = get_client()
-	container = client.containers.get(db_server.container_id)
+	container = _get_container(db_server)
 	container.exec_run(
 		cmd=[
 			"bash",
@@ -588,7 +588,7 @@ def restore_database_server(db_server_name: str, backup_file: str) -> None:
 	See docs/database-backup-restore.md for the full runbook.
 	"""
 	db_server = frappe.get_doc("Database Server", db_server_name)
-	container = get_client().containers.get(db_server.container_id)
+	container = _get_container(db_server)
 	root_pw = db_server.get_root_password()
 
 	dump_name = os.path.basename(backup_file)

@@ -52,11 +52,28 @@ class TestMariadbManager(IntegrationTestCase):
 			get_database_name("site-b.localhost"),
 		)
 
-	def _make_mock_db_server(self, container_id="ctr-abc"):
+	def _make_mock_db_server(self, container_id="ctr-abc", container_name="benchpress-mariadb"):
 		db_server = MagicMock()
 		db_server.container_id = container_id
+		db_server.container_name = container_name
 		db_server.get_root_password.return_value = "rootpw"
 		return db_server
+
+	@patch("benchpress.mariadb_manager.get_client")
+	@patch("benchpress.mariadb_manager.frappe.get_doc")
+	def test_execute_sql_resolves_the_container_by_name_not_id(self, mock_get_doc, mock_get_client):
+		from benchpress.mariadb_manager import execute_sql
+
+		mock_get_doc.return_value = self._make_mock_db_server(container_id="stale-id")
+		mock_container = MagicMock()
+		mock_container.exec_run.return_value = (0, b"ok")
+		mock_get_client.return_value.containers.get.return_value = mock_container
+
+		execute_sql("db-server-name", "SELECT 1")
+
+		looked_up = mock_get_client.return_value.containers.get.call_args.args[0]
+		self.assertEqual(looked_up, "benchpress-mariadb")
+		self.assertNotEqual(looked_up, "stale-id")
 
 	@patch("benchpress.mariadb_manager.get_client")
 	@patch("benchpress.mariadb_manager.frappe.get_doc")
