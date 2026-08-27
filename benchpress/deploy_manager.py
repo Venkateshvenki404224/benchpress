@@ -505,18 +505,20 @@ def _cleanup_failed_deploy(bench, container_id, append_log) -> None:
 	bench.wg_ip = None
 
 
-def build_linkuser_args(bench, lab, settings, ssh_password: str) -> list[str]:
+def build_linkuser_args(bench, lab, settings) -> list[str]:
 	"""Positional arguments for linkuser.sh, in the order the script reads them.
 
 	Order must match scripts/linkuser.sh:
-	USERNAME EMAIL LAB_NAME WG_IP SSH_PASSWORD BENCH_NAME BASE_DOMAIN LOGIN_SHELL
+	USERNAME EMAIL LAB_NAME WG_IP BENCH_NAME BASE_DOMAIN LOGIN_SHELL
+
+	The SSH password is not among them. It travels in the exec environment, which Docker
+	does not publish, while it publishes every command line in full.
 	"""
 	return [
 		bench.ssh_username,
 		bench.owner,
 		lab.title,
 		bench.wg_ip or "0.0.0.0",
-		ssh_password,
 		bench.bench_name,
 		settings.base_domain or "localhost",
 		lab.shell or "/bin/bash",
@@ -789,7 +791,7 @@ def _deploy_bench(bench_name: str) -> None:
 			bench.ssh_username = bench._derive_username(bench.owner)
 
 		ssh_password = secrets.token_urlsafe(12)
-		linkuser_args = build_linkuser_args(bench, lab, settings, ssh_password)
+		linkuser_args = build_linkuser_args(bench, lab, settings)
 		pipeline.step("ssh_user")
 		pipeline.log(f"linkuser.sh {bench.ssh_username}")
 		# The app's copy of linkuser.sh is authoritative over the one baked into the image.
@@ -800,7 +802,9 @@ def _deploy_bench(bench_name: str) -> None:
 			container_id, linkuser_script.read_text(), "/opt/benchpress/scripts/linkuser.sh"
 		)
 		linkuser_cmd = linkuser_command(linkuser_args)
-		exit_code, output = exec_in_container(container_id, linkuser_cmd, user="root")
+		exit_code, output = exec_in_container(
+			container_id, linkuser_cmd, user="root", environment={"SSH_PASSWORD": ssh_password}
+		)
 		if output:
 			pipeline.log(output.strip())
 		if exit_code != 0:

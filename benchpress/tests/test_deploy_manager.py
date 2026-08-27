@@ -511,12 +511,11 @@ class TestDeployManager(IntegrationTestCase):
 		self.lab.shell = "/bin/zsh"
 		settings = frappe.get_single("BenchPress Settings")
 
-		args = build_linkuser_args(bench, self.lab, settings, "secret-pw")
+		args = build_linkuser_args(bench, self.lab, settings)
 
-		# 8 args: mount_target was removed, so LOGIN_SHELL immediately follows BASE_DOMAIN.
-		self.assertEqual(len(args), 8)
-		self.assertEqual(args[4], "secret-pw")  # SSH_PASSWORD position
-		self.assertEqual(args[6], settings.base_domain or "localhost")  # BASE_DOMAIN position
+		# 7 args: mount_target was removed, and SSH_PASSWORD now travels in the environment.
+		self.assertEqual(len(args), 7)
+		self.assertEqual(args[5], settings.base_domain or "localhost")  # BASE_DOMAIN position
 		self.assertEqual(args[-1], "/bin/zsh")  # LOGIN_SHELL position (right after BASE_DOMAIN)
 
 	def test_build_linkuser_args_defaults_shell_to_bash(self):
@@ -527,7 +526,7 @@ class TestDeployManager(IntegrationTestCase):
 		self.lab.shell = None
 		settings = frappe.get_single("BenchPress Settings")
 
-		args = build_linkuser_args(bench, self.lab, settings, "pw")
+		args = build_linkuser_args(bench, self.lab, settings)
 
 		self.assertEqual(args[-1], "/bin/bash")
 
@@ -645,6 +644,7 @@ class TestDeployStepMarkers(IntegrationTestCase):
 			patch("benchpress.vpn_adapter.create_container_peer", autospec=True) as mock_peer,
 		):
 			self.cert_check = mock_cert
+			self.execs = mock_exec
 			mock_infra.return_value = self.db_server_name
 			mock_runtimes.return_value = {"names": set(registered_runtimes), "default": "runc"}
 			mock_runtime_of.return_value = "sysbox-runc"
@@ -845,6 +845,21 @@ class TestDeployStepMarkers(IntegrationTestCase):
 		self.assertIn("Securing the code-server config failed (exit 1)", log)
 		self.assertNotIn("code-server ready at", log)
 		self.assertFalse(self._bench_field(bench, "code_server_url"))
+
+	@patch("benchpress.deploy_manager.secrets.token_urlsafe")
+	def test_the_ssh_password_goes_into_the_environment_and_into_no_command(self, token):
+		"""Docker publishes every exec command line, and linkuser.sh read the password from argv."""
+		sentinel = "sS1XnOtAr3alPassw0rd"
+		token.return_value = sentinel
+		bench = self._bench()
+
+		self._run_deploy(bench)
+
+		linkuser = [call for call in self.execs.call_args_list if "linkuser.sh" in call.args[1]]
+		self.assertEqual(len(linkuser), 1)
+		self.assertEqual(linkuser[0].kwargs.get("environment"), {"SSH_PASSWORD": sentinel})
+		for call in self.execs.call_args_list:
+			self.assertNotIn(sentinel, call.args[1])
 
 	@patch("benchpress.deploy_manager.secrets.token_urlsafe")
 	@patch("benchpress.docker_manager.get_client")

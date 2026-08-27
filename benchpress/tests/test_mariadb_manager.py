@@ -1,6 +1,7 @@
 # Copyright (c) 2026, Venkatesh and Contributors
 # See license.txt
 
+import base64
 import hashlib
 import io
 import os
@@ -10,6 +11,12 @@ from unittest.mock import MagicMock, patch
 
 import frappe
 from frappe.tests import IntegrationTestCase
+
+
+def _sql_sent(container):
+	"""The SQL a mocked `execute_sql` piped in, decoded back out of the base64 on its command line."""
+	command = " ".join(container.exec_run.call_args_list[0].kwargs["cmd"])
+	return base64.b64decode(command.split("'")[1]).decode()
 
 
 class TestMariadbManager(IntegrationTestCase):
@@ -129,6 +136,40 @@ class TestMariadbManager(IntegrationTestCase):
 		for call in mock_container.exec_run.call_args_list:
 			cmd = call.kwargs.get("cmd") or call.args[0]
 			self.assertNotIn(sentinel, " ".join(cmd))
+
+	@patch("benchpress.mariadb_manager._random_string")
+	@patch("benchpress.mariadb_manager.get_client")
+	@patch("benchpress.mariadb_manager.frappe.get_doc")
+	def test_create_user_sends_the_hash_and_never_the_plaintext(
+		self, mock_get_doc, mock_get_client, mock_random
+	):
+		"""`execute_sql` puts its script on an exec command line, so the plaintext cannot be in it."""
+		from benchpress.mariadb_manager import _native_password_hash, create_mariadb_user
+
+		sentinel = "nOtAr3alUs3rPassw0rd"
+		mock_random.return_value = sentinel
+		mock_get_doc.return_value = self._make_mock_db_server()
+		mock_container = MagicMock()
+		mock_container.exec_run.return_value = (0, b"")
+		mock_get_client.return_value.containers.get.return_value = mock_container
+
+		_, _, password = create_mariadb_user("db-server-name", "mysite.localhost")
+
+		self.assertEqual(password, sentinel)
+		sql = _sql_sent(mock_container)
+		self.assertIn(_native_password_hash(sentinel), sql)
+		self.assertNotIn(sentinel, sql)
+
+	def test_the_native_hash_is_not_the_password(self):
+		"""The control: a hash that carried the plaintext would pass the test above."""
+		from benchpress.mariadb_manager import _native_password_hash
+
+		sentinel = "nOtAr3alUs3rPassw0rd"
+
+		native = _native_password_hash(sentinel)
+
+		self.assertNotIn(sentinel, native)
+		self.assertRegex(native, r"^\*[0-9A-F]{40}$")
 
 	def _make_backup_tar(self, name, data):
 		buffer = io.BytesIO()
