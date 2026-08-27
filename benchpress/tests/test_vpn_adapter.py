@@ -259,7 +259,7 @@ class TestDockerGateway(IntegrationTestCase):
 
 		self.assertEqual(vpn_adapter._get_docker_gateway("benchpress-1"), "10.20.16.1")
 
-	@patch("benchpress.docker_manager.subnet_base", return_value="10.20")
+	@patch("benchpress.placement.subnet_base", return_value="10.20")
 	@patch("benchpress.docker_manager.get_client")
 	def test_an_unreachable_daemon_falls_back_to_the_family_arithmetic(self, get_client, _base):
 		"""A bench on bridge 1 given bridge 0's gateway has no route to the host."""

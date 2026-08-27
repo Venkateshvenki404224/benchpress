@@ -12,7 +12,7 @@ from frappe import _
 from frappe.utils.file_lock import LockTimeoutError
 from frappe.utils.synchronization import filelock
 
-from benchpress import addressing, docker_manager, image_cache, ingress, placement
+from benchpress import addressing, image_cache, ingress, placement
 from benchpress.credits import admission, lease, metering
 from benchpress.deploy_pipeline import DeployLogWriter, DeployPipeline
 from benchpress.docker_manager import (
@@ -96,11 +96,11 @@ def _reconcile_bridge_attachments() -> dict[str, dict[str, list[str]]]:
 	"""
 	restored = {}
 	for index in range(placement.bridge_count()):
-		network = docker_manager.bench_network_spec(index)["name"]
-		missing = docker_manager.missing_infrastructure(network)
+		network = placement.bench_network_spec(index)["name"]
+		missing = placement.missing_infrastructure(network)
 		if not missing:
 			continue
-		now_on = docker_manager.attach_infrastructure(network)
+		now_on = placement.attach_infrastructure(network)
 		reattached = [name for name in missing if name in now_on]
 		if reattached:
 			restored[network] = reattached

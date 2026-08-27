@@ -185,7 +185,7 @@ def _start_scratch_container(lab_doc):
 	client = docker_manager.get_client()
 	name = f"{GOLDEN_CONTAINER_PREFIX}{lab_doc.lab_id}"
 	_remove_stale(client, name)
-	network = docker_manager.ensure_bench_network_for(placement.pick_network(), client)
+	network = placement.ensure_bench_network_for(placement.pick_network(), client)
 	return client.containers.run(
 		lab_doc.image_tag,
 		command=["sleep", "infinity"],

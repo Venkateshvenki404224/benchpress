@@ -104,9 +104,9 @@ class BenchInstance(Document):
 		return frappe.get_cached_doc("BenchPress Settings").default_bench_runtime or "runc"
 
 	def _default_bridge_network(self) -> str:
-		from benchpress.docker_manager import bench_network_spec
+		from benchpress import placement
 
-		return bench_network_spec(0)["name"]
+		return placement.bench_network_spec(0)["name"]
 
 	def autoname(self):
 		self.name = self.bench_name

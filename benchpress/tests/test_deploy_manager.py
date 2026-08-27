@@ -15,7 +15,7 @@ import frappe
 import yaml
 from frappe.tests import IntegrationTestCase
 
-from benchpress import docker_manager, ingress
+from benchpress import ingress, placement
 from benchpress.benchpress.doctype.bench_instance import get_instance_id
 from benchpress.tests.test_docker_manager import exec_commands, exec_environments
 
@@ -1443,7 +1443,7 @@ class TestReconcileBridgeAttachments(IntegrationTestCase):
 		self.assertEqual(result, {"attached": {"benchpress-0": ["benchpress_traefik"]}})
 
 	def test_a_quiet_tick_reports_nothing(self):
-		result, connects = self._reconcile({"benchpress-0": list(docker_manager.INFRASTRUCTURE_CONTAINERS)})
+		result, connects = self._reconcile({"benchpress-0": list(placement.INFRASTRUCTURE_CONTAINERS)})
 
 		self.assertEqual(connects, [])
 		self.assertEqual(result, {"attached": {}})
@@ -1459,5 +1459,5 @@ class TestReconcileBridgeAttachments(IntegrationTestCase):
 
 		self.assertEqual(
 			{container for _network, container in connects},
-			set(docker_manager.INFRASTRUCTURE_CONTAINERS),
+			set(placement.INFRASTRUCTURE_CONTAINERS),
 		)
