@@ -109,7 +109,7 @@ def main():
 		return
 
 	try:
-		source = open(path, encoding="utf-8").read()
+		source = open(path, encoding="utf-8").read()  # nosemgrep -- the path is the file the harness just wrote, not user input  # fmt: skip
 	except (OSError, UnicodeDecodeError):
 		return
 
