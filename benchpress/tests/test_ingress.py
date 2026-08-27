@@ -337,9 +337,7 @@ class TestCertificateVerification(unittest.TestCase):
 	def test_only_the_site_hostname_is_checked(self):
 		"""The IDE hostname is one label under the same `base_domain`, so the same wildcard
 		covers it — a second handshake would only re-prove the first."""
-		with patch.object(
-			ingress, "_certificate_error", autospec=True, return_value=None
-		) as mock_check:
+		with patch.object(ingress, "_certificate_error", autospec=True, return_value=None) as mock_check:
 			ingress.log_certificate_state("inst-1", "benchpress.cloud", self._pipeline())
 
 		mock_check.assert_called_once_with("inst-1.benchpress.cloud")
@@ -360,9 +358,7 @@ class TestCertificateVerification(unittest.TestCase):
 		"""The two causes call for different actions, so they must stay apart in a log
 		someone reads at 2am: one means fix the certificate, the other means Traefik is
 		down — or that there is no Traefik, which is the dev-checkout case."""
-		with patch.object(
-			ingress.socket, "create_connection", autospec=True, side_effect=OSError("refused")
-		):
+		with patch.object(ingress.socket, "create_connection", autospec=True, side_effect=OSError("refused")):
 			error = ingress._certificate_error("inst-1.benchpress.cloud")
 
 		self.assertIn("could not reach Traefik to check inst-1.benchpress.cloud", error)
@@ -405,5 +401,3 @@ class TestCertificateVerification(unittest.TestCase):
 			patch.object(ingress.ssl, "create_default_context", autospec=True),
 		):
 			self.assertIsNone(ingress._certificate_error("inst-1.benchpress.cloud"))
-
-

@@ -95,9 +95,7 @@ def publish(instance_id: str, base_domain: str) -> None:
 					}
 				},
 				f"ide-{instance_id}": {
-					"loadBalancer": {
-						"servers": [{"url": f"http://{instance_id}:{addressing.IDE_HTTP_PORT}"}]
-					}
+					"loadBalancer": {"servers": [{"url": f"http://{instance_id}:{addressing.IDE_HTTP_PORT}"}]}
 				},
 			},
 		}
@@ -117,9 +115,7 @@ def withdraw(instance_id: str) -> None:
 
 def published() -> set[str]:
 	"""The instance ids that own a route file."""
-	return {
-		path.stem for path in TRAEFIK_DYNAMIC_DIR.glob("*.yml") if path.name not in PROTECTED_ROUTE_FILES
-	}
+	return {path.stem for path in TRAEFIK_DYNAMIC_DIR.glob("*.yml") if path.name not in PROTECTED_ROUTE_FILES}
 
 
 def protected_present() -> int:
