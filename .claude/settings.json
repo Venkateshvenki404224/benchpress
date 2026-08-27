@@ -23,6 +23,19 @@
           }
         ]
       }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/docstring_limit.py\"",
+            "timeout": 10,
+            "statusMessage": "Checking docstring length"
+          }
+        ]
+      }
     ]
   }
 }

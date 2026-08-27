@@ -75,6 +75,10 @@ cd e2e && npx playwright test  # has its own config — running from the app roo
   ever used, and it will rewrite every frontend file.
 - Write the commit message with the `technical-writing` skill: plain, short,
   no filler — the Conventional Commits header above still applies.
+- Docstrings are capped at two lines by a `PostToolUse` hook
+  ([.claude/hooks/docstring_limit.py](.claude/hooks/docstring_limit.py), wired in
+  `.claude/settings.json`). It only flags docstrings the current edit touched, so
+  legacy ones are left alone. Review or disable it with `/hooks`.
 - Full checklist: [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Two things that will bite you
