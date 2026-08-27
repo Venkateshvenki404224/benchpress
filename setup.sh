@@ -136,9 +136,10 @@ fi
 # Generate .env if it doesn't exist
 if [ ! -f "$ENV_FILE" ]; then
     info "Generating .env file for shared infrastructure..."
-    MARIADB_ROOT_PASSWORD=$(openssl rand -hex 16)
+    # Straight into the file, never through a shell variable: a variable holding it
+    # can be exported into a child process or echoed by a later edit.
     cat > "$ENV_FILE" <<EOF
-MARIADB_ROOT_PASSWORD=$MARIADB_ROOT_PASSWORD
+MARIADB_ROOT_PASSWORD=$(openssl rand -hex 16)
 MARIADB_VERSION=10.6
 MARIADB_MEM_LIMIT=1g
 EOF
