@@ -20,7 +20,7 @@ from unittest.mock import MagicMock, patch
 import frappe
 from frappe.tests import IntegrationTestCase
 
-from benchpress import image_cache
+from benchpress import image_cache, ingress
 from benchpress.docker_manager import HOST_RUNTIMES_ATTRIBUTE
 from benchpress.request_cache import clear_local_cache
 
@@ -238,11 +238,11 @@ class TestDeployReusesTheSharedImage(IntegrationTestCase):
 			# Traefik's route directory is mounted into queue-long, not into the container
 			# these tests run in, so both writers have to be mocked for the deploy to reach
 			# its end — as the docstring above says it does.
-			patch.object(deploy_manager, "_ensure_wildcard_anchor", autospec=True),
-			patch.object(deploy_manager, "_write_instance_route", autospec=True),
+			patch.object(ingress, "ensure_anchor", autospec=True),
+			patch.object(ingress, "publish", autospec=True),
 			# The certificate check opens a real TLS socket to Traefik; a unit test must
 			# not depend on one running.
-			patch.object(deploy_manager, "_certificate_error", autospec=True, return_value=None),
+			patch.object(ingress, "_certificate_error", autospec=True, return_value=None),
 		):
 			mock_infra.return_value = self.db_server_name
 			mock_create.return_value = "cid-image-cache"
