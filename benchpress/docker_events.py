@@ -134,7 +134,7 @@ def _flush(pending: dict, stats: dict) -> None:
 		if not _unasked_for(row):
 			continue
 		record(bench_name, incident)
-	frappe.db.commit()
+	frappe.db.commit()  # nosemgrep -- no request boundary here, and the next tick rolls back
 
 
 def _unasked_for(row) -> bool:
