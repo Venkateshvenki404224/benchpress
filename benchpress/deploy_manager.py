@@ -12,7 +12,7 @@ from frappe import _
 from frappe.utils.file_lock import LockTimeoutError
 from frappe.utils.synchronization import filelock
 
-from benchpress import addressing, docker_manager, image_cache, ingress, placement
+from benchpress import addressing, image_cache, ingress, placement
 from benchpress.credits import admission, lease, metering
 from benchpress.deploy_pipeline import DeployLogWriter, DeployPipeline
 from benchpress.docker_manager import (
@@ -81,46 +81,6 @@ ADOPTED_MARKER = "already exists — adopting it"
 GOLDEN_MARKER = "Restored from golden dump"
 # What the Deploy Log says when the golden branch ran. `golden_drill` reads runs back by it.
 GOLDEN_RESTORED = "restored from the image's golden dump"
-
-
-def _reconcile_bridge_attachments() -> dict[str, dict[str, list[str]]]:
-	"""Put the three infrastructure containers back on every bench bridge that lost one.
-
-	`docker compose up -d traefik` recreates the proxy holding only its compose networks, so
-	every bridge this app made itself silently loses its ingress and the benches on it start
-	answering 502. Reattaching is hot, which is the whole reason this belongs on the pass
-	that already runs `*/5` rather than in a restart nobody wants to schedule.
-
-	A bridge that does not exist reports nothing missing, so the pass never grows the family
-	on a timer; only a deploy does that.
-	"""
-	restored = {}
-	for index in range(placement.bridge_count()):
-		network = docker_manager.bench_network_spec(index)["name"]
-		missing = docker_manager.missing_infrastructure(network)
-		if not missing:
-			continue
-		now_on = docker_manager.attach_infrastructure(network)
-		reattached = [name for name in missing if name in now_on]
-		if reattached:
-			restored[network] = reattached
-	if restored:
-		frappe.logger("benchpress").info(f"reattached infrastructure: {restored}")
-	return {"attached": restored}
-
-
-def _record_bridge_network(bench, network: str) -> None:
-	"""Stamp the bridge onto the row, around the refusal that guards the field.
-
-	`Bench Instance.validate` refuses a `bridge_network` change to anyone but an admin and to
-	anything but a `Draft` — and a deploy job runs as the tenant and has to write one more
-	time after the container exists. Writing the column directly is the honest way through:
-	this is the system recording where Docker put the container, not a caller choosing.
-	"""
-	if bench.bridge_network == network:
-		return
-	frappe.db.set_value("Bench Instance", bench.name, "bridge_network", network, update_modified=False)
-	bench.bridge_network = network
 
 
 def _cleanup_failed_deploy(bench, container_id, append_log) -> None:
@@ -330,7 +290,7 @@ def _deploy_bench(bench_name: str) -> None:
 		if bench.status == "Draft":
 			# Not the value `validate` defaulted: a bench can sit in Draft for days, and the
 			# bridge with room then is not the bridge with room now.
-			_record_bridge_network(bench, placement.pick_network())
+			placement.record_bridge_network(bench, placement.pick_network())
 		bench.status = "Deploying"
 		bench.save(ignore_permissions=True)
 		frappe.db.commit()
@@ -377,7 +337,7 @@ def _deploy_bench(bench_name: str) -> None:
 		pipeline.log(f"container runtime {container_runtime(container_id)}")
 
 		container_id = created_container_id = start_bench_container(container_id, bench, lab)
-		_record_bridge_network(bench, container_network(container_id))
+		placement.record_bridge_network(bench, container_network(container_id))
 		pipeline.log(f"bench bridge {bench.bridge_network}")
 
 		bench.container_id = container_id

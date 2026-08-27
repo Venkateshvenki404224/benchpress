@@ -146,12 +146,12 @@ def _fallback_gateway(network: str) -> str:
 	A bench on bridge 1 whose endpoint reads bridge 0's gateway has no route to the
 	host, and `wg-quick` reports nothing about it.
 	"""
-	from benchpress import docker_manager
+	from benchpress import placement
 
-	index = docker_manager.bench_network_index(network)
+	index = placement.bench_network_index(network)
 	if index is None:
 		return LEGACY_GATEWAY
-	return docker_manager.bench_network_spec(index, docker_manager.subnet_base())["gateway"]
+	return placement.bench_network_spec(index, placement.subnet_base())["gateway"]
 
 
 def register_device(device_name: str, device_type: str, public_key: str | None = None) -> dict:

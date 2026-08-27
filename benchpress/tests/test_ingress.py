@@ -601,6 +601,30 @@ class TestReconcileInstanceRoutes(IntegrationTestCase):
 			self.assertFalse(result["anchored"])
 			self.assertEqual({p.name: p.stat().st_mtime_ns for p in target_dir.iterdir()}, before)
 
+	def test_a_container_without_the_route_mount_reports_instead_of_raising(self):
+		"""Only `queue-long` mounts the directory, so a by-hand run anywhere else used to do
+		the bridge half and then raise out of `ensure_anchor`."""
+		with tempfile.TemporaryDirectory() as tmp:
+			with (
+				patch.object(ingress, "TRAEFIK_DYNAMIC_DIR", Path(tmp) / "dynamic"),
+				patch("frappe.get_cached_doc", return_value=frappe._dict(base_domain="benchpress.cloud")),
+				patch("benchpress.placement.repair", return_value={"attached": {}, "missing": {}}),
+			):
+				result = ingress.reconcile()
+
+		# None, not 0: nothing was read, and zero counts are what a converged pass reports.
+		self.assertEqual(
+			result,
+			{
+				"anchored": None,
+				"written": None,
+				"deleted": None,
+				"kept": None,
+				"attached": {},
+				"missing": {},
+			},
+		)
+
 	def test_reconcile_writes_nothing_at_all_without_a_public_domain(self):
 		"""A dev checkout must be byte-for-byte unaffected — and must not reap either, since a
 		directory it never writes is not a directory it understands."""
@@ -618,7 +642,8 @@ class TestReconcileInstanceRoutes(IntegrationTestCase):
 
 				self.assertTrue(survivor.exists())
 				self.assertEqual(
-					result, {"anchored": False, "written": 0, "deleted": 0, "kept": 0, "attached": {}}
+					result,
+					{"anchored": False, "written": 0, "deleted": 0, "kept": 0, "attached": {}, "missing": {}},
 				)
 
 
