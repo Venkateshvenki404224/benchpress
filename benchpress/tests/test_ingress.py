@@ -618,7 +618,8 @@ class TestReconcileInstanceRoutes(IntegrationTestCase):
 
 				self.assertTrue(survivor.exists())
 				self.assertEqual(
-					result, {"anchored": False, "written": 0, "deleted": 0, "kept": 0, "attached": {}}
+					result,
+					{"anchored": False, "written": 0, "deleted": 0, "kept": 0, "attached": {}, "missing": {}},
 				)
 
 

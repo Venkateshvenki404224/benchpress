@@ -130,6 +130,52 @@ def missing_infrastructure(network: str, client: docker.DockerClient | None = No
 	return [name for name in INFRASTRUCTURE_CONTAINERS if name not in present]
 
 
+def repair() -> dict[str, dict[str, list[str]]]:
+	"""Put the three infrastructure containers back on every bench bridge that lost one.
+
+	`docker compose up -d traefik` recreates the proxy holding only its compose networks, so
+	every bridge this app made itself silently loses its ingress and the benches on it start
+	answering 502. Reattaching is hot, which is the whole reason this belongs on the pass
+	that already runs `*/5` rather than in a restart nobody wants to schedule.
+
+	A bridge that does not exist reports nothing missing, so the pass never grows the family
+	on a timer; only a deploy does that.
+
+	Reports both halves: `missing` is what the read found before the write, `attached` is what
+	the write put back. A bridge in the first and not the second could not be repaired, and
+	without the split it reports exactly what a healthy bridge reports.
+	"""
+	missing_by_network = {}
+	restored = {}
+	for index in range(bridge_count()):
+		network = bench_network_spec(index)["name"]
+		missing = missing_infrastructure(network)
+		if not missing:
+			continue
+		missing_by_network[network] = missing
+		now_on = attach_infrastructure(network)
+		reattached = [name for name in missing if name in now_on]
+		if reattached:
+			restored[network] = reattached
+	if restored:
+		frappe.logger("benchpress").info(f"reattached infrastructure: {restored}")
+	return {"attached": restored, "missing": missing_by_network}
+
+
+def record_bridge_network(bench, network: str) -> None:
+	"""Stamp the bridge onto the row, around the refusal that guards the field.
+
+	`Bench Instance.validate` refuses a `bridge_network` change to anyone but an admin and to
+	anything but a `Draft` — and a deploy job runs as the tenant and has to write one more
+	time after the container exists. Writing the column directly is the honest way through:
+	this is the system recording where Docker put the container, not a caller choosing.
+	"""
+	if bench.bridge_network == network:
+		return
+	frappe.db.set_value("Bench Instance", bench.name, "bridge_network", network, update_modified=False)
+	bench.bridge_network = network
+
+
 def bench_network_spec(index: int, base: str | None = None) -> dict:
 	"""Name, bridge device, subnet and gateway for one bench bridge.
 

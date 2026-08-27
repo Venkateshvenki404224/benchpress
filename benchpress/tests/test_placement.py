@@ -277,3 +277,78 @@ class TestEnsureBenchNetwork(unittest.TestCase):
 	def test_a_network_outside_the_family_is_refused(self, get_client):
 		with self.assertRaises(frappe.ValidationError):
 			placement.ensure_bench_network_for("benchpress_frappe_network")
+
+
+class TestRepair(unittest.TestCase):
+	"""The half of the `*/5` pass that owns which containers can reach a bench bridge.
+
+	`docker compose up -d traefik` recreates the proxy with only its compose networks, so
+	every bridge this app made loses its ingress and says nothing about it.
+	"""
+
+	def _repair(self, present: dict[str, list[str]], bridges=2, unconnectable=()):
+		"""Run the pass against a daemon whose bridges hold `present`; returns (result, connects)."""
+		client = MagicMock()
+		connects = []
+
+		def get(name):
+			if name not in present:
+				raise docker.errors.NotFound(name)
+			network = _network_holding(*present[name])
+
+			def connect(container):
+				if container in unconnectable:
+					raise docker.errors.NotFound(container)
+				connects.append((name, container))
+
+			network.connect.side_effect = connect
+			return network
+
+		client.networks.get.side_effect = get
+		with (
+			patch("benchpress.docker_manager.get_client", return_value=client),
+			patch("benchpress.placement.bridge_count", return_value=bridges),
+		):
+			return placement.repair(), connects
+
+	def test_a_recreated_proxy_is_put_back_without_being_restarted(self):
+		result, connects = self._repair(
+			{"benchpress-0": ["benchpress-mariadb", "benchpress-redis", "a-bench"]}
+		)
+
+		self.assertEqual(connects, [("benchpress-0", "benchpress_traefik")])
+		self.assertEqual(result["attached"], {"benchpress-0": ["benchpress_traefik"]})
+		self.assertEqual(result["missing"], {"benchpress-0": ["benchpress_traefik"]})
+
+	def test_a_quiet_tick_reports_nothing(self):
+		result, connects = self._repair({"benchpress-0": list(placement.INFRASTRUCTURE_CONTAINERS)})
+
+		self.assertEqual(connects, [])
+		self.assertEqual(result, {"attached": {}, "missing": {}})
+
+	def test_what_it_found_is_reported_apart_from_what_it_fixed(self):
+		"""Collapse the two into one number and a bridge nothing could be reattached to
+		reports exactly what a healthy bridge reports, which is the failure item 8 exists for."""
+		unrepairable, connects = self._repair(
+			{"benchpress-0": ["a-bench"]}, unconnectable=placement.INFRASTRUCTURE_CONTAINERS
+		)
+		healthy, _ = self._repair({"benchpress-0": list(placement.INFRASTRUCTURE_CONTAINERS)})
+
+		self.assertEqual(connects, [])
+		self.assertEqual(unrepairable["attached"], healthy["attached"])
+		self.assertEqual(unrepairable["missing"], {"benchpress-0": list(placement.INFRASTRUCTURE_CONTAINERS)})
+		self.assertEqual(healthy["missing"], {})
+
+	def test_a_bridge_that_does_not_exist_is_not_created(self):
+		"""The family grows on a deploy, never on a timer."""
+		_result, connects = self._repair({})
+
+		self.assertEqual(connects, [])
+
+	def test_only_the_three_infrastructure_containers_are_ever_connected(self):
+		_result, connects = self._repair({"benchpress-0": [], "benchpress-1": []})
+
+		self.assertEqual(
+			{container for _network, container in connects},
+			set(placement.INFRASTRUCTURE_CONTAINERS),
+		)

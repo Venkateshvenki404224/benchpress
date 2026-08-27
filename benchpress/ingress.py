@@ -16,7 +16,7 @@ from pathlib import Path
 import frappe
 import yaml
 
-from benchpress import addressing
+from benchpress import addressing, placement
 
 # Module constant, not inlined, so tests can monkeypatch it to a tmp path.
 # Flat, not a subdirectory: Traefik's file provider does not recurse, so this must be the
@@ -321,12 +321,9 @@ def reconcile() -> dict:
 	Run it by hand with:
 	    bench --site frontend execute benchpress.ingress.reconcile
 	"""
-	# Lazy: deploy_manager imports this module, and item 17 moves this function to placement.
-	from benchpress.deploy_manager import _reconcile_bridge_attachments
-
 	# Ahead of the base_domain guard because this half is about container networking rather
 	# than routing: a bench that cannot reach MariaDB is broken on a dev checkout too.
-	attached = _reconcile_bridge_attachments()
+	attached = placement.repair()
 
 	base_domain = frappe.get_cached_doc("BenchPress Settings").base_domain
 	anchored = ensure_anchor(base_domain)
