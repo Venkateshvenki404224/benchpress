@@ -26,7 +26,6 @@ SITE = "Bench Site"
 ADMISSION = "Bench Admission"
 SETTINGS = "BenchPress Settings"
 LIFECYCLE_MODULE = "lifecycle.py"
-DB_SERVER_MODULE = "mariadb_manager.py"
 
 
 class TestOneWriterPerStatus(unittest.TestCase):
@@ -35,8 +34,8 @@ class TestOneWriterPerStatus(unittest.TestCase):
 		self.assertEqual(_status_writers("Running"), {LIFECYCLE_MODULE})
 
 	def test_only_lifecycle_writes_stopped(self):
-		"""`mariadb_manager` writes it too, on `Database Server` — a different doctype's status."""
-		self.assertEqual(_status_writers("Stopped"), {LIFECYCLE_MODULE, DB_SERVER_MODULE})
+		"""`Database Server` spells its own statuses the same, so it names them instead."""
+		self.assertEqual(_status_writers("Stopped"), {LIFECYCLE_MODULE})
 
 
 def _status_writers(status: str) -> set[str]:

@@ -20,6 +20,13 @@ BACKUP_TIMEOUT = 3600
 
 REDIS_CONTAINER_NAME = "benchpress-redis"
 
+# `Database Server` statuses. A bench carries its own, spelled the same and meaning
+# something else, and only `lifecycle` writes that one.
+SERVER_PENDING = "Pending"
+SERVER_ACTIVE = "Active"
+SERVER_STOPPED = "Stopped"
+SERVER_ERROR = "Error"
+
 # What config/docker-compose.yml declares as command flags, in the units the servers report
 # back. A live value that disagrees means the container predates the flags, or the daemon
 # refused one, or somebody ran SET GLOBAL.
@@ -147,7 +154,7 @@ def setup_database_server(db_server_name: str) -> None:
 		db_server.reload()
 		db_server.container_id = container.id
 		db_server.container_ip = container_ip
-		db_server.status = "Active"
+		db_server.status = SERVER_ACTIVE
 		db_server.created_at = frappe.utils.now()
 		db_server.save(ignore_permissions=True)
 		frappe.db.commit()
@@ -173,7 +180,7 @@ def start_database_server(db_server_name: str) -> None:
 	client = get_client()
 	container = client.containers.get(db_server.container_name)
 	db_server.container_id = container.id
-	db_server.status = "Active"
+	db_server.status = SERVER_ACTIVE
 	db_server.save(ignore_permissions=True)
 	frappe.db.commit()
 
@@ -183,7 +190,7 @@ def stop_database_server(db_server_name: str) -> None:
 	_compose_cmd("stop", "mariadb")
 
 	db_server = frappe.get_doc("Database Server", db_server_name)
-	db_server.status = "Stopped"
+	db_server.status = SERVER_STOPPED
 	db_server.save(ignore_permissions=True)
 	frappe.db.commit()
 
@@ -194,7 +201,7 @@ def ensure_database_server() -> str:
 	"""
 	servers = frappe.get_all(
 		"Database Server",
-		filters={"status": ["in", ["Active", "Pending", "Stopped"]]},
+		filters={"status": ["in", [SERVER_ACTIVE, SERVER_PENDING, SERVER_STOPPED]]},
 		fields=["name", "status"],
 		order_by="creation asc",
 		limit=1,
@@ -202,9 +209,9 @@ def ensure_database_server() -> str:
 
 	if servers:
 		server = servers[0]
-		if server.status == "Stopped":
+		if server.status == SERVER_STOPPED:
 			start_database_server(server.name)
-		elif server.status == "Pending":
+		elif server.status == SERVER_PENDING:
 			setup_database_server(server.name)
 		return server.name
 
@@ -482,7 +489,7 @@ def scheduled_health_check() -> list[str]:
 	"""
 	servers = frappe.get_all(
 		"Database Server",
-		filters={"status": ["in", ["Active", "Error"]]},
+		filters={"status": ["in", [SERVER_ACTIVE, SERVER_ERROR]]},
 		fields=["name"],
 	)
 	for s in servers:
@@ -623,7 +630,7 @@ def enqueue_backup() -> None:
 
 def scheduled_backup():
 	"""Cron job — nightly backup with 7-day retention."""
-	servers = frappe.get_all("Database Server", filters={"status": "Active"}, fields=["name"])
+	servers = frappe.get_all("Database Server", filters={"status": SERVER_ACTIVE}, fields=["name"])
 	for s in servers:
 		try:
 			backup_database_server(s.name)
