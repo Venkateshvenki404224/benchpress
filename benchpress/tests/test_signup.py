@@ -322,7 +322,7 @@ class TestSelfServeSignup(IntegrationTestCase):
 
 		frappe.set_user(EMAIL)
 
-		self.assertEqual(guard.concurrency_limit(), FREE_CEILING)
+		self.assertEqual(guard.concurrency_limit(EMAIL), FREE_CEILING)
 
 	def test_the_free_ceiling_refusal_names_the_number(self):
 		"""`test_admission` owns the claim; what matters here is that the user is told why."""

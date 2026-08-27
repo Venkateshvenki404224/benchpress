@@ -310,7 +310,7 @@ class TestCreditGuard(IntegrationTestCase):
 	def test_the_build_cap_refuses_one_over(self):
 		self.enable_credits()
 		self.set_setting("max_builds_per_day", 2)
-		self.record_builds(2, owner=self.admin)
+		self.record_builds(2, owner=self.user)
 		frappe.set_user(self.admin)
 		with self.assertRaises(frappe.ValidationError) as refusal:
 			api.build_lab_image(self.lab.name)
@@ -319,7 +319,7 @@ class TestCreditGuard(IntegrationTestCase):
 	def test_the_build_cap_allows_one_under(self):
 		self.enable_credits()
 		self.set_setting("max_builds_per_day", 2)
-		self.record_builds(1, owner=self.admin)
+		self.record_builds(1, owner=self.user)
 		frappe.set_user(self.admin)
 		with patch("frappe.enqueue"):
 			self.assertEqual(api.build_lab_image(self.lab.name)["status"], "Building")
@@ -327,7 +327,7 @@ class TestCreditGuard(IntegrationTestCase):
 	def test_zero_means_unlimited_builds(self):
 		self.enable_credits()
 		self.set_setting("max_builds_per_day", 0)
-		self.record_builds(5, owner=self.admin)
+		self.record_builds(5, owner=self.user)
 		frappe.set_user(self.admin)
 		with patch("frappe.enqueue"):
 			api.build_lab_image(self.lab.name)
@@ -335,7 +335,7 @@ class TestCreditGuard(IntegrationTestCase):
 	def test_yesterdays_builds_do_not_count_against_today(self):
 		self.enable_credits()
 		self.set_setting("max_builds_per_day", 1)
-		self.record_builds(1, owner=self.admin, creation=add_days(today(), -1))
+		self.record_builds(1, owner=self.user, creation=add_days(today(), -1))
 		frappe.set_user(self.admin)
 		with patch("frappe.enqueue"):
 			api.build_lab_image(self.lab.name)
@@ -344,8 +344,8 @@ class TestCreditGuard(IntegrationTestCase):
 		"""`custom_build_credits = 0` makes builds free, not uncountable."""
 		self.enable_credits()
 		self.set_setting("custom_build_credits", 0)
-		account.charge(self.admin, 0, "Custom image build for a free size", ("Lab", self.lab.name))
-		self.assertEqual(self.build_row_count(self.admin), 1)
+		account.charge(self.user, 0, "Custom image build for a free size", ("Lab", self.lab.name))
+		self.assertEqual(self.build_row_count(self.user), 1)
 
 	# --- The gate never answers a permission question ------------------------
 
@@ -406,6 +406,9 @@ class TestCreditGuard(IntegrationTestCase):
 
 	def record_builds(self, count: int, owner: str, creation=None) -> None:
 		"""The rows a custom build writes, which is what the daily cap counts.
+
+		`owner` is the lab's owner rather than the admin who presses build: `on_image_built`
+		charges the author, so those are the only rows the cap can ever find.
 
 		Funded well past the build fee on purpose: these tests are about the cap, and a shortfall
 		refusal would pass them for the wrong reason.

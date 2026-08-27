@@ -26,6 +26,7 @@ from benchpress.credits.guard import (
 	cap_builds_per_day,
 	cap_devices,
 	instance_lease_cost,
+	lab_owner,
 	payload_lease_cost,
 	require_balance,
 	requires_admission,
@@ -83,7 +84,7 @@ def create_lab_from_template(template: str, lab_id: str | None = None, title: st
 
 
 @frappe.whitelist()
-@requires_admission(cost=build_charge, caps=(cap_builds_per_day,))
+@requires_admission(cost=build_charge, caps=(cap_builds_per_day,), payer=lab_owner)
 def build_lab_image(lab_name: str) -> dict:
 	require_admin()
 	frappe.enqueue(

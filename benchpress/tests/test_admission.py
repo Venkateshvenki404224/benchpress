@@ -463,6 +463,57 @@ class TestAdmission(IntegrationTestCase):
 		frappe.set_user("Administrator")
 		self.assertNotIn(bench.name, self.rows())
 
+	# --- Who pays -------------------------------------------------------------
+
+	def test_a_caller_with_credits_cannot_start_an_owner_who_has_none(self):
+		"""The measurement this rule was written from: the owner went to -4.0 while the caller held 75.
+
+		Priced against the caller the hold refuses nobody, and `metering.charge_lease` then debits
+		the owner past zero — so the account that pays is the account that must be able to afford it.
+		"""
+		self.enable_credits()
+		self.set_balance(1.0)
+		self.set_balance(75.0, OTHER)
+		bench = self.running_bench(self.benches[0])
+		frappe.set_user(OTHER)
+		with self.assertRaises(frappe.ValidationError) as refusal:
+			frappe.get_doc(BENCH, bench.name).enqueue_start()
+		frappe.set_user("Administrator")
+		self.assertIn("3.0 short", str(refusal.exception))
+		self.assertEqual(self.balance(), 1.0)
+		self.assertEqual(self.rows(), [])
+		self.assertEqual(self.rows(OTHER), [])
+
+	def test_the_same_start_is_admitted_once_the_owner_can_afford_it(self):
+		"""The positive control, and the charge that proves it: the owner pays, the caller does not."""
+		self.enable_credits()
+		self.set_balance(10.0)
+		self.set_balance(75.0, OTHER)
+		bench = self.running_bench(self.benches[0])
+		frappe.set_user(OTHER)
+		with (
+			patch("benchpress.lifecycle.start_container"),
+			patch("benchpress.ingress.enqueue_route_sync"),
+			patch("frappe.db.commit"),
+		):
+			frappe.get_doc(BENCH, bench.name).enqueue_start()
+		frappe.set_user("Administrator")
+		self.assertEqual(self.rows(), [bench.name])
+		self.assertEqual(self.balance(), 10.0 - LEASE_COST)
+		self.assertEqual(self.balance(OTHER), 75.0)
+
+	def test_the_owners_cap_is_what_a_caller_meets(self):
+		"""The slot belongs to the owner too, so a caller cannot borrow somebody else's headroom."""
+		self.set_credits_enabled(0)
+		self.set_setting("max_concurrent_uncredited", 1)
+		admission.claim(USER, self.benches[0].name, 1)
+		bench = self.running_bench(self.benches[1])
+		frappe.set_user(OTHER)
+		with self.assertRaises(frappe.ValidationError) as refusal:
+			frappe.get_doc(BENCH, bench.name).enqueue_start()
+		frappe.set_user("Administrator")
+		self.assertIn("instances running", str(refusal.exception))
+
 	# --- The reconciler -------------------------------------------------------
 
 	def test_the_reconciler_releases_a_claim_whose_bench_is_not_live(self):
@@ -515,6 +566,38 @@ class TestAdmission(IntegrationTestCase):
 		frappe.db.set_value(ACCOUNT, USER, "reserved_credits", 99.0, update_modified=False)
 		admission_repair.reconcile_admissions()
 		self.assertEqual(self.reserved(), LEASE_COST)
+
+	def test_the_reconciler_rekeys_a_claim_held_against_the_wrong_account(self):
+		"""The drift the rest of the pass cannot see, because a wrong row and a wrong counter agree."""
+		admission.claim(OTHER, self.benches[0].name, 0)
+		frappe.db.set_value(BENCH, self.benches[0].name, "status", "Running", update_modified=False)
+		self.assertEqual(admission_repair.reconcile_admissions()["rekeyed"], [self.benches[0].name])
+		self.assertEqual(self.rows(), [self.benches[0].name])
+		self.assertEqual(self.counter(), 1)
+		self.assertEqual(self.counter(OTHER), 0)
+
+	def test_rekeying_the_same_claim_twice_moves_it_once(self):
+		admission.claim(OTHER, self.benches[0].name, 0)
+		frappe.db.set_value(BENCH, self.benches[0].name, "status", "Running", update_modified=False)
+		admission_repair.reconcile_admissions()
+		self.assertEqual(admission_repair.reconcile_admissions()["rekeyed"], [])
+		self.assertEqual(self.counter(), 1)
+
+	def test_a_rekeyed_claim_carries_its_hold_to_the_owner(self):
+		self.enable_credits()
+		self.set_balance(10.0, OTHER)
+		admission.claim(OTHER, self.benches[0].name, 0, cost=LEASE_COST)
+		frappe.db.set_value(BENCH, self.benches[0].name, "status", "Running", update_modified=False)
+		admission_repair.reconcile_admissions()
+		self.assertEqual(self.reserved(), LEASE_COST)
+		self.assertEqual(self.reserved(OTHER), 0.0)
+
+	def test_a_claim_already_on_its_owner_is_left_where_it_is(self):
+		"""The positive control: the rule must move only what is wrong."""
+		admission.claim(USER, self.benches[0].name, 0)
+		frappe.db.set_value(BENCH, self.benches[0].name, "status", "Running", update_modified=False)
+		self.assertEqual(admission_repair.reconcile_admissions()["rekeyed"], [])
+		self.assertEqual(self.rows(), [self.benches[0].name])
 
 	def test_an_adopted_orphan_holds_nothing(self):
 		"""Its lease was charged when it started, so there is nothing left for a hold to cover."""
@@ -569,31 +652,31 @@ class TestAdmission(IntegrationTestCase):
 		)
 		return frappe.get_doc(BENCH, bench.name)
 
-	def opened_account(self) -> str:
+	def opened_account(self, user: str = USER) -> str:
 		from benchpress.credits import account
 
-		return account.ensure_account(USER)
+		return account.ensure_account(user)
 
-	def counter(self) -> int:
-		return frappe.db.get_value(ACCOUNT, USER, "active_instances") or 0
+	def counter(self, user: str = USER) -> int:
+		return frappe.db.get_value(ACCOUNT, user, "active_instances") or 0
 
-	def reserved(self) -> float:
-		return flt(frappe.db.get_value(ACCOUNT, USER, "reserved_credits"))
+	def reserved(self, user: str = USER) -> float:
+		return flt(frappe.db.get_value(ACCOUNT, user, "reserved_credits"))
 
-	def balance(self) -> float:
-		return flt(frappe.db.get_value(ACCOUNT, USER, "balance"))
+	def balance(self, user: str = USER) -> float:
+		return flt(frappe.db.get_value(ACCOUNT, user, "balance"))
 
 	def held(self, bench_name: str) -> float:
 		return flt(frappe.db.get_value(ADMISSION, bench_name, "held_credits"))
 
-	def set_balance(self, credits) -> None:
-		frappe.db.set_value(ACCOUNT, self.opened_account(), "balance", credits, update_modified=False)
+	def set_balance(self, credits, user: str = USER) -> None:
+		frappe.db.set_value(ACCOUNT, self.opened_account(user), "balance", credits, update_modified=False)
 
 	def enable_credits(self) -> None:
 		self.set_credits_enabled(1)
 
-	def rows(self) -> list[str]:
-		return sorted(frappe.get_all(ADMISSION, filters={"account": USER}, pluck="name"))
+	def rows(self, user: str = USER) -> list[str]:
+		return sorted(frappe.get_all(ADMISSION, filters={"account": user}, pluck="name"))
 
 	def set_credits_enabled(self, value) -> None:
 		frappe.db.set_single_value(BENCHPRESS_SETTINGS, "enable_credits", value)
