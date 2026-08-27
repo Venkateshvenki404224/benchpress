@@ -23,6 +23,7 @@ from benchpress.docker_manager import (
 	restart_container,
 	start_bench_container,
 	start_container,
+	stop_container,
 	wait_for_container_running,
 	write_file_to_container,
 )
@@ -50,6 +51,50 @@ def running(bench, *, action: str = "start") -> None:
 	frappe.db.commit()  # nosemgrep -- the route job re-reads `status`, so it must not start before this
 	# After the commit, because the job re-reads `status`.
 	ingress.enqueue_route_sync(bench.name)
+
+
+def stopped(bench_name: str, from_claim: bool = False) -> None:
+	"""Stop a bench container, and with it every site the container was serving.
+
+	`from_claim` marks a queued expiry, which must not go ahead once it has outlived its claim.
+	"""
+	if not lease.confirm_expiry(bench_name, from_claim=from_claim):
+		return
+
+	lease.record_stop_started(bench_name)
+	bench = frappe.get_doc("Bench Instance", bench_name)
+	lease.assert_local(bench)
+	expired = bench.lease_state == lease.STOPPING
+
+	try:
+		if bench.container_id:
+			stop_container(bench.container_id)
+	except Exception:
+		if expired:
+			lease.release(bench_name, failed=True)
+			frappe.db.commit()  # nosemgrep -- the retry has to survive the failure that caused it
+		raise
+
+	lease.record_stopped(bench, expired)
+	bench.status = "Stopped"
+	metering.on_bench_stopped(bench)
+	# Stopped is free, so it must stop holding a slot too: a caller at their cap who stops
+	# everything they own would otherwise never start anything again.
+	admission.release(bench.name)
+	bench.save(ignore_permissions=True)
+	_deactivate_bench_sites(bench)
+	if expired:
+		lease.announce_expired(bench)
+	frappe.db.commit()  # nosemgrep -- intentional commit to persist status before response
+	ingress.enqueue_route_sync(bench.name)
+
+
+def _deactivate_bench_sites(bench) -> None:
+	"""Mark every `Bench Site` on this instance Inactive, since its data is gone.
+
+	One UPDATE: `set_value` takes the filter itself, so the row names never have to be read.
+	"""
+	frappe.db.set_value("Bench Site", {"bench": bench.name}, "status", "Inactive", update_modified=False)
 
 
 def deploy_bench(bench_name: str) -> None:

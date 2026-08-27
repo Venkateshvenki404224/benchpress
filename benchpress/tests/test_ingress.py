@@ -822,14 +822,14 @@ class TestRouteSyncTriggers(IntegrationTestCase):
 		# The job re-reads `status`, so it must not start before the new value is committed.
 		self.assertTrue(kwargs["enqueue_after_commit"])
 
-	@patch("benchpress.deploy_manager.stop_container")
+	@patch("benchpress.lifecycle.stop_container")
 	def test_stop_enqueues_the_sync_on_the_long_queue(self, mock_stop):
-		from benchpress.deploy_manager import stop_bench
+		from benchpress.lifecycle import stopped
 
 		bench = self._bench()
 
 		with patch("frappe.enqueue") as enqueue:
-			stop_bench(bench.name)
+			stopped(bench.name)
 
 		self._assert_synced_on_long(enqueue, bench.name)
 

@@ -90,7 +90,7 @@ This is the **brain** of BenchPress. It coordinates builds and deployments.
 |----------|-----------|--------------|
 | `build_lab(lab_name)` | Background job from `build_lab_image` API | Builds Docker image for a Lab. Creates Build Log doc, streams logs via WebSocket (`lab_build_log` event). Sets Lab status to Ready or Error. |
 | `lifecycle.deploy_bench(bench_name)` | Background job from `create_bench` API | **Main deploy pipeline**: check image → remove stale container → create container → start → register VPN Peer + configure container tunnel (via `vpn_adapter`) → set SSH password → mark Running |
-| `stop_bench(bench_name)` | Background job from `bench_action` | Stop container |
+| `lifecycle.stopped(bench_name)` | Background job from `bench_action` | Stop container |
 | `lifecycle.redeploy_bench(bench_name)` | Background job from `bench_action` | Stop + remove container, reset to Draft, call deploy_bench |
 | `log_deploy(bench_name, msg, type)` | Internal helper | Saves Deploy Log + publishes `bench_deploy_log` WebSocket event |
 

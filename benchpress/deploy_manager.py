@@ -9,7 +9,7 @@ import shlex
 import frappe
 from frappe import _
 
-from benchpress import addressing, image_cache, ingress, site_names
+from benchpress import addressing, image_cache, ingress, lifecycle, site_names
 from benchpress.credits import admission, lease, metering
 from benchpress.deploy_pipeline import DeployLogWriter
 from benchpress.docker_manager import (
@@ -372,7 +372,7 @@ def teardown_bench(bench, *, release_admission: bool = True) -> None:
 	_drop_site_database(bench)
 	# Marked, not deleted: a redeploy refreshes them, and the reaper leaves the instance
 	# one click from running.
-	_deactivate_bench_sites(bench)
+	lifecycle._deactivate_bench_sites(bench)
 
 	# The container this bench was burning for is gone, so the session ends here. Without
 	# this the burning flag would survive the teardown and the fresh container — which
@@ -388,14 +388,6 @@ def teardown_bench(bench, *, release_admission: bool = True) -> None:
 	bench.started_at = None
 	bench.save(ignore_permissions=True)
 	frappe.db.commit()  # nosemgrep -- the caller may redeploy next, which must see Draft
-
-
-def _deactivate_bench_sites(bench) -> None:
-	"""Mark every `Bench Site` on this instance Inactive, since its data is gone.
-
-	One UPDATE: `set_value` takes the filter itself, so the row names never have to be read.
-	"""
-	frappe.db.set_value("Bench Site", {"bench": bench.name}, "status", "Inactive", update_modified=False)
 
 
 def _drop_site_database(bench) -> None:
@@ -549,46 +541,3 @@ def build_lab(lab_name: str) -> None:
 		_notify_owner(lab.owner, f"Lab build failed: {lab.title}", "Lab", lab_name)
 		return
 	_notify_owner(lab.owner, f"Lab build complete: {lab.title} ({image_tag})", "Lab", lab_name)
-
-
-def stop_bench(bench_name: str, from_claim: bool = False) -> None:
-	"""Stop a bench container, and with it every site the container was serving.
-
-	VPN stops automatically with the container. The sites do not: nothing answers on a stopped
-	container, so a row left `Active` is the page telling the user to open an address that has
-	gone quiet. This is the one stop path — `api.bench_action("stop")` routes here too — so the
-	deactivation cannot be missed by a second caller.
-
-	It is also where an expired lease lands, which is why it starts by confirming the claim
-	under a row lock. `from_claim` marks that caller: a user pressing Stop carries no claim and
-	always goes ahead, while a queued expiry that has outlived its claim must not.
-	"""
-	if not lease.confirm_expiry(bench_name, from_claim=from_claim):
-		return
-
-	lease.record_stop_started(bench_name)
-	bench = frappe.get_doc("Bench Instance", bench_name)
-	lease.assert_local(bench)
-	expired = bench.lease_state == lease.STOPPING
-
-	try:
-		if bench.container_id:
-			stop_container(bench.container_id)
-	except Exception:
-		if expired:
-			lease.release(bench_name, failed=True)
-			frappe.db.commit()  # nosemgrep -- the retry has to survive the failure that caused it
-		raise
-
-	lease.record_stopped(bench, expired)
-	bench.status = "Stopped"
-	metering.on_bench_stopped(bench)
-	# Stopped is free, so it must stop holding a slot too: a caller at their cap who stops
-	# everything they own would otherwise never start anything again.
-	admission.release(bench.name)
-	bench.save(ignore_permissions=True)
-	_deactivate_bench_sites(bench)
-	if expired:
-		lease.announce_expired(bench)
-	frappe.db.commit()  # nosemgrep -- intentional commit to persist status before response
-	ingress.enqueue_route_sync(bench.name)

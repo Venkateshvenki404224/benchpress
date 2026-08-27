@@ -149,9 +149,7 @@ class BenchInstance(Document):
 
 	@frappe.whitelist()
 	def enqueue_stop(self):
-		from benchpress.deploy_manager import stop_bench
-
-		stop_bench(self.name)
+		lifecycle.stopped(self.name)
 		frappe.msgprint(_("Bench stopped."))
 
 	@frappe.whitelist()

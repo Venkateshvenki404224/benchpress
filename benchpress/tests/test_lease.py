@@ -31,7 +31,7 @@ import frappe
 from frappe.tests import IntegrationTestCase
 from frappe.utils import add_days, flt, now_datetime
 
-from benchpress import api, deploy_manager, ingress, lab_detail
+from benchpress import api, deploy_manager, ingress, lab_detail, lifecycle
 from benchpress.benchpress.doctype.bench_instance import get_instance_id
 from benchpress.credits import account, config, drain, lease, metering
 from benchpress.credits.seed import ensure_ledger_index, seed_default_lease_plan, seed_defaults
@@ -298,11 +298,11 @@ class TestLease(IntegrationTestCase):
 
 	def stop_the_bench(self) -> None:
 		with (
-			patch.object(deploy_manager, "stop_container"),
+			patch.object(lifecycle, "stop_container"),
 			patch.object(frappe.db, "commit"),
 			patch("frappe.publish_realtime"),
 		):
-			deploy_manager.stop_bench(self.bench.name)
+			lifecycle.stopped(self.bench.name)
 
 	def age_the_bench(self, days: int) -> None:
 		"""Backdate `modified`, which is what the reaper measures a stopped bench against."""
@@ -504,11 +504,11 @@ class TestLease(IntegrationTestCase):
 		metering.on_bench_running(self.running_bench())
 		self.expire()
 		with (
-			patch.object(deploy_manager, "stop_container"),
+			patch.object(lifecycle, "stop_container"),
 			patch.object(frappe.db, "commit"),
 			patch("frappe.publish_realtime"),
 		):
-			deploy_manager.stop_bench(self.bench.name)
+			lifecycle.stopped(self.bench.name)
 		self.assertEqual(self.deadline(), 0)
 
 		with (
@@ -622,8 +622,8 @@ class TestLease(IntegrationTestCase):
 			lease.claim_due(50)
 		frappe.db.set_value(BENCH, self.bench.name, "expires_at_ts", lease.now_ts() + 1800)
 
-		with patch.object(deploy_manager, "stop_container") as stop, patch.object(frappe.db, "commit"):
-			deploy_manager.stop_bench(self.bench.name)
+		with patch.object(lifecycle, "stop_container") as stop, patch.object(frappe.db, "commit"):
+			lifecycle.stopped(self.bench.name)
 
 		stop.assert_not_called()
 		self.assertEqual(frappe.db.get_value(BENCH, self.bench.name, "status"), "Running")
@@ -636,9 +636,9 @@ class TestLease(IntegrationTestCase):
 		with patch.object(frappe.db, "commit"), patch("frappe.enqueue"):
 			lease.claim_due(50)
 
-		with patch.object(deploy_manager, "stop_container", side_effect=RuntimeError("docker is down")):
+		with patch.object(lifecycle, "stop_container", side_effect=RuntimeError("docker is down")):
 			with patch.object(frappe.db, "commit"):
-				self.assertRaises(RuntimeError, deploy_manager.stop_bench, self.bench.name)
+				self.assertRaises(RuntimeError, lifecycle.stopped, self.bench.name)
 
 		self.assertEqual(self.lease_state(), lease.ACTIVE)
 		self.assertEqual(frappe.db.get_value(BENCH, self.bench.name, "expiry_attempts"), 1)
@@ -655,8 +655,8 @@ class TestLease(IntegrationTestCase):
 	def test_a_plain_stop_is_untouched_by_the_lease(self):
 		"""A bench with no lease stops exactly the way it does on a dev checkout."""
 		self.set_credits_enabled(0)
-		with patch.object(deploy_manager, "stop_container") as stop, patch.object(frappe.db, "commit"):
-			deploy_manager.stop_bench(self.bench.name)
+		with patch.object(lifecycle, "stop_container") as stop, patch.object(frappe.db, "commit"):
+			lifecycle.stopped(self.bench.name)
 		stop.assert_called_once()
 		self.assertEqual(frappe.db.get_value(BENCH, self.bench.name, "status"), "Stopped")
 
@@ -676,11 +676,11 @@ class TestLease(IntegrationTestCase):
 			lease.claim_due(50)
 
 		with (
-			patch.object(deploy_manager, "stop_container"),
+			patch.object(lifecycle, "stop_container"),
 			patch.object(frappe.db, "commit"),
 			patch("frappe.publish_realtime") as publish,
 		):
-			deploy_manager.stop_bench(self.bench.name)
+			lifecycle.stopped(self.bench.name)
 
 		events = self.lease_events(publish)
 		self.assertEqual(len(events), 1)
@@ -705,11 +705,11 @@ class TestLease(IntegrationTestCase):
 			lease.claim_due(50)
 
 		with (
-			patch.object(deploy_manager, "stop_container"),
+			patch.object(lifecycle, "stop_container"),
 			patch.object(frappe.db, "commit"),
 			patch("frappe.publish_realtime") as publish,
 		):
-			deploy_manager.stop_bench(self.other_bench.name)
+			lifecycle.stopped(self.other_bench.name)
 
 		events = self.lease_events(publish)
 		self.assertEqual(len(events), 1)
@@ -719,11 +719,11 @@ class TestLease(IntegrationTestCase):
 		"""Only an expiry is news the tab did not ask for; a user pressing Stop already knows."""
 		self.enable_credits()
 		with (
-			patch.object(deploy_manager, "stop_container"),
+			patch.object(lifecycle, "stop_container"),
 			patch.object(frappe.db, "commit"),
 			patch("frappe.publish_realtime") as publish,
 		):
-			deploy_manager.stop_bench(self.bench.name)
+			lifecycle.stopped(self.bench.name)
 		self.assertEqual(self.lease_events(publish), [])
 
 	# --- The clock the browser anchors on --------------------------------------
@@ -898,8 +898,8 @@ class TestLease(IntegrationTestCase):
 		metering.on_bench_running(self.running_bench())
 		frappe.db.set_value(BENCH, self.bench.name, "status", "Running", update_modified=False)
 
-		with patch.object(deploy_manager, "stop_container") as stop, patch.object(frappe.db, "commit"):
-			deploy_manager.stop_bench(self.bench.name, from_claim=True)
+		with patch.object(lifecycle, "stop_container") as stop, patch.object(frappe.db, "commit"):
+			lifecycle.stopped(self.bench.name, from_claim=True)
 
 		stop.assert_not_called()
 		self.assertEqual(frappe.db.get_value(BENCH, self.bench.name, "status"), "Running")
@@ -910,8 +910,8 @@ class TestLease(IntegrationTestCase):
 		self.enable_credits()
 		metering.on_bench_running(self.running_bench())
 
-		with patch.object(deploy_manager, "stop_container") as stop, patch.object(frappe.db, "commit"):
-			deploy_manager.stop_bench(self.bench.name)
+		with patch.object(lifecycle, "stop_container") as stop, patch.object(frappe.db, "commit"):
+			lifecycle.stopped(self.bench.name)
 
 		stop.assert_called_once()
 		self.assertEqual(frappe.db.get_value(BENCH, self.bench.name, "status"), "Stopped")

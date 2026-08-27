@@ -10,7 +10,7 @@ first tenant's data. `autoname: field:site_name` closes that, and existing rows 
 moved onto their names before the constraint can hold.
 
 A duplicate loser is suffixed and deactivated, never deleted. An `Inactive` row can still own a
-live database - `stop_bench` deactivates without dropping - and `api._drop_bench_site_databases`
+live database - `lifecycle.stopped` deactivates without dropping - and `api._drop_bench_site_databases`
 reads `site_name` to find what to drop, so a row deleted here is a database nothing will ever
 clean up. The suffixed loser is the record that the collision happened.
 """

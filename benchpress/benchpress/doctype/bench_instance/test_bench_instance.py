@@ -203,8 +203,8 @@ class IntegrationTestBenchInstance(IntegrationTestCase):
 		bench.reload()
 		self.assertEqual(bench.status, "Running")
 
-	@patch("benchpress.deploy_manager.stop_bench")
-	def test_enqueue_stop_calls_stop_bench(self, mock_stop):
+	@patch("benchpress.lifecycle.stopped")
+	def test_enqueue_stop_calls_stopped(self, mock_stop):
 		bench = self._insert_bench()
 		bench.enqueue_stop()
 		mock_stop.assert_called_once_with(bench.name)

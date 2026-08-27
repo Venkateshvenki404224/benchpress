@@ -151,7 +151,7 @@ class TestSiteNameClaim(IntegrationTestCase):
 		return " ".join(str(entry) for entry in (frappe.local.message_log or []))
 
 	def test_an_inactive_name_is_still_claimed(self):
-		"""`stop_bench` deactivates without dropping, so the database is still on disk."""
+		"""`lifecycle.stopped` deactivates without dropping, so the database is still on disk."""
 		stopped = self._bench(self.labs[0], f"stopped.{DOMAIN}")
 		self._claimed(stopped, status="Inactive")
 

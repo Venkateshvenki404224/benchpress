@@ -182,66 +182,6 @@ class TestDeployManager(FakeDockerMixin, IntegrationTestCase):
 		for container_name in frappe.get_all("Database Server", pluck="container_name"):
 			self.docker.add_container(container_name)
 
-	# --- stop_bench ---
-
-	def test_stop_bench_sets_status_stopped(self):
-		from benchpress.deploy_manager import stop_bench
-
-		bench = self._fresh_bench()
-		self.docker.add_container("container-xyz")
-		bench.container_id = "container-xyz"
-		bench.status = "Running"
-		bench.save(ignore_permissions=True)
-		frappe.db.commit()
-
-		stop_bench(bench.name)
-		bench.reload()
-		self.assertEqual(bench.status, "Stopped")
-
-	def test_stop_bench_calls_stop_container(self):
-		from benchpress.deploy_manager import stop_bench
-
-		bench = self._fresh_bench()
-		self.docker.add_container("container-stop-test")
-		bench.container_id = "container-stop-test"
-		bench.save(ignore_permissions=True)
-		frappe.db.commit()
-
-		stop_bench(bench.name)
-		self.assertEqual(self.docker.stopped, ["container-stop-test"])
-
-	def test_stop_bench_skips_container_stop_when_no_container_id(self):
-		from benchpress.deploy_manager import stop_bench
-
-		bench = self._fresh_bench()
-		bench.container_id = None
-		bench.save(ignore_permissions=True)
-		frappe.db.commit()
-
-		stop_bench(bench.name)
-		self.assertEqual(self.docker.stopped, [])
-		bench.reload()
-		self.assertEqual(bench.status, "Stopped")
-
-	def test_stop_bench_deactivates_every_site_on_the_bench(self):
-		"""Nothing answers inside a stopped container, so no row may stay Active."""
-		from benchpress.deploy_manager import stop_bench
-
-		bench = self._fresh_bench()
-		self.docker.add_container("container-stop-sites")
-		bench.container_id = "container-stop-sites"
-		bench.status = "Running"
-		bench.save(ignore_permissions=True)
-		_make_bench_site(bench.name, "one.localhost")
-		_make_bench_site(bench.name, "two.localhost")
-		frappe.db.commit()
-
-		stop_bench(bench.name)
-		stop_bench(bench.name)  # a second stop is a no-op, not an error
-
-		statuses = frappe.get_all("Bench Site", filters={"bench": bench.name}, pluck="status")
-		self.assertEqual(statuses, ["Inactive", "Inactive"])
-
 	@patch("benchpress.lifecycle._deploy_bench")
 	def test_redeploy_bench_resets_status_to_draft_before_deploy(self, mock_deploy):
 		from benchpress.lifecycle import redeploy_bench
@@ -1293,7 +1233,8 @@ class TestRecordPrimarySite(IntegrationTestCase):
 		self.assertEqual(frappe.db.count("Bench Site", {"bench": bench.name}), 1)
 
 	def test_teardown_marks_the_site_inactive(self):
-		from benchpress.deploy_manager import _deactivate_bench_sites, _record_primary_site
+		from benchpress.deploy_manager import _record_primary_site
+		from benchpress.lifecycle import _deactivate_bench_sites
 
 		bench = self._bench()
 		_record_primary_site(bench, self.lab, "secret-one")
@@ -1302,11 +1243,12 @@ class TestRecordPrimarySite(IntegrationTestCase):
 
 		self.assertEqual(frappe.db.get_value("Bench Site", {"bench": bench.name}, "status"), "Inactive")
 
-	@patch("benchpress.deploy_manager.stop_container")
+	@patch("benchpress.lifecycle.stop_container")
 	def test_a_deploy_returns_a_stopped_site_to_active(self, mock_stop):
 		"""The round trip, which needs no code of its own: `_record_primary_site` already writes
 		`Active`, so a stop followed by a deploy must land back where it started."""
-		from benchpress.deploy_manager import _record_primary_site, stop_bench
+		from benchpress.deploy_manager import _record_primary_site
+		from benchpress.lifecycle import stopped
 
 		bench = self._bench()
 		bench.container_id = "container-round-trip"
@@ -1314,7 +1256,7 @@ class TestRecordPrimarySite(IntegrationTestCase):
 		_record_primary_site(bench, self.lab, "secret-one")
 		frappe.db.commit()
 
-		stop_bench(bench.name)
+		stopped(bench.name)
 		self.assertEqual(frappe.db.get_value("Bench Site", {"bench": bench.name}, "status"), "Inactive")
 
 		bench.reload()

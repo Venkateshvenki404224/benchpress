@@ -268,7 +268,7 @@ def _assert_site_name_changeable(doc) -> None:
 
 	`Draft` is the only status that guarantees no live site exists under `doc.site_name`:
 	either nothing was ever deployed, or `teardown_bench` ran and actually dropped the
-	database before resetting status. `stop_bench` marks the instance `Stopped` and
+	database before resetting status. `lifecycle.stopped` marks the instance `Stopped` and
 	deactivates its `Bench Site` rows WITHOUT dropping the database (only `teardown_bench`
 	does that) — so `Stopped` must still block a rename, or the old database would be
 	silently orphaned. The caller stops/deletes the instance first to rename it.
@@ -326,11 +326,9 @@ def _require_container(bench) -> None:
 
 
 def _stop_bench(bench) -> dict:
-	"""Stop through `deploy_manager.stop_bench`, the one path that also deactivates the sites."""
-	from benchpress.deploy_manager import stop_bench
-
+	"""Stop through `lifecycle.stopped`, the one path that also deactivates the sites."""
 	_require_container(bench)
-	stop_bench(bench.name)
+	lifecycle.stopped(bench.name)
 	return {"name": bench.name, "status": "Stopped"}
 
 
