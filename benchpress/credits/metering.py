@@ -52,7 +52,7 @@ def charge_lease(bench, lab, plan, request_id: str | None = None) -> float:
 	`request_id` makes the debit idempotent for a caller that may deliver the same click more
 	than once — a renew from three tabs. A deploy needs none: `lease_state` is its guard.
 	"""
-	cost = lease.cost_of(lab, plan)
+	cost = lease.cost_of_bench(bench, lab, plan)
 	label = bench_label(lab.lab_id) or bench.name
 	account.charge(
 		bench.owner,

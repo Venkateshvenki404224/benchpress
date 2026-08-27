@@ -13,8 +13,10 @@ import benchpress.docker_manager as docker_manager
 from benchpress.docker_manager import (
 	DEFAULT_BPS,
 	DEFAULT_IOPS,
+	DEFAULT_MEMORY,
 	DEFAULT_PIDS_LIMIT,
 	HOST_RUNTIMES_ATTRIBUTE,
+	CreatedContainer,
 	container_runtime,
 	get_container_health,
 	host_runtimes,
@@ -438,6 +440,129 @@ class TestAddressPoolExhausted(unittest.TestCase):
 		self.assertFalse(docker_manager._address_pool_exhausted(error))
 
 
+NANO = frappe._dict(
+	size_label="Nano",
+	memory_limit="512m",
+	cpu_cores=1,
+	pids_limit=128,
+	iops_limit=500,
+	bps_limit=20 * 1024 * 1024,
+	disk_limit=0,
+)
+LARGE = frappe._dict(size_label="Large", memory_limit="4g", cpu_cores=4)
+
+
+def _nano_with(**overrides):
+	return frappe._dict({**NANO, **overrides})
+
+
+class TestDockerManagerTierKnobs(FakeDockerMixin, IntegrationTestCase):
+	"""`Instance Size` owns the density knobs, and the adapter clamps and probes for itself."""
+
+	@classmethod
+	def setUpClass(cls):
+		super().setUpClass()
+		frappe.set_user("Administrator")
+
+	def setUp(self):
+		super().setUp()
+		self.lab = _make_lab("tier-knobs")
+		self.addCleanup(frappe.delete_doc, "Lab", self.lab.name, force=True, ignore_permissions=True)
+
+	def _create(self, size, *, cpu_count=2, disk_quota=False):
+		"""Create against the fake and return what came back beside the create kwargs."""
+		bench = types.SimpleNamespace(
+			bench_name="tier-test-bench", runtime="runc", bridge_network="benchpress-0"
+		)
+		with (
+			patch.object(docker_manager.os, "cpu_count", return_value=cpu_count),
+			patch.object(docker_manager, "_disk_quota_supported", return_value=disk_quota),
+		):
+			created = docker_manager.create_bench_container(bench, self.lab, size)
+		return created, self.docker.created[-1]
+
+	def test_a_nano_bench_really_gets_its_own_pid_ceiling(self):
+		_, kwargs = self._create(NANO)
+
+		self.assertEqual(kwargs["pids_limit"], 128)
+		self.assertEqual(kwargs["mem_limit"], "512m")
+		self.assertEqual(kwargs["device_read_iops"], [{"Path": "/dev/sda", "Rate": 500}])
+		self.assertEqual(kwargs["device_write_bps"], [{"Path": "/dev/sda", "Rate": 20 * 1024 * 1024}])
+
+	def test_the_size_beats_the_lab_own_fields(self):
+		"""Nothing copies a size onto a Lab any more, so a retuned size must reach the create."""
+		self.assertEqual(self.lab.memory_limit, "512m")
+
+		_, kwargs = self._create(LARGE, cpu_count=8)
+
+		self.assertEqual(kwargs["mem_limit"], "4g")
+
+	def test_a_large_bench_is_clamped_to_the_host_core_count(self):
+		"""The seeded Large asks for four cores, and this host refuses anything over two."""
+		_, kwargs = self._create(LARGE, cpu_count=2)
+
+		self.assertEqual(kwargs["nano_cpus"], 2_000_000_000)
+
+	def test_a_host_with_the_cores_to_spare_is_not_clamped(self):
+		_, kwargs = self._create(LARGE, cpu_count=8)
+
+		self.assertEqual(kwargs["nano_cpus"], 4_000_000_000)
+
+	def test_a_disk_quota_is_passed_where_the_host_can_enforce_one(self):
+		created, kwargs = self._create(_nano_with(disk_limit=4), disk_quota=True)
+
+		self.assertEqual(kwargs["storage_opt"], {"size": "4g"})
+		self.assertEqual(created.applied["disk"], "4g")
+		self.assertEqual(created.skipped, {})
+
+	def test_a_disk_quota_this_host_ignores_is_skipped_and_named(self):
+		"""`--storage-opt size=` is accepted and ignored off xfs, so passing it would lie."""
+		created, kwargs = self._create(_nano_with(disk_limit=4), disk_quota=False)
+
+		self.assertNotIn("storage_opt", kwargs)
+		self.assertNotIn("disk", created.applied)
+		self.assertIn("4g", created.skipped["disk_limit"])
+		self.assertIn(docker_manager.DISK_QUOTA_UNSUPPORTED, created.skipped["disk_limit"])
+
+	def test_no_disk_limit_asks_for_nothing_and_skips_nothing(self):
+		created, kwargs = self._create(NANO, disk_quota=True)
+
+		self.assertNotIn("storage_opt", kwargs)
+		self.assertEqual(created.skipped, {})
+
+	def test_a_bench_that_resolves_to_no_size_falls_back_to_the_module_constants(self):
+		created, kwargs = self._create(None)
+
+		self.assertEqual(kwargs["pids_limit"], DEFAULT_PIDS_LIMIT)
+		self.assertEqual(kwargs["device_read_iops"], [{"Path": "/dev/sda", "Rate": DEFAULT_IOPS}])
+		self.assertEqual(kwargs["device_write_bps"], [{"Path": "/dev/sda", "Rate": DEFAULT_BPS}])
+		self.assertEqual(kwargs["mem_limit"], DEFAULT_MEMORY)
+		self.assertEqual(created.skipped, {})
+
+	def test_the_probe_reads_the_driver_and_its_backing_filesystem(self):
+		self.docker.info_response = {
+			"Driver": "overlay2",
+			"DriverStatus": [["Backing Filesystem", "xfs"]],
+		}
+
+		self.assertTrue(self._probe())
+
+	def test_this_host_storage_driver_fails_the_probe(self):
+		"""ext4 under the containerd snapshotter, which is what production runs on."""
+		self.docker.info_response = {
+			"Driver": "overlayfs",
+			"DriverStatus": [["driver-type", "io.containerd.snapshotter.v1"]],
+		}
+
+		self.assertFalse(self._probe())
+
+	def _probe(self) -> bool:
+		"""The real probe, around the per-process cache a second test would otherwise read."""
+		docker_manager._disk_quota_supported.cache_clear()
+		self.addCleanup(docker_manager._disk_quota_supported.cache_clear)
+		return docker_manager._disk_quota_supported()
+
+
 class TestStartBenchContainer(unittest.TestCase):
 	@patch("benchpress.docker_manager.start_container")
 	def test_a_bridge_with_room_starts_the_container_it_was_given(self, start):
@@ -445,21 +570,27 @@ class TestStartBenchContainer(unittest.TestCase):
 		start.assert_called_once_with("abc123")
 
 	@patch("benchpress.placement.next_network", return_value="benchpress-1")
-	@patch("benchpress.docker_manager.create_bench_container", return_value="def456")
+	@patch(
+		"benchpress.docker_manager.create_bench_container",
+		return_value=CreatedContainer("def456", {}, {}),
+	)
 	@patch("benchpress.docker_manager.remove_container")
 	@patch("benchpress.docker_manager.container_network", return_value="benchpress-0")
 	@patch("benchpress.docker_manager.start_container")
 	def test_a_full_bridge_rolls_once_onto_the_next(self, start, _network, remove, create, _next):
 		start.side_effect = [docker.errors.APIError(LIVE_EXHAUSTION), None]
-		bench, lab = MagicMock(), MagicMock()
+		bench, lab, size = MagicMock(), MagicMock(), MagicMock()
 
-		self.assertEqual(docker_manager.start_bench_container("abc123", bench, lab), "def456")
+		self.assertEqual(docker_manager.start_bench_container("abc123", bench, lab, size), "def456")
 
 		remove.assert_called_once_with("abc123")
-		create.assert_called_once_with(bench, lab, "benchpress-1")
+		create.assert_called_once_with(bench, lab, size, "benchpress-1")
 
 	@patch("benchpress.placement.next_network", return_value="benchpress-1")
-	@patch("benchpress.docker_manager.create_bench_container", return_value="def456")
+	@patch(
+		"benchpress.docker_manager.create_bench_container",
+		return_value=CreatedContainer("def456", {}, {}),
+	)
 	@patch("benchpress.docker_manager.remove_container")
 	@patch("benchpress.docker_manager.container_network", return_value="benchpress-0")
 	@patch("benchpress.docker_manager.start_container")

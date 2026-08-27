@@ -97,14 +97,26 @@ def minutes_for(lab, plan) -> int:
 	return min(minutes, ceiling) if ceiling else minutes
 
 
-def cost_of(lab, plan) -> float:
-	"""`plan.credits x size.price_multiplier`, unless the lab prices its own deploys."""
+def cost_of(lab, plan, size=None) -> float:
+	"""`plan.credits x size.price_multiplier`, unless the lab prices its own deploys.
+
+	`size` defaults to the one the lab deploys at. Pass the bench's own through `cost_of_bench`
+	where the call carries a bench.
+	"""
 	override = flt(lab.get("deploy_credits"))
 	if override:
 		return override
-	size = config.size_for_lab(lab)
+	size = size or config.size_for_lab(lab)
 	multiplier = flt(size.price_multiplier) if size else 1.0
 	return flt(flt(plan.get("credits")) * multiplier, account.PRECISION)
+
+
+def cost_of_bench(bench, lab, plan) -> float:
+	"""What one window on a deployed bench costs, priced at the size it was deployed at.
+
+	Named once rather than resolved at each call site: the payer rule diverged exactly that way.
+	"""
+	return cost_of(lab, plan, config.size_for_instance(bench))
 
 
 def plan_for_size(size) -> dict | None:

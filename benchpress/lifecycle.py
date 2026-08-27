@@ -14,6 +14,7 @@ from frappe.utils.synchronization import filelock
 
 from benchpress import addressing, ingress, placement
 from benchpress.credits import admission, lease, metering
+from benchpress.credits.config import size_for_lab
 from benchpress.deploy_pipeline import DeployLogWriter, DeployPipeline
 from benchpress.docker_manager import (
 	container_network,
@@ -197,6 +198,15 @@ def _drop_site_database(bench) -> None:
 		pass  # best-effort
 
 
+def _log_limits(pipeline, size, created) -> None:
+	"""Name the size and the knobs it applied, then every quota this host would not enforce."""
+	label = size.size_label if size else "no size"
+	applied = " ".join(f"{knob}={value}" for knob, value in created.applied.items())
+	pipeline.log(f"limits {label} — {applied}")
+	for knob, reason in created.skipped.items():
+		pipeline.log(f"limit skipped — {knob} {reason}")
+
+
 def deploy_bench(bench_name: str) -> None:
 	"""Deploy a bench, refusing to run concurrently with another deploy of the same bench."""
 	from benchpress.deploy_manager import _log_deploy_skipped
@@ -299,13 +309,18 @@ def _deploy_bench(bench_name: str) -> None:
 		_remove_stale_container(bench)
 		_drop_site_database(bench)
 		pipeline.step("container")
-		container_id = create_bench_container(bench, lab)
-		created_container_id = container_id
+		# Resolved here and recorded, never copied onto the Lab: a size edited in Desk reaches
+		# this deploy, and billing keeps pricing what Docker was actually given.
+		size = size_for_lab(lab)
+		bench.instance_size = size.name if size else None
+		created = create_bench_container(bench, lab, size)
+		container_id = created_container_id = created.container_id
+		_log_limits(pipeline, size, created)
 		# Read back rather than assumed: the stored log answers what a bench was
 		# isolated by long after the run.
 		pipeline.log(f"container runtime {container_runtime(container_id)}")
 
-		container_id = created_container_id = start_bench_container(container_id, bench, lab)
+		container_id = created_container_id = start_bench_container(container_id, bench, lab, size)
 		placement.record_bridge_network(bench, container_network(container_id))
 		pipeline.log(f"bench bridge {bench.bridge_network}")
 

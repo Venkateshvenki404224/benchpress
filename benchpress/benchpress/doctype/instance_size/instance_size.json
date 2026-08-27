@@ -17,8 +17,13 @@
   "resources_section",
   "memory_limit",
   "cpu_cores",
+  "disk_limit",
+  "pids_limit",
   "column_break_resources",
-  "max_sites"
+  "max_sites",
+  "iops_limit",
+  "bps_limit",
+  "include_code_server"
  ],
  "fields": [
   {
@@ -63,14 +68,14 @@
    "label": "Resources"
   },
   {
-   "description": "Docker memory limit, e.g. 1g. Copied to Lab.memory_limit.",
+   "description": "Docker memory limit, e.g. 1g. Read at deploy, not copied onto the Lab.",
    "fieldname": "memory_limit",
    "fieldtype": "Data",
    "in_list_view": 1,
    "label": "Memory Limit"
   },
   {
-   "description": "Copied to Lab.cpu_cores. Minimum 1.",
+   "description": "Clamped to the host's core count at deploy. Minimum 1.",
    "fieldname": "cpu_cores",
    "fieldtype": "Int",
    "in_list_view": 1,
@@ -101,12 +106,47 @@
    "fieldtype": "Link",
    "label": "Default Lease Plan",
    "options": "Lease Plan"
+  },
+  {
+   "description": "Writable-layer quota in GB. 0 = unlimited. Only enforced on overlay2 over xfs; anywhere else the deploy logs it as skipped.",
+   "fieldname": "disk_limit",
+   "fieldtype": "Int",
+   "label": "Disk Limit (GB)",
+   "non_negative": 1
+  },
+  {
+   "description": "Max number of processes (PIDs) a bench of this size may spawn. Leave 0 for the default (500).",
+   "fieldname": "pids_limit",
+   "fieldtype": "Int",
+   "label": "Max Processes (PID limit)",
+   "non_negative": 1
+  },
+  {
+   "description": "Read/write IOPS cap per host block device. Leave 0 for the default (1000).",
+   "fieldname": "iops_limit",
+   "fieldtype": "Int",
+   "label": "Max IOPS (Block I/O)",
+   "non_negative": 1
+  },
+  {
+   "description": "Read/write throughput cap in bytes/sec per host block device. Leave 0 for the default (40 MiB/s).",
+   "fieldname": "bps_limit",
+   "fieldtype": "Int",
+   "label": "Max Bytes/sec (Block I/O)",
+   "non_negative": 1
+  },
+  {
+   "default": "1",
+   "description": "Whether a bench of this size runs code-server. Off means no IDE and no public ide- hostname.",
+   "fieldname": "include_code_server",
+   "fieldtype": "Check",
+   "label": "Include Code Server"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-08-17 08:10:00.000000",
+ "modified": "2026-08-27 10:00:00.000000",
  "modified_by": "Administrator",
  "module": "Benchpress",
  "name": "Instance Size",

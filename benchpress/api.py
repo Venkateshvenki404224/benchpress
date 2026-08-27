@@ -527,7 +527,7 @@ def renew_bench(bench_name: str, plan: str, request_id: str) -> dict:
 	stopped = bench.status == "Stopped"
 	if stopped:
 		_assert_inside_grace(bench)
-	require_balance(bench.owner, lease.cost_of(lab, chosen))
+	require_balance(bench.owner, lease.cost_of_bench(bench, lab, chosen))
 
 	charged = metering.charge_lease(bench, lab, chosen, request_id=request_id)
 	lease.extend(bench, chosen)

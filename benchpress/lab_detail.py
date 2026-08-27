@@ -52,6 +52,10 @@ def get_lab(name: str) -> dict:
 	"""One lab, the caller's deployment of it, and why the last run failed."""
 	lab = frappe.get_cached_doc("Lab", name)
 	bench = _caller_bench(lab.name)
+	# Read through the size rather than off the Lab: the deploy resolves it the same way, and
+	# nothing copies it onto the Lab any more, so the stored fields go stale the moment a size
+	# is retuned in Desk.
+	size = config.size_for_lab(lab)
 	return {
 		"name": lab.name,
 		"lab_id": lab.lab_id,
@@ -62,8 +66,8 @@ def get_lab(name: str) -> dict:
 		"status": lab.status,
 		"image_tag": lab.image_tag,
 		"instance_size": lab.instance_size,
-		"memory_limit": lab.memory_limit,
-		"cpu_cores": lab.cpu_cores,
+		"memory_limit": size.memory_limit if size else lab.memory_limit,
+		"cpu_cores": size.cpu_cores if size else lab.cpu_cores,
 		"enable_ssh": lab.enable_ssh,
 		"enable_code_server": lab.enable_code_server,
 		"lease_price": _lease_price(lab),

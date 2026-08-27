@@ -16,6 +16,7 @@ from frappe.tests import IntegrationTestCase
 
 from benchpress import deploy_manager, ingress, lifecycle
 from benchpress.benchpress.doctype.bench_instance import get_instance_id
+from benchpress.docker_manager import CreatedContainer
 from benchpress.tests.fakes import FakeDockerMixin, sql_of
 from benchpress.tests.test_docker_manager import exec_commands, exec_environments
 
@@ -538,7 +539,7 @@ class TestDeployStepMarkers(IntegrationTestCase):
 			patch.object(lifecycle, "create_bench_container", autospec=True) as mock_create,
 			# The deploy starts through the roll wrapper, so the bridge it lands on is a
 			# read-back rather than the id that went in.
-			patch.object(lifecycle, "start_bench_container", new=lambda cid, bench, lab: cid),
+			patch.object(lifecycle, "start_bench_container", new=lambda cid, bench, lab, size: cid),
 			patch.object(lifecycle, "container_network", new=lambda cid: "benchpress-0"),
 			patch.object(lifecycle, "wait_for_container_running", autospec=True) as mock_wait,
 			# Only the socket is mocked, not the reporting around it: a unit test must not
@@ -560,7 +561,7 @@ class TestDeployStepMarkers(IntegrationTestCase):
 			mock_infra.return_value = self.db_server_name
 			mock_runtimes.return_value = {"names": set(registered_runtimes), "default": "runc"}
 			mock_runtime_of.return_value = "sysbox-runc"
-			mock_create.return_value = "cid-steps"
+			mock_create.return_value = CreatedContainer("cid-steps", {}, {})
 			mock_wait.return_value = "172.30.0.11"
 			mock_exec.side_effect = _exec_results(exec_failures)
 			if write_error:
@@ -1112,7 +1113,7 @@ class TestTerminalStateNotifications(IntegrationTestCase):
 			patch.object(lifecycle, "create_bench_container", autospec=True) as mock_create,
 			# The deploy starts through the roll wrapper, so the bridge it lands on is a
 			# read-back rather than the id that went in.
-			patch.object(lifecycle, "start_bench_container", new=lambda cid, bench, lab: cid),
+			patch.object(lifecycle, "start_bench_container", new=lambda cid, bench, lab, size: cid),
 			patch.object(lifecycle, "container_network", new=lambda cid: "benchpress-0"),
 			patch.object(lifecycle, "wait_for_container_running", autospec=True) as mock_wait,
 			patch.object(ingress, "publish", autospec=True),
@@ -1126,7 +1127,7 @@ class TestTerminalStateNotifications(IntegrationTestCase):
 			mock_infra.return_value = self.db_server_name
 			mock_runtimes.return_value = {"names": {"runc", "sysbox-runc"}, "default": "runc"}
 			mock_runtime_of.return_value = "sysbox-runc"
-			mock_create.return_value = "cid-notify"
+			mock_create.return_value = CreatedContainer("cid-notify", {}, {})
 			mock_wait.return_value = "172.30.0.9"
 			mock_site.return_value = (0, "site created")
 

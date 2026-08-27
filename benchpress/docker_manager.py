@@ -6,20 +6,25 @@ import os
 import re
 import subprocess
 import time
+from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import PurePosixPath
 
 import docker
 import frappe
 from frappe import _
-from frappe.utils import cint
+from frappe.utils import cint, flt
 
 from benchpress.image_cache import cache_tag, clear_cached_tags
 from benchpress.request_cache import local_cache
 
+DEFAULT_MEMORY = "512m"
 DEFAULT_PIDS_LIMIT = 500
 DEFAULT_STOP_GRACE = 5
 DEFAULT_IOPS = 1000
 DEFAULT_BPS = 40 * 1024 * 1024
+
+DISK_QUOTA_UNSUPPORTED = "this host enforces no writable-layer quota (overlay2 on xfs required)"
 
 # Field value -> the runtime name registered with the Docker daemon. None means
 # "pass no runtime", which leaves the daemon's own default-runtime in charge.
@@ -186,9 +191,67 @@ def build_lab_image(lab_doc, log_fn=None, no_cache: bool = False) -> str:
 	return image_tag
 
 
-def create_bench_container(bench_doc, lab_doc, network: str | None = None) -> str:
-	"""Create a container from a lab image with resource limits.
-	Does NOT start the container. Returns the container ID.
+@dataclass(frozen=True)
+class CreatedContainer:
+	"""A created container, and which of its limits the daemon was really asked to enforce.
+
+	`skipped` maps a knob to why it was dropped, so no deploy log can claim a quota this host
+	silently ignores.
+	"""
+
+	container_id: str
+	applied: dict
+	skipped: dict
+
+
+def _nano_cpus(cpu_cores) -> int:
+	"""Clamp to what this host will accept: the seeded Large is undeployable on 2 cores."""
+	return int(min(flt(cpu_cores) or 1.0, os.cpu_count() or 1) * 1_000_000_000)
+
+
+@lru_cache(maxsize=1)
+def _disk_quota_supported() -> bool:
+	"""True only for overlay2 on xfs. Anywhere else `storage_opt` is accepted and ignored."""
+	info = get_client().info()
+	status = dict(info.get("DriverStatus") or [])
+	backing = str(status.get("Backing Filesystem") or "").lower()
+	return (info.get("Driver") or "").lower() == "overlay2" and backing == "xfs"
+
+
+def _storage_opt(disk_limit: int) -> tuple[dict | None, str]:
+	"""The `storage_opt` for a requested quota, or `None` and why it was skipped.
+
+	Probed rather than assumed: off overlay2/xfs the flag is accepted and silently ignored, so
+	passing it anyway would report a quota that does not exist.
+	"""
+	if not disk_limit:
+		return None, ""
+	if not _disk_quota_supported():
+		return None, DISK_QUOTA_UNSUPPORTED
+	return {"size": f"{disk_limit}g"}, ""
+
+
+def _resolve_limits(size, lab_doc) -> dict:
+	"""The density knobs for one create: the size's, or the lab's own where no size resolved.
+
+	A site carrying no `Instance Size` row at all has nothing but the lab's hand-typed numbers.
+	"""
+	source = size if size else lab_doc
+	return {
+		"mem_limit": source.get("memory_limit") or DEFAULT_MEMORY,
+		"nano_cpus": _nano_cpus(source.get("cpu_cores")),
+		"pids_limit": cint(source.get("pids_limit")) or DEFAULT_PIDS_LIMIT,
+		"iops": cint(source.get("iops_limit")) or DEFAULT_IOPS,
+		"bps": cint(source.get("bps_limit")) or DEFAULT_BPS,
+		"disk_limit": cint(source.get("disk_limit")),
+	}
+
+
+def create_bench_container(bench_doc, lab_doc, size=None, network: str | None = None) -> CreatedContainer:
+	"""Create a container at a resolved `Instance Size`. Does NOT start it.
+
+	`size` is read and never copied, so a size edited in Desk reaches the next deploy without the
+	Lab being re-saved. `None` means no size resolved at all.
 
 	`network` overrides the bench's recorded bridge, which is what a roll onto the next
 	bridge needs: the row still names the bridge Docker refused.
@@ -207,9 +270,10 @@ def create_bench_container(bench_doc, lab_doc, network: str | None = None) -> st
 		"benchpress.lab": lab_doc.lab_id,
 	}
 
-	pids_limit = int(getattr(lab_doc, "pids_limit", None) or DEFAULT_PIDS_LIMIT)
-	iops = int(getattr(lab_doc, "iops_limit", None) or DEFAULT_IOPS)
-	bps = int(getattr(lab_doc, "bps_limit", None) or DEFAULT_BPS)
+	limits = _resolve_limits(size, lab_doc)
+	storage_opt, disk_skipped = _storage_opt(limits["disk_limit"])
+	iops = limits["iops"]
+	bps = limits["bps"]
 
 	runtime = resolve_runtime(bench_doc)
 	runtime_kwargs = {"runtime": runtime} if runtime else {}
@@ -239,18 +303,32 @@ def create_bench_container(bench_doc, lab_doc, network: str | None = None) -> st
 		devices=["/dev/net/tun:/dev/net/tun:rwm"],
 		# No volume over /home/frappe — a named volume forces a full copy of the bench
 		# on every create; the container's own layer is the bench's storage.
-		mem_limit=lab_doc.memory_limit or "512m",
-		nano_cpus=int((lab_doc.cpu_cores or 1) * 1e9),
-		pids_limit=pids_limit,
+		mem_limit=limits["mem_limit"],
+		nano_cpus=limits["nano_cpus"],
+		pids_limit=limits["pids_limit"],
 		device_read_iops=device_read_iops or None,
 		device_write_iops=device_write_iops or None,
 		device_read_bps=device_read_bps or None,
 		device_write_bps=device_write_bps or None,
 		network=network,
+		**({"storage_opt": storage_opt} if storage_opt else {}),
 		**runtime_kwargs,
 	)
 
-	return container.id
+	applied = {
+		"memory": limits["mem_limit"],
+		"nano_cpus": limits["nano_cpus"],
+		"pids_limit": limits["pids_limit"],
+		"iops": iops,
+		"bps": bps,
+	}
+	skipped = {}
+	if storage_opt:
+		applied["disk"] = storage_opt["size"]
+	elif disk_skipped:
+		skipped["disk_limit"] = f"{limits['disk_limit']}g — {disk_skipped}"
+
+	return CreatedContainer(container.id, applied, skipped)
 
 
 def container_runtime(container_id: str) -> str:
@@ -263,7 +341,7 @@ def container_network(container_id: str) -> str:
 	return get_client().containers.get(container_id).attrs["HostConfig"]["NetworkMode"]
 
 
-def start_bench_container(container_id: str, bench_doc, lab_doc) -> str:
+def start_bench_container(container_id: str, bench_doc, lab_doc, size=None) -> str:
 	"""Start the bench, moving it to the next bridge if this one has no address left.
 
 	Returns the id of the container that is now running — a roll recreates it, so it is
@@ -287,7 +365,7 @@ def start_bench_container(container_id: str, bench_doc, lab_doc) -> str:
 	# and the new container has to take the name the old one is still holding.
 	rolled_to = placement.next_network(container_network(container_id))
 	remove_container(container_id)
-	container_id = create_bench_container(bench_doc, lab_doc, rolled_to)
+	container_id = create_bench_container(bench_doc, lab_doc, size, rolled_to).container_id
 	start_container(container_id)
 	return container_id
 

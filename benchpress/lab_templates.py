@@ -13,7 +13,7 @@ import frappe
 from frappe import _
 
 # Each template names its `Instance Size`. `memory_limit` / `cpu_cores` below must agree
-# with it: they are what the card renders, and `Lab.apply_instance_size` overwrites them.
+# with it: nothing rewrites them at save time, and the card renders what is stored.
 
 # "Use template" names the lab itself, so a taken id is retried with a numeric
 # suffix. The ceiling only exists so a pathological catalog cannot spin.
