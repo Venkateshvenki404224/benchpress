@@ -87,6 +87,24 @@ subject — and verify it by hand before trusting it.
 an unguarded `grep` miss aborts the whole loop instead of reporting the failure
 the gate exists to catch. End helpers with `|| true` and an explicit `return 0`.
 
+**A helper whose stdout is the signal never counts with `grep -c`.** It prints
+`0` on no match, so `[ -z "$(helper)" ]` is false for a clean tree and false for
+a dirty one: the gate is unsatisfiable and fails every phase whatever the agent
+writes. Emit the matches themselves — `grep -o`, `grep -l` — and let empty mean
+clean. Guarding the exit code with `|| true` does not help, because the `0` is on
+stdout.
+
+> This one shipped. Two phase-1 gates read `grep -c … || true` and tested the
+> result with `-z`, so a correct implementation was retracted as a failure. Prove
+> every helper both ways before shipping the loop: break the thing on purpose and
+> watch the gate go red, then fix it and watch it go green. A gate only ever
+> observed on a clean tree is untested.
+
+**Beware an `awk` range whose start line also matches its end pattern.**
+`/def _enforce/,/^def [a-z_]+\(/` looks like "the body of `_enforce`" and selects
+the `def` line alone, because that line matches the end pattern too. The body is
+never read, so the gate sees nothing and reports clean.
+
 **Redirect stdin on every `docker compose exec`, or the loop hangs forever.**
 GNU `timeout` calls `setpgid()` to put its child in its own process group so it
 can kill the group. That group is *background* relative to the terminal, so the
