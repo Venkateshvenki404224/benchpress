@@ -18,6 +18,7 @@ output — still only have `=== … ===` markers, so both are read.
 
 import frappe
 
+from benchpress import addressing
 from benchpress.credits import config, lease
 from benchpress.deploy_pipeline import scan_log
 
@@ -113,6 +114,7 @@ def _caller_bench(lab_name: str) -> dict | None:
 	# The last moment a renew still restores this container instead of rebuilding it, so the
 	# screen knows whether its call to action is Renew or Redeploy.
 	bench["grace_ends_at_ts"] = lease.grace_ends_at(bench) if bench["status"] == "Stopped" else None
+	bench["addresses"] = addressing.addresses_for(bench)
 	return bench
 
 

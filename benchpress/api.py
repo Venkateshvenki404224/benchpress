@@ -6,7 +6,7 @@ from frappe import _
 from frappe.query_builder import DocType
 from frappe.query_builder.functions import Count
 
-from benchpress import image_cache, lab_detail, lab_templates, labs
+from benchpress import addressing, image_cache, lab_detail, lab_templates, labs
 from benchpress.benchpress.doctype.bench_instance.bench_instance import DEPLOY_JOB_TIMEOUT
 
 # Every field the renew path decides from, read once under the row lock.
@@ -150,6 +150,7 @@ def get_benches() -> list[dict]:
 			"started_at",
 			"ssh_username",
 			"code_server_url",
+			"public_url",
 		],
 		order_by="creation desc",
 	)
@@ -160,6 +161,7 @@ def get_benches() -> list[dict]:
 	for bench in benches:
 		bench["app_count"] = apps.get(bench["name"], 0)
 		bench["site_count"] = sites.get(bench["name"], 0)
+		bench["addresses"] = addressing.addresses_for(bench)
 
 	return benches
 

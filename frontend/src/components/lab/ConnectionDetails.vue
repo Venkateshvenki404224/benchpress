@@ -108,7 +108,7 @@ const rows = computed(() =>
 	[
 		// Both addresses, always: the public one for sharing outside the tunnel,
 		// the private one for teammates already on the VPN.
-		{ key: "public-url", label: "Public URL", value: props.bench.public_url },
+		{ key: "public-url", label: "Public URL", value: props.bench.addresses?.public_site },
 		{ key: "private-url", label: "Private URL (VPN)", value: privateSiteUrl(props.bench) },
 		{ key: "wg-ip", label: "WireGuard IP", value: props.bench.wg_ip },
 		{ key: "runtime", label: "Runtime", value: props.bench.runtime },

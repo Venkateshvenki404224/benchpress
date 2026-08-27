@@ -1426,40 +1426,8 @@ class TestRecordPrimarySite(IntegrationTestCase):
 				teardown_bench(bench)
 
 
-class TestPublicSiteUrlHelpers(unittest.TestCase):
-	"""Pure-function tests, no container/DB — see phase-1-public-site-hostname.md."""
-
-	def test_public_site_url_is_none_when_base_domain_unset(self):
-		from benchpress.deploy_manager import _public_site_url
-
-		self.assertIsNone(_public_site_url("inst-1", None))
-		self.assertIsNone(_public_site_url("inst-1", ""))
-
-	def test_public_site_url_is_none_for_localhost(self):
-		from benchpress.deploy_manager import _public_site_url
-
-		self.assertIsNone(_public_site_url("inst-1", "localhost"))
-
-	def test_public_site_url_shape(self):
-		from benchpress.deploy_manager import _public_site_url
-
-		self.assertEqual(_public_site_url("inst-1", "benchpress.cloud"), "https://inst-1.benchpress.cloud")
-
-	def test_public_ide_url_is_none_when_base_domain_unset(self):
-		from benchpress.deploy_manager import _public_ide_url
-
-		self.assertIsNone(_public_ide_url("inst-1", None))
-		self.assertIsNone(_public_ide_url("inst-1", ""))
-
-	def test_public_ide_url_is_none_for_localhost(self):
-		from benchpress.deploy_manager import _public_ide_url
-
-		self.assertIsNone(_public_ide_url("inst-1", "localhost"))
-
-	def test_public_ide_url_shape(self):
-		from benchpress.deploy_manager import _public_ide_url
-
-		self.assertEqual(_public_ide_url("inst-1", "benchpress.cloud"), "https://ide-inst-1.benchpress.cloud")
+class TestWriteInstanceRoute(unittest.TestCase):
+	"""Pure-function tests, no container/DB — the URL helpers moved to test_addressing.py."""
 
 	def test_write_instance_route_writes_router_and_service(self):
 		from benchpress import deploy_manager

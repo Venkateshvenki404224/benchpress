@@ -16,7 +16,7 @@ from frappe import _
 from frappe.utils.file_lock import LockTimeoutError
 from frappe.utils.synchronization import filelock
 
-from benchpress import docker_manager, image_cache, placement
+from benchpress import addressing, docker_manager, image_cache, placement
 from benchpress.credits import admission, lease, metering
 from benchpress.deploy_pipeline import DeployLogWriter, DeployPipeline
 from benchpress.docker_manager import (
@@ -81,9 +81,6 @@ def _remove_stale_container(bench) -> None:
 
 NOTHING_TO_ROLL_BACK = "Cleanup: nothing to roll back — no container was created"
 
-# Kept in step with `frontend/src/utils/labActions.js`, which builds the URL from it.
-SITE_HTTP_PORT = 8000
-
 ADOPTED_MARKER = "already exists — adopting it"
 GOLDEN_MARKER = "Restored from golden dump"
 # What the Deploy Log says when the golden branch ran. `golden_drill` reads runs back by it.
@@ -123,18 +120,6 @@ class TraefikRouteDirectoryMissing(Exception):
 	`queue-short` mount neither, and both consume `default`. Every caller therefore
 	reaches routing through `enqueue_route_sync`, which pins `queue="long"`.
 	"""
-
-
-def _public_site_url(instance_id: str, base_domain: str | None) -> str | None:
-	if not base_domain or base_domain == "localhost":
-		return None
-	return f"https://{instance_id}.{base_domain}"
-
-
-def _public_ide_url(instance_id: str, base_domain: str | None) -> str | None:
-	if not base_domain or base_domain == "localhost":
-		return None
-	return f"https://ide-{instance_id}.{base_domain}"
 
 
 def _wildcard_anchor_config(base_domain: str) -> dict:
@@ -253,7 +238,9 @@ def _write_instance_route(instance_id: str, base_domain: str) -> None:
 			# Resolved by Docker's embedded DNS: traefik is on the `benchpress` network.
 			"services": {
 				f"site-{instance_id}": {
-					"loadBalancer": {"servers": [{"url": f"http://{instance_id}:{SITE_HTTP_PORT}"}]}
+					"loadBalancer": {
+						"servers": [{"url": f"http://{instance_id}:{addressing.SITE_HTTP_PORT}"}]
+					}
 				},
 				f"ide-{instance_id}": {"loadBalancer": {"servers": [{"url": f"http://{instance_id}:8080"}]}},
 			},
@@ -745,7 +732,7 @@ def _deploy_bench(bench_name: str) -> None:
 		bench.save(ignore_permissions=True)
 		frappe.db.commit()
 
-		bench.public_url = _public_site_url(bench.name, settings.base_domain)
+		bench.public_url = addressing.public_site_url(bench.name, settings.base_domain)
 		_write_instance_route(bench.name, settings.base_domain)
 		_log_certificate_state(bench.name, settings.base_domain, pipeline)
 
@@ -759,7 +746,7 @@ def _deploy_bench(bench_name: str) -> None:
 			"redis_queue": "redis://benchpress-redis:6379/1",
 			"redis_socketio": "redis://benchpress-redis:6379/2",
 			"socketio_port": 9000,
-			"webserver_port": SITE_HTTP_PORT,
+			"webserver_port": addressing.SITE_HTTP_PORT,
 			"default_site": site_name,
 			"developer_mode": 1,
 		}
@@ -826,7 +813,7 @@ def _deploy_bench(bench_name: str) -> None:
 		)
 		if exit_code != 0:
 			raise Exception(f"serve.sh failed (exit {exit_code}): {output}")
-		pipeline.log(f"Site served on port {SITE_HTTP_PORT}")
+		pipeline.log(f"Site served on port {addressing.SITE_HTTP_PORT}")
 
 		if getattr(lab, "enable_code_server", 0):
 			_start_code_server(bench, container_id, pipeline, settings)
@@ -907,7 +894,7 @@ def _start_code_server(bench, container_id: str, pipeline, settings) -> None:
 
 	bench.code_server_password = code_server_password
 	bench.code_server_url = (
-		_public_ide_url(bench.name, settings.base_domain)
+		addressing.public_ide_url(bench.name, settings.base_domain)
 		or f"http://{bench.wg_ip or bench.container_ip or '127.0.0.1'}:8080/"
 	)
 	pipeline.log(f"code-server ready at {bench.code_server_url}")
