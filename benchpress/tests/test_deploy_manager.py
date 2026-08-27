@@ -1250,7 +1250,6 @@ class TestRecordPrimarySite(IntegrationTestCase):
 
 		site = frappe.get_doc("Bench Site", {"bench": bench.name})
 		self.assertEqual(site.site_name, bench.site_name)
-		self.assertEqual(site.full_domain, bench.site_name)
 		self.assertEqual(site.status, "Active")
 		self.assertEqual([row.app_name for row in site.apps_installed], ["frappe"])
 
@@ -1268,26 +1267,18 @@ class TestRecordPrimarySite(IntegrationTestCase):
 		self.assertEqual(site.site_name, "acme.benchpress.cloud")
 		self.assertEqual(frappe.db.get_value("Bench Instance", bench.name, "site_name"), site.site_name)
 
-	def test_the_controller_alone_owns_full_domain(self):
-		"""Two writers meant the label could name a site that does not exist.
-
-		`_record_primary_site` no longer stamps `full_domain`; the controller derives it from the
-		editable `Bench Instance.domain`. The name the site was created under is `site_name`, and
-		relabelling the instance must never move it.
-		"""
+	def test_relabelling_the_instance_leaves_the_site_name_alone(self):
+		"""`site_name` is the name the database was created under, so a relabel must not move it."""
 		from benchpress.deploy_manager import _record_primary_site
 
 		bench = self._bench()
 		_record_primary_site(bench, self.lab, "secret-one")
-		created = frappe.db.get_value("Bench Site", {"bench": bench.name}, "full_domain")
-		self.assertEqual(created, bench.site_name)
 
 		frappe.db.set_value("Bench Instance", bench.name, "domain", "relabelled.example")
 		_record_primary_site(bench, self.lab, "secret-one")
 
 		site = frappe.get_doc("Bench Site", {"bench": bench.name})
 		self.assertEqual(site.site_name, bench.site_name)
-		self.assertEqual(site.full_domain, f"{bench.site_name}.relabelled.example")
 
 	def test_a_second_deploy_refreshes_the_row_instead_of_duplicating_it(self):
 		from benchpress.deploy_manager import _record_primary_site
@@ -1330,9 +1321,8 @@ class TestRecordPrimarySite(IntegrationTestCase):
 		self.assertEqual(frappe.db.get_value("Bench Site", {"bench": bench.name}, "status"), "Active")
 
 	@patch("benchpress.mariadb_manager.drop_site_database")
-	def test_teardown_drops_the_real_db_when_the_domain_has_drifted(self, mock_drop):
-		"""`full_domain` is recomputed from the editable `Bench Instance.domain`, so it drifts from
-		the name a site's database was created under. Teardown must still drop the real database."""
+	def test_teardown_drops_only_the_name_the_site_was_created_under(self, mock_drop):
+		"""Editing the instance domain must not add a second candidate name for teardown to drop."""
 		from benchpress.api import _drop_bench_site_databases
 		from benchpress.deploy_manager import _record_primary_site
 
@@ -1341,17 +1331,12 @@ class TestRecordPrimarySite(IntegrationTestCase):
 		frappe.db.set_value("Bench Instance", bench.name, "domain", "example.com")
 		_record_primary_site(bench, self.lab, "secret-one")
 
-		site = frappe.get_doc("Bench Site", {"bench": bench.name})
-		# The controller rewrote full_domain, drifting it from the created name.
-		self.assertEqual(site.full_domain, f"{bench.site_name}.example.com")
-
 		bench.database_server = "db-any"
 		_drop_bench_site_databases(bench)
 
 		dropped = {call.args[1] for call in mock_drop.call_args_list}
-		# The name the database was actually created under must be among those dropped.
-		self.assertIn(bench.site_name, dropped)
-		self.assertIn(site.full_domain, dropped)
+		self.assertEqual(dropped, {bench.site_name})
+		self.assertNotIn(f"{bench.site_name}.example.com", dropped)
 
 	def test_teardown_removes_the_instance_route_file(self):
 		"""Freed container IPs get reused by Docker — a stale route file left after teardown

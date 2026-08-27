@@ -45,7 +45,7 @@ BENCH_FIELDS = [
 	"owner",
 ]
 
-SITE_FIELDS = ["name", "site_name", "full_domain", "status"]
+SITE_FIELDS = ["name", "site_name", "status"]
 
 
 def get_lab(name: str) -> dict:

@@ -10,7 +10,6 @@
   "site_name",
   "bench",
   "column_break_site",
-  "full_domain",
   "status",
   "admin_password",
   "apps_section",
@@ -33,12 +32,6 @@
   {
    "fieldname": "column_break_site",
    "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "full_domain",
-   "fieldtype": "Data",
-   "label": "Full Domain",
-   "read_only": 1
   },
   {
    "default": "Creating",

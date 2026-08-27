@@ -215,9 +215,9 @@ describe("urlNeedsVpn", () => {
 });
 
 describe("siteLabel", () => {
-	it("prefers the site's own domain and falls back to the address", () => {
+	it("prefers the site's own name and falls back to the address", () => {
 		expect(
-			siteLabel({ addresses: { host_label: HOST_LABEL } }, { full_domain: "crm.lab" })
+			siteLabel({ addresses: { host_label: HOST_LABEL } }, { site_name: "crm.lab" })
 		).toBe("crm.lab");
 		expect(siteLabel({ domain: "bench.lab" }, null)).toBe("bench.lab");
 		expect(siteLabel({ addresses: { host_label: HOST_LABEL } }, null)).toBe(HOST_LABEL);

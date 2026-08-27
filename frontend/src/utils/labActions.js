@@ -204,13 +204,7 @@ export function ideUrl(bench) {
 
 /** What that address is called on screen. */
 export function siteLabel(bench, site) {
-	return (
-		site?.full_domain ||
-		site?.site_name ||
-		bench?.domain ||
-		bench?.site_name ||
-		hostLabel(bench)
-	);
+	return site?.site_name || bench?.domain || bench?.site_name || hostLabel(bench);
 }
 
 function hostLabel(bench) {

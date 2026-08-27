@@ -49,7 +49,7 @@ apps/benchpress/
 | **Lab App** | Child of Lab | `app_name`, `git_url`, `branch` |
 | **Bench Instance** | Running container | `bench_name`, `lab`, `status` (Draft/Deploying/Running/Stopped/Error), `container_id`, `wg_ip`, `vpn_peer` (Link to VPN Peer), `cpu_usage`, `memory_usage` |
 | **Bench App** | Child of Bench Instance | `app_name`, `git_url`, `branch` |
-| **Bench Site** | Frappe site in a bench | `site_name`, `bench`, `status`, `full_domain`, `admin_password` |
+| **Bench Site** | Frappe site in a bench | `site_name`, `bench`, `status`, `admin_password` |
 | **Site App** | Child of Bench Site | `app_name`, `app_label` |
 | **BenchPress Settings** | Global config (singleton) | `docker_socket`, `base_domain`, `container_memory_limit`, `container_cpu_quota` |
 | **Deploy Log** | Deployment event logs | `bench`, `message`, `log_type`, `timestamp` |

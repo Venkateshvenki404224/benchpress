@@ -373,7 +373,7 @@ BenchPress uses 10 DocTypes to model the complete bench lifecycle (VPN DocTypes 
 | **Lab App** | Child Table | Apps to install in a Lab | `app_name`, `app_label`, `git_url`, `branch` |
 | **Bench Instance** | Document | Running container | `bench_name`, `lab`, `status` (Draft/Deploying/Running/Stopped/Error), `container_id`, `wg_ip`, `vpn_peer` (Link to VPN Peer), `cpu_usage`, `memory_usage` |
 | **Bench App** | Child Table | Apps installed in a Bench | `app_name`, `app_label`, `git_url`, `branch` |
-| **Bench Site** | Document | Frappe site inside a bench | `site_name`, `bench`, `status` (Creating/Active/Inactive/Error), `full_domain`, `admin_password` |
+| **Bench Site** | Document | Frappe site inside a bench | `site_name`, `bench`, `status` (Creating/Active/Inactive/Error), `admin_password` |
 | **Site App** | Child Table | Apps installed on a Site | `app_name`, `app_label` |
 | **Database Server** | Document | Shared MariaDB container | `container_name`, `container_id`, `status`, `port`, `volume_name`, `image_tag`, `memory_limit` |
 | **BenchPress Settings** | Single | Global configuration | `docker_socket`, `base_domain`, `container_memory_limit`, `container_cpu_quota` |
