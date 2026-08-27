@@ -245,7 +245,7 @@ scheduler_events = {
 			"benchpress.credits.sweep.enforce_limits",
 			# `queue-short` has no route mount either. Lifecycle triggers already converge in
 			# seconds — this is the net under them.
-			"benchpress.deploy_manager.enqueue_route_reconcile",
+			"benchpress.ingress.enqueue_route_reconcile",
 			# The net under the lease warden, not the primary path: `DEFAULT_SCHEDULER_TICK` is
 			# four minutes here, so no cron entry can promise better than that. The warden claims
 			# within seconds; this catches whatever it misses while the warden is restarting.

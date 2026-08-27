@@ -20,6 +20,8 @@ import unittest
 from importlib.util import find_spec
 from pathlib import Path
 
+import frappe
+
 from benchpress.hooks import scheduler_events
 
 DOCKER_MODULE = "benchpress.docker_manager"
@@ -47,6 +49,30 @@ class TestSchedulerEntries(unittest.TestCase):
 		self.assertFalse(_enqueues_onto_socket_queue("benchpress.stats_collector", "collect_bench_stats"))
 
 
+class TestJobPathsResolve(unittest.TestCase):
+	"""Frappe resolves a job from a dotted string at run time, so a move that breaks one is silent.
+
+	A `Scheduled Job Type` row is the worst carrier: `ScheduledJobType.execute()` swallows the
+	import error, writes no log row and still advances `last_execution`.
+	"""
+
+	def test_every_scheduled_method_resolves(self):
+		for method in _scheduled_methods():
+			with self.subTest(method=method):
+				frappe.get_attr(method)
+
+	def test_every_enqueue_target_resolves(self):
+		for module, target in _enqueue_targets():
+			with self.subTest(module=module, target=target):
+				frappe.get_attr(target)
+
+	def test_the_walker_finds_the_targets(self):
+		"""A walker that matched nothing would pass the test above for the wrong reason."""
+		targets = {target for _, target in _enqueue_targets()}
+		self.assertIn("benchpress.deploy_manager.deploy_bench", targets)
+		self.assertGreater(len(targets), 8)
+
+
 def _scheduled_methods() -> list[str]:
 	"""Flatten `scheduler_events` — frequency lists, plus the cron dict of lists."""
 	methods = []
@@ -55,6 +81,33 @@ def _scheduled_methods() -> list[str]:
 		for entry in entries:
 			methods.extend(entry)
 	return methods
+
+
+def _enqueue_targets() -> list[tuple[str, str]]:
+	"""Every literal first argument of a `frappe.enqueue` call outside the test package.
+
+	A target built at run time is skipped rather than failed — `image_cache` passes one
+	through a variable, and no static walk can say what it holds.
+	"""
+	package = Path(__file__).resolve().parent.parent
+	targets = []
+	for path in sorted(package.rglob("*.py")):
+		if path.parent.name == "tests":
+			continue
+		for node in ast.walk(ast.parse(path.read_text())):
+			target = _enqueue_target(node)
+			if target:
+				targets.append((str(path.relative_to(package)), target))
+	return targets
+
+
+def _enqueue_target(node: ast.AST) -> str | None:
+	if not isinstance(node, ast.Call) or getattr(node.func, "attr", None) != "enqueue":
+		return None
+	method = next((kw.value for kw in node.keywords if kw.arg == "method"), None)
+	if node.args:
+		method = node.args[0]
+	return method.value if isinstance(method, ast.Constant) and isinstance(method.value, str) else None
 
 
 def _reaches_docker(module: str, seen: set[str] | None = None) -> bool:

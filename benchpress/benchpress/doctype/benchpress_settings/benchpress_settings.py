@@ -21,7 +21,7 @@ class BenchPressSettings(Document):
 			return
 
 		frappe.enqueue(
-			"benchpress.deploy_manager.reconcile_instance_routes",
+			"benchpress.ingress.reconcile",
 			queue="long",
 			job_id="reconcile_instance_routes",
 			deduplicate=True,

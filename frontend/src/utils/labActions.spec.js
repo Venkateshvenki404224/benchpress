@@ -20,8 +20,14 @@ import {
 	urlNeedsVpn,
 } from "./labActions";
 
+// The address set as `benchpress/addressing.py` builds it. Every fixture below
+// states one literally rather than deriving it from a port, which is the
+// duplication this payload exists to remove.
 const SITE = "http://172.27.0.2:8000";
 const PUBLIC = "https://abc123.benchpress.cloud";
+const IDE = "http://172.27.0.2:8080/";
+const PUBLIC_IDE = "https://ide-abc123.benchpress.cloud";
+const HOST_LABEL = "172.27.0.2:8000";
 
 // The whole contextual matrix the header has to get right. It is pure logic,
 // so it is asserted here rather than clicked through four times in a browser.
@@ -120,13 +126,12 @@ describe("primaryAction", () => {
 });
 
 describe("siteUrl", () => {
-	it("routes over the tunnel address, falling back to the container IP", () => {
-		expect(siteUrl({ wg_ip: "172.27.0.2", container_ip: "172.30.0.5" })).toBe(SITE);
-		expect(siteUrl({ container_ip: "172.30.0.5" })).toBe("http://172.30.0.5:8000");
+	it("routes over the tunnel address when the bench has no public hostname", () => {
+		expect(siteUrl({ addresses: { tunnel_site: SITE } })).toBe(SITE);
 	});
 
 	it("prefers the public hostname over the tunnel address", () => {
-		expect(siteUrl({ public_url: PUBLIC, wg_ip: "172.27.0.2" })).toBe(PUBLIC);
+		expect(siteUrl({ addresses: { public_site: PUBLIC, tunnel_site: SITE } })).toBe(PUBLIC);
 	});
 
 	it("has no address for a bench that never got one", () => {
@@ -135,7 +140,7 @@ describe("siteUrl", () => {
 	});
 
 	it("answers for the row it is handed, not for the bench", () => {
-		const bench = { wg_ip: "172.27.0.2", site_name: "lab-abc" };
+		const bench = { addresses: { tunnel_site: SITE }, site_name: "lab-abc" };
 		expect(siteUrl(bench, { site_name: "lab-abc" })).toBe(SITE);
 		// The container serves its own site and nothing else, so any other row is
 		// unreachable — opening the bench's site from it would be the old lie.
@@ -189,15 +194,15 @@ describe("siteOpenAction", () => {
 });
 
 describe("ideUrl", () => {
-	it("is the same host on code-server's port", () => {
-		expect(ideUrl({ wg_ip: "172.27.0.2" })).toBe("http://172.27.0.2:8080/");
+	it("is the tunnel address when the deployment has no public hostname", () => {
+		expect(ideUrl({ addresses: { tunnel_ide: IDE } })).toBe(IDE);
 		expect(ideUrl({})).toBeNull();
 	});
 
 	it("prefers the address the deploy stored — public when the deployment has one", () => {
-		expect(
-			ideUrl({ code_server_url: "https://ide-abc123.benchpress.cloud", wg_ip: "172.27.0.2" })
-		).toBe("https://ide-abc123.benchpress.cloud");
+		expect(ideUrl({ addresses: { public_ide: PUBLIC_IDE, tunnel_ide: IDE } })).toBe(
+			PUBLIC_IDE
+		);
 	});
 });
 
@@ -211,9 +216,11 @@ describe("urlNeedsVpn", () => {
 
 describe("siteLabel", () => {
 	it("prefers the site's own domain and falls back to the address", () => {
-		expect(siteLabel({ wg_ip: "172.27.0.2" }, { full_domain: "crm.lab" })).toBe("crm.lab");
+		expect(
+			siteLabel({ addresses: { host_label: HOST_LABEL } }, { full_domain: "crm.lab" })
+		).toBe("crm.lab");
 		expect(siteLabel({ domain: "bench.lab" }, null)).toBe("bench.lab");
-		expect(siteLabel({ wg_ip: "172.27.0.2" }, null)).toBe("172.27.0.2:8000");
+		expect(siteLabel({ addresses: { host_label: HOST_LABEL } }, null)).toBe(HOST_LABEL);
 	});
 });
 

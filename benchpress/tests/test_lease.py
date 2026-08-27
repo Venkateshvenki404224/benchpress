@@ -31,7 +31,7 @@ import frappe
 from frappe.tests import IntegrationTestCase
 from frappe.utils import add_days, flt, now_datetime
 
-from benchpress import api, deploy_manager, lab_detail
+from benchpress import api, deploy_manager, ingress, lab_detail
 from benchpress.benchpress.doctype.bench_instance import get_instance_id
 from benchpress.credits import account, config, drain, lease, metering
 from benchpress.credits.seed import ensure_ledger_index, seed_default_lease_plan, seed_defaults
@@ -283,7 +283,7 @@ class TestLease(IntegrationTestCase):
 		"""Renew with Docker, the route job and the commit stood down, so the rollback still holds."""
 		with (
 			patch("benchpress.docker_manager.start_container") as start,
-			patch("benchpress.deploy_manager.enqueue_route_sync") as route,
+			patch("benchpress.ingress.enqueue_route_sync") as route,
 			patch("frappe.publish_realtime") as publish,
 			patch.object(frappe.db, "commit"),
 		):
@@ -513,7 +513,7 @@ class TestLease(IntegrationTestCase):
 
 		with (
 			patch("benchpress.docker_manager.start_container"),
-			patch.object(deploy_manager, "enqueue_route_sync"),
+			patch.object(ingress, "enqueue_route_sync"),
 			patch.object(frappe.db, "commit"),
 		):
 			frappe.get_doc(BENCH, self.bench.name).enqueue_start()
@@ -1125,7 +1125,7 @@ class TestLease(IntegrationTestCase):
 		with (
 			patch.object(deploy_manager, "stop_container"),
 			patch.object(deploy_manager, "remove_container"),
-			patch.object(deploy_manager, "_delete_instance_route"),
+			patch.object(ingress, "withdraw"),
 			patch.object(deploy_manager, "_drop_site_database"),
 			patch.object(frappe.db, "commit"),
 		):

@@ -24,7 +24,7 @@ import docker
 import frappe
 from frappe import _
 
-from benchpress import deploy_manager, docker_manager, image_cache, placement
+from benchpress import addressing, deploy_manager, docker_manager, image_cache, placement
 from benchpress.image_cache import clear_cached_tags
 from benchpress.mariadb_manager import (
 	create_mariadb_user,
@@ -215,7 +215,7 @@ def _create_site(container_id: str, db_server, site: str, database: str, lab_doc
 		"redis_queue": "redis://benchpress-redis:6379/1",
 		"redis_socketio": "redis://benchpress-redis:6379/2",
 		"socketio_port": 9000,
-		"webserver_port": deploy_manager.SITE_HTTP_PORT,
+		"webserver_port": addressing.SITE_HTTP_PORT,
 		"default_site": site,
 		"developer_mode": 1,
 	}

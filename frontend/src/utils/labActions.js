@@ -19,9 +19,6 @@ export const START = "start";
 // Something the server is already doing; the button only reports it.
 export const WAIT = "wait";
 
-export const SITE_PORT = 8000;
-export const IDE_PORT = 8080;
-
 /**
  * The primary button for a lab and the caller's deployment of it.
  *
@@ -122,32 +119,18 @@ export function deployDialogAction({ runState, vpnConnected, siteUrl } = {}) {
 	return { action: OPEN, label: "Open site", disabled: !siteUrl, loading: false };
 }
 
-/**
- * The host a bench answers on — the single source of every address on this page.
- *
- * Every open action routes through the two helpers below, so issue #130 (giving
- * each instance a public `<instance-id>.benchpress.cloud` hostname) repoints one
- * function rather than hunting call sites. A bench with a `public_url` answers
- * there from anywhere; without one it answers only on its WireGuard address,
- * over the tunnel.
- */
-function benchHost(bench) {
-	return bench?.wg_ip || bench?.container_ip || null;
-}
-
 /** The tunnel-only address — answers only for devices on the WireGuard network. */
 export function privateSiteUrl(bench) {
-	const host = benchHost(bench);
-	return host ? `http://${host}:${SITE_PORT}` : null;
+	return bench?.addresses?.tunnel_site ?? null;
 }
 
 /**
  * Whether an address answers only over the tunnel.
  *
  * Both address kinds are built by this codebase, never typed by hand: public
- * ones are `https://` hostnames behind the reverse proxy (deploy_manager),
- * private ones are plain-http tunnel IPs (this file). The scheme is therefore
- * a reliable discriminator, not a heuristic.
+ * ones are `https://` hostnames behind the reverse proxy, private ones are
+ * plain-http tunnel IPs, and `benchpress/addressing.py` builds both. The scheme
+ * is therefore a reliable discriminator, not a heuristic.
  */
 export function urlNeedsVpn(url) {
 	return !!url && url.startsWith("http://");
@@ -168,7 +151,7 @@ export function urlNeedsVpn(url) {
  */
 export function siteUrl(bench, site = null) {
 	if (site && site.site_name !== bench?.site_name) return null;
-	return bench?.public_url || privateSiteUrl(bench);
+	return bench?.addresses?.public_site || privateSiteUrl(bench);
 }
 
 /**
@@ -215,9 +198,8 @@ export function siteOpenAction({ status, url, vpnConnected } = {}) {
  * when the deployment has one; the tunnel address is the VPN-only fallback.
  */
 export function ideUrl(bench) {
-	if (bench?.code_server_url) return bench.code_server_url;
-	const host = benchHost(bench);
-	return host ? `http://${host}:${IDE_PORT}/` : null;
+	const addresses = bench?.addresses;
+	return addresses?.public_ide || addresses?.tunnel_ide || null;
 }
 
 /** What that address is called on screen. */
@@ -232,8 +214,7 @@ export function siteLabel(bench, site) {
 }
 
 function hostLabel(bench) {
-	const host = benchHost(bench);
-	return host ? `${host}:${SITE_PORT}` : "";
+	return bench?.addresses?.host_label ?? "";
 }
 
 export const PROMPT_LOADING = "loading";
