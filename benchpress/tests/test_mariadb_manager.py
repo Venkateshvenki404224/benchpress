@@ -492,3 +492,45 @@ class TestSharedSettingDrift(IntegrationTestCase):
 
 		self.assertEqual(lines, ["Redis maxmemory is 0, declared 268435456"])
 		self.assertEqual(hit_rate, "99.94%")
+
+	def _health_check_with(self, drift):
+		"""scheduled_health_check over one healthy server, with a cache that really remembers."""
+		cache = {}
+		with (
+			patch("benchpress.mariadb_manager.check_mariadb_health", return_value=True),
+			patch("benchpress.mariadb_manager.shared_setting_drift", side_effect=drift),
+			patch("benchpress.mariadb_manager.frappe") as mock_frappe,
+		):
+			mock_frappe.get_all.return_value = [frappe._dict(name="db-1")]
+			mock_frappe.cache.return_value.get_value.side_effect = cache.get
+			mock_frappe.cache.return_value.set_value.side_effect = cache.__setitem__
+			from benchpress.mariadb_manager import scheduled_health_check
+
+			returned = [scheduled_health_check() for _ in drift]
+		return returned, mock_frappe.log_error
+
+	def test_an_unchanged_drift_is_logged_once_and_not_every_five_minutes(self):
+		"""288 copies of one true row a day is the Error Log this check exists to be read in."""
+		drifted = (["Redis maxmemory is 0, declared 268435456"], "99.94%")
+
+		returned, log_error = self._health_check_with([drifted, drifted])
+
+		self.assertEqual(returned, [drifted[0], drifted[0]])
+		self.assertEqual(log_error.call_count, 1)
+		message = log_error.call_args.kwargs["message"]
+		self.assertIn("Redis maxmemory is 0, declared 268435456", message)
+		self.assertIn("InnoDB buffer pool hit rate 99.94%", message)
+
+	def test_a_drift_that_changes_is_logged_again(self):
+		redis_only = (["Redis maxmemory is 0, declared 268435456"], "99.94%")
+		both = (["MariaDB max_connections is 151, declared 500", *redis_only[0]], "99.94%")
+
+		_returned, log_error = self._health_check_with([redis_only, both])
+
+		self.assertEqual(log_error.call_count, 2)
+		self.assertIn("max_connections is 151", log_error.call_args.kwargs["message"])
+
+	def test_a_pair_that_agrees_logs_nothing(self):
+		_returned, log_error = self._health_check_with([([], "99.94%")])
+
+		log_error.assert_not_called()

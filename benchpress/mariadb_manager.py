@@ -453,10 +453,30 @@ def shared_setting_drift(db_server_name: str) -> tuple[list[str], str]:
 	return lines, hit_rate
 
 
+DRIFT_CACHE_KEY = "benchpress:shared_setting_drift"
+
+
+def _log_new_drift(lines: list[str], hit_rate: str) -> None:
+	"""Log a drift set only when it changes.
+
+	The check runs every five minutes and drift stays true until a human recreates the pair,
+	so logging unconditionally would bury the Error Log under 288 copies of one row a day.
+	"""
+	signature = "\n".join(lines)
+	if frappe.cache().get_value(DRIFT_CACHE_KEY) == signature:
+		return
+	frappe.cache().set_value(DRIFT_CACHE_KEY, signature)
+	if lines:
+		frappe.log_error(
+			title="Shared service settings drift",
+			message="\n".join([*lines, f"InnoDB buffer pool hit rate {hit_rate}"]),
+		)
+
+
 def scheduled_health_check() -> list[str]:
 	"""Cron job — restart any DB server that is down, then report shared-setting drift.
 
-	Returns the drift lines it logged, so `bench execute` shows them too.
+	Returns the current drift, so `bench execute` shows it even when the log row is a repeat.
 	"""
 	servers = frappe.get_all(
 		"Database Server",
@@ -481,11 +501,7 @@ def scheduled_health_check() -> list[str]:
 		return []
 
 	drift, hit_rate = shared_setting_drift(servers[0].name)
-	if drift:
-		frappe.log_error(
-			title="Shared service settings drift",
-			message="\n".join([*drift, f"InnoDB buffer pool hit rate {hit_rate}"]),
-		)
+	_log_new_drift(drift, hit_rate)
 	return drift
 
 
