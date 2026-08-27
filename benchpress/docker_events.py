@@ -9,7 +9,7 @@ It observes and never acts — no stop, no restart, no route write; `deploy_mana
 import queue
 import threading
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import frappe
 from frappe import _
@@ -113,9 +113,7 @@ def _drain(inbox: queue.Queue, pending: dict, stats: dict) -> None:
 			incident = pending[bench] = {"due": time.time() + settle_seconds()}
 		if action == "oom" or "kind" not in incident:
 			kind, severity = INCIDENTS[action]
-			incident.update(
-				kind=kind, severity=severity, action=event.get("Action"), at=event.get("time")
-			)
+			incident.update(kind=kind, severity=severity, action=event.get("Action"), at=event.get("time"))
 		if attributes.get("exitCode"):
 			incident["exit_code"] = cint(attributes["exitCode"])
 		incident.setdefault("exit_code", 0)
@@ -129,9 +127,7 @@ def _flush(pending: dict, stats: dict) -> None:
 	due = [name for name, incident in pending.items() if incident["due"] <= time.time()]
 	for bench_name in due:
 		incident = pending.pop(bench_name)
-		row = frappe.db.get_value(
-			"Bench Instance", bench_name, ["status", "container_health"], as_dict=True
-		)
+		row = frappe.db.get_value("Bench Instance", bench_name, ["status", "container_health"], as_dict=True)
 		if not row:
 			stats["orphans"] += 1
 			continue
@@ -182,7 +178,7 @@ def _stamp(at):
 	"""The daemon's event time in the site's timezone, or now when the event carried none."""
 	if not at:
 		return now_datetime()
-	utc = datetime.fromtimestamp(cint(at), tz=timezone.utc)
+	utc = datetime.fromtimestamp(cint(at), tz=UTC)
 	return convert_utc_to_system_timezone(utc).replace(tzinfo=None)
 
 
