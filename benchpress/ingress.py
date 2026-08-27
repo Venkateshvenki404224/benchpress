@@ -326,12 +326,18 @@ def reconcile() -> dict:
 	attached = placement.repair()
 
 	base_domain = frappe.get_cached_doc("BenchPress Settings").base_domain
-	anchored = ensure_anchor(base_domain)
 	if not base_domain or base_domain == "localhost":
 		# A dev checkout has no route directory and must stay byte-for-byte unaffected —
 		# skipped silently, exactly as the writers skip it.
-		return {"anchored": anchored, "written": 0, "deleted": 0, "kept": 0, **attached}
+		return {"anchored": False, "written": 0, "deleted": 0, "kept": 0, **attached}
 
+	if not TRAEFIK_DYNAMIC_DIR.is_dir():
+		# Only ever a by-hand run outside queue-long — the cron reaches this through
+		# `enqueue_route_reconcile`, which pins the queue. None rather than 0, because the
+		# directory was never read and zero counts would read as a converged pass.
+		return {"anchored": None, "written": None, "deleted": None, "kept": None, **attached}
+
+	anchored = ensure_anchor(base_domain)
 	routable = _routable_instance_ips()
 	for instance_id in routable:
 		publish(instance_id, base_domain)
