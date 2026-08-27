@@ -6,9 +6,16 @@ services:
     restart: always
     environment:
       MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD}
+    # Flags, not a mounted .cnf: this file is run from inside the backend container, so a
+    # relative bind reaches the host daemon as a path the host does not have. See
+    # tests/test_shared_compose.py.
+    command: >
+      mariadbd
+      --max-connections=500
+      --innodb-buffer-pool-size=128M
+      --key-buffer-size=16M
     volumes:
       - mariadb-data:/var/lib/mysql
-      - ./mariadb.cnf:/etc/mysql/conf.d/benchpress.cnf:ro
     mem_limit: ${MARIADB_MEM_LIMIT:-1g}
     networks:
       - benchpress
@@ -18,10 +25,13 @@ services:
     container_name: benchpress-redis
     hostname: benchpress-redis
     restart: always
-    command: redis-server /usr/local/etc/redis/redis.conf
+    command: >
+      redis-server
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
     volumes:
       - redis-data:/data
-      - ./redis.conf:/usr/local/etc/redis/redis.conf:ro
+    mem_limit: 512m
     networks:
       - benchpress
 

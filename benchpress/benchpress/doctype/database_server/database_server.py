@@ -5,8 +5,6 @@ import frappe
 from frappe import _
 from frappe.model.document import Document
 
-from benchpress.mariadb_manager import DEFAULT_MARIADB_CONFIG
-
 
 class DatabaseServer(Document):
 	def before_insert(self):
@@ -18,8 +16,6 @@ class DatabaseServer(Document):
 			self.image_tag = f"mariadb:{self.mariadb_version or '10.6'}"
 		if not self.volume_name:
 			self.volume_name = "benchpress-mariadb-data"
-		if not self.custom_config:
-			self.custom_config = DEFAULT_MARIADB_CONFIG
 
 	def get_root_password(self) -> str:
 		return self.get_password("mariadb_root_password")

@@ -725,9 +725,7 @@ benchpress/
 |   +-- hooks.py                  # App config: routes, scheduler, ignore_links_on_delete
 |   +-- mariadb_manager.py        # Shared MariaDB + Redis lifecycle (docker compose)
 |   +-- config/
-|   |   +-- docker-compose.yml    # Shared infrastructure (MariaDB + Redis)
-|   |   +-- mariadb.cnf           # MariaDB custom configuration
-|   |   +-- redis.conf            # Redis custom configuration
+|   |   +-- docker-compose.yml    # Shared infrastructure (MariaDB + Redis), tuned by command flags
 |   |   +-- .env.example          # Environment variable template
 |   |   +-- benchpress-infra.service  # Systemd unit for auto-start on boot
 |   +-- lab-templates/

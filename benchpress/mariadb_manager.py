@@ -18,14 +18,6 @@ from benchpress.docker_manager import ensure_network, get_client
 
 BACKUP_TIMEOUT = 3600
 
-DEFAULT_MARIADB_CONFIG = """[mysqld]
-character-set-server=utf8mb4
-collation-server=utf8mb4_unicode_ci
-innodb_buffer_pool_size=536870912
-max_connections=500
-wait_timeout=28800
-"""
-
 
 def _get_config_dir() -> str:
 	return os.path.join(frappe.get_app_path("benchpress"), "config")
@@ -96,15 +88,8 @@ def _write_env_file(root_password: str, version: str = "10.6", mem_limit: str = 
 		f.write(f"MARIADB_MEM_LIMIT={mem_limit}\n")
 
 
-def _write_mariadb_config(custom_config: str | None = None) -> None:
-	"""Write MariaDB config to persistent path (not /tmp/)."""
-	config_path = os.path.join(_get_config_dir(), "mariadb.cnf")
-	with open(config_path, "w") as f:  # nosemgrep: frappe-semgrep-rules.rules.security.frappe-security-file-traversal  # fmt: skip
-		f.write(custom_config or DEFAULT_MARIADB_CONFIG)
-
-
 def setup_database_server(db_server_name: str) -> None:
-	"""Full setup: write config, bring up MariaDB via docker compose, wait for ready."""
+	"""Full setup: write .env, bring up MariaDB via docker compose, wait for ready."""
 	db_server = frappe.get_doc("Database Server", db_server_name)
 
 	try:
@@ -112,7 +97,6 @@ def setup_database_server(db_server_name: str) -> None:
 		version = (db_server.mariadb_version or "10.6").strip()
 		mem_limit = db_server.memory_limit or "1g"
 
-		_write_mariadb_config(db_server.custom_config)
 		_write_env_file(root_password, version, mem_limit)
 		client = get_client()
 		ensure_network(client)
