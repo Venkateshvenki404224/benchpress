@@ -31,7 +31,7 @@ import frappe
 from frappe.tests import IntegrationTestCase
 from frappe.utils import add_to_date, now_datetime
 
-from benchpress import deploy_manager, docker_manager, hooks
+from benchpress import deploy_manager, docker_manager, hooks, lifecycle
 from benchpress.credits import drain, lease, warden
 from benchpress.credits.seed import seed_defaults
 from benchpress.tests.test_lease import _ensure_bench, _ensure_lab, _ensure_plan, _ensure_user
@@ -157,10 +157,10 @@ class TestLeaseDrain(IntegrationTestCase):
 
 	def failing_stop(self, bench_name: str) -> None:
 		with (
-			patch.object(deploy_manager, "stop_container", side_effect=RuntimeError("docker is down")),
+			patch.object(lifecycle, "stop_container", side_effect=RuntimeError("docker is down")),
 			patch.object(frappe.db, "commit"),
 		):
-			self.assertRaises(RuntimeError, deploy_manager.stop_bench, bench_name, from_claim=True)
+			self.assertRaises(RuntimeError, lifecycle.stopped, bench_name, from_claim=True)
 
 	# --- The backlog gauge ----------------------------------------------------
 
@@ -395,10 +395,10 @@ class TestLeaseDrain(IntegrationTestCase):
 		self.claim()
 
 		with (
-			patch.object(deploy_manager, "stop_container") as stop,
+			patch.object(lifecycle, "stop_container") as stop,
 			patch.object(frappe.db, "commit"),
 		):
-			self.assertRaises(frappe.ValidationError, deploy_manager.stop_bench, self.bench.name, True)
+			self.assertRaises(frappe.ValidationError, lifecycle.stopped, self.bench.name, True)
 
 		stop.assert_not_called()
 		self.assertEqual(self.row(self.bench.name, "status"), "Running")
@@ -410,18 +410,18 @@ class TestLeaseDrain(IntegrationTestCase):
 
 		with (
 			patch.object(lease, "local_node", return_value=OTHER_NODE),
-			patch.object(deploy_manager, "stop_container") as stop,
+			patch.object(lifecycle, "stop_container") as stop,
 			patch.object(frappe.db, "commit"),
 			patch("frappe.publish_realtime"),
 		):
-			deploy_manager.stop_bench(self.bench.name, from_claim=True)
+			lifecycle.stopped(self.bench.name, from_claim=True)
 
 		stop.assert_called_once()
 		self.assertEqual(self.row(self.bench.name, "status"), "Stopped")
 
 	def test_a_deploy_stamps_the_node_beside_the_container_id(self):
 		"""Backfilling this later means inspecting Docker across live hosts while benches run."""
-		source = inspect.getsource(deploy_manager._deploy_bench)
+		source = inspect.getsource(lifecycle._deploy_bench)
 		self.assertIn("bench.node = lease.local_node()", source)
 
 	# --- The warden -----------------------------------------------------------
@@ -506,11 +506,11 @@ class TestLeaseDrain(IntegrationTestCase):
 		self.claim()
 
 		with (
-			patch.object(deploy_manager, "stop_container"),
+			patch.object(lifecycle, "stop_container"),
 			patch.object(frappe.db, "commit"),
 			patch("frappe.publish_realtime"),
 		):
-			deploy_manager.stop_bench(self.bench.name, from_claim=True)
+			lifecycle.stopped(self.bench.name, from_claim=True)
 
 		lateness = self.row(self.bench.name, "expiry_lateness")
 		self.assertIsNotNone(lateness)
@@ -530,11 +530,11 @@ class TestLeaseDrain(IntegrationTestCase):
 	def test_a_user_pressed_stop_records_no_lateness(self):
 		"""It was not late — nothing was due. A zero here would flatter the histogram."""
 		with (
-			patch.object(deploy_manager, "stop_container"),
+			patch.object(lifecycle, "stop_container"),
 			patch.object(frappe.db, "commit"),
 			patch("frappe.publish_realtime"),
 		):
-			deploy_manager.stop_bench(self.bench.name)
+			lifecycle.stopped(self.bench.name)
 
 		self.assertIsNone(self.row(self.bench.name, "expiry_lateness"))
 		self.assertTrue(self.row(self.bench.name, "container_stopped_at"))
@@ -543,11 +543,11 @@ class TestLeaseDrain(IntegrationTestCase):
 		self.expire(self.bench.name, seconds_ago=90)
 		self.claim()
 		with (
-			patch.object(deploy_manager, "stop_container"),
+			patch.object(lifecycle, "stop_container"),
 			patch.object(frappe.db, "commit"),
 			patch("frappe.publish_realtime"),
 		):
-			deploy_manager.stop_bench(self.bench.name, from_claim=True)
+			lifecycle.stopped(self.bench.name, from_claim=True)
 
 		report = drain.stop_slo()
 		self.assertGreaterEqual(report["count"], 1)

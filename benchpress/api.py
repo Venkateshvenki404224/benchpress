@@ -6,7 +6,7 @@ from frappe import _
 from frappe.query_builder import DocType
 from frappe.query_builder.functions import Count
 
-from benchpress import addressing, image_cache, lab_detail, lab_templates, labs, site_names
+from benchpress import addressing, image_cache, lab_detail, lab_templates, labs, lifecycle, site_names
 from benchpress.benchpress.doctype.bench_instance.bench_instance import DEPLOY_JOB_TIMEOUT
 
 # Every field the renew path decides from, read once under the row lock.
@@ -216,7 +216,7 @@ def create_bench(data: str) -> dict:
 	site_names.claim(doc)
 
 	frappe.enqueue(
-		"benchpress.deploy_manager.deploy_bench",
+		"benchpress.lifecycle.deploy_bench",
 		bench_name=doc.name,
 		queue="long",
 		timeout=DEPLOY_JOB_TIMEOUT,
@@ -267,9 +267,9 @@ def _assert_site_name_changeable(doc) -> None:
 	"""Refuse to rename a bench whose current name might still own a live database.
 
 	`Draft` is the only status that guarantees no live site exists under `doc.site_name`:
-	either nothing was ever deployed, or `teardown_bench` ran and actually dropped the
-	database before resetting status. `stop_bench` marks the instance `Stopped` and
-	deactivates its `Bench Site` rows WITHOUT dropping the database (only `teardown_bench`
+	either nothing was ever deployed, or `lifecycle.torn_down` ran and actually dropped the
+	database before resetting status. `lifecycle.stopped` marks the instance `Stopped` and
+	deactivates its `Bench Site` rows WITHOUT dropping the database (only `torn_down`
 	does that) — so `Stopped` must still block a rename, or the old database would be
 	silently orphaned. The caller stops/deletes the instance first to rename it.
 	"""
@@ -308,26 +308,8 @@ def _start_bench(bench, action: str) -> dict:
 	This is the start path the SPA uses, so it is where the cap and the hold have to be. Stopping
 	and deleting stay outside the gate: stopping is what a refused caller is being told to do.
 	"""
-	from benchpress import ingress
-	from benchpress.docker_manager import restart_container, start_container
-
 	_require_container(bench)
-	if action == "start":
-		start_container(bench.container_id)
-		bench.started_at = frappe.utils.now_datetime()
-	else:
-		restart_container(bench.container_id)
-
-	bench.status = "Running"
-	# A restart does not interrupt the window the user already bought, so this only buys one
-	# for a bench that had none — and it runs before the save so the deadline and the status
-	# it belongs to are written together.
-	metering.on_bench_running(bench)
-	bench.save()
-	frappe.db.commit()
-	# A restart re-allocates the container address, and a start may be following a stop that
-	# removed the file — both need the route re-established.
-	ingress.enqueue_route_sync(bench.name)
+	lifecycle.running(bench, action=action)
 	return {"name": bench.name, "status": bench.status}
 
 
@@ -344,25 +326,22 @@ def _require_container(bench) -> None:
 
 
 def _stop_bench(bench) -> dict:
-	"""Stop through `deploy_manager.stop_bench`, the one path that also deactivates the sites."""
-	from benchpress.deploy_manager import stop_bench
-
+	"""Stop through `lifecycle.stopped`, the one path that also deactivates the sites."""
 	_require_container(bench)
-	stop_bench(bench.name)
+	lifecycle.stopped(bench.name)
 	return {"name": bench.name, "status": "Stopped"}
 
 
 def _delete_bench(bench) -> dict:
 	"""Remove an instance and everything it owns, then the row itself.
 
-	Container, volume, site database and metering session go through
-	`deploy_manager.teardown_bench`, the one teardown path, where every removal is
-	best-effort. Only what it does not cover is left here.
+	Container, volume, site database and metering session go through `lifecycle.torn_down`,
+	the one teardown path, where every removal is best-effort. Only what it does not cover is
+	left here.
 	"""
-	from benchpress.deploy_manager import teardown_bench
 	from benchpress.vpn_adapter import remove_bench_peer
 
-	teardown_bench(bench)
+	lifecycle.torn_down(bench)
 	# Before the instance: it reads the `Bench Site` rows, which `BenchInstance.on_trash` removes.
 	_drop_bench_site_databases(bench)
 	remove_bench_peer(bench)
@@ -520,8 +499,6 @@ def renew_bench(bench_name: str, plan: str, request_id: str) -> dict:
 	the charge last. Raises `ValidationError` when the sweep already claimed the row, when the
 	plan would push the lease past the lab's ceiling, or when the grace window has closed.
 	"""
-	from benchpress import ingress
-
 	require_bench_access(bench_name)
 	if not config.credits_enabled():
 		frappe.throw(_("Credits are switched off on this site, so there is nothing to renew."))
@@ -557,8 +534,6 @@ def renew_bench(bench_name: str, plan: str, request_id: str) -> dict:
 		_restart_in_grace(bench)
 	lease.announce_renewed(bench)
 	frappe.db.commit()  # nosemgrep -- releases the row lock, and the push is hung off this commit
-	if stopped:
-		ingress.enqueue_route_sync(bench.name)
 	return _lease_state(bench, charged=charged)
 
 
@@ -590,17 +565,14 @@ def _assert_inside_grace(bench) -> None:
 
 
 def _restart_in_grace(bench) -> None:
-	"""Start the container the bench still has. Expiry only stopped it, so this is not a rebuild."""
-	from benchpress.docker_manager import start_container
+	"""Start the container the bench still has. Expiry only stopped it, so this is not a rebuild.
 
-	start_container(bench.container_id)
-	bench.status = "Running"
-	frappe.db.set_value(
-		"Bench Instance",
-		bench.name,
-		{"status": "Running", "started_at": frappe.utils.now_datetime()},
-		update_modified=False,
-	)
+	`bench` is the locked row read rather than a document, so the transition runs on a loaded
+	one and the status it wrote is reflected back for the caller's response.
+	"""
+	doc = frappe.get_doc("Bench Instance", bench.name)
+	lifecycle.running(doc)
+	bench.status = doc.status
 
 
 def _lease_state(bench, charged: float) -> dict:

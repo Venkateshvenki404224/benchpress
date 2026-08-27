@@ -21,6 +21,7 @@ site name. Each one has to be able to fail for its own reason and no other.
 import frappe
 from frappe.utils import cint, flt
 
+from benchpress import lifecycle
 from benchpress.credits import account, config
 
 ACCOUNT = "Credit Account"
@@ -211,13 +212,12 @@ def _drill_benches() -> list[str]:
 
 
 def _delete_bench(bench_name: str) -> None:
-	from benchpress.deploy_manager import teardown_bench
 	from benchpress.vpn_adapter import remove_bench_peer
 
 	bench = frappe.get_doc(BENCH, bench_name)
 	if bench.container_id:
 		try:
-			teardown_bench(bench)
+			lifecycle.torn_down(bench)
 			remove_bench_peer(bench)
 		except Exception:
 			# Best-effort, and named rather than swallowed: a drill container the harness cannot

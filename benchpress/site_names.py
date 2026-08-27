@@ -90,9 +90,9 @@ def claimed(bench):
 	return site
 
 
-# The name is held for exactly as long as the row. `teardown_bench` keeps it so a redeploy still
-# owns its own name; only a deleted instance frees it, which is once `api._delete_bench` has
-# dropped the database the name keyed.
+# The name is held for exactly as long as the row. `lifecycle.torn_down` keeps it so a redeploy
+# still owns its own name; only a deleted instance frees it, which is once `api._delete_bench`
+# has dropped the database the name keyed.
 def release(bench_name: str) -> None:
 	"""Free every name this bench holds, by deleting the rows that are the claim."""
 	for site in frappe.get_all("Bench Site", filters={"bench": bench_name}, pluck="name"):

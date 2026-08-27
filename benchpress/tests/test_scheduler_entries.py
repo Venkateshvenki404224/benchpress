@@ -69,7 +69,7 @@ class TestJobPathsResolve(unittest.TestCase):
 	def test_the_walker_finds_the_targets(self):
 		"""A walker that matched nothing would pass the test above for the wrong reason."""
 		targets = {target for _, target in _enqueue_targets()}
-		self.assertIn("benchpress.deploy_manager.deploy_bench", targets)
+		self.assertIn("benchpress.lifecycle.deploy_bench", targets)
 		self.assertGreater(len(targets), 8)
 
 

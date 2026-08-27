@@ -139,7 +139,7 @@ def _accounts(owners: set) -> dict:
 def _enqueue_stop(bench_name: str) -> None:
 	"""Deduplicated, so a sweep that overlaps the previous one cannot stop the same bench twice."""
 	frappe.enqueue(
-		"benchpress.deploy_manager.stop_bench",
+		"benchpress.lifecycle.stopped",
 		bench_name=bench_name,
 		queue="long",
 		timeout=STOP_TIMEOUT,

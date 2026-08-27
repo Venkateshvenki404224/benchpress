@@ -660,7 +660,7 @@ class TestApi(IntegrationTestCase):
 		)
 
 	def test_create_bench_refuses_to_rename_a_stopped_instance(self):
-		"""`stop_bench` never drops the database, so a `Stopped` instance's site is still live."""
+		"""`lifecycle.stopped` never drops the database, so a `Stopped` instance's site is still live."""
 		self._set_base_domain("benchpress.cloud")
 		lab = _ensure_lab("api-timing-rename-stopped-lab", apps=[_lab_app()])
 		self.addCleanup(frappe.delete_doc, "Lab", lab.name, force=True, ignore_permissions=True)
@@ -725,11 +725,9 @@ class TestApi(IntegrationTestCase):
 
 	def test_bench_action_start_stop_restart_and_timing(self):
 		with (
-			patch("benchpress.docker_manager.start_container"),
-			# Stop routes through `deploy_manager.stop_bench`, which bound its Docker call at
-			# import — so the patch has to land on that module, not on `docker_manager`.
-			patch("benchpress.deploy_manager.stop_container"),
-			patch("benchpress.docker_manager.restart_container"),
+			patch("benchpress.lifecycle.start_container"),
+			patch("benchpress.lifecycle.stop_container"),
+			patch("benchpress.lifecycle.restart_container"),
 			patch("benchpress.docker_manager.remove_container"),
 		):
 			for action, expected in (("start", "Running"), ("stop", "Stopped"), ("restart", "Running")):
@@ -751,7 +749,7 @@ class TestApi(IntegrationTestCase):
 		self.addCleanup(frappe.delete_doc, "Bench Site", site.name, force=True, ignore_permissions=True)
 		self.addCleanup(frappe.db.commit)
 
-		with patch("benchpress.deploy_manager.stop_container"):
+		with patch("benchpress.lifecycle.stop_container"):
 			api.bench_action(self.action_bench.name, "stop")
 
 		self.assertEqual(frappe.db.get_value("Bench Site", site.name, "status"), "Inactive")
@@ -767,9 +765,9 @@ class TestApi(IntegrationTestCase):
 		for action in ("start", "stop", "restart"):
 			with (
 				self.subTest(action=action),
-				patch("benchpress.docker_manager.start_container") as start,
-				patch("benchpress.deploy_manager.stop_container") as stop,
-				patch("benchpress.docker_manager.restart_container") as restart,
+				patch("benchpress.lifecycle.start_container") as start,
+				patch("benchpress.lifecycle.stop_container") as stop,
+				patch("benchpress.lifecycle.restart_container") as restart,
 			):
 				with self.assertRaises(frappe.ValidationError) as caught:
 					api.bench_action(bench.name, action)
@@ -815,7 +813,7 @@ class TestApi(IntegrationTestCase):
 		with patch("frappe.enqueue") as enqueue:
 			_, elapsed_ms = _timed(bench.enqueue_deploy)
 		enqueue.assert_called_once()
-		self.assertEqual(enqueue.call_args.args[0], "benchpress.deploy_manager.deploy_bench")
+		self.assertEqual(enqueue.call_args.args[0], "benchpress.lifecycle.deploy_bench")
 		self.assert_within_budget("enqueue_deploy", elapsed_ms)
 
 	def test_enqueue_redeploy_calls_job_and_timing(self):
@@ -823,19 +821,19 @@ class TestApi(IntegrationTestCase):
 		with patch("frappe.enqueue") as enqueue:
 			_, elapsed_ms = _timed(bench.enqueue_redeploy)
 		enqueue.assert_called_once()
-		self.assertEqual(enqueue.call_args.args[0], "benchpress.deploy_manager.redeploy_bench")
+		self.assertEqual(enqueue.call_args.args[0], "benchpress.lifecycle.redeploy_bench")
 		self.assert_within_budget("enqueue_redeploy", elapsed_ms)
 
-	def test_enqueue_stop_calls_stop_bench_and_timing(self):
+	def test_enqueue_stop_calls_stopped_and_timing(self):
 		bench = frappe.get_doc("Bench Instance", self.bench.name)
-		with patch("benchpress.deploy_manager.stop_bench") as stop_bench:
+		with patch("benchpress.lifecycle.stopped") as stopped:
 			_, elapsed_ms = _timed(bench.enqueue_stop)
-		stop_bench.assert_called_once_with(bench.name)
+		stopped.assert_called_once_with(bench.name)
 		self.assert_within_budget("enqueue_stop", elapsed_ms)
 
 	def test_enqueue_start_starts_container_and_timing(self):
 		bench = frappe.get_doc("Bench Instance", self.bench.name)
-		with patch("benchpress.docker_manager.start_container") as start_container:
+		with patch("benchpress.lifecycle.start_container") as start_container:
 			_, elapsed_ms = _timed(bench.enqueue_start)
 		start_container.assert_called_once_with(bench.container_id)
 		self.assertEqual(bench.status, "Running")

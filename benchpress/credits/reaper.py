@@ -10,8 +10,8 @@ an email two days before so nobody loses work to a rule they had forgotten.
 
 **The `Lab` survives.** Its apps, branches, version and size are all intact, so "reaped" means one
 click to rebuild rather than lost work — which is exactly what lets us keep saying stopped is free.
-Teardown is `deploy_manager.teardown_bench`, the same path a redeploy takes; there is deliberately
-no second teardown in this app.
+Teardown is `lifecycle.torn_down`, the same path a redeploy takes; there is deliberately no
+second teardown in this app.
 
 Both queries filter on `status` and `modified`, so neither scans the table. As with the enforcement
 sweep, the scheduler decides and `queue-long` acts: this worker has no Docker socket.
@@ -44,9 +44,11 @@ def reap_bench(bench_name: str) -> None:
 	bench = frappe.get_doc(BENCH, bench_name)
 	if bench.status != "Stopped":
 		return  # started again between the decision and this job; it has earned another window
-	from benchpress import deploy_manager
+	# Inside the function, not at module scope: the scheduler imports this module and has no
+	# Docker socket, and `test_scheduler_entries` holds that line.
+	from benchpress import lifecycle
 
-	deploy_manager.teardown_bench(bench)
+	lifecycle.torn_down(bench)
 	notify.announce_reap(bench)
 
 

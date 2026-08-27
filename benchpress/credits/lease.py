@@ -306,7 +306,7 @@ def _claim(bench_name: str, cutoff: int) -> bool:
 
 def enqueue_stop(bench_name: str, node: str | None = None) -> None:
 	frappe.enqueue(
-		"benchpress.deploy_manager.stop_bench",
+		"benchpress.lifecycle.stopped",
 		bench_name=bench_name,
 		queue=stop_queue_for(node),
 		timeout=STOP_TIMEOUT,

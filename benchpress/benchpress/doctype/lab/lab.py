@@ -11,6 +11,11 @@ from benchpress.image_cache import build_spec
 
 BASELINE_CPU_CORES = 1
 
+# A `Lab` spells its statuses the same way a `Bench Instance` does, and one grep cannot tell the
+# two doctypes apart. Named so the lifecycle's one-writer guard stays readable.
+LAB_DRAFT = "Draft"
+LAB_READY = "Ready"
+
 
 class Lab(Document):
 	def validate(self):
@@ -25,11 +30,11 @@ class Lab(Document):
 		hash), so an edit to what actually gets built no longer changes the tag by itself —
 		nothing else would catch a Ready lab quietly pointing at a stale image.
 		"""
-		if self.status != "Ready" or self.is_new():
+		if self.status != LAB_READY or self.is_new():
 			return
 		before = self.get_doc_before_save()
 		if before and build_spec(self) != build_spec(before):
-			self.status = "Draft"
+			self.status = LAB_DRAFT
 			# The golden in the old image was built from the old spec, so it no longer describes
 			# what this lab asks for.
 			self.golden_manifest = None

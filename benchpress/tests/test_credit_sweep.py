@@ -165,7 +165,7 @@ class TestCreditSweep(IntegrationTestCase):
 		self.enable_credits()
 		self.fund(0)
 		self.assertEqual(self.ours(sweep.enforce_limits()["stopped"]), [self.bench.name])
-		self.assert_enqueued("benchpress.deploy_manager.stop_bench")
+		self.assert_enqueued("benchpress.lifecycle.stopped")
 
 	def test_a_funded_owner_keeps_running(self):
 		self.enable_credits()
@@ -196,7 +196,7 @@ class TestCreditSweep(IntegrationTestCase):
 		self.assertTrue(stop.kwargs["deduplicate"])
 
 	def test_the_stop_cannot_start_before_the_decision_commits(self):
-		"""`stop_bench` re-reads the row, so a job that runs first acts on a decision that may roll back."""
+		"""`lifecycle.stopped` re-reads the row, so a job that runs first acts on a decision that may roll back."""
 		sweep._enqueue_stop(self.bench.name)
 		self.assertTrue(self.enqueue_for(self.bench.name).kwargs["enqueue_after_commit"])
 
@@ -297,8 +297,8 @@ class TestCreditSweep(IntegrationTestCase):
 
 		with (
 			patch("frappe.db.commit"),
-			patch("benchpress.deploy_manager.stop_container") as stop,
-			patch("benchpress.deploy_manager.remove_container") as remove,
+			patch("benchpress.lifecycle.stop_container") as stop,
+			patch("benchpress.lifecycle.remove_container") as remove,
 			patch("benchpress.docker_manager.get_client") as client,
 			patch("benchpress.mariadb_manager.drop_site_database") as drop,
 		):
@@ -315,7 +315,7 @@ class TestCreditSweep(IntegrationTestCase):
 		"""Between the decision and the job, one click can make the decision wrong."""
 		self.enable_credits()
 		frappe.db.set_value(BENCH, self.bench.name, "status", "Running", update_modified=False)
-		with patch("benchpress.deploy_manager.teardown_bench") as teardown:
+		with patch("benchpress.lifecycle.torn_down") as teardown:
 			reaper.reap_bench(self.bench.name)
 		teardown.assert_not_called()
 

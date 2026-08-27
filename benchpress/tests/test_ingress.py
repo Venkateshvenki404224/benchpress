@@ -822,14 +822,14 @@ class TestRouteSyncTriggers(IntegrationTestCase):
 		# The job re-reads `status`, so it must not start before the new value is committed.
 		self.assertTrue(kwargs["enqueue_after_commit"])
 
-	@patch("benchpress.deploy_manager.stop_container")
+	@patch("benchpress.lifecycle.stop_container")
 	def test_stop_enqueues_the_sync_on_the_long_queue(self, mock_stop):
-		from benchpress.deploy_manager import stop_bench
+		from benchpress.lifecycle import stopped
 
 		bench = self._bench()
 
 		with patch("frappe.enqueue") as enqueue:
-			stop_bench(bench.name)
+			stopped(bench.name)
 
 		self._assert_synced_on_long(enqueue, bench.name)
 
@@ -838,7 +838,7 @@ class TestRouteSyncTriggers(IntegrationTestCase):
 
 		bench = self._bench("Stopped")
 
-		with patch("benchpress.docker_manager.start_container"), patch("frappe.enqueue") as enqueue:
+		with patch("benchpress.lifecycle.start_container"), patch("frappe.enqueue") as enqueue:
 			bench_action(bench.name, "start")
 
 		self._assert_synced_on_long(enqueue, bench.name)
@@ -850,7 +850,7 @@ class TestRouteSyncTriggers(IntegrationTestCase):
 
 		bench = self._bench()
 
-		with patch("benchpress.docker_manager.restart_container"), patch("frappe.enqueue") as enqueue:
+		with patch("benchpress.lifecycle.restart_container"), patch("frappe.enqueue") as enqueue:
 			bench_action(bench.name, "restart")
 
 		self._assert_synced_on_long(enqueue, bench.name)
@@ -859,7 +859,7 @@ class TestRouteSyncTriggers(IntegrationTestCase):
 		bench = self._bench("Stopped")
 
 		with (
-			patch("benchpress.docker_manager.start_container"),
+			patch("benchpress.lifecycle.start_container"),
 			patch("frappe.msgprint"),
 			patch("frappe.enqueue") as enqueue,
 		):
@@ -883,7 +883,7 @@ class TestRouteSyncTriggers(IntegrationTestCase):
 	def test_teardown_deletes_directly_and_enqueues_nothing(self):
 		"""Teardown already runs on `queue-long`, and it must not depend on a second job
 		surviving to remove live routing state."""
-		from benchpress.deploy_manager import teardown_bench
+		from benchpress import lifecycle
 
 		bench = self._bench()
 		bench.container_id = None
@@ -894,7 +894,7 @@ class TestRouteSyncTriggers(IntegrationTestCase):
 			route_file = target_dir / f"{bench.name}.yml"
 
 			with patch("frappe.enqueue") as enqueue:
-				teardown_bench(bench)
+				lifecycle.torn_down(bench)
 
 			self.assertFalse(route_file.exists())
 			enqueue.assert_not_called()

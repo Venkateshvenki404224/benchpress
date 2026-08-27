@@ -216,25 +216,24 @@ class TestDeployReusesTheSharedImage(IntegrationTestCase):
 
 	def _run_deploy(self, bench, cached_tags=()):
 		"""A whole deploy with every side effect mocked but the log and the Docker client."""
-		from benchpress import deploy_manager
+		from benchpress import deploy_manager, lifecycle
 
 		client = _client_with_tags(*cached_tags)
 		with (
 			patch("benchpress.docker_manager.get_client", return_value=client),
-			patch.object(deploy_manager, "ensure_infrastructure", autospec=True) as mock_infra,
-			patch.object(deploy_manager, "wait_for_mariadb", autospec=True),
-			patch.object(deploy_manager, "_remove_stale_container", autospec=True),
-			patch.object(deploy_manager, "create_bench_container", autospec=True) as mock_create,
+			patch.object(lifecycle, "ensure_infrastructure", autospec=True) as mock_infra,
+			patch.object(lifecycle, "wait_for_mariadb", autospec=True),
+			patch.object(lifecycle, "create_bench_container", autospec=True) as mock_create,
 			# The deploy starts through the roll wrapper, so the bridge it lands on is a
 			# read-back rather than the id that went in.
-			patch.object(deploy_manager, "start_bench_container", new=lambda cid, bench, lab: cid),
-			patch.object(deploy_manager, "container_network", new=lambda cid: "benchpress-0"),
-			patch.object(deploy_manager, "wait_for_container_running", autospec=True) as mock_wait,
+			patch.object(lifecycle, "start_bench_container", new=lambda cid, bench, lab: cid),
+			patch.object(lifecycle, "container_network", new=lambda cid: "benchpress-0"),
+			patch.object(lifecycle, "wait_for_container_running", autospec=True) as mock_wait,
 			patch.object(deploy_manager, "_setup_container_vpn", autospec=True),
-			patch.object(deploy_manager, "write_file_to_container", autospec=True),
-			patch.object(deploy_manager, "exec_in_container", autospec=True) as mock_exec,
+			patch.object(lifecycle, "write_file_to_container", autospec=True),
+			patch.object(lifecycle, "exec_in_container", autospec=True) as mock_exec,
 			patch.object(deploy_manager, "create_site_in_container", autospec=True) as mock_site,
-			patch.object(deploy_manager, "_notify_owner", autospec=True),
+			patch.object(lifecycle, "notify_owner", autospec=True),
 			# Traefik's route directory is mounted into queue-long, not into the container
 			# these tests run in, so both writers have to be mocked for the deploy to reach
 			# its end — as the docstring above says it does.
@@ -249,7 +248,7 @@ class TestDeployReusesTheSharedImage(IntegrationTestCase):
 			mock_wait.return_value = "172.30.0.21"
 			mock_exec.return_value = (0, "")
 			mock_site.return_value = (0, "site created")
-			deploy_manager.deploy_bench(bench.name)
+			lifecycle.deploy_bench(bench.name)
 		return client
 
 	def _log(self, bench_name):

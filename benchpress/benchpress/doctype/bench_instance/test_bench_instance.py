@@ -193,7 +193,7 @@ class IntegrationTestBenchInstance(IntegrationTestCase):
 		with self.assertRaises(frappe.ValidationError):
 			bench.enqueue_start()
 
-	@patch("benchpress.docker_manager.start_container")
+	@patch("benchpress.lifecycle.start_container")
 	def test_enqueue_start_starts_container_and_sets_running(self, mock_start):
 		bench = self._insert_bench()
 		bench.container_id = "test-container-abc"
@@ -203,8 +203,8 @@ class IntegrationTestBenchInstance(IntegrationTestCase):
 		bench.reload()
 		self.assertEqual(bench.status, "Running")
 
-	@patch("benchpress.deploy_manager.stop_bench")
-	def test_enqueue_stop_calls_stop_bench(self, mock_stop):
+	@patch("benchpress.lifecycle.stopped")
+	def test_enqueue_stop_calls_stopped(self, mock_stop):
 		bench = self._insert_bench()
 		bench.enqueue_stop()
 		mock_stop.assert_called_once_with(bench.name)

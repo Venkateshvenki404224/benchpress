@@ -215,16 +215,16 @@ class TestAdmission(IntegrationTestCase):
 	# --- The lifecycle paths that must give it back ---------------------------
 
 	def test_stopping_a_bench_frees_its_slot(self):
-		from benchpress.deploy_manager import stop_bench
+		from benchpress.lifecycle import stopped
 
 		bench = self.running_bench(self.benches[0])
 		admission.claim(USER, bench.name, 1)
 		with (
-			patch("benchpress.deploy_manager.stop_container"),
+			patch("benchpress.lifecycle.stop_container"),
 			patch("frappe.enqueue"),
 			patch("frappe.db.commit"),
 		):
-			stop_bench(bench.name)
+			stopped(bench.name)
 		self.assertEqual(self.counter(), 0)
 
 	def test_tearing_a_bench_down_frees_its_slot(self):
@@ -438,7 +438,7 @@ class TestAdmission(IntegrationTestCase):
 		self.running_bench(self.benches[1])
 		frappe.set_user(USER)
 		with (
-			patch("benchpress.docker_manager.start_container"),
+			patch("benchpress.lifecycle.start_container"),
 			patch("benchpress.ingress.enqueue_route_sync"),
 			patch("frappe.db.commit"),
 		):
@@ -455,7 +455,7 @@ class TestAdmission(IntegrationTestCase):
 		admission.claim(USER, bench.name, 0)
 		frappe.set_user(USER)
 		with (
-			patch("benchpress.deploy_manager.stop_container"),
+			patch("benchpress.lifecycle.stop_container"),
 			patch("frappe.enqueue"),
 			patch("frappe.db.commit"),
 		):
@@ -549,16 +549,16 @@ class TestAdmission(IntegrationTestCase):
 		)
 
 	def teardown(self, bench, **kwargs) -> None:
-		from benchpress.deploy_manager import teardown_bench
+		from benchpress import lifecycle
 
 		with (
-			patch("benchpress.deploy_manager.stop_container"),
-			patch("benchpress.deploy_manager.remove_container"),
-			patch("benchpress.deploy_manager._drop_site_database"),
+			patch("benchpress.lifecycle.stop_container"),
+			patch("benchpress.lifecycle.remove_container"),
+			patch("benchpress.lifecycle._drop_site_database"),
 			patch("benchpress.ingress.withdraw"),
 			patch("frappe.db.commit"),
 		):
-			teardown_bench(frappe.get_doc(BENCH, bench.name), **kwargs)
+			lifecycle.torn_down(frappe.get_doc(BENCH, bench.name), **kwargs)
 
 	def running_bench(self, bench):
 		frappe.db.set_value(

@@ -5,6 +5,7 @@ import frappe
 from frappe import _
 from frappe.utils import now_datetime
 
+from benchpress import lifecycle
 from benchpress.docker_manager import container_is_gone, get_container_health, get_container_stats
 
 
@@ -88,10 +89,9 @@ def _stop_if_dead(bench: dict, health: str) -> None:
 	if health == "Unknown" and not container_is_gone(bench["container_id"]):
 		return
 
-	from benchpress.deploy_manager import stop_bench
 	from benchpress.notifications import notify_owner
 
-	stop_bench(bench["name"])
+	lifecycle.stopped(bench["name"])
 	notify_owner(
 		bench["owner"],
 		_("Bench {0} was stopped: its container is no longer running.").format(bench["name"]),

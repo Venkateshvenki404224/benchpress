@@ -17,7 +17,7 @@ class TestStopIfDead(unittest.TestCase):
 			patch("benchpress.stats_collector.get_container_stats", side_effect=Exception("no stats")),
 			patch("benchpress.stats_collector.get_container_health", return_value=health),
 			patch("benchpress.stats_collector.container_is_gone", return_value=gone) as gone_mock,
-			patch("benchpress.deploy_manager.stop_bench") as stop_mock,
+			patch("benchpress.lifecycle.stopped") as stop_mock,
 			patch("benchpress.notifications.notify_owner") as notify_mock,
 		):
 			frappe_mock.get_all.return_value = [dict(BENCH)]
@@ -56,7 +56,7 @@ class TestStopIfDead(unittest.TestCase):
 			patch("benchpress.stats_collector.frappe") as frappe_mock,
 			patch("benchpress.stats_collector.get_container_stats", side_effect=Exception("no stats")),
 			patch("benchpress.stats_collector.get_container_health", return_value="Unhealthy"),
-			patch("benchpress.deploy_manager.stop_bench", side_effect=[Exception("boom"), None]) as stop_mock,
+			patch("benchpress.lifecycle.stopped", side_effect=[Exception("boom"), None]) as stop_mock,
 			patch("benchpress.notifications.notify_owner"),
 		):
 			frappe_mock.get_all.return_value = [dict(BENCH), second]
