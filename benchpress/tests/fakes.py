@@ -6,11 +6,13 @@
 Tests read state (`self.docker.created[-1]`) rather than mock call records.
 """
 
+import base64
 from unittest.mock import patch
 
 import docker
 
 from benchpress import diagnostics, docker_manager, mariadb_manager
+from benchpress.request_cache import clear_local_cache
 
 # The modules that bind `get_client` at import instead of reaching it through
 # `docker_manager`, so `patch.object(docker_manager, ...)` alone misses them.
@@ -35,6 +37,15 @@ class UnscriptedExec(AssertionError):
 	"""A strict FakeDocker was asked to run a command no test registered."""
 
 
+def _command_text(cmd) -> str:
+	return " ".join(cmd) if isinstance(cmd, list | tuple) else str(cmd)
+
+
+def sql_of(exec_command: str) -> str:
+	"""The SQL inside an `execute_sql` exec, which travels base64 so nothing is shell-interpolated."""
+	return base64.b64decode(exec_command.split("'")[1]).decode()
+
+
 class FakeContainer:
 	def __init__(self, client, container_id, name, labels, network, runtime, ip, status="created"):
 		self.client = client
@@ -44,6 +55,8 @@ class FakeContainer:
 		self.status = status
 		self.health = ""
 		self.stats_response = dict(DEFAULT_STATS)
+		self.execs: list[str] = []
+		self.start_refusal = ""
 		self.archives: dict[str, bytes] = {}
 		self.attrs = {
 			"HostConfig": {"Runtime": runtime or "runc", "NetworkMode": network},
@@ -52,18 +65,23 @@ class FakeContainer:
 		}
 
 	def exec_run(self, cmd=None, **kwargs):
+		self.execs.append(_command_text(cmd))
 		return self.client._run_exec(cmd)
 
 	def start(self, **kwargs):
+		if self.start_refusal:
+			raise docker.errors.APIError(self.start_refusal)
 		self.status = "running"
 
 	def stop(self, **kwargs):
+		self.client.stopped.append(self.name)
 		self.status = "exited"
 
 	def restart(self, **kwargs):
 		self.status = "running"
 
 	def remove(self, **kwargs):
+		self.client.removed.append(self.name)
 		self.client._store.pop(self.id, None)
 
 	def reload(self):
@@ -203,11 +221,14 @@ class FakeDocker:
 		self.images = _Images(self)
 		self.created: list[dict] = []
 		self.execs: list[str] = []
+		self.stopped: list[str] = []
+		self.removed: list[str] = []
 		self.volume_gets: list[str] = []
 		self.images_removed: list[str] = []
 		self.archives_put: list[tuple[str, bytes]] = []
 		self.info_response = dict(DEFAULT_INFO)
 		self._scripted: list[tuple[str, tuple[int, bytes]]] = []
+		self._start_refusals: dict[str, str] = {}
 		self._store: dict[str, FakeContainer] = {}
 		self._networks: dict[str, FakeNetwork] = {}
 		self._volumes: dict[str, FakeVolume] = {}
@@ -219,6 +240,10 @@ class FakeDocker:
 	def script_exec(self, substring: str, result: tuple[int, bytes]) -> None:
 		"""Answer any exec whose command contains `substring` with `result`."""
 		self._scripted.append((substring, result))
+
+	def refuse_start(self, name: str, message: str) -> None:
+		"""Make this container's `start()` raise `APIError`, the way a daemon refusing one does."""
+		self._start_refusals[name] = message
 
 	def add_container(self, name, *, labels=None, status="running", health="", network="benchpress"):
 		"""Seed a container the app did not create, for `containers.get` and `list`."""
@@ -243,6 +268,7 @@ class FakeDocker:
 			status=status,
 		)
 		container.health = health
+		container.start_refusal = self._start_refusals.get(container.name, "")
 		self._store[container_id] = container
 		return container
 
@@ -251,7 +277,7 @@ class FakeDocker:
 		return {c.name: c for c in self._store.values()}
 
 	def _run_exec(self, cmd) -> tuple[int, bytes]:
-		command = " ".join(cmd) if isinstance(cmd, list | tuple) else str(cmd)
+		command = _command_text(cmd)
 		self.execs.append(command)
 		for substring, result in self._scripted:
 			if substring in command:
@@ -271,6 +297,10 @@ class FakeDockerMixin:
 		self.docker = FakeDocker(strict=self.docker_strict)
 		for module in GET_CLIENT_MODULES:
 			self._install(module, "get_client", self.docker)
+		# `host_runtimes` memoises on `frappe.local`, which outlives a test, so a real daemon
+		# read taken earlier in the run would otherwise survive the fake.
+		clear_local_cache(docker_manager.HOST_RUNTIMES_ATTRIBUTE)
+		self.addCleanup(clear_local_cache, docker_manager.HOST_RUNTIMES_ATTRIBUTE)
 		self.host_block_devices = self._install(
 			docker_manager, "_get_host_block_devices", list(DEFAULT_BLOCK_DEVICES)
 		)

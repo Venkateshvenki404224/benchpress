@@ -2,6 +2,7 @@
 # See license.txt
 
 import ast
+import base64
 import unittest
 from pathlib import Path
 
@@ -10,7 +11,13 @@ import frappe
 from frappe.tests import IntegrationTestCase
 
 from benchpress import docker_manager, mariadb_manager
-from benchpress.tests.fakes import GET_CLIENT_MODULES, FakeDocker, FakeDockerMixin, UnscriptedExec
+from benchpress.tests.fakes import (
+	GET_CLIENT_MODULES,
+	FakeDocker,
+	FakeDockerMixin,
+	UnscriptedExec,
+	sql_of,
+)
 
 
 class TestFakeDocker(unittest.TestCase):
@@ -68,6 +75,48 @@ class TestFakeDocker(unittest.TestCase):
 		fake.add_container("bench").exec_run(cmd=["bash", "-c", "whoami"])
 
 		self.assertEqual(fake.execs, ["bash -c whoami"])
+
+	def test_a_container_records_only_its_own_execs(self):
+		"""One client runs execs in several containers, and a test names the one it means."""
+		fake = FakeDocker()
+		bench = fake.add_container("bench")
+		db = fake.add_container("db")
+
+		bench.exec_run(cmd=["bash", "-c", "whoami"])
+		db.exec_run(cmd=["bash", "-c", "mariadb"])
+
+		self.assertEqual(bench.execs, ["bash -c whoami"])
+		self.assertEqual(db.execs, ["bash -c mariadb"])
+
+	def test_stops_and_removals_are_recorded_by_name(self):
+		fake = FakeDocker()
+		fake.add_container("bench-a")
+
+		fake.containers.get("bench-a").stop()
+		fake.containers.get("bench-a").remove()
+
+		self.assertEqual((fake.stopped, fake.removed), (["bench-a"], ["bench-a"]))
+		with self.assertRaises(docker.errors.NotFound):
+			fake.containers.get("bench-a")
+
+	def test_a_refused_start_raises_api_error(self):
+		"""`start_bench_container` has a branch for a daemon that refuses, so the fake must too."""
+		fake = FakeDocker()
+		fake.refuse_start("bench-a", "no available ipv4 addresses")
+		container = fake.add_container("bench-a", status="created")
+
+		with self.assertRaises(docker.errors.APIError):
+			container.start()
+		self.assertEqual(container.status, "created")
+
+	def test_sql_of_reads_back_the_base64_execute_sql_pipes_in(self):
+		fake = FakeDocker()
+		container = fake.add_container("db")
+		encoded = base64.b64encode(b"DROP DATABASE `_abc`;\n").decode()
+
+		container.exec_run(cmd=["bash", "-c", f"echo '{encoded}' | base64 -d | mariadb -u root"])
+
+		self.assertEqual(sql_of(container.execs[-1]), "DROP DATABASE `_abc`;\n")
 
 
 class TestFakeDockerMixinOnUnitTestCase(FakeDockerMixin, unittest.TestCase):
