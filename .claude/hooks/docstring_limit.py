@@ -18,10 +18,13 @@ def changed_lines(path):
 	"""Line numbers touched since HEAD; None means treat every line as new."""
 	directory = os.path.dirname(path) or "."
 	try:
-		tracked = subprocess.run(
-			["git", "-C", directory, "ls-files", "--error-unmatch", path],
-			capture_output=True,
-		).returncode == 0
+		tracked = (
+			subprocess.run(
+				["git", "-C", directory, "ls-files", "--error-unmatch", path],
+				capture_output=True,
+			).returncode
+			== 0
+		)
 		if not tracked:
 			return None
 		diff = subprocess.run(
@@ -124,17 +127,21 @@ def main():
 		f"  - {os.path.basename(path)}:{start} ({name}) — {count} lines"
 		for start, _, name, count in violations
 	)
-	print(json.dumps({
-		"decision": "block",
-		"reason": (
-			f"Docstring length rule: a docstring is at most {MAX_LINES} lines. "
-			f"These exceed it:\n{listing}\n"
-			"Trim each to what it does plus the one non-obvious constraint. "
-			"Rationale, history, and measurements belong in the commit message, not the docstring."
-		),
-		"systemMessage": f"Docstring limit: {len(violations)} over {MAX_LINES} lines in {os.path.basename(path)}",
-		"suppressOutput": True,
-	}))
+	print(
+		json.dumps(
+			{
+				"decision": "block",
+				"reason": (
+					f"Docstring length rule: a docstring is at most {MAX_LINES} lines. "
+					f"These exceed it:\n{listing}\n"
+					"Trim each to what it does plus the one non-obvious constraint. "
+					"Rationale, history, and measurements belong in the commit message, not the docstring."
+				),
+				"systemMessage": f"Docstring limit: {len(violations)} over {MAX_LINES} lines in {os.path.basename(path)}",
+				"suppressOutput": True,
+			}
+		)
+	)
 
 
 if __name__ == "__main__":
