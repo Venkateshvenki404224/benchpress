@@ -19,6 +19,12 @@
   "bench_bridge_count",
   "bench_slots_per_bridge",
   "bench_event_settle_seconds",
+  "enable_bench_healthcheck",
+  "bench_health_interval_seconds",
+  "bench_health_timeout_seconds",
+  "bench_health_retries",
+  "bench_health_start_period_seconds",
+  "stats_poll_max_benches",
   "resource_section",
   "container_memory_limit",
   "column_break_resource",
@@ -112,6 +118,48 @@
    "fieldname": "bench_event_settle_seconds",
    "fieldtype": "Int",
    "label": "Bench Event Settle Seconds"
+  },
+  {
+   "default": "1",
+   "description": "Whether a new bench container is given a Docker healthcheck that asks its site to answer. Off, a bench reports only whether its container exists, which is what every bench did before this switch. Takes effect at the next container create.",
+   "fieldname": "enable_bench_healthcheck",
+   "fieldtype": "Check",
+   "label": "Enable Bench Healthcheck"
+  },
+  {
+   "default": "30",
+   "description": "Seconds between two probes of a bench's site. Each probe is an exec, so this is also the event stream's noise floor: three events per bench per interval.",
+   "fieldname": "bench_health_interval_seconds",
+   "fieldtype": "Int",
+   "label": "Bench Health Interval Seconds"
+  },
+  {
+   "default": "5",
+   "description": "Seconds one probe waits for the site to answer before it counts as a failure.",
+   "fieldname": "bench_health_timeout_seconds",
+   "fieldtype": "Int",
+   "label": "Bench Health Timeout Seconds"
+  },
+  {
+   "default": "3",
+   "description": "Consecutive failed probes before Docker calls a bench unhealthy. With the interval above, this is how long a site may be down before anything says so.",
+   "fieldname": "bench_health_retries",
+   "fieldtype": "Int",
+   "label": "Bench Health Retries"
+  },
+  {
+   "default": "600",
+   "description": "Seconds after a container starts during which a failed probe does not count. Must exceed the longest deploy: on first boot nothing serves the site until the deploy has created it, and a seven-app site takes over three minutes to build.",
+   "fieldname": "bench_health_start_period_seconds",
+   "fieldtype": "Int",
+   "label": "Bench Health Start Period Seconds"
+  },
+  {
+   "default": "50",
+   "description": "Benches one stats poll samples, least recently checked first. Docker's stats endpoint samples twice a second apart, so an unbounded pass over a large fleet cannot finish inside its own minute. 0 removes the bound.",
+   "fieldname": "stats_poll_max_benches",
+   "fieldtype": "Int",
+   "label": "Stats Poll Max Benches"
   },
   {
    "fieldname": "resource_section",

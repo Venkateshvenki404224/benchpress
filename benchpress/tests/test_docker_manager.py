@@ -17,6 +17,8 @@ from benchpress.docker_manager import (
 	DEFAULT_PIDS_LIMIT,
 	HOST_RUNTIMES_ATTRIBUTE,
 	CreatedContainer,
+	bench_healthcheck,
+	container_is_down,
 	container_runtime,
 	get_container_health,
 	host_runtimes,
@@ -27,15 +29,22 @@ from benchpress.request_cache import clear_local_cache
 from benchpress.tests.fakes import FakeDockerMixin
 
 
-def _client_returning(status):
+def _client_returning(status, health=None):
+	"""Docker client whose one container reports `status` and, if given, that health verdict."""
 	client = MagicMock()
-	client.containers.get.return_value.status = status
+	container = client.containers.get.return_value
+	container.status = status
+	state = {"Status": status}
+	if health:
+		state["Health"] = {"Status": health}
+	container.attrs = {"State": state}
 	return client
 
 
 class TestContainerHealth(unittest.TestCase):
 	@patch("benchpress.docker_manager.get_client")
-	def test_running_container_is_healthy(self, get_client):
+	def test_a_container_with_no_healthcheck_falls_back_to_run_state(self, get_client):
+		"""Every bench created before the healthcheck existed, which must keep its old answer."""
 		get_client.return_value = _client_returning("running")
 		self.assertEqual(get_container_health("abc123"), "Healthy")
 
@@ -50,6 +59,94 @@ class TestContainerHealth(unittest.TestCase):
 		client.containers.get.side_effect = docker.errors.NotFound("no such container")
 		get_client.return_value = client
 		self.assertEqual(get_container_health("gone"), "Unknown")
+
+	@patch("benchpress.docker_manager.get_client")
+	def test_a_site_that_answers_is_healthy(self, get_client):
+		get_client.return_value = _client_returning("running", health="healthy")
+		self.assertEqual(get_container_health("abc123"), "Healthy")
+
+	@patch("benchpress.docker_manager.get_client")
+	def test_a_dead_site_in_a_running_container_is_unhealthy(self, get_client):
+		"""The gap this exists to close: the container runs, the site answers nothing."""
+		get_client.return_value = _client_returning("running", health="unhealthy")
+		self.assertEqual(get_container_health("abc123"), "Unhealthy")
+
+	@patch("benchpress.docker_manager.get_client")
+	def test_a_bench_inside_its_start_period_is_unknown(self, get_client):
+		get_client.return_value = _client_returning("running", health="starting")
+		self.assertEqual(get_container_health("abc123"), "Unknown")
+
+	@patch("benchpress.docker_manager.get_client")
+	def test_a_stopped_container_is_unhealthy_whatever_its_last_verdict_was(self, get_client):
+		"""The daemon keeps the verdict it had while running; it is not about this container."""
+		get_client.return_value = _client_returning("exited", health="healthy")
+		self.assertEqual(get_container_health("abc123"), "Unhealthy")
+
+
+class TestContainerIsDown(unittest.TestCase):
+	@patch("benchpress.docker_manager.get_client")
+	def test_a_running_container_is_not_down(self, get_client):
+		get_client.return_value = _client_returning("running")
+		self.assertFalse(container_is_down("abc123"))
+
+	@patch("benchpress.docker_manager.get_client")
+	def test_an_exited_container_is_down(self, get_client):
+		get_client.return_value = _client_returning("exited")
+		self.assertTrue(container_is_down("abc123"))
+
+	@patch("benchpress.docker_manager.get_client")
+	def test_a_missing_container_is_down(self, get_client):
+		client = MagicMock()
+		client.containers.get.side_effect = docker.errors.NotFound("no such container")
+		get_client.return_value = client
+		self.assertTrue(container_is_down("gone"))
+
+	@patch("benchpress.docker_manager.get_client")
+	def test_a_daemon_error_is_not_down(self, get_client):
+		"""Callers stop benches on this answer, so a socket hiccup must not be one."""
+		client = MagicMock()
+		client.containers.get.side_effect = Exception("socket gone")
+		get_client.return_value = client
+		self.assertFalse(container_is_down("abc123"))
+
+
+class TestBenchHealthcheck(unittest.TestCase):
+	def _healthcheck(self, **settings):
+		with patch("benchpress.docker_manager.frappe") as frappe_mock:
+			frappe_mock.get_cached_doc.return_value = frappe._dict(settings)
+			return bench_healthcheck()
+
+	def test_the_durations_are_nanoseconds(self):
+		"""`"Interval": 30` is thirty nanoseconds, which the daemon clamps out of sight."""
+		probe = self._healthcheck()
+		self.assertEqual(probe["Interval"], 30 * 1_000_000_000)
+		self.assertEqual(probe["Timeout"], 5 * 1_000_000_000)
+		self.assertEqual(probe["StartPeriod"], 600 * 1_000_000_000)
+
+	def test_the_retry_count_is_a_count_and_not_a_duration(self):
+		self.assertEqual(self._healthcheck()["Retries"], 3)
+
+	def test_the_probe_asks_the_site_to_answer(self):
+		probe = self._healthcheck()
+		self.assertEqual(
+			probe["Test"],
+			["CMD-SHELL", "curl -fsS -m 5 http://localhost:8000/api/method/ping || exit 1"],
+		)
+
+	def test_the_configured_timeout_reaches_both_the_probe_and_docker(self):
+		probe = self._healthcheck(bench_health_timeout_seconds=2)
+		self.assertIn("-m 2 ", probe["Test"][1])
+		self.assertEqual(probe["Timeout"], 2 * 1_000_000_000)
+
+	def test_the_switch_off_means_no_healthcheck_at_all(self):
+		self.assertIsNone(self._healthcheck(enable_bench_healthcheck=0))
+
+	def test_an_install_that_never_saved_its_settings_still_gets_one(self):
+		"""A Single stores only what somebody wrote, so an unset Check reads None, not 1."""
+		self.assertIsNotNone(self._healthcheck())
+
+	def test_a_zeroed_duration_falls_back_rather_than_asking_docker_for_zero(self):
+		self.assertEqual(self._healthcheck(bench_health_interval_seconds=0)["Interval"], 30 * 1_000_000_000)
 
 
 def _reloading_container(states):
@@ -210,6 +307,26 @@ class TestDockerManagerBlockIO(FakeDockerMixin, IntegrationTestCase):
 		kwargs = self._container_create_kwargs(lab)
 
 		self.assertNotIn("volumes", kwargs)
+
+	def test_the_container_is_given_the_bench_healthcheck(self):
+		lab = _make_lab("healthcheck-on")
+		self.addCleanup(frappe.delete_doc, "Lab", lab.name, force=True, ignore_permissions=True)
+		probe = {"Test": ["CMD-SHELL", "curl -fsS -m 5 http://localhost:8000/api/method/ping || exit 1"]}
+
+		with patch("benchpress.docker_manager.bench_healthcheck", return_value=probe):
+			kwargs = self._container_create_kwargs(lab)
+
+		self.assertEqual(kwargs["healthcheck"], probe)
+
+	def test_the_switch_off_leaves_the_key_off_the_create(self):
+		"""Not an empty healthcheck: the daemon reads one as a healthcheck that always fails."""
+		lab = _make_lab("healthcheck-off")
+		self.addCleanup(frappe.delete_doc, "Lab", lab.name, force=True, ignore_permissions=True)
+
+		with patch("benchpress.docker_manager.bench_healthcheck", return_value=None):
+			kwargs = self._container_create_kwargs(lab)
+
+		self.assertNotIn("healthcheck", kwargs)
 
 	def test_the_container_is_stamped_with_the_managed_labels(self):
 		"""`containers.list` filtering and every reconcile pass key off these."""

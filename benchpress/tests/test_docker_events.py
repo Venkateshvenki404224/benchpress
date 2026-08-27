@@ -78,10 +78,39 @@ class TestDrain(unittest.TestCase):
 		# The exit code survives the kind being overwritten; an oom event carries none.
 		self.assertEqual(pending[BENCH]["exit_code"], 137)
 
-	def test_the_action_is_matched_by_prefix(self):
-		"""Docker's action carries its state: `health_status: unhealthy`, never `health_status`."""
+	def test_an_action_with_a_state_nobody_named_still_matches_the_action(self):
 		pending, _stats = _drain({**event("die"), "Action": "die: whatever"})
 		self.assertEqual(pending[BENCH]["kind"], "bench_died")
+
+	def test_a_health_verdict_is_matched_on_its_state(self):
+		"""Docker's action carries the state after a colon and a space, and it is the whole point."""
+		pending, _stats = _drain(event("health_status: unhealthy"))
+		self.assertEqual(pending[BENCH]["kind"], "bench_unhealthy")
+		self.assertEqual(pending[BENCH]["severity"], "error")
+		self.assertEqual(pending[BENCH]["action"], "health_status: unhealthy")
+
+	def test_a_recovery_is_the_other_verdict_and_is_not_an_error(self):
+		pending, _stats = _drain(event("health_status: healthy"))
+		self.assertEqual(pending[BENCH]["kind"], "bench_healthy")
+		self.assertEqual(pending[BENCH]["severity"], "info")
+
+	def test_a_bare_health_status_names_no_verdict_and_is_dropped(self):
+		pending, _stats = _drain(event("health_status"))
+		self.assertEqual(pending, {})
+
+	def test_a_death_outranks_a_verdict_it_arrives_with(self):
+		"""A site that stopped answering on its way out is one incident, and it is the death."""
+		for events in (
+			(event("health_status: unhealthy"), event("die", exit_code=137)),
+			(event("die", exit_code=137), event("health_status: unhealthy")),
+		):
+			pending, _stats = _drain(*events)
+			self.assertEqual(len(pending), 1)
+			self.assertEqual(pending[BENCH]["kind"], "bench_died")
+
+	def test_a_flap_inside_the_window_is_reported_as_the_failure(self):
+		pending, _stats = _drain(event("health_status: unhealthy"), event("health_status: healthy"))
+		self.assertEqual(pending[BENCH]["kind"], "bench_unhealthy")
 
 	def test_two_benches_are_two_incidents(self):
 		pending, _stats = _drain(event("die", bench="a"), event("die", bench="b"))
@@ -147,6 +176,52 @@ class TestFlush(unittest.TestCase):
 		self.assertEqual(list(pending), [BENCH])
 
 
+class TestHealthVerdicts(unittest.TestCase):
+	def _flush(self, kind, status="Running", last_event=None):
+		"""Flush one parked health verdict and report what it recorded and what it wrote."""
+		pending = {BENCH: {"due": 0, "kind": kind, "severity": "error", "exit_code": 0}}
+		stats = {"events_seen": 1, "orphans": 0, "connected_since": 0}
+		with (
+			patch("benchpress.docker_events.frappe") as frappe_mock,
+			patch("benchpress.docker_events.record") as record_mock,
+			patch("benchpress.docker_events._last_event", return_value=last_event),
+			patch("benchpress.docker_events.now_datetime", return_value="2026-08-27 12:00:00"),
+		):
+			frappe_mock.db.get_value.return_value = frappe._dict(status=status, container_health="Healthy")
+			docker_events._flush(pending, stats)
+		return record_mock, frappe_mock.db.set_value
+
+	def test_a_failure_freshens_the_field_and_is_recorded(self):
+		record_mock, set_value = self._flush("bench_unhealthy")
+		record_mock.assert_called_once()
+		self.assertEqual(set_value.call_args.args[2]["container_health"], "Unhealthy")
+
+	def test_a_recovery_after_a_recorded_failure_is_news(self):
+		record_mock, set_value = self._flush("bench_healthy", last_event="bench_unhealthy")
+		record_mock.assert_called_once()
+		self.assertEqual(set_value.call_args.args[2]["container_health"], "Healthy")
+
+	def test_a_recovery_with_no_failure_behind_it_writes_the_field_and_no_row(self):
+		"""Every deploy's first verdict is `starting -> healthy`, which is noise and not news."""
+		record_mock, set_value = self._flush("bench_healthy", last_event=None)
+		record_mock.assert_not_called()
+		self.assertEqual(set_value.call_args.args[2]["container_health"], "Healthy")
+
+	def test_a_recovery_after_a_death_is_not_a_recovery_from_anything_said(self):
+		record_mock, _set_value = self._flush("bench_healthy", last_event="bench_died")
+		record_mock.assert_not_called()
+
+	def test_a_verdict_about_a_bench_the_platform_stopped_writes_nothing(self):
+		record_mock, set_value = self._flush("bench_unhealthy", status="Stopped")
+		record_mock.assert_not_called()
+		set_value.assert_not_called()
+
+	def test_a_verdict_mid_deploy_writes_nothing(self):
+		record_mock, set_value = self._flush("bench_unhealthy", status="Deploying")
+		record_mock.assert_not_called()
+		set_value.assert_not_called()
+
+
 class TestRecord(unittest.TestCase):
 	def _record(self, kind="bench_died", owner="tenant@example.com"):
 		incident = {
@@ -176,6 +251,12 @@ class TestRecord(unittest.TestCase):
 		self.assertEqual(doc["exit_code"], 137)
 		self.assertEqual(doc["docker_action"], "die")
 		insert.assert_called_once_with(ignore_permissions=True)
+
+	def test_every_incident_can_be_ranked_and_has_something_to_say_to_the_owner(self):
+		"""An unranked kind raises inside the drain, and a subject-less one inside the record."""
+		kinds = {kind for kind, _severity in docker_events.INCIDENTS.values()}
+		self.assertEqual(kinds, set(docker_events.SUBJECTS))
+		self.assertEqual(kinds, set(docker_events.PRECEDENCE))
 
 	def test_the_owner_is_told(self):
 		_doc, _insert, notify = self._record()

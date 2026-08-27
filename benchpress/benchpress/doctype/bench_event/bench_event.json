@@ -33,7 +33,7 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Event Type",
-   "options": "bench_died\noom_killed",
+   "options": "bench_died\noom_killed\nbench_unhealthy\nbench_healthy",
    "reqd": 1
   },
   {

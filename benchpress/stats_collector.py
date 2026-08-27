@@ -3,10 +3,12 @@
 
 import frappe
 from frappe import _
-from frappe.utils import now_datetime
+from frappe.utils import cint, now_datetime
 
 from benchpress import lifecycle
-from benchpress.docker_manager import container_is_gone, get_container_health, get_container_stats
+from benchpress.docker_manager import container_is_down, get_container_health, get_container_stats
+
+DEFAULT_POLL_MAX_BENCHES = 50
 
 
 def enqueue_stats_sweep() -> None:
@@ -27,13 +29,7 @@ def collect_bench_stats() -> None:
 	`status` drives billing, so a bench whose container died must be stopped,
 	not just marked unhealthy.
 	"""
-	running_benches = frappe.get_all(
-		"Bench Instance",
-		filters={"status": "Running", "container_id": ["is", "set"]},
-		fields=["name", "container_id", "owner"],
-	)
-
-	for bench in running_benches:
+	for bench in _benches_to_poll():
 		try:
 			stats = get_container_stats(bench["container_id"])
 			frappe.db.set_value(
@@ -60,7 +56,30 @@ def collect_bench_stats() -> None:
 				message=frappe.get_traceback(),
 			)
 
-	frappe.db.commit()
+	frappe.db.commit()  # nosemgrep -- a background sweep has no request boundary to commit at
+
+
+def _benches_to_poll() -> list[dict]:
+	"""The Running benches this pass samples, least recently checked first.
+
+	Bounded because Docker's stats endpoint samples twice a second apart: at 1.7 s a bench, an
+	unbounded pass over a large fleet cannot finish inside its own minute, and a `*/1` job that
+	overruns stacks up behind itself. The stalest benches go first so a bounded pass still
+	reaches every one of them, just over more ticks.
+	"""
+	return frappe.get_all(
+		"Bench Instance",
+		filters={"status": "Running", "container_id": ["is", "set"]},
+		fields=["name", "container_id", "owner"],
+		order_by="last_health_check asc",
+		limit_page_length=_poll_max_benches(),
+	)
+
+
+def _poll_max_benches() -> int:
+	"""Benches one pass may sample; 0 removes the bound, which is what `get_all` reads it as."""
+	limit = frappe.get_cached_doc("BenchPress Settings").get("stats_poll_max_benches")
+	return DEFAULT_POLL_MAX_BENCHES if limit is None else cint(limit)
 
 
 def _update_bench_health(bench: dict) -> str:
@@ -79,14 +98,16 @@ def _update_bench_health(bench: dict) -> str:
 
 
 def _stop_if_dead(bench: dict, health: str) -> None:
-	"""Stop a bench whose container died.
+	"""Stop a bench whose container is no longer running.
 
-	Unknown health is acted on only when the container is positively gone —
-	an inspect error must never stop a bench.
+	Acted on only when Docker positively reports the container down — an inspect error must
+	never stop a bench, and neither must an unhealthy site: `Unhealthy` now also means the site
+	stopped answering inside a container that is running perfectly well, which is a thing to
+	report and route around, not a reason to stop a bench and take the tenant's work with it.
 	"""
 	if health == "Healthy":
 		return
-	if health == "Unknown" and not container_is_gone(bench["container_id"]):
+	if not container_is_down(bench["container_id"]):
 		return
 
 	from benchpress.notifications import notify_owner

@@ -1,7 +1,7 @@
 # Copyright (c) 2026, Venkatesh and contributors
 # For license information, please see license.txt
 
-"""The Docker event stream, consumed rather than polled: a bench that dies is written down.
+"""The Docker event stream, consumed rather than polled: a bench that dies or goes quiet is written down.
 
 It observes and never acts — no stop, no restart, no route write; `deploy_manager` owns those.
 """
@@ -24,16 +24,31 @@ BENCH_NAME_LABEL = "benchpress.bench_name"
 # bench, which the fleet multiplies.
 EVENT_FILTERS = {
 	"label": f"{MANAGED_LABEL}=true",
-	"event": ["die", "oom"],
+	"event": ["die", "oom", "health_status"],
 }
 
-# Action prefix -> (event_type, severity). An action carries its state after a colon
-# (`health_status: unhealthy`), so it is matched by prefix and never by equality.
-INCIDENTS = {"oom": ("oom_killed", "error"), "die": ("bench_died", "error")}
+# Action, with its state kept, -> (event_type, severity).
+INCIDENTS = {
+	"die": ("bench_died", "error"),
+	"oom": ("oom_killed", "error"),
+	"health_status:unhealthy": ("bench_unhealthy", "error"),
+	"health_status:healthy": ("bench_healthy", "info"),
+}
+
+# Which incident wins when two arrive for one bench inside the settle window. An OOM outranks the
+# `die` 122 ms behind it, and a death outranks a health verdict: a site that stopped answering on
+# its way out is one incident, and the death is the half the owner has to be told about.
+PRECEDENCE = ("bench_healthy", "bench_unhealthy", "bench_died", "oom_killed")
+
+# The `container_health` a verdict writes, which is how the field becomes fresh in seconds
+# instead of after a poll interval.
+HEALTH_VERDICTS = {"bench_unhealthy": "Unhealthy", "bench_healthy": "Healthy"}
 
 SUBJECTS = {
 	"bench_died": "Bench {0} stopped unexpectedly.",
 	"oom_killed": "Bench {0} ran out of memory and was killed.",
+	"bench_unhealthy": "Bench {0} has stopped answering on its site.",
+	"bench_healthy": "Bench {0} is answering again.",
 }
 
 # `stats_collector._update_bench_health` writes one of these before `_stop_if_dead` stops a bench,
@@ -102,17 +117,18 @@ def _drain(inbox: queue.Queue, pending: dict, stats: dict) -> None:
 		actor = event.get("Actor") or {}
 		attributes = actor.get("Attributes") or {}
 		bench = attributes.get(BENCH_NAME_LABEL)
-		action = (event.get("Action") or "").split(":")[0].strip()
-		if not bench or action not in INCIDENTS:
+		named = _incident_for(event.get("Action") or "")
+		if not bench or not named:
 			continue
+		kind, severity = named
 
 		# One incident per bench collapses the `oom`/`die` pair — 122 ms apart — into the one
-		# incident it is, and `oom` wins the kind: exit 137 alone is not evidence of an OOM.
+		# incident it is, and `PRECEDENCE` decides which of them it is reported as: exit 137
+		# alone is not evidence of an OOM.
 		incident = pending.get(bench)
 		if incident is None:
 			incident = pending[bench] = {"due": time.time() + settle_seconds()}
-		if action == "oom" or "kind" not in incident:
-			kind, severity = INCIDENTS[action]
+		if _outranks(kind, incident.get("kind")):
 			incident.update(kind=kind, severity=severity, action=event.get("Action"), at=event.get("time"))
 		if attributes.get("exitCode"):
 			incident["exit_code"] = cint(attributes["exitCode"])
@@ -120,6 +136,23 @@ def _drain(inbox: queue.Queue, pending: dict, stats: dict) -> None:
 		incident.setdefault(
 			"detail", f"container {actor.get('ID', '')[:12]} image {attributes.get('image', '')}"
 		)
+
+
+def _incident_for(action: str) -> tuple[str, str] | None:
+	"""The (event_type, severity) an action names, or None for an action not worth a row.
+
+	Matched on the action's state when it carries one and on the action alone otherwise:
+	`health_status: unhealthy` keeps its state after a colon and a space, so a lookup on
+	`health_status` matches neither verdict.
+	"""
+	head, _colon, state = action.partition(":")
+	head, state = head.strip(), state.strip()
+	return INCIDENTS.get(f"{head}:{state}") or INCIDENTS.get(head)
+
+
+def _outranks(kind: str, parked: str | None) -> bool:
+	"""Whether this incident replaces the one already parked for the bench."""
+	return parked is None or PRECEDENCE.index(kind) > PRECEDENCE.index(parked)
 
 
 def _flush(pending: dict, stats: dict) -> None:
@@ -131,10 +164,37 @@ def _flush(pending: dict, stats: dict) -> None:
 		if not row:
 			stats["orphans"] += 1
 			continue
-		if not _unasked_for(row):
-			continue
-		record(bench_name, incident)
+		if incident["kind"] in HEALTH_VERDICTS:
+			_settle_health(bench_name, row, incident)
+		elif _unasked_for(row):
+			record(bench_name, incident)
 	frappe.db.commit()  # nosemgrep -- no request boundary here, and the next tick rolls back
+
+
+def _settle_health(bench_name: str, row, incident: dict) -> None:
+	"""Freshen the health field from Docker's verdict, and record the transition if it is news."""
+	# A verdict about a bench the platform is no longer running is neither news nor a field worth
+	# writing: `lifecycle` owns the field across a stop and a start.
+	if row.status != "Running":
+		return
+	frappe.db.set_value(
+		"Bench Instance",
+		bench_name,
+		{"container_health": HEALTH_VERDICTS[incident["kind"]], "last_health_check": now_datetime()},
+		update_modified=False,
+	)
+	# Recovery is news only after a failure was recorded. The first verdict a deploy produces is
+	# `starting -> healthy`, and a row for every deploy is noise rather than news.
+	if incident["kind"] == "bench_healthy" and _last_event(bench_name) != "bench_unhealthy":
+		return
+	record(bench_name, incident)
+
+
+def _last_event(bench_name: str) -> str | None:
+	"""The event type most recently recorded for a bench, or None when it has none."""
+	return frappe.db.get_value(
+		"Bench Event", {"bench": bench_name}, "event_type", order_by="occurred_at desc"
+	)
 
 
 def _unasked_for(row) -> bool:
