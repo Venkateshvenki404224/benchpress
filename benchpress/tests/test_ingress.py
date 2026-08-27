@@ -838,7 +838,7 @@ class TestRouteSyncTriggers(IntegrationTestCase):
 
 		bench = self._bench("Stopped")
 
-		with patch("benchpress.docker_manager.start_container"), patch("frappe.enqueue") as enqueue:
+		with patch("benchpress.lifecycle.start_container"), patch("frappe.enqueue") as enqueue:
 			bench_action(bench.name, "start")
 
 		self._assert_synced_on_long(enqueue, bench.name)
@@ -850,7 +850,7 @@ class TestRouteSyncTriggers(IntegrationTestCase):
 
 		bench = self._bench()
 
-		with patch("benchpress.docker_manager.restart_container"), patch("frappe.enqueue") as enqueue:
+		with patch("benchpress.lifecycle.restart_container"), patch("frappe.enqueue") as enqueue:
 			bench_action(bench.name, "restart")
 
 		self._assert_synced_on_long(enqueue, bench.name)
@@ -859,7 +859,7 @@ class TestRouteSyncTriggers(IntegrationTestCase):
 		bench = self._bench("Stopped")
 
 		with (
-			patch("benchpress.docker_manager.start_container"),
+			patch("benchpress.lifecycle.start_container"),
 			patch("frappe.msgprint"),
 			patch("frappe.enqueue") as enqueue,
 		):

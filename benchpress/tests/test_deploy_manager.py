@@ -14,7 +14,7 @@ import frappe
 import yaml
 from frappe.tests import IntegrationTestCase
 
-from benchpress import ingress
+from benchpress import deploy_manager, ingress, lifecycle
 from benchpress.benchpress.doctype.bench_instance import get_instance_id
 from benchpress.tests.fakes import FakeDockerMixin, sql_of
 from benchpress.tests.test_docker_manager import exec_commands, exec_environments
@@ -242,9 +242,9 @@ class TestDeployManager(FakeDockerMixin, IntegrationTestCase):
 		statuses = frappe.get_all("Bench Site", filters={"bench": bench.name}, pluck="status")
 		self.assertEqual(statuses, ["Inactive", "Inactive"])
 
-	@patch("benchpress.deploy_manager._deploy_bench")
+	@patch("benchpress.lifecycle._deploy_bench")
 	def test_redeploy_bench_resets_status_to_draft_before_deploy(self, mock_deploy):
-		from benchpress.deploy_manager import redeploy_bench
+		from benchpress.lifecycle import redeploy_bench
 
 		bench = self._fresh_bench()
 		self.docker.add_container("old-container")
@@ -265,9 +265,9 @@ class TestDeployManager(FakeDockerMixin, IntegrationTestCase):
 		mock_deploy.assert_called_once_with(bench.name)
 		self.assertEqual(status_at_deploy["status"], "Draft")
 
-	@patch("benchpress.deploy_manager._deploy_bench")
+	@patch("benchpress.lifecycle._deploy_bench")
 	def test_redeploy_bench_never_touches_volumes(self, mock_deploy):
-		from benchpress.deploy_manager import redeploy_bench
+		from benchpress.lifecycle import redeploy_bench
 
 		bench = self._fresh_bench()
 		self.docker.add_container("old-container")
@@ -279,9 +279,9 @@ class TestDeployManager(FakeDockerMixin, IntegrationTestCase):
 
 		self.assertEqual(self.docker.volume_gets, [])
 
-	@patch("benchpress.deploy_manager._deploy_bench")
+	@patch("benchpress.lifecycle._deploy_bench")
 	def test_redeploy_bench_drops_site_database(self, mock_deploy):
-		from benchpress.deploy_manager import redeploy_bench
+		from benchpress.lifecycle import redeploy_bench
 		from benchpress.mariadb_manager import get_database_name
 
 		bench = self._fresh_bench()
@@ -314,9 +314,9 @@ class TestDeployManager(FakeDockerMixin, IntegrationTestCase):
 
 		self.addCleanup(_purge)
 
-	@patch("benchpress.deploy_manager._deploy_bench")
+	@patch("benchpress.lifecycle._deploy_bench")
 	def test_deploy_skipped_when_lock_held(self, mock_deploy):
-		from benchpress.deploy_manager import deploy_bench
+		from benchpress.lifecycle import deploy_bench
 
 		bench = self._fresh_bench()
 		self._cleanup_deploy_logs(bench.name)
@@ -332,9 +332,9 @@ class TestDeployManager(FakeDockerMixin, IntegrationTestCase):
 		)
 		self.assertIn("skipped", skip_message)
 
-	@patch("benchpress.deploy_manager._deploy_bench")
+	@patch("benchpress.lifecycle._deploy_bench")
 	def test_deploy_lock_released_after_run(self, mock_deploy):
-		from benchpress.deploy_manager import deploy_bench
+		from benchpress.lifecycle import deploy_bench
 
 		bench = self._fresh_bench()
 		deploy_bench(bench.name)
@@ -342,9 +342,9 @@ class TestDeployManager(FakeDockerMixin, IntegrationTestCase):
 
 		self.assertEqual(mock_deploy.call_count, 2)
 
-	@patch("benchpress.deploy_manager._deploy_bench")
+	@patch("benchpress.lifecycle._deploy_bench")
 	def test_redeploy_skipped_when_lock_held(self, mock_deploy):
-		from benchpress.deploy_manager import redeploy_bench
+		from benchpress.lifecycle import redeploy_bench
 
 		bench = self._fresh_bench()
 		self._cleanup_deploy_logs(bench.name)
@@ -366,8 +366,6 @@ class TestDeployManager(FakeDockerMixin, IntegrationTestCase):
 		return logs[0].message if logs else ""
 
 	def test_deploy_failure_after_container_creation_cleans_up(self):
-		from benchpress import deploy_manager
-
 		bench = self._fresh_bench()
 		self._cleanup_deploy_logs(bench.name)
 		self._shared_mariadb_up()
@@ -383,9 +381,9 @@ class TestDeployManager(FakeDockerMixin, IntegrationTestCase):
 		with (
 			_cached_image(self.lab.name),
 			patch.object(ingress, "ensure_anchor", autospec=True),
-			patch.object(deploy_manager, "_notify_owner", autospec=True),
+			patch.object(lifecycle, "notify_owner", autospec=True),
 		):
-			deploy_manager.deploy_bench(bench.name)
+			lifecycle.deploy_bench(bench.name)
 
 		self.assertEqual(self.docker.removed, [bench.bench_name])
 		self.assertIn("Cleanup: VPN peer removed", self._deploy_log(bench.name))
@@ -418,9 +416,9 @@ class TestDeployManager(FakeDockerMixin, IntegrationTestCase):
 
 		with (
 			_cached_image(self.lab.name),
-			patch.object(deploy_manager, "_notify_owner", autospec=True),
+			patch.object(lifecycle, "notify_owner", autospec=True),
 		):
-			deploy_manager.deploy_bench(bench.name)
+			lifecycle.deploy_bench(bench.name)
 
 		self.assertEqual(self.docker.removed, [])
 		self.assertNotIn("Cleanup: VPN peer removed", self._deploy_log(bench.name))
@@ -507,6 +505,20 @@ class TestDeployManager(FakeDockerMixin, IntegrationTestCase):
 		self.assertEqual(parsed[2:], args)
 
 
+def _install_on_both(case, name, mock=None):
+	"""Install one mock at both bindings of a `docker_manager` wrapper, and return it.
+
+	Started outside the `with` block rather than in it: CPython allows twenty nested blocks and
+	the deploy's mock list is already at that ceiling.
+	"""
+	mock = mock or MagicMock(name=name)
+	for module in (lifecycle, deploy_manager):
+		patcher = patch.object(module, name, new=mock)
+		patcher.start()
+		case.addCleanup(patcher.stop)
+	return mock
+
+
 class TestDeployStepMarkers(IntegrationTestCase):
 	"""Phase 4: the run reports its eleven steps, in the order the code runs them."""
 
@@ -579,28 +591,35 @@ class TestDeployStepMarkers(IntegrationTestCase):
 		self.route_dir = Path(route_dir.name) / "dynamic"
 		self.route_dir.mkdir()
 
+		# The deploy runs in `lifecycle`; the code-server step it calls stayed in
+		# `deploy_manager`, and both modules imported these wrappers by name.
+		mock_write = _install_on_both(self, "write_file_to_container")
+		mock_exec = _install_on_both(self, "exec_in_container")
+
 		with (
 			_cached_image(self.lab.name) if cache_hit else nullcontext(),
 			patch.object(ingress, "TRAEFIK_DYNAMIC_DIR", self.route_dir),
-			patch.object(deploy_manager, "ensure_infrastructure", autospec=True) as mock_infra,
-			patch.object(deploy_manager, "wait_for_mariadb", autospec=True),
+			patch.object(lifecycle, "ensure_infrastructure", autospec=True) as mock_infra,
+			patch.object(lifecycle, "wait_for_mariadb", autospec=True),
 			patch.object(deploy_manager, "_remove_stale_container", autospec=True),
 			patch.object(deploy_manager, "host_runtimes", autospec=True) as mock_runtimes,
-			patch.object(deploy_manager, "container_runtime", autospec=True) as mock_runtime_of,
-			patch.object(deploy_manager, "create_bench_container", autospec=True) as mock_create,
+			patch.object(lifecycle, "container_runtime", autospec=True) as mock_runtime_of,
+			patch.object(lifecycle, "create_bench_container", autospec=True) as mock_create,
 			# The deploy starts through the roll wrapper, so the bridge it lands on is a
 			# read-back rather than the id that went in.
-			patch.object(deploy_manager, "start_bench_container", new=lambda cid, bench, lab: cid),
-			patch.object(deploy_manager, "container_network", new=lambda cid: "benchpress-0"),
-			patch.object(deploy_manager, "wait_for_container_running", autospec=True) as mock_wait,
+			patch.object(lifecycle, "start_bench_container", new=lambda cid, bench, lab: cid),
+			patch.object(lifecycle, "container_network", new=lambda cid: "benchpress-0"),
+			patch.object(lifecycle, "wait_for_container_running", autospec=True) as mock_wait,
 			# Only the socket is mocked, not the reporting around it: a unit test must not
 			# depend on a running Traefik, but the log line must still be the real one.
 			patch.object(ingress, "_certificate_error", autospec=True, return_value=cert_error) as mock_cert,
-			patch.object(deploy_manager, "write_file_to_container", autospec=True) as mock_write,
-			patch.object(deploy_manager, "exec_in_container", autospec=True) as mock_exec,
+			# One mock, two bindings: the deploy runs in `lifecycle` and the code-server step it
+			# calls stayed in `deploy_manager`, and both imported the wrapper by name.
 			patch.object(deploy_manager, "create_site_in_container", autospec=True) as mock_site,
 			patch.object(deploy_manager, "remove_container", autospec=True),
-			patch.object(deploy_manager, "_notify_owner", autospec=True),
+			# The transition reissues `start` on the container the deploy already brought up.
+			patch.object(lifecycle, "start_container", autospec=True),
+			patch.object(lifecycle, "notify_owner", autospec=True),
 			patch("benchpress.vpn_adapter.remove_bench_peer", autospec=True),
 			patch("benchpress.vpn_adapter.configure_container", autospec=True),
 			patch("benchpress.vpn_adapter.create_container_peer", autospec=True) as mock_peer,
@@ -625,7 +644,7 @@ class TestDeployStepMarkers(IntegrationTestCase):
 			else:
 				mock_site.return_value = site_result
 
-			deploy_manager.deploy_bench(bench.name)
+			lifecycle.deploy_bench(bench.name)
 
 	def _log(self, bench_name):
 		logs = frappe.get_all(
@@ -808,7 +827,7 @@ class TestDeployStepMarkers(IntegrationTestCase):
 		self.assertNotIn("code-server ready at", log)
 		self.assertFalse(self._bench_field(bench, "code_server_url"))
 
-	@patch("benchpress.deploy_manager.secrets.token_urlsafe")
+	@patch("benchpress.lifecycle.secrets.token_urlsafe")
 	def test_the_ssh_password_goes_into_the_environment_and_into_no_command(self, token):
 		"""Docker publishes every exec command line, and linkuser.sh read the password from argv."""
 		sentinel = "sS1XnOtAr3alPassw0rd"
@@ -823,7 +842,7 @@ class TestDeployStepMarkers(IntegrationTestCase):
 		for call in self.execs.call_args_list:
 			self.assertNotIn(sentinel, call.args[1])
 
-	@patch("benchpress.deploy_manager.secrets.token_urlsafe")
+	@patch("benchpress.lifecycle.secrets.token_urlsafe")
 	@patch("benchpress.docker_manager.get_client")
 	def test_the_code_server_password_goes_into_the_environment_and_into_no_command(self, get_client, token):
 		"""Docker publishes every exec command line, and the IDE password was in one."""
@@ -1096,9 +1115,9 @@ class TestTerminalStateNotifications(IntegrationTestCase):
 			as_dict=True,
 		)
 
-	@patch("benchpress.deploy_manager.ensure_infrastructure", autospec=True)
+	@patch("benchpress.lifecycle.ensure_infrastructure", autospec=True)
 	def test_deploy_failure_notifies_owner(self, mock_infra):
-		from benchpress.deploy_manager import deploy_bench
+		from benchpress.lifecycle import deploy_bench
 
 		bench = self._owned_bench()
 		mock_infra.side_effect = Exception("mariadb container refused to start")
@@ -1112,41 +1131,40 @@ class TestTerminalStateNotifications(IntegrationTestCase):
 		self.assertIn("failed", notification.subject)
 
 	def test_deploy_success_notifies_owner(self):
-		from benchpress import deploy_manager
-
 		bench = self._owned_bench()
+		_install_on_both(self, "write_file_to_container")
+		_install_on_both(self, "exec_in_container", MagicMock(return_value=(0, "")))
 		frappe.db.commit()
 
 		with (
 			_cached_image(self.lab.name),
-			patch.object(deploy_manager, "ensure_infrastructure", autospec=True) as mock_infra,
-			patch.object(deploy_manager, "wait_for_mariadb", autospec=True),
+			patch.object(lifecycle, "ensure_infrastructure", autospec=True) as mock_infra,
+			patch.object(lifecycle, "wait_for_mariadb", autospec=True),
 			patch.object(deploy_manager, "_remove_stale_container", autospec=True),
 			patch.object(deploy_manager, "host_runtimes", autospec=True) as mock_runtimes,
-			patch.object(deploy_manager, "container_runtime", autospec=True) as mock_runtime_of,
-			patch.object(deploy_manager, "create_bench_container", autospec=True) as mock_create,
+			patch.object(lifecycle, "container_runtime", autospec=True) as mock_runtime_of,
+			patch.object(lifecycle, "create_bench_container", autospec=True) as mock_create,
 			# The deploy starts through the roll wrapper, so the bridge it lands on is a
 			# read-back rather than the id that went in.
-			patch.object(deploy_manager, "start_bench_container", new=lambda cid, bench, lab: cid),
-			patch.object(deploy_manager, "container_network", new=lambda cid: "benchpress-0"),
-			patch.object(deploy_manager, "wait_for_container_running", autospec=True) as mock_wait,
+			patch.object(lifecycle, "start_bench_container", new=lambda cid, bench, lab: cid),
+			patch.object(lifecycle, "container_network", new=lambda cid: "benchpress-0"),
+			patch.object(lifecycle, "wait_for_container_running", autospec=True) as mock_wait,
 			patch.object(ingress, "publish", autospec=True),
 			patch.object(ingress, "ensure_anchor", autospec=True),
 			patch.object(ingress, "_certificate_error", autospec=True, return_value=None),
 			patch.object(deploy_manager, "_setup_container_vpn", autospec=True),
-			patch.object(deploy_manager, "write_file_to_container", autospec=True),
-			patch.object(deploy_manager, "exec_in_container", autospec=True) as mock_exec,
 			patch.object(deploy_manager, "create_site_in_container", autospec=True) as mock_site,
+			# The transition reissues `start` on the container the deploy already brought up.
+			patch.object(lifecycle, "start_container", autospec=True),
 		):
 			mock_infra.return_value = self.db_server_name
 			mock_runtimes.return_value = {"names": {"runc", "sysbox-runc"}, "default": "runc"}
 			mock_runtime_of.return_value = "sysbox-runc"
 			mock_create.return_value = "cid-notify"
 			mock_wait.return_value = "172.30.0.9"
-			mock_exec.return_value = (0, "")
 			mock_site.return_value = (0, "site created")
 
-			deploy_manager.deploy_bench(bench.name)
+			lifecycle.deploy_bench(bench.name)
 
 		self.assertEqual(frappe.db.get_value("Bench Instance", bench.name, "status"), "Running")
 		notification = self._owner_notification("Bench Instance", bench.name)
@@ -1189,9 +1207,9 @@ class TestTerminalStateNotifications(IntegrationTestCase):
 		"frappe.desk.doctype.notification_log.notification_log.enqueue_create_notification",
 		autospec=True,
 	)
-	@patch("benchpress.deploy_manager.ensure_infrastructure", autospec=True)
+	@patch("benchpress.lifecycle.ensure_infrastructure", autospec=True)
 	def test_notification_failure_does_not_break_deploy(self, mock_infra, mock_notify):
-		from benchpress.deploy_manager import deploy_bench
+		from benchpress.lifecycle import deploy_bench
 
 		bench = self._owned_bench()
 		mock_infra.side_effect = Exception("infrastructure down")

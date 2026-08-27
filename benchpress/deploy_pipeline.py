@@ -33,7 +33,7 @@ class DeployStep:
 	label: str
 
 
-# The order below is `deploy_manager._deploy_bench`'s own order. DESIGN_BRIEF §4
+# The order below is `lifecycle._deploy_bench`'s own order. DESIGN_BRIEF §4
 # lists the WireGuard peer at position 10; `_setup_container_vpn` actually runs
 # it at 5, right after the container reports an IP. The stepper is a report of
 # the run, not of the plan, so the code wins — do not "correct" this to the

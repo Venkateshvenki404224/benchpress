@@ -438,7 +438,7 @@ class TestAdmission(IntegrationTestCase):
 		self.running_bench(self.benches[1])
 		frappe.set_user(USER)
 		with (
-			patch("benchpress.docker_manager.start_container"),
+			patch("benchpress.lifecycle.start_container"),
 			patch("benchpress.ingress.enqueue_route_sync"),
 			patch("frappe.db.commit"),
 		):

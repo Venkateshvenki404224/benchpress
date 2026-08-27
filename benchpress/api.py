@@ -216,7 +216,7 @@ def create_bench(data: str) -> dict:
 	site_names.claim(doc)
 
 	frappe.enqueue(
-		"benchpress.deploy_manager.deploy_bench",
+		"benchpress.lifecycle.deploy_bench",
 		bench_name=doc.name,
 		queue="long",
 		timeout=DEPLOY_JOB_TIMEOUT,
@@ -308,26 +308,10 @@ def _start_bench(bench, action: str) -> dict:
 	This is the start path the SPA uses, so it is where the cap and the hold have to be. Stopping
 	and deleting stay outside the gate: stopping is what a refused caller is being told to do.
 	"""
-	from benchpress import ingress
-	from benchpress.docker_manager import restart_container, start_container
+	from benchpress import lifecycle
 
 	_require_container(bench)
-	if action == "start":
-		start_container(bench.container_id)
-		bench.started_at = frappe.utils.now_datetime()
-	else:
-		restart_container(bench.container_id)
-
-	bench.status = "Running"
-	# A restart does not interrupt the window the user already bought, so this only buys one
-	# for a bench that had none — and it runs before the save so the deadline and the status
-	# it belongs to are written together.
-	metering.on_bench_running(bench)
-	bench.save()
-	frappe.db.commit()
-	# A restart re-allocates the container address, and a start may be following a stop that
-	# removed the file — both need the route re-established.
-	ingress.enqueue_route_sync(bench.name)
+	lifecycle.running(bench, action=action)
 	return {"name": bench.name, "status": bench.status}
 
 
@@ -520,8 +504,6 @@ def renew_bench(bench_name: str, plan: str, request_id: str) -> dict:
 	the charge last. Raises `ValidationError` when the sweep already claimed the row, when the
 	plan would push the lease past the lab's ceiling, or when the grace window has closed.
 	"""
-	from benchpress import ingress
-
 	require_bench_access(bench_name)
 	if not config.credits_enabled():
 		frappe.throw(_("Credits are switched off on this site, so there is nothing to renew."))
@@ -557,8 +539,6 @@ def renew_bench(bench_name: str, plan: str, request_id: str) -> dict:
 		_restart_in_grace(bench)
 	lease.announce_renewed(bench)
 	frappe.db.commit()  # nosemgrep -- releases the row lock, and the push is hung off this commit
-	if stopped:
-		ingress.enqueue_route_sync(bench.name)
 	return _lease_state(bench, charged=charged)
 
 
@@ -590,17 +570,16 @@ def _assert_inside_grace(bench) -> None:
 
 
 def _restart_in_grace(bench) -> None:
-	"""Start the container the bench still has. Expiry only stopped it, so this is not a rebuild."""
-	from benchpress.docker_manager import start_container
+	"""Start the container the bench still has. Expiry only stopped it, so this is not a rebuild.
 
-	start_container(bench.container_id)
-	bench.status = "Running"
-	frappe.db.set_value(
-		"Bench Instance",
-		bench.name,
-		{"status": "Running", "started_at": frappe.utils.now_datetime()},
-		update_modified=False,
-	)
+	`bench` is the locked row read rather than a document, so the transition runs on a loaded
+	one and the status it wrote is reflected back for the caller's response.
+	"""
+	from benchpress import lifecycle
+
+	doc = frappe.get_doc("Bench Instance", bench.name)
+	lifecycle.running(doc)
+	bench.status = doc.status
 
 
 def _lease_state(bench, charged: float) -> dict:

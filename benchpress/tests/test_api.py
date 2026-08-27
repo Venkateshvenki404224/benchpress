@@ -815,7 +815,7 @@ class TestApi(IntegrationTestCase):
 		with patch("frappe.enqueue") as enqueue:
 			_, elapsed_ms = _timed(bench.enqueue_deploy)
 		enqueue.assert_called_once()
-		self.assertEqual(enqueue.call_args.args[0], "benchpress.deploy_manager.deploy_bench")
+		self.assertEqual(enqueue.call_args.args[0], "benchpress.lifecycle.deploy_bench")
 		self.assert_within_budget("enqueue_deploy", elapsed_ms)
 
 	def test_enqueue_redeploy_calls_job_and_timing(self):
@@ -823,7 +823,7 @@ class TestApi(IntegrationTestCase):
 		with patch("frappe.enqueue") as enqueue:
 			_, elapsed_ms = _timed(bench.enqueue_redeploy)
 		enqueue.assert_called_once()
-		self.assertEqual(enqueue.call_args.args[0], "benchpress.deploy_manager.redeploy_bench")
+		self.assertEqual(enqueue.call_args.args[0], "benchpress.lifecycle.redeploy_bench")
 		self.assert_within_budget("enqueue_redeploy", elapsed_ms)
 
 	def test_enqueue_stop_calls_stop_bench_and_timing(self):
@@ -835,7 +835,7 @@ class TestApi(IntegrationTestCase):
 
 	def test_enqueue_start_starts_container_and_timing(self):
 		bench = frappe.get_doc("Bench Instance", self.bench.name)
-		with patch("benchpress.docker_manager.start_container") as start_container:
+		with patch("benchpress.lifecycle.start_container") as start_container:
 			_, elapsed_ms = _timed(bench.enqueue_start)
 		start_container.assert_called_once_with(bench.container_id)
 		self.assertEqual(bench.status, "Running")

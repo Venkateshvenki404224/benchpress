@@ -31,7 +31,7 @@ import frappe
 from frappe.tests import IntegrationTestCase
 from frappe.utils import add_to_date, now_datetime
 
-from benchpress import deploy_manager, docker_manager, hooks
+from benchpress import deploy_manager, docker_manager, hooks, lifecycle
 from benchpress.credits import drain, lease, warden
 from benchpress.credits.seed import seed_defaults
 from benchpress.tests.test_lease import _ensure_bench, _ensure_lab, _ensure_plan, _ensure_user
@@ -421,7 +421,7 @@ class TestLeaseDrain(IntegrationTestCase):
 
 	def test_a_deploy_stamps_the_node_beside_the_container_id(self):
 		"""Backfilling this later means inspecting Docker across live hosts while benches run."""
-		source = inspect.getsource(deploy_manager._deploy_bench)
+		source = inspect.getsource(lifecycle._deploy_bench)
 		self.assertIn("bench.node = lease.local_node()", source)
 
 	# --- The warden -----------------------------------------------------------

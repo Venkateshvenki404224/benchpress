@@ -282,7 +282,7 @@ class TestLease(IntegrationTestCase):
 	def renewing(self):
 		"""Renew with Docker, the route job and the commit stood down, so the rollback still holds."""
 		with (
-			patch("benchpress.docker_manager.start_container") as start,
+			patch("benchpress.lifecycle.start_container") as start,
 			patch("benchpress.ingress.enqueue_route_sync") as route,
 			patch("frappe.publish_realtime") as publish,
 			patch.object(frappe.db, "commit"),
@@ -512,7 +512,7 @@ class TestLease(IntegrationTestCase):
 		self.assertEqual(self.deadline(), 0)
 
 		with (
-			patch("benchpress.docker_manager.start_container"),
+			patch("benchpress.lifecycle.start_container"),
 			patch.object(ingress, "enqueue_route_sync"),
 			patch.object(frappe.db, "commit"),
 		):

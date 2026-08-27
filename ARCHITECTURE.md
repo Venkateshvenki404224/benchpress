@@ -20,7 +20,8 @@ apps/benchpress/
 ├── benchpress/
 │   ├── hooks.py               # App config, scheduler, routes
 │   ├── api.py                 # REST API (~20 endpoints)
-│   ├── deploy_manager.py      # Build & deploy orchestration
+│   ├── lifecycle.py           # Bench transitions: running, and the deploy that reaches it
+│   ├── deploy_manager.py      # Image building, site creation, stop and teardown
 │   ├── docker_manager.py      # Docker SDK wrapper
 │   ├── vpn_adapter.py         # Seam to the vpn_management VPN plane
 │   ├── stats_collector.py     # Container stats cron job
@@ -88,9 +89,9 @@ This is the **brain** of BenchPress. It coordinates builds and deployments.
 | Function | Called By | What It Does |
 |----------|-----------|--------------|
 | `build_lab(lab_name)` | Background job from `build_lab_image` API | Builds Docker image for a Lab. Creates Build Log doc, streams logs via WebSocket (`lab_build_log` event). Sets Lab status to Ready or Error. |
-| `deploy_bench(bench_name)` | Background job from `create_bench` API | **Main deploy pipeline**: check image → remove stale container → create container → start → register VPN Peer + configure container tunnel (via `vpn_adapter`) → set SSH password → mark Running |
+| `lifecycle.deploy_bench(bench_name)` | Background job from `create_bench` API | **Main deploy pipeline**: check image → remove stale container → create container → start → register VPN Peer + configure container tunnel (via `vpn_adapter`) → set SSH password → mark Running |
 | `stop_bench(bench_name)` | Background job from `bench_action` | Stop container |
-| `redeploy_bench(bench_name)` | Background job from `bench_action` | Stop + remove container, reset to Draft, call deploy_bench |
+| `lifecycle.redeploy_bench(bench_name)` | Background job from `bench_action` | Stop + remove container, reset to Draft, call deploy_bench |
 | `log_deploy(bench_name, msg, type)` | Internal helper | Saves Deploy Log + publishes `bench_deploy_log` WebSocket event |
 
 ### `docker_manager.py` (191 lines) — Docker SDK Wrapper
@@ -273,7 +274,7 @@ static markup of a session that is not running anywhere.
                        ▼
 ┌─────────────────────────────────────────────────────────────┐
 │ 3. DEPLOY BENCH                                             │
-│    api.create_bench() → enqueue deploy_manager.deploy_bench │
+│    api.create_bench() → enqueue lifecycle.deploy_bench      │
 │    Status: Deploying                                        │
 │    Pipeline:                                                │
 │      a. Check image exists (build if not)                   │

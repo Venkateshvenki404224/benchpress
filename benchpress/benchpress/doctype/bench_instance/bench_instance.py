@@ -136,7 +136,7 @@ class BenchInstance(Document):
 			frappe.msgprint(_("A deploy is already in progress for this bench."))
 			return
 		frappe.enqueue(
-			"benchpress.deploy_manager.deploy_bench",
+			"benchpress.lifecycle.deploy_bench",
 			bench_name=self.name,
 			queue="long",
 			timeout=DEPLOY_JOB_TIMEOUT,
@@ -160,7 +160,7 @@ class BenchInstance(Document):
 			frappe.msgprint(_("A deploy is already in progress for this bench."))
 			return
 		frappe.enqueue(
-			"benchpress.deploy_manager.redeploy_bench",
+			"benchpress.lifecycle.redeploy_bench",
 			bench_name=self.name,
 			queue="long",
 			timeout=DEPLOY_JOB_TIMEOUT,
@@ -176,19 +176,9 @@ class BenchInstance(Document):
 	@frappe.whitelist()
 	@requires_admission(cost=instance_lease_cost)
 	def enqueue_start(self):
-		from benchpress import ingress
-		from benchpress.credits import metering
-		from benchpress.docker_manager import start_container
+		from benchpress import lifecycle
 
 		if not self.container_id:
 			frappe.throw(_("No container to start."))
-		start_container(self.container_id)
-		self.status = "Running"
-		self.started_at = frappe.utils.now_datetime()
-		# Buys a fresh window before the save writes `Running`. A start that left the old,
-		# passed deadline on the row would be claimed by the next sweep and stopped again.
-		metering.on_bench_running(self)
-		self.save()
-		frappe.db.commit()  # nosemgrep: intentional commit to persist status before response
-		ingress.enqueue_route_sync(self.name)
+		lifecycle.running(self)
 		frappe.msgprint(_("Bench started."))
