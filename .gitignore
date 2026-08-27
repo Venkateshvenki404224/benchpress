@@ -73,3 +73,17 @@ specs/
 
 # Playwright run artifacts
 test-results/
+
+# Local-only working notes, drafts and generated reports. None of these are part
+# of the published repository, and the Ralph loops refuse to branch over an
+# untracked file, so anything that lives only on this box belongs here.
+todo.md
+brainstrom.txt
+AI_AGENT_HARNESS_ENGINEERING_PLAYBOOK.md
+*.docx
+architecture-review-*.html
+docs/design/
+
+# Skills that ship from the Shipcraft plugin marketplace, not from this repo.
+.claude/skills/improve-codebase-architecture/
+.claude/skills/wayfinder/
