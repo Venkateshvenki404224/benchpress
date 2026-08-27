@@ -47,6 +47,9 @@ def running(bench, *, action: str = "start") -> None:
 		bench.started_at = frappe.utils.now_datetime()
 
 	bench.status = "Running"
+	# A verdict from before the container was restarted is not a verdict about this one, and
+	# `docker_events._unasked_for` reads the field to tell a death from a stop that was asked for.
+	bench.container_health = ""
 	# Before the save, so the deadline and the status it belongs to are written together. A
 	# restart does not interrupt the window the user already bought: this only buys one for a
 	# bench that had none.

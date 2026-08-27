@@ -286,6 +286,14 @@ class TestApi(IntegrationTestCase):
 
 	def test_get_lab_carries_both_status_axes_of_the_bench(self):
 		"""A Running bench can be Unhealthy — the card cannot draw one from the other."""
+		# Set here rather than in the fixture: a start clears the health verdict, and a sibling
+		# test starts this same shared bench.
+		frappe.db.set_value(
+			"Bench Instance",
+			self.bench.name,
+			{"container_health": "Unhealthy", "last_health_check": frappe.utils.now_datetime()},
+			update_modified=False,
+		)
 		bench = api.get_lab(self.lab.name)["bench"]
 
 		self.assertEqual(bench["name"], self.bench.name)
