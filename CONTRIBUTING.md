@@ -40,12 +40,22 @@ without it; `bench get-app` resolves it automatically from
 
 ## Branch Strategy
 
-- `main` — production, always deployable
-- `develop` — integration branch
-- `feature/<name>` — feature branches from `develop`
-- `fix/<name>` — bug fix branches from `main`
+Three long-lived branches, promoted in one direction and never the other:
 
-Never commit directly to `main` or `develop`.
+- **`develop` — development.** Feature and fix branches start here and merge back
+  here. This is where work lands first.
+- **`version-16` — staging.** What the staging deployment runs, and the
+  repository's default branch. `develop` merges here once it holds together.
+- **`main` — production.** A release *is* a merge into `main` plus a `vX.Y.Z` tag.
+  The README's install instructions point here, so whatever is on `main` is what
+  a new user gets.
+
+Work branches take the commit type as their prefix: `feat/<name>`, `fix/<name>`,
+`docs/<name>`, `refactor/<name>`, `test/<name>`, `chore/<name>`.
+
+Never commit directly to any of the three. Note that GitHub will offer
+`version-16` as the base for a new PR because it is the default branch — change
+it to `develop`.
 
 ## Commit Messages
 
@@ -130,7 +140,7 @@ source-available with a commercial-use restriction) cannot be merged.
 1. Create a branch from `develop`
 2. Make your changes with conventional commit messages
 3. Run the three verification commands above before pushing
-4. Open a PR targeting `develop`
+4. Open a PR targeting `develop` — GitHub will preselect `version-16`, so change it
 5. Describe **what** changed and **why** in the PR description
 6. Link any related issues
 7. Sign the CLA when the bot asks

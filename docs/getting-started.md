@@ -26,7 +26,7 @@ Before installing BenchPress, ensure your host machine has:
 ```bash
 cd /path/to/your/frappe-bench
 
-bench get-app https://github.com/Venkateshvenki404224/benchpress --branch develop
+bench get-app https://github.com/Venkateshvenki404224/benchpress --branch main
 bench pip install docker
 bench --site your-site.localhost install-app benchpress
 bench --site your-site.localhost migrate
