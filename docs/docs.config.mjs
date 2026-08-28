@@ -29,6 +29,28 @@ export default defineDocsConfig({
           { urlPath: "/docs/user/deploy-from-template" },
         ],
       },
+      // Every page, with its own description, because llms.txt is the routing
+      // table an HTTP agent reads. A page missing from here is a page it has
+      // to find by crawling.
+      {
+        type: "links",
+        heading: "User Track",
+        links: [
+          { urlPath: "/docs" },
+          { urlPath: "/docs/user/quick-tour" },
+          { urlPath: "/docs/user/deploy-from-template" },
+          { urlPath: "/docs/user/create-a-lab" },
+          { urlPath: "/docs/user/lab-detail" },
+          { urlPath: "/docs/user/lifecycle" },
+          { urlPath: "/docs/user/vpn-devices" },
+          { urlPath: "/docs/user/open-your-site" },
+          { urlPath: "/docs/user/connect-ssh-vpn" },
+          { urlPath: "/docs/user/code-server" },
+          { urlPath: "/docs/user/logs-and-monitoring" },
+          { urlPath: "/docs/user/leases-and-credits" },
+          { urlPath: "/docs/user/troubleshooting" },
+        ],
+      },
       {
         type: "markdown",
         heading: "Agent Guidance",
@@ -69,6 +91,20 @@ export default defineDocsConfig({
             "lifecycle",
           ],
         },
+        {
+          title: "Get into the bench",
+          pages: [
+            "vpn-devices",
+            "open-your-site",
+            "connect-ssh-vpn",
+            "code-server",
+          ],
+        },
+        {
+          title: "Watch it and pay for it",
+          pages: ["logs-and-monitoring", "leases-and-credits"],
+        },
+        { title: "When it goes wrong", pages: ["troubleshooting"] },
       ],
     },
     { title: "Operator", base: "operator", children: [] },

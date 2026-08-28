@@ -57,7 +57,7 @@ BenchPress only *consumes* the VPN plane through `benchpress/vpn_adapter.py`:
   brings up `wg0` inside it.
 - **Delete/redeploy**: removes the bench's peer so the allocation is freed.
 - **Devices page**: the add/remove/list/config APIs are thin wrappers over
-  VPN Peer documents — see [Device Management](device-management.md).
+  VPN Peer documents — see [Register a VPN device](user/vpn-devices.mdx).
 
 ---
 

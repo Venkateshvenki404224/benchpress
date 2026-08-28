@@ -125,9 +125,13 @@ users the corresponding source. See [License](#license) for the notice, and
 - [Create a lab](docs/user/create-a-lab.mdx) -- The New lab form, for when no template fits
 - [Read a lab page](docs/user/lab-detail.mdx) -- Every field, and why status and health disagree
 - [Start, stop and redeploy](docs/user/lifecycle.mdx) -- The five actions, and what each one keeps
-- [Connecting to Benches](docs/connecting-to-benches.md) -- SSH, VPN, and connection info
-- [Logs & Monitoring](docs/logs-and-monitoring.md) -- Build logs, deploy logs, and stats
-- [VPN Device Management](docs/device-management.md) -- Register devices for WireGuard access
+- [Register a VPN device](docs/user/vpn-devices.mdx) -- Put a machine on the WireGuard network, and the connection test
+- [Open the bench site](docs/user/open-your-site.mdx) -- The Sites card, and logging in to the site a deploy created
+- [Connect over SSH and the VPN](docs/user/connect-ssh-vpn.mdx) -- The connection card, both addresses and the three passwords
+- [Use code-server](docs/user/code-server.mdx) -- The browser IDE, its password, and sharing a session
+- [Read logs and container stats](docs/user/logs-and-monitoring.mdx) -- The deploy stepper, the raw log and the resource bars
+- [Leases and credits](docs/user/leases-and-credits.mdx) -- The countdown, the renew dialog, the meter and the ledger
+- [Troubleshooting](docs/user/troubleshooting.mdx) -- Every user-facing symptom, its cause and its fix
 - [WireGuard Setup](docs/wireguard-setup.md) -- Detailed WireGuard configuration
 - [Upgrading a BenchPress Install](docs/upgrading.md) -- Backup-gated upgrade and rollback runbook
 - [Database Backup & Restore](docs/database-backup-restore.md) -- Where nightly MariaDB dumps live and the verified restore runbook

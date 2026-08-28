@@ -107,8 +107,8 @@ it in one click. To define an environment yourself, follow the
 |-------|-------------|
 | [Deploy from a template](user/deploy-from-template.mdx) | Deploy a bench from the catalog |
 | [Create a lab](user/create-a-lab.mdx) | Define a lab by hand when no template fits |
-| [Connecting to Benches](connecting-to-benches.md) | SSH access, VPN setup, and connection info |
-| [Logs and Monitoring](logs-and-monitoring.md) | Build logs, deploy logs, and container stats |
-| [VPN Device Management](device-management.md) | Register devices for persistent WireGuard access |
+| [Connect over SSH and the VPN](user/connect-ssh-vpn.mdx) | The connection card, both addresses and the three passwords |
+| [Read logs and container stats](user/logs-and-monitoring.mdx) | The deploy stepper, the raw log and the resource bars |
+| [Register a VPN device](user/vpn-devices.mdx) | Put a machine on the WireGuard network, and the connection test |
 | [WireGuard Setup](wireguard-setup.md) | How the vpn_management app runs the VPN plane |
 | [Upgrading a BenchPress Install](upgrading.md) | Backup-gated upgrade and rollback runbook |

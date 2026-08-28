@@ -118,4 +118,4 @@ service.
 
 - [Production Safety & Compatibility](production-safety.md) — what is and is not backed up
 - [Upgrading a BenchPress Install](upgrading.md) — the pre-upgrade backup gate for the control-plane site
-- [Logs & Monitoring](logs-and-monitoring.md) — where backup failures are logged (Error Log)
+- [Read logs and container stats](user/logs-and-monitoring.mdx) — where backup failures are logged (Error Log)

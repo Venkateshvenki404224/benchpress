@@ -95,4 +95,4 @@ definitions accept:
 
 - [Getting Started](getting-started.md) — install and deploy your first bench
 - [WireGuard Setup](wireguard-setup.md) — VPN configuration and troubleshooting
-- [Connecting to Benches](connecting-to-benches.md) — SSH and connection info
+- [Connect over SSH and the VPN](user/connect-ssh-vpn.mdx) — SSH and connection info
