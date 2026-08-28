@@ -9,6 +9,13 @@
 - [Create a lab](https://docs.benchpress.cloud/docs/user/create-a-lab): Fill in the New lab form when no catalog template matches the app list you need.
 - [Read a lab page](https://docs.benchpress.cloud/docs/user/lab-detail): Every field on the lab page, and why container status and container health can disagree.
 - [Start, stop and redeploy](https://docs.benchpress.cloud/docs/user/lifecycle): The five actions on a running bench, which of them destroy work, and which are admin-only.
+- [Register a VPN device](https://docs.benchpress.cloud/docs/user/vpn-devices): Put a laptop or a phone on the WireGuard network, import the config, read the device status, and run the connection test when a site will not open.
+- [Open the bench site](https://docs.benchpress.cloud/docs/user/open-your-site): The Sites card, the three states of its Open button, and logging in to the Frappe site a deploy created.
+- [Connect over SSH and the VPN](https://docs.benchpress.cloud/docs/user/connect-ssh-vpn): The connection card on a lab page — two addresses, the SSH command, the three passwords, and which of them work without the tunnel.
+- [Use code-server](https://docs.benchpress.cloud/docs/user/code-server): Open the browser VS Code session on a bench, find its password, hand the session to a teammate, and restart it when it stops answering.
+- [Read logs and container stats](https://docs.benchpress.cloud/docs/user/logs-and-monitoring): The deploy stepper, the raw log and its step markers, the build log, and the CPU and memory bars on a running bench.
+- [Leases and credits](https://docs.benchpress.cloud/docs/user/leases-and-credits): The countdown on a running bench, the renew dialog and its plans, the credit meter, the ledger, and where a purchase hands off to the payment gateway.
+- [Troubleshooting](https://docs.benchpress.cloud/docs/user/troubleshooting): Every symptom a BenchPress user meets, its cause, and the page that fixes it — deploys, the VPN, SSH, code-server, logs and credits.
 - [BenchPress documentation](https://docs.benchpress.cloud/docs): Start here. Three tracks — use a bench, run the server that hosts one, or read the data model and the API.
 
 ## Content
@@ -688,6 +695,1151 @@ before, so nothing disappears without notice. `0` turns the deletion off.
 * [Read a lab page](/docs/user/lab-detail) — the fields these actions change.
 * [Deploy from a template](/docs/user/deploy-from-template) — the eleven steps a redeploy runs again.
 * [Create a lab](/docs/user/create-a-lab) — what a rebuild rebuilds.
+
+# Register a VPN device
+URL: https://docs.benchpress.cloud/docs/user/vpn-devices
+Put a laptop or a phone on the WireGuard network, import the config, read the device status, and run the connection test when a site will not open.
+
+No bench is published to the internet on a tunnel-only address. Register the
+machine you work from once, and every bench you own becomes reachable from it.
+
+**Who this is for.** Anybody who cannot reach a bench site, an SSH port or an
+IDE on a private address.
+
+**Before you start.** Install the WireGuard client for your platform. You need
+nothing else. BenchPress generates the keys.
+
+## Steps
+
+1. Open **Devices** in the sidebar. With no device registered, the page says
+   so twice — once in the banner and once in the list.
+
+   ![The BenchPress Devices page at 1280 by 800 pixels with nothing registered. A yellow banner reads, This device is not on the VPN, Register the machine, import the config, then everything below becomes reachable, with an Add this device button. The Registered devices card reports 0 machines and an empty state reading, No machine can reach your benches yet. Register the one you work from and its config arrives immediately. The right column stacks a How this works card listing three numbered steps and a card headed A site will not open with three checks and a Run connection test button.](../images/user/vpn-devices/01-no-devices.png)
+
+   The **How this works** card states the whole model in three lines.
+
+   |#|Step|
+   |--|--|
+   |1|Register the machine here — it gets a fixed IP on the lab network|
+   |2|Import the config into the WireGuard app, or scan the QR on a phone|
+   |3|Turn the tunnel on. Sites, SSH and VS Code resolve immediately|
+
+2. Press **Add this device**. Name the machine and pick its type.
+
+   ![The Add this device dialog over the Devices page at 1280 by 800 pixels. The dialog is headed Add this device with the line Two minutes, once per machine. A Device name field holds the typed text Sam — MacBook Pro and a Type dropdown reads Laptop. A dashed placeholder to the left reads, QR appears once the device is registered, and the Download .conf button beside it is grayed out. The paragraph explains that this device gets a fixed IP on the lab network and that nothing else routes through the tunnel. Cancel and Register and connect buttons sit at the foot.](../images/user/vpn-devices/02-add-device.png)
+
+   The name is yours to choose. It is the name every later message uses, so
+   name the machine, not the person.
+
+   **Type** accepts one of seven values: `Mobile`, `Laptop`, `Desktop`,
+   `Tablet`, `Server`, `IoT` and `Embedded`.
+
+   The QR panel is empty and **Download .conf** is disabled at this point. A
+   peer's config does not exist until the peer does.
+
+3. Press **Register and connect**. The config and its QR code appear in the
+   same dialog.
+
+   ![The same dialog after registration, at 1280 by 800 pixels. A black and white QR code now fills the left panel, captioned Scan with the WireGuard app, and the Download .conf button beside it is enabled. A green line reads, Registered as 172.27.0.20. Import the config and turn the tunnel on. The Device name and Type fields are grayed out, and the foot of the dialog now offers a single Close button. Behind the dialog the banner has changed to report one machine registered, with a Check again button.](../images/user/vpn-devices/03-registered.png)
+
+   The message names the address the device was given. In the frame it is
+   `172.27.0.20`.
+
+   **The QR code encodes the private key.** Treat that image the way you treat
+   a password. Do not paste it into a chat channel and do not put it in a
+   ticket.
+
+4. Import the config on the machine.
+
+   |Platform|How to import|
+   |--|--|
+   |macOS|WireGuard app, **Import tunnel(s) from file**, pick the `.conf`|
+   |Windows|WireGuard app, **Import tunnel(s) from file**, pick the `.conf`|
+   |Linux|Save to `/etc/wireguard/benchpress.conf`, then `sudo wg-quick up benchpress`|
+   |iOS|WireGuard app, scan the QR code|
+   |Android|WireGuard app, scan the QR code|
+
+5. Turn the tunnel on, then press **Check again** in the banner.
+
+   The chip in the page header turns green and reads `VPN connected` once the
+   server has heard from the device.
+
+## Read the device list
+
+Each registered machine is one row.
+
+![The Devices page with one machine registered, at 1280 by 800 pixels. The row reads Sam — MacBook Pro, Laptop, registered 28 Aug, IP 172.27.0.20, Transfer 0 B down and 0 B up, and a gray Pending badge. Config, QR and an overflow button sit under the badge. The banner above still reads, This device is not on the VPN, with the line, 1 machine registered, none with a recent handshake. Turn the tunnel on in your WireGuard client, then check again.](../images/user/vpn-devices/04-device-list.png)
+
+|Column|Value in the frame|Meaning|
+|--|--|--|
+|Name and type|`Sam — MacBook Pro`, `Laptop`|what you typed when you registered|
+|Registered|`28 Aug`|when the peer was created|
+|IP|`172.27.0.20`|the fixed tunnel address for this machine|
+|Transfer|`0 B ↓ / 0 B ↑`|bytes the server has counted for this peer|
+|Status|`Pending`|see the status table below|
+
+**Config** reopens the config text with a download button. **QR** reopens the
+scannable code. The overflow button holds **Remove**.
+
+## Run the connection test
+
+Press **Run connection test** when a site will not open. The test checks only
+what is yours, so a non-admin gets a real answer.
+
+![The Devices page after running the connection test, at 1280 by 800 pixels. The device row now carries a yellow Stale badge. Under the Run connection test button a bold line reads, First failing check: Peer enabled on the server. Four rows follow: WireGuard server Active, Device registered Active, Peer enabled on the server Error with the hint that Sam — MacBook Pro has stopped talking to the server and to turn its tunnel on again, and Recent handshake Error with the hint that the server has never heard from Sam — MacBook Pro.](../images/user/vpn-devices/05-connection-test.png)
+
+The four checks run in order, and the card names the first one that failed.
+
+|Check|Passes when|
+|--|--|
+|WireGuard server|the server this tunnel terminates on is up|
+|Device registered|this account has at least one device|
+|Peer enabled on the server|the device's peer status is `Active`|
+|Recent handshake|the last handshake is inside the 5-minute window|
+
+The test never raises an error. A failure is a row with a hint.
+
+## Remove a device
+
+Open the overflow button on the row and choose **Remove**.
+
+![A confirmation dialog over the Devices page at 1280 by 800 pixels, headed Remove this device? The body reads, Sam — MacBook Pro loses VPN access immediately and its tunnel IP goes back to the pool. Registering it again issues a new config. A single black Confirm button spans the foot of the dialog.](../images/user/vpn-devices/06-remove-confirm.png)
+
+Removing is immediate and the address returns to the pool. Registering the
+same machine again issues a new key and, usually, a different IP.
+
+## Verify
+
+* The header chip reads `VPN connected`.
+* The device row reads `Active` and the transfer counters climb.
+* A bench's private URL opens in a browser.
+* `ping <the bench WireGuard IP>` answers.
+
+## Troubleshooting
+
+|Symptom|Cause|Fix|
+|--|--|--|
+|Status stays `Pending`|The config was never imported, or the tunnel is off|Import the `.conf` and turn the tunnel on|
+|Status turned `Stale`|No handshake for over 5 minutes|Turn the tunnel on again. WireGuard rekeys about every two minutes|
+|Status reads `Disabled`|An administrator disabled the peer|Ask an admin to re-enable it|
+|Status reads `Revoked`|The peer was revoked|Register the machine again for a fresh config|
+|Two machines drop each other|One config is being used on both|Register each machine separately|
+|**Add device** is refused|The account is at the device cap of 5|Remove a machine you no longer use|
+|The connection test says `No device to test`|Nothing is registered on this account|Register this machine|
+|The tunnel is up and a site still 404s|The bench is stopped, not unreachable|Start the bench|
+
+## Reference
+
+### Device status
+
+|Status|Meaning|
+|--|--|
+|`Pending`|Registered, never connected|
+|`Active`|Handshake inside the last 5 minutes|
+|`Stale`|Registered and connected once, silent since|
+|`Disabled`|Switched off on the server by an administrator|
+|`Revoked`|Withdrawn. The config no longer works|
+
+`Active` is decided by one rule, used by the header chip, the row badge and
+the connection test alike: the last handshake is no older than
+`VPN Settings.status_poll_interval_min`, which is 5 minutes on this server.
+
+### Limits and defaults
+
+|Setting|Where|Value here|
+|--|--|--|
+|Devices per account|`Credit Settings.max_devices`|5|
+|Handshake window|`VPN Settings.status_poll_interval_min`|5 minutes|
+|Device types|fixed in the app|Mobile, Laptop, Desktop, Tablet, Server, IoT, Embedded|
+
+### One device per machine
+
+A WireGuard peer is a single identity. Two machines running the same config
+disconnect each other, because the server routes the address to whichever
+handshook last. Register every machine separately.
+
+### What a device is underneath
+
+Each device is a **VPN Peer** record owned by your user. The `vpn_management`
+app owns the WireGuard server, the address pool and the keys. The Devices page
+is a view over the peers you own, and it authorizes by owner rather than by
+VPN role, so a BenchPress User can manage their own machines.
+
+### Only the lab network routes through the tunnel
+
+The config routes the lab network and nothing else. Your normal traffic does
+not go through BenchPress while the tunnel is on.
+
+## Related
+
+* [Connect over SSH and the VPN](/docs/user/connect-ssh-vpn) — the addresses this tunnel makes reachable.
+* [Use code-server](/docs/user/code-server) — the browser IDE, which needs no tunnel.
+* [Troubleshooting](/docs/user/troubleshooting) — symptoms across the whole app.
+
+# Open the bench site
+URL: https://docs.benchpress.cloud/docs/user/open-your-site
+The Sites card, the three states of its Open button, and logging in to the Frappe site a deploy created.
+
+A deploy ends with a working Frappe site. This page opens it and logs in, and
+explains the two words the **Open** button uses when it cannot.
+
+**Who this is for.** Anybody whose deploy finished.
+
+**Before you start.** The bench must read `Running`. You need the **Admin
+password** from **Connection details** to sign in as `Administrator`.
+
+## Steps
+
+1. Press **Open site** in the lab header. That is the whole task when the
+   bench is running and reachable.
+
+   The header button is the fastest route. The rest of this page is for
+   reading the site's own state, and for when the button will not press.
+
+2. Open the **Sites** tab for the state behind that button.
+
+   ![The Sites tab of the Frappe CRM demo lab at 1280 by 800 pixels. A single card headed Sites holds one row. The row names the site 89c00d317f31f5e2887d1d9bc80a4ef2.benchpress.cloud, carries two app chips reading Frappe and CRM, and ends in a green Active pill and an Open button. The lab header above reads Frappe CRM demo, Ready, with the chips version-15, 1 GB, 1 vCPU, code-server and SSH, and the buttons Open VS Code and Open site.](../images/user/open-your-site/01-sites-tab.png)
+
+   The row carries four things.
+
+   |Part|Value in the frame|Meaning|
+   |--|--|--|
+   |Site name|`89c00d31…f2.benchpress.cloud`|the site's own hostname|
+   |App chips|`Frappe`, `CRM`|the apps installed on this site|
+   |State pill|`Active`|whether the site is serving|
+   |Button|**Open**|see the table below|
+
+   The app chips are the lab's app list as it was actually installed. A bench
+   built from a larger lab shows more chips.
+
+3. Read the button before pressing it. It never disappears, and it says why
+   when it cannot be pressed.
+
+   |Button|Cause|Fix|
+   |--|--|--|
+   |**Open**|The site is serving and reachable|Press it|
+   |**Not running**|The container is stopped|Start the bench|
+   |**Unreachable**|The address is tunnel-only and your tunnel is down|Turn WireGuard on|
+   |**Unreachable**|Nothing serves this site|Read the hint. The container answers only on its own site|
+
+   A stopped container and a down tunnel are different problems. The button
+   never collapses them into one word, because the remedies are different.
+
+4. Sign in on the site. The site is a normal Frappe site with its own login.
+
+   ![The login page of a deployed bench site at 1280 by 800 pixels. A white card on a pale gray background carries the Frappe mark and the heading Login to Frappe. The email field holds Administrator and the password field below it holds a masked value with a Show link at its right. A black Login button spans the card, with a Forgot Password link above it and a Login with Email Link button below.](../images/user/open-your-site/02-site-login.png)
+
+   Use `Administrator` and the **Admin password** from the lab's
+   **Connection details** card. That password belongs to this bench alone.
+
+   This login is the site's, not BenchPress's. Your BenchPress account has no
+   session here.
+
+5. Work in the site. It opens on whichever app the lab installed.
+
+   ![The deployed bench site after signing in, at 1280 by 800 pixels. Frappe CRM has loaded with Administrator in the account button at the top left and a sidebar listing Dashboard, Leads, Deals, Contacts, Organizations, Notes, Tasks and Call Logs. The Leads list is open and empty, reading No Leads Found with the note that leads can be created with the Create button. A Getting started panel on the right reads Welcome to Frappe CRM, 0 of 9 steps completed, and lists setup tasks beginning with Setup your password.](../images/user/open-your-site/03-site-desk.png)
+
+   In the frame the lab installed Frappe and CRM, so the site opens Frappe CRM
+   with an empty Leads list. A site is new, so every list starts empty.
+
+   The Frappe desk is at `/app` on the same hostname.
+
+## Verify
+
+* The Sites row reads `Active` and the button reads **Open**.
+* The site opens and shows a login page.
+* `Administrator` with the bench's admin password reaches the app.
+
+## Troubleshooting
+
+|Symptom|Cause|Fix|
+|--|--|--|
+|The Sites card is empty|The deploy has not created the site yet|Watch step 7 on the **Deploy log** tab|
+|The row reads `Inactive` and `Not running`|The container is stopped|Start the bench|
+|**Open site** in the header reads **Open site — VPN off**|The bench has only a tunnel address|Turn WireGuard on|
+|The public URL returns a 404|The bench is stopped, so nothing serves the hostname|Start the bench|
+|The private URL times out|It answers only inside the tunnel|Use the public URL, or turn the tunnel on|
+|`Administrator` is refused|The password came from another bench|Copy it from this bench's **Connection details**|
+|The site loads but every list is empty|The site is new|Nothing is wrong. Create a record|
+|The site was fine and now asks for a password that fails|A redeploy replaced the site and its passwords|Copy the new admin password|
+
+## Reference
+
+### The two addresses
+
+|Address|Scheme|Works without the VPN|
+|--|--|--|
+|Public URL|`https://` hostname|yes|
+|Private URL (VPN)|`http://` tunnel address, port 8000|no|
+
+The scheme is the reliable test. Both are built by BenchPress and never typed
+by hand, so a plain `http://` address is always the tunnel-only one.
+
+### One site per bench
+
+The container pins its default site and serves only that one. A row naming any
+other site has no address, and the button reads `Unreachable` rather than
+opening a different site's address from this one's button.
+
+### The site name is a hostname, not a route
+
+The site name is the bench id under the server's domain. It is a label the
+site answers to, not something DNS resolves for each bench separately. The
+wildcard certificate on the server covers it.
+
+### Which password opens what
+
+|Password|Opens|
+|--|--|
+|Admin password|`Administrator` on this site|
+|SSH password|an SSH session on the container|
+|code-server password|the browser IDE|
+
+All three are on **Connection details**, and all three are replaced by a
+redeploy.
+
+## Related
+
+* [Connect over SSH and the VPN](/docs/user/connect-ssh-vpn) — where the admin password and both addresses live.
+* [Register a VPN device](/docs/user/vpn-devices) — what makes the private address reachable.
+* [Start, stop and redeploy](/docs/user/lifecycle) — which action replaces the site.
+* [Read a lab page](/docs/user/lab-detail) — the rest of the lab screen.
+
+# Connect over SSH and the VPN
+URL: https://docs.benchpress.cloud/docs/user/connect-ssh-vpn
+The connection card on a lab page — two addresses, the SSH command, the three passwords, and which of them work without the tunnel.
+
+A running bench publishes one card with everything needed to reach it. This
+page reads that card field by field and gets you a shell inside the container.
+
+**Who this is for.** Anybody whose bench has finished deploying.
+
+**Before you start.** The bench must read `Running`. Register this machine on
+the VPN first — see [Register a VPN device](/docs/user/vpn-devices). Only one
+field on the card works without the tunnel.
+
+## Steps
+
+1. Open the lab and stay on the **Dashboard** tab. **Connection details** is
+   the second card in the left column. Every secret starts masked.
+
+   ![The Connection details card on a BenchPress lab page at 1280 by 800 pixels, seen as a non-admin user. A note under the card header reads that the public URL works from anywhere, everything else is reachable only over the VPN, and passwords are regenerated on every redeploy. Nine rows are listed: Public URL, Private URL (VPN) as http colon slash slash 172.27.0.19 colon 8000, WireGuard IP 172.27.0.19, Runtime sysbox, a code-server address, SSH as ssh intern at 172.27.0.19, and then SSH password, Admin password and code-server password, all three drawn as rows of dots. A Reveal secrets button sits in the card header and every row ends in a copy button.](../images/user/connect-ssh-vpn/01-connection-details.png)
+
+   The card carries nine rows. Four are addresses, one is the runtime, one is
+   a command, and three are passwords.
+
+   |Row|Value in the frame|Needs the VPN|
+   |--|--|--|
+   |Public URL|`https://05c166d4…f.benchpress.cloud`|no|
+   |Private URL (VPN)|`http://172.27.0.19:8000`|yes|
+   |WireGuard IP|`172.27.0.19`|yes|
+   |Runtime|`sysbox`|—|
+   |code-server|`https://ide-05c166d4….benchpress.cloud`|no|
+   |SSH|`ssh intern@172.27.0.19`|yes|
+   |SSH password|masked|—|
+   |Admin password|masked|—|
+   |code-server password|masked|—|
+
+   The scheme tells you which kind of address you are holding. A `https://`
+   hostname answers from anywhere. A plain `http://` tunnel address answers
+   only for a device on the WireGuard network.
+
+2. Press **Reveal secrets** to unmask all three passwords at once.
+
+   ![The same Connection details card after pressing Reveal secrets, at 1280 by 800 pixels. The header button now reads Hide secrets. The three password rows show plain text instead of dots: SSH password, Admin password and code-server password each hold a random mixed-case string of twelve to twenty characters. Every other row is unchanged, and the copy button is still at the end of each row.](../images/user/connect-ssh-vpn/02-revealed.png)
+
+   One toggle drives the whole column. The button becomes **Hide secrets**
+   while the passwords are shown.
+
+   The reveal state lives on the screen, not on the account. Navigate away and
+   back and the passwords are masked again.
+
+3. Press the copy button at the end of a row instead of selecting the text.
+   The icon turns into a check mark for two seconds to confirm the copy.
+
+   Copying works whether or not the row is revealed. You do not have to show a
+   password to paste it.
+
+4. Turn the WireGuard tunnel on in your client. Nothing below this step works
+   with the tunnel down.
+
+5. Run the SSH command from the card. Paste the SSH password when it asks.
+
+   ```bash
+   ssh intern@172.27.0.19
+   ```
+
+   The username is your email address with the domain removed, lowercased,
+   stripped of anything that is not a valid Linux username character, and cut
+   to 32 characters. `John.Doe@example.com` becomes `johndoe`.
+
+6. Work in the bench. The bench is at `/home/frappe/frappe-bench` and its
+   services are already running. The deploy started them at step 10.
+
+   ```bash
+   cd /home/frappe/frappe-bench
+   bench --site <site> list-apps
+   ```
+
+7. Open the site in a browser to log in to Frappe. Use the public URL from
+   anywhere, or the private URL over the tunnel. Sign in as `Administrator`
+   with the **Admin password** from the card.
+
+## Verify
+
+* `ssh <username>@<WireGuard IP>` gives a shell prompt inside the container.
+* The site opens at the public URL and accepts `Administrator` with the admin
+  password.
+* With the tunnel off, the public URL still opens and the private URL times
+  out. That difference is the tunnel working as designed.
+
+## Troubleshooting
+
+|Symptom|Cause|Fix|
+|--|--|--|
+|The card is not on the page|It renders for a deployed bench only|Deploy the lab first|
+|Every password reads `—`|The bench has no stored credential yet|Wait for the deploy to reach `Deploy complete`|
+|SSH times out|The tunnel is down, or this machine has no device|Turn WireGuard on, then run the connection test on **Devices**|
+|SSH says `Permission denied`|The password was retyped, not pasted|Use the row's copy button|
+|SSH worked yesterday and fails today|A redeploy regenerated the passwords|Reopen the card and copy them again|
+|The private URL never answers|It is tunnel-only by design|Use the public URL, or turn the tunnel on|
+|The public URL 404s|The bench is stopped, so nothing serves the hostname|Start the bench|
+|`Administrator` is refused on the site|The admin password was taken from another bench|Copy it from this bench's card|
+
+## Reference
+
+### What each field is
+
+|Field|Source|Notes|
+|--|--|--|
+|Public URL|the bench hostname behind the reverse proxy|HTTPS, works without the VPN|
+|Private URL (VPN)|the WireGuard address and port 8000|plain HTTP inside the tunnel|
+|WireGuard IP|claimed from the pool at deploy step 5|one address per bench|
+|Runtime|the container runtime the bench runs on|`sysbox` on this server|
+|code-server|the browser IDE address|see [Use code-server](/docs/user/code-server)|
+|SSH|`ssh <username>@<WireGuard IP>`|the username is derived from your email|
+|SSH password|generated per deploy|for the SSH login above|
+|Admin password|generated per deploy|for `Administrator` on the Frappe site|
+|code-server password|generated per deploy|for the IDE login page|
+
+### The passwords are regenerated on every redeploy
+
+A redeploy replaces the container, and the new container gets new credentials.
+A **Stop** followed by a **Start** keeps them, because that is the same
+container. Never write a bench password into a script.
+
+### VS Code Remote SSH
+
+The card's SSH command is a normal SSH target, so the Remote-SSH extension
+takes it as it is.
+
+1. Install the **Remote - SSH** extension.
+2. Run **Remote-SSH: Connect to Host**.
+3. Enter `<username>@<WireGuard IP>`.
+4. Paste the SSH password.
+5. Open `/home/frappe/frappe-bench`.
+
+The tunnel has to be up first. For an IDE that needs no local install, use
+code-server instead.
+
+### Who can see the card
+
+The endpoint behind it checks bench access on every call. You see your own
+benches. An admin sees every bench on the server.
+
+## Related
+
+* [Register a VPN device](/docs/user/vpn-devices) — the tunnel every field here depends on.
+* [Use code-server](/docs/user/code-server) — the browser IDE and its own password.
+* [Start, stop and redeploy](/docs/user/lifecycle) — which actions regenerate these passwords.
+* [Read a lab page](/docs/user/lab-detail) — the rest of the screen this card sits on.
+
+# Use code-server
+URL: https://docs.benchpress.cloud/docs/user/code-server
+Open the browser VS Code session on a bench, find its password, hand the session to a teammate, and restart it when it stops answering.
+
+Every bench whose lab enables it runs code-server, which is VS Code in a
+browser tab. This page opens it, logs in, and shares the session.
+
+**Who this is for.** Anybody with a running bench who would rather not install
+an SSH client or a remote-development extension.
+
+**Before you start.** The bench must read `Running`, and the lab must have
+code-server switched on. Look at the chips under the lab title. A lab with the
+IDE shows a `code-server` chip and the header offers **Open VS Code**.
+
+## Steps
+
+1. Press **Open VS Code** in the lab header. The IDE opens in a new tab and
+   BenchPress shows the password for it on the page you left.
+
+   ![The Helpdesk sandbox lab page at 1280 by 800 pixels with a small dialog over it, headed code-server password. The dialog text reads that code-server asks for this password and that every redeploy replaces it. Below the text a read-only field holds a random twenty-character password in plain text, with a copy button beside it. The lab header behind the dialog carries the chips version-16, 2 GB, 2 vCPU, code-server and SSH, and the buttons Open VS Code and Open site.](../images/user/code-server/01-password-dialog.png)
+
+   The password is shown, not masked. The dialog exists so the password can be
+   read beside the login form that is now asking for it.
+
+   The password is never put in the address. A query parameter would land in
+   browser history, in the container access log, and in every proxy between
+   the two.
+
+2. Press the copy button in the dialog.
+
+3. Switch to the new tab and paste the password into code-server's own login
+   page.
+
+   ![The code-server login page filling the browser window at 1280 by 800 pixels. A white card on a pale background is headed Welcome to code-server. The line under it reads, Please log in below. Check the config file at slash home slash intern slash dot config slash code-server slash config dot yaml for the password. A single empty field labeled PASSWORD sits below, with a blue SUBMIT button to its right.](../images/user/code-server/02-login.png)
+
+   This page is code-server's, not BenchPress's. It points at
+   `/home/<username>/.config/code-server/config.yaml` because that is where
+   code-server keeps its own copy. Use the password BenchPress gave you. It is
+   the same one.
+
+4. Press **SUBMIT**. The bench opens as a workspace.
+
+   ![The code-server workspace in a browser at 1280 by 800 pixels, showing VS Code for the Web with a light theme. The Explorer on the left is rooted at FRAPPE-BENCH and expands apps into crm, erpnext, frappe, helpdesk, hrms, lms, payments and telephony, followed by config, env, logs and sites, then patches.txt and Procfile. The editor area holds the Get Started with VS Code for the Web walkthrough tab. The status bar at the foot reports 0 errors and 0 warnings.](../images/user/code-server/03-workspace.png)
+
+   The workspace opens at `/home/frappe/frappe-bench`. The `apps` folder holds
+   one directory per app the lab installed. In the frame that is `crm`,
+   `erpnext`, `frappe`, `helpdesk`, `hrms`, `lms`, `payments` and `telephony`.
+
+   `sites` holds the site data, `logs` holds the bench logs, and `Procfile`
+   lists the processes the bench runs.
+
+5. Use the built-in terminal for bench commands. The terminal is a shell in
+   the same container SSH would give you, so nothing extra is needed.
+
+## Share a session with a teammate
+
+The IDE address is a public HTTPS hostname. Send a teammate the address and
+the password and they open the same workspace, from anywhere, with no VPN and
+no BenchPress account.
+
+1. Copy the **code-server** address from **Connection details**.
+2. Copy the **code-server password** from the same card.
+3. Send both.
+
+**Anybody holding those two strings has a shell on the bench.** The password
+is the only thing in front of it. Share a session for as long as the work
+takes, then redeploy the bench, which replaces the password.
+
+## Verify
+
+* The IDE tab shows the file tree rooted at `frappe-bench`.
+* The terminal answers `whoami` with your bench username, not `root`.
+* **Connection details** lists a `code-server` row with an `https://ide-…`
+  address.
+
+## Troubleshooting
+
+|Symptom|Cause|Fix|
+|--|--|--|
+|No **Open VS Code** button|The lab has code-server switched off|Ask an admin to enable it on the lab, then redeploy|
+|`Bench must be running to access code-server`|The bench is stopped or still deploying|Start the bench and try again|
+|`Code-server is not enabled for this lab`|The deploy stored no IDE address|Redeploy the bench|
+|The password dialog says the request failed|The bench stopped between the click and the call|Reload the lab page and check the container status|
+|The login page rejects the password|The bench was redeployed after the password was copied|Reopen **Open VS Code** for the current password|
+|The IDE tab never loads|The IDE process is not answering|Restart it, or redeploy the bench|
+|The IDE loads but the terminal is empty|The workspace opened before the container settled|Reload the tab|
+
+## Reference
+
+### The two passwords are different
+
+|Password|Opens|Where it is shown|
+|--|--|--|
+|code-server password|the IDE login page|the dialog, and **Connection details**|
+|SSH password|an SSH session|**Connection details** only|
+|Admin password|`Administrator` on the Frappe site|**Connection details** only|
+
+All three are generated per deploy and all three are replaced by a redeploy.
+
+### Restarting code-server
+
+BenchPress has an endpoint that restarts the IDE process without touching the
+bench. It runs `restart.sh` inside the container as `root` and leaves the
+container, the site and the database alone.
+
+`restart_code_server` has no button in the app today. Until it gets one,
+restart the IDE from the API:
+
+```bash
+curl -X POST https://<your-server>/api/method/benchpress.api.restart_code_server \
+     -H "Authorization: token <api_key>:<api_secret>" \
+     -d "bench_name=<bench id>"
+```
+
+The endpoint refuses a bench that is not `Running` or has no container. A
+redeploy also restarts the IDE, at the cost of the container's writable layer.
+
+### What the IDE can reach
+
+code-server runs inside the bench container as your bench user. It sees the
+bench filesystem and nothing else on the host. It is not a route into other
+benches.
+
+## Related
+
+* [Connect over SSH and the VPN](/docs/user/connect-ssh-vpn) — the card that holds the IDE address and its password.
+* [Start, stop and redeploy](/docs/user/lifecycle) — which action replaces the IDE password.
+* [Read a lab page](/docs/user/lab-detail) — the chips that say whether a lab has an IDE.
+
+# Read logs and container stats
+URL: https://docs.benchpress.cloud/docs/user/logs-and-monitoring
+The deploy stepper, the raw log and its step markers, the build log, and the CPU and memory bars on a running bench.
+
+Every deploy and every image build writes a log you can read while it runs and
+months after it finished. This page finds those logs and reads them.
+
+**Who this is for.** Anybody whose deploy failed, or who wants to know where
+the time went.
+
+**Before you start.** Nothing. A log exists as soon as a run starts. Build logs
+and build history are admin-only.
+
+## Steps
+
+1. Open the lab and pick the **Deploy log** tab. It shows the most recent run
+   for that bench.
+
+   ![The Deploy log tab of a BenchPress lab page at 1280 by 800 pixels. The card header reads Latest deploy, a green Success chip and the total 4m 52s. Nine of the eleven steps are visible, each with a check mark, a name, a one-line result in monospace and its own duration on the right: Checking shared infrastructure 2s with MariaDB reachable at benchpress-mariadb 3306, Preparing the lab image 9s, Creating the container 1s on bench bridge benchpress-0, Waiting for the container IP 0s with TLS ready on the wildcard, Configuring the WireGuard peer 1s with container VPN 172.27.0.19, Writing common_site_config.json 0s, Creating the site 4m 37s reading Site created successfully, Preparing assets 0s, and Provisioning the SSH user 1s.](../images/user/logs-and-monitoring/01-deploy-steps.png)
+
+   The header carries three things: which run this is, how it ended, and how
+   long it took. In the frame that is `Latest deploy`, `Success` and `4m 52s`.
+
+   Each row is one of the eleven pipeline steps. It carries a check mark, the
+   step name, one line of result, and its own duration.
+
+   Read the durations to find where a deploy spends its time. In the frame,
+   `Creating the site` took 4m 37s of a 4m 52s run. Every other step took a
+   second or less. A slow deploy is almost always site creation.
+
+   The step names and their order are the same on every run. See
+   [Deploy from a template](/docs/user/deploy-from-template) for what each of
+   the eleven does.
+
+2. Watch a running deploy on the same tab. The steps arrive one at a time over
+   a WebSocket, so the tab fills in as the pipeline advances.
+
+   ![An animation of the BenchPress Deploy log tab during a real deploy of the crm-demo lab. The header reads Latest deploy, Deploying, and a counter that climbs from 2 seconds to 1 minute 25 seconds. The eleven steps tick over one at a time from Checking shared infrastructure to Deploy complete, each gaining a check mark, a one-line result and its own duration. The header ends on a green Success chip.](../images/user/deploy-from-template/04-pipeline.gif)
+
+   A step appears when the pipeline opens it. Its duration appears when the
+   next one opens. The header counter climbs until the run ends, then it
+   freezes at the total and the chip turns green.
+
+   Nothing is lost if the tab is closed. The stream is a live view of a record
+   that is written either way.
+
+3. Expand **Raw log** under the steps for the unsummarized output.
+
+   ![The Deploy log tab scrolled down at 1280 by 800 pixels. The last three steps end with Deploy complete at 4m 52s. Below them a Raw log section reports 35 lines and offers a Download button. The log text is monospace with blue step markers reading, for example, Step 4/11 colon Waiting for the container IP, container underscore ip at 11.2s. Between the markers are plain lines such as limits Medium memory 2g nano cpus 2000000000 pids limit 500, container runtime sysbox-runc, container ip 10.20.0.9, VPN peer PEER-00142 registered, claimed IP 172.27.0.19.](../images/user/logs-and-monitoring/02-raw-log.png)
+
+   The raw log carries facts the stepper summarizes away: the container
+   limits, the runtime, the bridge address, the peer name.
+
+   Every step writes a marker into the raw log in this shape:
+
+   ```text
+   === Step 4/11: Waiting for the container IP [container_ip @11.2s] ===
+   ```
+
+   The marker holds the step number, the total, the name, a stable key and how
+   many seconds into the run it opened. The offsets are why a finished log
+   still yields per-step durations months later. A step lasted from its own
+   offset to the next marker's.
+
+   Press **Download** to save the whole log as a file.
+
+4. Read the container stats on the **Dashboard** tab. This is the running
+   bench rather than the run that made it.
+
+   ![The Dashboard tab of a running BenchPress lab at 1280 by 800 pixels. The Container card is headed Running in green. Health reads Healthy with the note checked 58s ago. Two meters below read CPU 1 percent of quota 2 vCPU and MEMORY 1 percent of a 2 GB limit, each with a thin progress bar. The card ends with Started 33 minutes ago. To the right, a Connection card carries a yellow VPN off panel, and a Sites card lists the site with seven app chips and the pills Inactive and Not running.](../images/user/logs-and-monitoring/03-container-stats.png)
+
+   |Reading|Value in the frame|What it means|
+   |--|--|--|
+   |Container|`Running`|the container state|
+   |Health|`Healthy`, checked 58s ago|the last health probe, and its age|
+   |CPU|1% of a 2 vCPU quota|share of the quota the lab's size sets|
+   |MEMORY|1% of a 2 GB limit|share of the memory limit|
+   |Started|33 minutes ago|when this container started|
+
+   The percentages are of the bench's own quota, not of the server. A bench at
+   100% CPU is using the whole share its instance size bought, and no more.
+
+   **Health and status are two different readings.** A stopped container can
+   still report `Healthy`, because that was true when the last probe ran. Read
+   the age beside it.
+
+   A stats sweep runs on a schedule, so the numbers are a recent sample rather
+   than a live meter. `checked 58s ago` is the honest age of the reading.
+
+5. Open the **Build log** tab for the image the bench was made from. This tab
+   and the build history are admin-only.
+
+   ![The Build log tab of the Frappe CRM lab, seen as an admin at 1280 by 800 pixels. The sidebar carries an extra Templates entry that a non-admin does not see. Six collapsible rows each carry a green dot: Build started, Step 1 of 4 FROM benchpress slash crm colon lab, Step 2 of 4 COPY golden to slash opt slash benchpress slash golden, Step 3 of 4 COPY setup-site.sh, Step 4 of 4 LABEL benchpress.golden equals 1 and benchpress.golden.mariadb equals 10.6.28-MariaDB-ubu2204, and Build complete, golden in benchpress slash crm colon lab. The last row is expanded and reads No output.](../images/user/logs-and-monitoring/04-build-log.png)
+
+   Each Docker step is one collapsible row with a status dot. Expand a row to
+   read its output. A row with nothing to show says `No output` rather than
+   opening empty.
+
+   The build in the frame is a golden build: four steps that layer a prepared
+   database dump onto the lab image. It records the MariaDB version the dump
+   came from, `10.6.28-MariaDB-ubu2204`, because a dump only restores onto a
+   matching server.
+
+## Find an older run
+
+Neither history is in the sidebar. Both hang off the list they belong to.
+
+|History|Where|Who|
+|--|--|--|
+|Deploy history|**Instances** page|everybody, for the benches they can see|
+|Build history|**Labs** page, beside **From template**|admins|
+
+Each row carries the run, a result badge, the last step the run opened, the
+duration and when it started. Clicking a row opens the lab.
+
+A run recorded before the pipeline emitted step markers shows an em dash for
+its last step and its duration. The table does not guess.
+
+## Verify
+
+* The **Deploy log** tab shows eleven steps and ends on `Deploy complete`.
+* The durations on the steps add up to the total in the header.
+* **Raw log** reports a line count and downloads a file.
+* The Container card's `checked … ago` is minutes old, not hours.
+
+## Troubleshooting
+
+|Symptom|Cause|Fix|
+|--|--|--|
+|The Deploy log tab is empty|The bench has never been deployed|Deploy the lab|
+|The log stops mid-run and never finishes|The live stream dropped|Reload the tab. The record is complete either way|
+|A run is missing from Deploy history|Logs are cleared after 7 days|Nothing to recover. Read a newer run|
+|A row shows an em dash for duration|The run predates the step markers|Read the raw log instead|
+|No **Build log** tab|Build logs are admin-only|Ask an admin|
+|CPU and MEMORY read a dash|The container is not running|Start the bench|
+|Health reads `Healthy` on a stopped bench|The last probe ran before the stop|Read the `checked … ago` age|
+|The deploy failed and the reason is not in the steps|The failing step's detail is in the raw output|Expand **Raw log** and read the end of the failed step|
+
+## Reference
+
+### Where each log lives
+
+|Log|Tab|Scope|
+|--|--|--|
+|Deploy log|**Deploy log** on the lab page|the latest run for that bench|
+|Deploy history|**Instances** page|your benches, or all of them for an admin|
+|Build log|**Build log** on the lab page|the latest image build for that lab. Admins|
+|Build history|**Labs** page|every build. Admins|
+
+### Retention
+
+Deploy Log and Build Log rows are cleared after **7 days**. Every window the
+app reports is bounded by that number rather than by a longer one, so the
+Overview dashboard's deploy-time average also covers 7 days.
+
+Download a log you need to keep.
+
+### The step marker
+
+```text
+=== Step <n>/11: <label> [<key> @<seconds>s] ===
+```
+
+|Part|Example|Use|
+|--|--|--|
+|`<n>/11`|`4/11`|position in the pipeline|
+|`<label>`|`Waiting for the container IP`|the name in the stepper|
+|`<key>`|`container_ip`|the stable key. Match on this, not on the label|
+|`@<seconds>s`|`@11.2s`|seconds from the start of the run|
+
+Match on the key. The label is written for a reader and may be reworded.
+
+### What the health check reads
+
+Health is a probe against the container, kept separate from the container
+state on purpose. A bench can be `Running` and `Unhealthy`, which means the
+container is up and the site is not answering. Both readings are on the same
+card, and the deploy log says which of them changed.
+
+## Related
+
+* [Deploy from a template](/docs/user/deploy-from-template) — what the eleven steps do.
+* [Read a lab page](/docs/user/lab-detail) — the rest of the Dashboard tab.
+* [Start, stop and redeploy](/docs/user/lifecycle) — the actions that start a new run.
+* [Troubleshooting](/docs/user/troubleshooting) — symptoms across the whole app.
+
+# Leases and credits
+URL: https://docs.benchpress.cloud/docs/user/leases-and-credits
+The countdown on a running bench, the renew dialog and its plans, the credit meter, the ledger, and where a purchase hands off to the payment gateway.
+
+On a server with credits switched on, a deploy buys a fixed window of time and
+the bench stops when the window closes. This page reads the clock, renews it,
+and explains every line in the ledger.
+
+**Who this is for.** Anybody using a BenchPress server that charges for time.
+
+**Before you start.** Credits are off by default, and off means the feature
+does not exist. With credits off there is no countdown, no meter in the
+sidebar, and `/frontend/credits` sends you back to Labs. If your server looks
+like that, skip this page. Nothing on it applies.
+
+## What costs credits
+
+Two things, and the Credits screen says so at the top.
+
+|Action|Cost|
+|--|--|
+|The lease an instance runs on|the plan's price|
+|A custom image build nobody has built before|40 credits|
+|Creating a site|free|
+|Registering a device|free|
+|A build that fails|free|
+
+## Steps
+
+1. Find the countdown. Every running bench with a lease shows one on the
+   **Labs** list, under the instance it is deployed as.
+
+   ![The BenchPress Labs list at 1280 by 800 pixels with credits switched on. Ten labs are listed. The Frappe CRM demo row reads version-15, the app chip CRM, a green Running badge, the bench hostname, bench-crm-demo Running, a green line reading Lease ends in 29:48, and 23 minutes ago in the Last run column. Every other lab reads Ready or Draft with Never deployed and an em dash. At the foot of the sidebar a credit meter reads 60 of 65 with a green progress bar, which only appears while credits are on.](../images/user/leases-and-credits/01-labs-countdown.png)
+
+   In the frame the `crm-demo` row reads `Lease ends in 29:48`. The credit
+   meter at the foot of the sidebar reads `60` of `65`.
+
+   The meter is a fuel gauge, not a total. The number is what is left, the
+   denominator is everything ever put into the account, and the bar empties as
+   credits are spent.
+
+2. Open the lab for the same clock beside a **Renew** button.
+
+   ![The Dashboard tab of the Frappe CRM demo lab at 1280 by 800 pixels with credits on. The Container card is headed Running, Health reads Healthy checked 23m ago, CPU reads 0 percent of quota 1 vCPU and MEMORY 0 percent of a 1 GB limit. The foot of the card reads Started 24 minutes ago, then a green Lease ends in 29:39, then a Renew button. The lab header carries an extra orange chip reading 5 credits slash 30 minutes beside version-15, 1 GB, 1 vCPU, code-server and SSH.](../images/user/leases-and-credits/02-container-countdown.png)
+
+   The lab header gains one chip while credits are on. In the frame it reads
+   `5 credits / 30 minutes`, which is what one lease on this lab costs at the
+   default plan.
+
+   The countdown ticks once a second against the server clock, not the
+   browser's.
+
+   ![An animation of the Container card on a running bench, cropped to the card and lasting about thirteen seconds. The card reads Running, Health Healthy checked 23m ago, CPU 0 percent of quota 1 vCPU and MEMORY 0 percent of a 1 GB limit. The bottom line reads Started 24 minutes ago, then the green countdown Lease ends in 29:26, which ticks down one second at a time to 29:14 while nothing else on the card changes, with the Renew button steady beside it.](../images/user/leases-and-credits/08-countdown.gif)
+
+   Only the countdown moves. Everything else on the card holds still, which is
+   the point: the deadline is the one number on this screen that changes on
+   its own.
+
+3. Press **Renew** and pick a duration. The dialog offers eight.
+
+   ![The Renew lease dialog over the lab page at 1280 by 800 pixels. It is headed Renew lease with the line, Time is added to the deadline you already have. Eight radio rows list a duration on the left and a price on the right: 5 minutes 1 credits, 30 minutes 5 credits, 2 hours 18 credits, 8 hours 60 credits, 1 day 150 credits, 2 days 260 credits, 4 days 460 credits and 1 week 700 credits. None is selected and the Renew button at the foot is grayed out.](../images/user/leases-and-credits/03-renew-plans.png)
+
+   Read the first line of the dialog. **Time is added to the deadline you
+   already have.** Renewing early does not throw away what is left.
+
+   |Duration|Credits|Credits per hour|
+   |--|--|--|
+   |5 minutes|1|12.0|
+   |30 minutes|5|10.0|
+   |2 hours|18|9.0|
+   |8 hours|60|7.5|
+   |1 day|150|6.25|
+   |2 days|260|5.4|
+   |4 days|460|4.8|
+   |1 week|700|4.2|
+
+   The longer window is cheaper per hour. The **Renew** button stays disabled
+   until a duration is chosen, then names the choice and its price.
+
+4. If the account cannot afford the plan, the dialog refuses in place and says
+   by how much.
+
+   ![The Renew lease dialog with the 1 week row selected at 1280 by 800 pixels. The button now reads Renew 1 week, 700 credits, and a red message under it reads, Not enough credits: this needs 700.0 and 60.0 are available — 640.0 short. Top up at slash frontend slash credits. The credit meter in the sidebar reads 60 of 65 and the other seven durations remain selectable above the button.](../images/user/leases-and-credits/04-renew-refused.png)
+
+   The refusal carries four things: what the plan costs, what is available,
+   the gap, and where to fix it. Nothing is charged and nothing changes.
+
+   Available is not the same as the balance. Credits already held against a
+   running deploy are reserved and cannot be committed twice.
+
+5. Pick a duration you can afford and press the button. The charge and the
+   extension happen together.
+
+   ![The lab page after a successful renewal at 1280 by 800 pixels. The countdown now reads Lease ends in 58:02 where it read 29:48 before, and the credit meter in the sidebar has fallen from 60 to 55 of 65. The Container card is otherwise unchanged, still Running and Healthy, and the header chip still reads 5 credits slash 30 minutes.](../images/user/leases-and-credits/05-renewed.png)
+
+   In the frame, 30 minutes was added to a lease with about 28 minutes left,
+   so the countdown went from `29:48` to `58:02`, and the balance fell from
+   `60` to `55`.
+
+6. Open **Credits** from the meter in the sidebar for the balance, the packs
+   and the full ledger.
+
+   ![The BenchPress Credits page at 1280 by 800 pixels. Two tiles read Balance 55 of 65 allocated and Entries 4. A Buy credits card offers three packs side by side: Starter 200 credits for 499 rupees at 2.50 rupees per credit, Regular 1,000 credits for 1,999 rupees at 2.00 rupees per credit and highlighted, and Heavy 4,000 credits for 6,999 rupees at 1.75 rupees per credit. Below them a table with the columns Type, Credits, Balance after, What happened and When lists four rows: Usage −5 leaving 55, Usage −5 leaving 60, Adjustment +25 leaving 65 described as Documentation demo top-up, and Grant +40 leaving 40 described as Signup grant.](../images/user/leases-and-credits/06-credits-page.png)
+
+   Every row names what happened and what the balance was afterward, so the
+   column reads down to the current figure with no arithmetic.
+
+   |Type|Credits|Balance after|What happened|
+   |--|--|--|--|
+   |Usage|−5|55|`bench-crm-demo — 30 minutes lease`|
+   |Usage|−5|60|`bench-crm-demo — 30 minutes lease`|
+   |Adjustment|+25|65|Documentation demo top-up|
+   |Grant|+40|40|Signup grant|
+
+   The `Grant` at the bottom is the signup grant. A new account is opened with
+   40 credits on this server.
+
+## Buying credits
+
+Press a pack on the Credits page and BenchPress opens an order with the
+payment gateway. The price is read from the pack, never from the browser, so
+the amount cannot be changed on the way.
+
+![The Credits page after pressing the Regular pack at 1280 by 800 pixels. The Regular card is highlighted and a red message under the three packs reads, Password not found for Razorpay Settings Razorpay Settings key_secret. The Balance tile still reads 55 of 65 allocated, the Entries tile still reads 4, and the ledger below is unchanged with its four rows.](../images/user/leases-and-credits/07-checkout-handoff.png)
+
+The frame above is a server whose gateway has no keys configured. The press
+reaches the gateway handoff and stops there with
+`Password not found for Razorpay Settings Razorpay Settings key_secret`.
+Nothing is charged and the ledger does not change.
+
+With keys configured, the press opens a checkout instead. Credits land in the
+account when the payment settles, as a `Purchase` row in the ledger.
+
+**A purchase is applied exactly once.** The gateway retries, and every retry
+is matched against the order already settled.
+
+|Pack|Credits|Price|Per credit|
+|--|--|--|--|
+|Starter|200|₹499|₹2.50|
+|Regular|1,000|₹1,999|₹2.00|
+|Heavy|4,000|₹6,999|₹1.75|
+
+There are no subscriptions and no auto-renewal. Money buys credits, and
+credits buy time.
+
+## Verify
+
+* The Labs row for a running bench shows `Lease ends in …`.
+* The countdown falls by one second a second.
+* After a renewal the countdown jumps by the plan's duration and the meter
+  falls by its price.
+* The Credits page shows one `Usage` row for the renewal, with the new
+  balance in **Balance after**.
+
+## Troubleshooting
+
+|Symptom|Cause|Fix|
+|--|--|--|
+|No countdown and no meter|Credits are switched off on this server|Nothing to do. There are no leases|
+|`/frontend/credits` sends you to Labs|Same. The screen exists only while credits are on|Ask the operator whether credits are meant to be on|
+|No **Renew** button beside the countdown|The bench never held a lease|Redeploy it|
+|`Not enough credits`|The plan costs more than is available|Pick a shorter plan, or buy credits|
+|The refusal names less than the balance|Credits are reserved against a running deploy|Stop an instance, or buy credits|
+|`A lease on this lab cannot run longer than … minutes`|The plan would push the lease past the lab's ceiling|Pick a shorter plan|
+|`This bench is already stopping`|The expiry sweep claimed the row first|Wait for the stop, start the bench, then renew|
+|`This bench has been torn down. Redeploy it`|The stopped container was reaped|Redeploy. A new lease starts with it|
+|`Credits are switched off on this site`|Credits were turned off between opening the dialog and pressing it|Reload the page|
+|A purchase fails at the gateway|The server has no gateway keys|Ask the operator. Nothing was charged|
+|The deadline passed and the bench is still up|The sweep that stops expired leases is not running|Tell the operator. The clock is right, the sweep is not|
+
+## Reference
+
+### The lease clock
+
+The deadline is a fixed instant stored on the bench. Nothing accrues and
+nothing settles later. A deploy spends the plan's price once and writes the
+deadline.
+
+A scheduled sweep on the server claims each due lease and hands the stop to a
+background worker. **That sweep, not the browser, is what stops a bench.** A
+server whose sweep or stop worker is not running keeps benches alive past
+their deadline. The countdown still tells the truth about the deadline.
+
+### After the deadline
+
+A stop keeps the container. It is a stop, not a delete.
+
+|Then|What happens|
+|--|--|
+|The bench stops|The container is kept. The database is kept|
+|Inside the grace window|**Renew** starts the same container again|
+|After `reap_after_days`|The container is removed. Only a redeploy brings it back|
+
+`reap_after_days` is 7 on this server. `0` turns the deletion off.
+
+### Ledger entry types
+
+|Type|Sign|Written by|
+|--|--|--|
+|`Grant`|+|signup, or an operator granting credits|
+|`Purchase`|+|a settled payment|
+|`Usage`|−|a lease, or a custom image build|
+|`Refund`|−|credits taken back|
+|`Adjustment`|±|an operator correcting an account by hand|
+
+An `Adjustment` moves a balance without a payment. It is how an operator tops
+up an account on a server with no gateway.
+
+### The meter
+
+|Figure|Meaning|
+|--|--|
+|Balance|what is left to spend|
+|Allocated|the balance plus everything already spent|
+|Entries|how many ledger rows the account has|
+
+Allocated holds still while the balance falls, which is what makes the bar
+read as a gauge. A refund or a negative adjustment lowers it, because those
+credits were taken back.
+
+The meter turns a warning color below 20% of allocated.
+
+### Concurrency
+
+How many instances one account may run at once depends on whether credits are
+on, and whether the account has ever bought any.
+
+|Account|Limit here|
+|--|--|
+|Credits off|unlimited|
+|Credits on, never purchased|2|
+|Credits on, has purchased|5|
+
+`0` in any of these settings means unlimited. A refusal names the number that
+was hit.
+
+### Renewing is free of the concurrency cap
+
+The cap forbids new instances, not touching existing ones. A renew, a restart
+and a retry on a bench you already hold are never refused for concurrency.
+They can still be refused for credits.
+
+## Related
+
+* [Start, stop and redeploy](/docs/user/lifecycle) — the grace window after a stop.
+* [Read a lab page](/docs/user/lab-detail) — where the countdown and the price chip sit.
+* [Deploy from a template](/docs/user/deploy-from-template) — the deploy that buys the first lease.
+* [Troubleshooting](/docs/user/troubleshooting) — symptoms across the whole app.
+
+# Troubleshooting
+URL: https://docs.benchpress.cloud/docs/user/troubleshooting
+Every symptom a BenchPress user meets, its cause, and the page that fixes it — deploys, the VPN, SSH, code-server, logs and credits.
+
+One index of symptoms across the whole app. Find the line that matches what
+you see, then read the cause and the fix.
+
+**Who this is for.** Anybody whose bench is not doing what they expected.
+
+**Before you start.** Read the message on screen first. BenchPress refuses by
+name: every refusal states the number that was hit or the thing that is
+missing, and most of them name the fix. This page is for the cases where the
+message is not enough.
+
+## Start here
+
+Three readings answer most questions, and they are all on the lab page.
+
+|Reading|Where|Says|
+|--|--|--|
+|Container status|Container card header|whether the bench is running|
+|Health|Container card, beside the status|whether the site answered the last probe|
+|VPN chip|page header, top right|whether **your machine** is on the tunnel|
+
+Check them in that order. A stopped container and a down tunnel look the same
+from a browser and have nothing to do with each other.
+
+## Nothing loads
+
+|Symptom|Cause|Fix|
+|--|--|--|
+|`/frontend` sends you to `/login`|No session|Sign in, then open `/frontend` again|
+|The sidebar has no **Templates**, **New lab** or **Settings**|Those screens are admin-only|Ask an admin. See [Quick tour](/docs/user/quick-tour)|
+|The sidebar has no credit meter and `/frontend/credits` bounces to Labs|Credits are switched off on this server|Nothing to do. See [Leases and credits](/docs/user/leases-and-credits)|
+|A lab you were shown is not in your list|A user sees only their own benches|Ask the owner, or an admin|
+
+## The deploy
+
+|Symptom|Cause|Fix|
+|--|--|--|
+|**Deploy** is missing and the button reads **Deploying…**|A run is already going|Watch the **Deploy log** tab|
+|The primary button reads **Rebuild image**|The lab is in `Error`|An admin rebuilds the image. See [Create a lab](/docs/user/create-a-lab)|
+|**Rebuild image** is grayed out|Rebuilding is admin-only|Ask an admin|
+|The deploy failed and the steps do not say why|The detail is in the unsummarized output|Expand **Raw log**. See [Read logs and container stats](/docs/user/logs-and-monitoring)|
+|The deploy sat on `Creating the site` for minutes|Site creation is the slow step. It is normal|Wait. In a measured run it took 4m 37s of 4m 52s|
+|The bench stays `Deploying` long after the log stopped|The background worker stopped|Tell the operator|
+|`This instance has no container — deploy it first`|The bench was never deployed, or it was reaped|Press **Deploy**|
+
+## Reaching a bench
+
+|Symptom|Cause|Fix|
+|--|--|--|
+|**Open site** reads **Open site — VPN off** and will not press|The address is tunnel-only and your tunnel is down|Turn WireGuard on. See [Register a VPN device](/docs/user/vpn-devices)|
+|A site row reads `Unreachable`|Nothing serves that site, or the tunnel is down|Read the hint under the button. It names which|
+|A site row reads `Not running`|The container is stopped|Start the bench|
+|The private URL times out and the public URL works|The private address is tunnel-only by design|Use the public URL, or turn the tunnel on|
+|The public URL 404s|The bench is stopped, so nothing answers the hostname|Start the bench|
+|SSH times out|The tunnel is down, or this machine has no device|Run the connection test on **Devices**|
+|SSH says `Permission denied`|The password was retyped rather than pasted|Use the copy button on the row|
+|SSH and the site both worked yesterday|A redeploy regenerated every password|Reopen **Connection details** and copy again|
+|The device status stays `Pending`|The config was never imported|Import the `.conf` and turn the tunnel on|
+|The device status turned `Stale`|No handshake for over 5 minutes|Turn the tunnel on again|
+|Two machines keep disconnecting each other|One config is in use on both|Register each machine separately|
+|**Add device** is refused|The account is at the device cap of 5|Remove a machine you no longer use|
+
+## Inside a bench
+
+|Symptom|Cause|Fix|
+|--|--|--|
+|No **Open VS Code** button|The lab has code-server switched off|Ask an admin to enable it, then redeploy|
+|`Bench must be running to access code-server`|The bench is stopped or still deploying|Start the bench|
+|The IDE login page rejects the password|The bench was redeployed since the password was copied|Reopen **Open VS Code**. See [Use code-server](/docs/user/code-server)|
+|The IDE tab never loads|The IDE process is not answering|Restart it, or redeploy the bench|
+|`Administrator` is refused on the bench site|The admin password came from a different bench|Copy it from this bench's card|
+|Files written inside the bench are gone|A redeploy replaced the container and its writable layer|Keep work in git. See [Start, stop and redeploy](/docs/user/lifecycle)|
+
+## Logs and numbers
+
+|Symptom|Cause|Fix|
+|--|--|--|
+|The Deploy log tab is empty|The bench has never been deployed|Deploy the lab|
+|The log stopped streaming mid-run|The live connection dropped|Reload the tab. The record is written either way|
+|A run is missing from Deploy history|Logs are cleared after 7 days|Read a newer run, or download the ones you need|
+|A history row shows an em dash for duration|The run predates the step markers|Read the raw log|
+|No **Build log** tab|Build logs are admin-only|Ask an admin|
+|CPU and MEMORY read a dash|The container is not running|Start the bench|
+|Health reads `Healthy` on a stopped bench|The last probe ran before the stop|Read the `checked … ago` age beside it|
+|CPU reads 100%|The bench is using its whole quota, not the server's|Ask for a larger instance size|
+
+## Credits and leases
+
+These lines apply only while credits are on.
+
+|Symptom|Cause|Fix|
+|--|--|--|
+|`Not enough credits`|The plan costs more than is available|Pick a shorter plan, or buy credits|
+|The refusal names less than the balance shows|Credits are reserved against a running deploy|Stop an instance, or buy credits|
+|`You have N instances running, the most your plan allows`|The concurrency cap was hit|Stop one, or buy credits to raise the cap|
+|`A lease on this lab cannot run longer than … minutes`|The plan would pass the lab's ceiling|Pick a shorter plan|
+|`This bench is already stopping`|The expiry sweep claimed the row first|Wait for the stop, start the bench, then renew|
+|`This bench has been torn down. Redeploy it`|The stopped container was reaped after 7 days|Redeploy|
+|A purchase fails at the gateway|The server has no gateway keys|Ask the operator. Nothing was charged|
+|The deadline passed and the bench is still up|The sweep that stops expired leases is not running|Tell the operator|
+
+## How to report a problem well
+
+Give the person helping you the four things they cannot get themselves.
+
+1. The lab name and the bench id, both on the lab page.
+2. The exact message, copied rather than described.
+3. Which of the three readings above were true at the time.
+4. The step the deploy log stopped on, if a deploy was involved.
+
+A live code-server session is worth more than a description. Send the IDE
+address and its password instead of retyping the error.
+
+## Related
+
+* [Quick tour](/docs/user/quick-tour) — which screen owns which task.
+* [Register a VPN device](/docs/user/vpn-devices) — the connection test, which answers most reachability questions.
+* [Read logs and container stats](/docs/user/logs-and-monitoring) — where the detail behind a failure lives.
+* [Connect over SSH and the VPN](/docs/user/connect-ssh-vpn) — the card behind most access problems.
 
 # BenchPress documentation
 URL: https://docs.benchpress.cloud/docs
