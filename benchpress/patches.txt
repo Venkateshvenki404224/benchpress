@@ -29,3 +29,4 @@ benchpress.patches.backfill_bench_bridge_network
 benchpress.patches.default_golden_switches
 benchpress.patches.backfill_bench_health
 benchpress.patches.default_traefik_health
+benchpress.patches.seed_route_rate_limits

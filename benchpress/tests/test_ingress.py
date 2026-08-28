@@ -33,7 +33,7 @@ def _mounted(tmp) -> Path:
 	return target_dir
 
 
-def _make_size(label, include_code_server, memory_limit):
+def _make_size(label, include_code_server, memory_limit, **fields):
 	"""A throwaway `Instance Size`, replaced rather than reused so its flags are known."""
 	if frappe.db.exists("Instance Size", label):
 		frappe.delete_doc("Instance Size", label, force=True, ignore_permissions=True)
@@ -45,6 +45,7 @@ def _make_size(label, include_code_server, memory_limit):
 			"cpu_cores": 3,
 			"credits_per_hour": 1.0,
 			"include_code_server": include_code_server,
+			**fields,
 		}
 	)
 	return size.insert(ignore_permissions=True)
@@ -115,9 +116,9 @@ class TestPublish(unittest.TestCase):
 				written_text = (Path(tmp) / "instances" / "inst-1.yml").read_text()
 
 		self.assertNotIn("certResolver", written_text)
-		# Two separate `{}` literals, so PyYAML emits the mapping twice rather than an
+		# One `{}` literal per router, so PyYAML emits the mapping each time rather than an
 		# anchor/alias pair that Traefik would have to resolve.
-		self.assertEqual(written_text.count("tls: {}"), 2)
+		self.assertEqual(written_text.count("tls: {}"), 3)
 
 	def test_instance_route_names_the_container_and_no_address(self):
 		"""The property this phase exists to create. Both services name the container, which
@@ -182,6 +183,7 @@ class TestServiceHealthCheck(unittest.TestCase):
 			with (
 				patch.object(ingress, "TRAEFIK_DYNAMIC_DIR", _mounted(tmp)),
 				patch.object(ingress, "has_ide", return_value=True),
+				patch.object(ingress, "rate_limits", return_value=ingress.DEFAULT_RATE_LIMITS),
 				patch.object(ingress, "frappe") as frappe_mock,
 			):
 				frappe_mock.get_cached_doc.return_value = frappe._dict(settings)
@@ -230,13 +232,25 @@ class TestServiceHealthCheck(unittest.TestCase):
 				"site-inst-1": {
 					"rule": "Host(`inst-1.benchpress.cloud`)",
 					"entryPoints": ["websecure"],
+					"priority": ingress.ROUTER_PRIORITY,
 					"service": "site-inst-1",
+					"middlewares": ["inst-1-rl-site"],
+					"tls": {},
+				},
+				"assets-inst-1": {
+					"rule": "Host(`inst-1.benchpress.cloud`) && (PathPrefix(`/assets`) || PathPrefix(`/files`))",
+					"entryPoints": ["websecure"],
+					"priority": ingress.ASSETS_ROUTER_PRIORITY,
+					"service": "site-inst-1",
+					"middlewares": ["inst-1-rl-assets"],
 					"tls": {},
 				},
 				"ide-inst-1": {
 					"rule": "Host(`ide-inst-1.benchpress.cloud`)",
 					"entryPoints": ["websecure"],
+					"priority": ingress.ROUTER_PRIORITY,
 					"service": "ide-inst-1",
+					"middlewares": ["inst-1-rl-ide"],
 					"tls": {},
 				},
 			},
@@ -298,7 +312,7 @@ class TestIdeRouter(IntegrationTestCase):
 	def _assert_site_only(self, target_dir, bench):
 		text = (target_dir / f"{bench.name}.yml").read_text()
 		http = yaml.safe_load(text)["http"]
-		self.assertEqual(set(http["routers"]), {f"site-{bench.name}"})
+		self.assertEqual(set(http["routers"]), {f"site-{bench.name}", f"assets-{bench.name}"})
 		self.assertEqual(set(http["services"]), {f"site-{bench.name}"})
 		# No router and no service, so Traefik matches nothing and answers 404 rather than
 		# the 502 a router pointing at a dead port would give.
@@ -311,7 +325,10 @@ class TestIdeRouter(IntegrationTestCase):
 			ingress.publish(bench.name, "benchpress.cloud")
 			http = self._http(target_dir, bench)
 
-		self.assertEqual(set(http["routers"]), {f"site-{bench.name}", f"ide-{bench.name}"})
+		self.assertEqual(
+			set(http["routers"]),
+			{f"site-{bench.name}", f"assets-{bench.name}", f"ide-{bench.name}"},
+		)
 		self.assertEqual(set(http["services"]), {f"site-{bench.name}", f"ide-{bench.name}"})
 
 	def test_a_lab_with_code_server_off_publishes_no_ide_hostname(self):
@@ -344,7 +361,7 @@ class TestIdeRouter(IntegrationTestCase):
 		"""The derivability assertion, and nothing else catches it: the `*/5` pass has none of
 		the deploy's context, so a flag it resolved differently rewrites this file every pass —
 		and Traefik reloads on mtime."""
-		for size, routers in ((self.ide_size.name, 2), (self.no_ide_size.name, 1)):
+		for size, routers in ((self.ide_size.name, 3), (self.no_ide_size.name, 2)):
 			with self.subTest(size=size):
 				bench = self._bench(lab_size=size)
 
@@ -386,6 +403,274 @@ class TestIdeRouter(IntegrationTestCase):
 		frappe.db.set_value("Lab", self.lab.name, "instance_size", self.ide_size.name)
 
 		self.assertTrue(ingress.lab_has_ide(frappe.get_doc("Lab", self.lab.name)))
+
+
+class TestPathSplitAndRateLimits(IntegrationTestCase):
+	"""The render/assets split and the rate limit each router carries.
+
+	The path this guards is a *missing* `/assets` file, which renders a full 404 page.
+	"""
+
+	@classmethod
+	def setUpClass(cls):
+		super().setUpClass()
+		frappe.set_user("Administrator")
+		# Numbers no tier would pick, so a hardcoded 20/60 cannot pass this by accident.
+		cls.tuned_size = _make_size("Rate Limit Tuned", 1, "781m", rate_average=7, rate_burst=9)
+		# Zero is what a row that predates the fields reads back as, and Traefik reads
+		# `average: 0` as no limit at all.
+		cls.unseeded_size = _make_size("Rate Limit Unseeded", 0, "782m", rate_average=0, rate_burst=0)
+		cls.lab = _make_lab("test-lab-rate-limits")
+		frappe.db.commit()
+
+	@classmethod
+	def tearDownClass(cls):
+		frappe.set_user("Administrator")
+		for name in frappe.get_all("Bench Instance", filters={"lab": cls.lab.name}, pluck="name"):
+			frappe.delete_doc("Bench Instance", name, force=True, ignore_permissions=True)
+		cls.lab.delete(ignore_permissions=True)
+		for size in (cls.tuned_size, cls.unseeded_size):
+			frappe.delete_doc("Instance Size", size.name, force=True, ignore_permissions=True)
+		frappe.db.commit()
+		clear_size_index()
+		super().tearDownClass()
+
+	def setUp(self):
+		super().setUp()
+		clear_size_index()
+
+	def _bench(self, lab_size):
+		frappe.db.set_value("Lab", self.lab.name, {"instance_size": lab_size, "enable_code_server": 1})
+		bench = _fresh_bench(self, self.lab.name)
+		bench.status = "Running"
+		bench.container_ip = "172.30.0.22"
+		bench.save(ignore_permissions=True)
+		frappe.db.commit()
+		return bench
+
+	@contextmanager
+	def _published(self, lab_size=None):
+		"""One bench of `lab_size`, and the `http` block its deploy wrote."""
+		bench = self._bench(lab_size or self.tuned_size.name)
+		with _route_dir() as (published_ingress, target_dir):
+			published_ingress.publish(bench.name, "benchpress.cloud")
+			http = yaml.safe_load((target_dir / f"{bench.name}.yml").read_text())["http"]
+			yield bench, http
+
+	def test_the_assets_router_outranks_the_site_router(self):
+		"""The bare host rule matches an `/assets` request too, so the split is only real while
+		the assets router out-ranks it — and a lost split looks exactly like a working one."""
+		with self._published() as (bench, http):
+			assets = http["routers"][f"assets-{bench.name}"]["priority"]
+			site = http["routers"][f"site-{bench.name}"]["priority"]
+
+		self.assertGreater(assets, site)
+
+	def test_the_assets_router_takes_the_paths_that_render_nothing(self):
+		"""`/private/files` is deliberately absent — it needs a permission check, and it is not
+		matched by `PathPrefix(/files)` anyway."""
+		with self._published() as (bench, http):
+			rule = http["routers"][f"assets-{bench.name}"]["rule"]
+
+		self.assertEqual(
+			rule,
+			f"Host(`{bench.name}.benchpress.cloud`) && (PathPrefix(`/assets`) || PathPrefix(`/files`))",
+		)
+		self.assertNotIn("/private/files", rule)
+
+	def test_both_routers_name_the_one_service(self):
+		"""There is one bench behind both. A second service would be a second health check on
+		the same container, and an assets router pointing anywhere else is a 502."""
+		with self._published() as (bench, http):
+			self.assertEqual(
+				{http["routers"][name]["service"] for name in (f"site-{bench.name}", f"assets-{bench.name}")},
+				{f"site-{bench.name}"},
+			)
+			self.assertEqual(set(http["services"]), {f"site-{bench.name}", f"ide-{bench.name}"})
+
+	def test_each_router_carries_one_middleware_of_its_own_name(self):
+		"""A limiter instance is per router, so a shared name would hide the doubling rather
+		than remove it — and would make the two paths impossible to tune apart."""
+		with self._published() as (bench, http):
+			carried = {name: router["middlewares"] for name, router in http["routers"].items()}
+			defined = set(http["middlewares"])
+
+		self.assertEqual(
+			carried,
+			{
+				f"site-{bench.name}": [f"{bench.name}-rl-site"],
+				f"assets-{bench.name}": [f"{bench.name}-rl-assets"],
+				f"ide-{bench.name}": [f"{bench.name}-rl-ide"],
+			},
+		)
+		# Defined in the same file that references them: Traefik drops a router naming a
+		# middleware it cannot resolve, and a dropped router is a bench nobody can reach.
+		self.assertEqual(defined, {name for names in carried.values() for name in names})
+
+	def test_the_assets_middleware_is_a_rate_limit_and_nothing_else(self):
+		"""No `inFlightReq` here, ever: one tab pulls nine same-host assets, so any cap low
+		enough to bind would 429 a single user loading their own page."""
+		with self._published() as (bench, http):
+			self.assertEqual(set(http["middlewares"][f"{bench.name}-rl-assets"]), {"rateLimit"})
+
+	def test_every_rate_limit_buckets_on_the_address_cloudflare_saw(self):
+		"""`depth` counts from the right, and a client-supplied `X-Forwarded-For` arrives to the
+		left of the real address — so 2 is spoofable and the literal 1 is the security property."""
+		with self._published() as (_bench, http):
+			depths = [
+				middleware["rateLimit"]["sourceCriterion"]["ipStrategy"]["depth"]
+				for middleware in http["middlewares"].values()
+			]
+
+		self.assertEqual(depths, [1, 1, 1])
+
+	def test_the_rate_numbers_come_from_the_tier(self):
+		with self._published() as (bench, http):
+			limit = http["middlewares"][f"{bench.name}-rl-site"]["rateLimit"]
+
+		self.assertEqual((limit["average"], limit["burst"]), (7, 9))
+
+	def test_an_unseeded_tier_gets_the_floor_rather_than_no_limit(self):
+		"""Traefik reads `average: 0` as the brake off, so a row nobody seeded must not publish
+		its zero — the failure would be an unguarded route that looks configured."""
+		with self._published(self.unseeded_size.name) as (bench, http):
+			limit = http["middlewares"][f"{bench.name}-rl-site"]["rateLimit"]
+
+		self.assertEqual(
+			(limit["average"], limit["burst"]),
+			(ingress.DEFAULT_RATE_AVERAGE, ingress.DEFAULT_RATE_BURST),
+		)
+
+	def test_the_reconcile_writes_the_tier_numbers_the_deploy_wrote(self):
+		"""The derivability assertion for the new values: the `*/5` pass has none of the deploy's
+		context, so a rate it resolved differently rewrites this file every pass."""
+		bench = self._bench(self.tuned_size.name)
+
+		with _route_dir() as (published_ingress, target_dir):
+			published_ingress.publish(bench.name, "benchpress.cloud")
+			route = target_dir / f"{bench.name}.yml"
+			deployed = route.read_bytes()
+			mtime = route.stat().st_mtime_ns
+
+			published_ingress.reconcile()
+
+			self.assertEqual(route.read_bytes(), deployed)
+			self.assertEqual(route.stat().st_mtime_ns, mtime)
+
+		self.assertIn(b"average: 7", deployed)
+
+	def test_the_fleet_read_still_resolves_everything_in_one_query(self):
+		"""The rates are per tier, so a per-bench read for them would cost the `*/5` pass one
+		query each — 300 a pass at the load profile this exists for."""
+		self._bench(self.tuned_size.name)
+
+		with _route_dir() as (published_ingress, _target_dir):
+			with patch.object(
+				published_ingress, "_fleet_rows", wraps=published_ingress._fleet_rows
+			) as fleet_rows:
+				published_ingress.reconcile()
+
+		self.assertEqual(fleet_rows.call_count, 1)
+
+
+class TestInFlightCap(IntegrationTestCase):
+	"""The render router's `inFlightReq` and the clamp over it — see phase-2-inflight.md.
+
+	The cap exists so one saturated bench queues its own requests instead of holding an
+	unbounded share of the shared MariaDB connection pool.
+	"""
+
+	@classmethod
+	def setUpClass(cls):
+		super().setUpClass()
+		frappe.set_user("Administrator")
+		cls.capped_size = _make_size("In Flight Capped", 1, "783m", inflight_limit=16)
+		# `Instance Size` is admin-editable, so the realistic bad value is a typo'd row rather
+		# than a hand-written route file — which the */5 reconcile overwrites anyway.
+		cls.typo_size = _make_size("In Flight Typo", 1, "784m", inflight_limit=999)
+		cls.unseeded_size = _make_size("In Flight Unseeded", 1, "785m", inflight_limit=0)
+		cls.lab = _make_lab("test-lab-inflight")
+		frappe.db.commit()
+
+	@classmethod
+	def tearDownClass(cls):
+		frappe.set_user("Administrator")
+		for name in frappe.get_all("Bench Instance", filters={"lab": cls.lab.name}, pluck="name"):
+			frappe.delete_doc("Bench Instance", name, force=True, ignore_permissions=True)
+		cls.lab.delete(ignore_permissions=True)
+		for size in (cls.capped_size, cls.typo_size, cls.unseeded_size):
+			frappe.delete_doc("Instance Size", size.name, force=True, ignore_permissions=True)
+		frappe.db.commit()
+		clear_size_index()
+		super().tearDownClass()
+
+	def setUp(self):
+		super().setUp()
+		clear_size_index()
+
+	@contextmanager
+	def _published(self, lab_size):
+		"""One bench of `lab_size`, and the `http` block its deploy wrote."""
+		frappe.db.set_value("Lab", self.lab.name, {"instance_size": lab_size, "enable_code_server": 1})
+		bench = _fresh_bench(self, self.lab.name)
+		bench.status = "Running"
+		bench.container_ip = "172.30.0.23"
+		bench.save(ignore_permissions=True)
+		frappe.db.commit()
+		with _route_dir() as (published_ingress, target_dir):
+			published_ingress.publish(bench.name, "benchpress.cloud")
+			yield bench, yaml.safe_load((target_dir / f"{bench.name}.yml").read_text())["http"]
+
+	def test_the_cap_lands_on_the_render_router_and_nowhere_else(self):
+		"""One tab pulls nine same-host assets, so a cap on `assets-` would 429 a single user;
+		code-server holds one upgraded connection per session, so a cap on `ide-` counts
+		sessions. The rate limit is listed first so a refused request takes no slot."""
+		with self._published(self.capped_size.name) as (bench, http):
+			carried = {name: router["middlewares"] for name, router in http["routers"].items()}
+			# Traefik drops a router naming a middleware it cannot resolve, and a dropped
+			# router is a bench nobody can reach.
+			defined = set(http["middlewares"])
+
+		self.assertEqual(
+			carried,
+			{
+				f"site-{bench.name}": [f"{bench.name}-rl-site", f"{bench.name}-inflight"],
+				f"assets-{bench.name}": [f"{bench.name}-rl-assets"],
+				f"ide-{bench.name}": [f"{bench.name}-rl-ide"],
+			},
+		)
+		self.assertEqual(defined, {name for names in carried.values() for name in names})
+
+	def test_the_amount_is_the_tier_number(self):
+		with self._published(self.capped_size.name) as (bench, http):
+			cap = http["middlewares"][f"{bench.name}-inflight"]
+
+		self.assertEqual(cap["inFlightReq"]["amount"], 16)
+
+	def test_a_typod_tier_cannot_exceed_the_ceiling(self):
+		"""The clamp is the whole reason the ceiling is a module constant: 151 shared database
+		connections divided by 24 is about the number of saturated benches this host holds."""
+		with self._published(self.typo_size.name) as (bench, http):
+			amount = http["middlewares"][f"{bench.name}-inflight"]["inFlightReq"]["amount"]
+
+		self.assertEqual(amount, 24)
+		self.assertEqual(amount, ingress.INFLIGHT_CEILING)
+
+	def test_an_unseeded_tier_gets_no_cap_rather_than_a_default(self):
+		"""Unlike the rate numbers, which have a floor. A row nobody seeded is an operator who
+		has not chosen yet, and imposing 4 on every bench the day this ships would be a
+		capacity change nobody asked for."""
+		with self._published(self.unseeded_size.name) as (bench, http):
+			self.assertEqual(http["routers"][f"site-{bench.name}"]["middlewares"], [f"{bench.name}-rl-site"])
+			self.assertNotIn(f"{bench.name}-inflight", http["middlewares"])
+
+	def test_the_cap_carries_no_source_criterion_at_all(self):
+		"""`site-<id>` matches exactly one host, so the router is already the bucket. A
+		`sourceCriterion` would only split the one count across two limiter instances."""
+		with self._published(self.capped_size.name) as (bench, http):
+			cap = http["middlewares"][f"{bench.name}-inflight"]
+
+		self.assertEqual(cap, {"inFlightReq": {"amount": 16}})
 
 
 class TestWildcardAnchor(unittest.TestCase):
