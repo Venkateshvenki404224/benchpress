@@ -292,8 +292,10 @@ def drop_site_database(db_server_name: str, site_name: str, database: str | None
 	)
 
 
-# MariaDB's own schemas, which no site ever owns.
-SYSTEM_SCHEMAS = {"information_schema", "mysql", "performance_schema", "sys"}
+# What `SHOW DATABASES` returns that no site ever owns. `backups` is not a schema at all —
+# `backup_database_server` writes into the data directory and the server lists every directory
+# there — so a reconciler that reported it could never reach zero.
+NOT_SITE_DATABASES = {"information_schema", "mysql", "performance_schema", "sys", "backups"}
 
 
 def list_site_databases(db_server_name: str) -> list[str]:
@@ -307,7 +309,7 @@ def list_site_databases(db_server_name: str) -> list[str]:
 	return [
 		name
 		for name in names
-		if name and " " not in name and name != "Database" and name not in SYSTEM_SCHEMAS
+		if name and " " not in name and name != "Database" and name not in NOT_SITE_DATABASES
 	]
 
 

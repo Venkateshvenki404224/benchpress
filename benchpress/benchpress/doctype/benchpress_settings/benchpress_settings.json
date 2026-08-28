@@ -36,7 +36,8 @@
   "credits_section",
   "enable_credits",
   "reconcile_section",
-  "orphan_grace_minutes"
+  "orphan_grace_minutes",
+  "deploy_log_cap"
  ],
  "fields": [
   {
@@ -238,6 +239,13 @@
    "fieldname": "orphan_grace_minutes",
    "fieldtype": "Int",
    "label": "Orphan Grace Minutes"
+  },
+  {
+   "default": "50",
+   "description": "Deploy Log rows kept per bench. Frappe's own sweep clears them at seven days; this is the second bound, for a bench redeployed in a loop inside one.",
+   "fieldname": "deploy_log_cap",
+   "fieldtype": "Int",
+   "label": "Deploy Log Cap"
   }
  ],
  "grid_page_length": 50,

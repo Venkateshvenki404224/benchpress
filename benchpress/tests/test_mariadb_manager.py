@@ -575,7 +575,12 @@ class TestListSiteDatabases(IntegrationTestCase):
 	def test_the_server_s_own_schemas_are_not_a_site_s(self):
 		listed = self._listed(0, LIVE_SHOW_DATABASES)
 
-		self.assertEqual(listed, ["_0f466d815af80ea5", "_30097bd7739c8788_limited", "backups"])
+		self.assertEqual(listed, ["_0f466d815af80ea5", "_30097bd7739c8788_limited"])
+
+	def test_the_backup_directory_is_not_a_schema(self):
+		"""`backup_database_server` writes into the data directory, and the server lists every
+		directory there — so a reconciler that reported it could never reach zero."""
+		self.assertNotIn("backups", self._listed(0, LIVE_SHOW_DATABASES))
 
 	def test_the_column_header_is_not_a_schema(self):
 		self.assertNotIn("Database", self._listed(0, LIVE_SHOW_DATABASES))

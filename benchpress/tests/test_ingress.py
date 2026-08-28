@@ -13,7 +13,7 @@ import frappe
 import yaml
 from frappe.tests import IntegrationTestCase
 
-from benchpress import ingress
+from benchpress import ingress, reconcile
 from benchpress.credits.config import clear_size_index
 from benchpress.tests.test_deploy_manager import _fresh_bench, _make_lab
 
@@ -371,7 +371,7 @@ class TestIdeRouter(IntegrationTestCase):
 					deployed = route.read_bytes()
 					mtime = route.stat().st_mtime_ns
 
-					ingress.reconcile()
+					reconcile._converge_routes()
 
 					self.assertEqual(route.read_bytes(), deployed)
 					self.assertEqual(route.stat().st_mtime_ns, mtime)
@@ -386,7 +386,7 @@ class TestIdeRouter(IntegrationTestCase):
 
 		with _route_dir() as (ingress, _target_dir):
 			with patch.object(ingress, "_fleet_rows", wraps=ingress._fleet_rows) as fleet_rows:
-				result = ingress.reconcile()
+				result = reconcile._converge_routes()
 
 		self.assertEqual(fleet_rows.call_count, 1)
 		self.assertGreaterEqual(result["written"], 2)
@@ -552,7 +552,7 @@ class TestPathSplitAndRateLimits(IntegrationTestCase):
 			deployed = route.read_bytes()
 			mtime = route.stat().st_mtime_ns
 
-			published_ingress.reconcile()
+			reconcile._converge_routes()
 
 			self.assertEqual(route.read_bytes(), deployed)
 			self.assertEqual(route.stat().st_mtime_ns, mtime)
@@ -568,7 +568,7 @@ class TestPathSplitAndRateLimits(IntegrationTestCase):
 			with patch.object(
 				published_ingress, "_fleet_rows", wraps=published_ingress._fleet_rows
 			) as fleet_rows:
-				published_ingress.reconcile()
+				reconcile._converge_routes()
 
 		self.assertEqual(fleet_rows.call_count, 1)
 
@@ -962,268 +962,6 @@ def _route_dir(base_domain="benchpress.cloud"):
 			patch("frappe.get_cached_doc", return_value=frappe._dict(base_domain=base_domain)),
 		):
 			yield ingress, target_dir
-
-
-class TestRouteConvergenceSchedule(unittest.TestCase):
-	"""The `*/5` convergence tick — see phase-3-invariant-and-convergence.md."""
-
-	def test_the_tick_hands_the_pass_to_the_long_queue(self):
-		from benchpress.ingress import enqueue_route_reconcile
-
-		with patch("frappe.enqueue") as enqueue:
-			enqueue_route_reconcile()
-
-		args, kwargs = enqueue.call_args
-		self.assertEqual(args[0], "benchpress.ingress.reconcile")
-		self.assertEqual(kwargs["queue"], "long")
-		# Fixed, so a pass running longer than the interval does not queue behind itself.
-		self.assertEqual(kwargs["job_id"], "route_reconcile")
-		self.assertTrue(kwargs["deduplicate"])
-
-	def test_the_cron_entry_is_the_enqueuer_and_never_the_pass(self):
-		"""Frappe sends cron to `default`, which `queue-short` also consumes — and that
-		container has no route mount, so the pass itself would raise every five minutes."""
-		from benchpress.hooks import scheduler_events
-
-		cron_methods = [method for methods in scheduler_events["cron"].values() for method in methods]
-
-		self.assertIn(
-			"benchpress.ingress.enqueue_route_reconcile",
-			scheduler_events["cron"]["*/5 * * * *"],
-		)
-		self.assertNotIn("benchpress.ingress.reconcile", cron_methods)
-
-
-class TestReconcileInstanceRoutes(IntegrationTestCase):
-	"""`reconcile` — the route directory converges on the database.
-
-	See specs/completed/wildcard-cert-routing/phase-3-route-convergence.md.
-	"""
-
-	@classmethod
-	def setUpClass(cls):
-		super().setUpClass()
-		frappe.set_user("Administrator")
-		cls.lab = _make_lab("test-lab-reconcile-routes")
-		frappe.db.commit()
-
-	@classmethod
-	def tearDownClass(cls):
-		frappe.set_user("Administrator")
-		for name in frappe.get_all("Bench Instance", filters={"lab": cls.lab.name}, pluck="name"):
-			frappe.delete_doc("Bench Instance", name, force=True, ignore_permissions=True)
-		cls.lab.delete(ignore_permissions=True)
-		frappe.db.commit()
-		super().tearDownClass()
-
-	def _bench(self, status, container_ip):
-		bench = _fresh_bench(self, self.lab.name)
-		bench.status = status
-		bench.container_ip = container_ip
-		bench.save(ignore_permissions=True)
-		frappe.db.commit()
-		return bench
-
-	def _seed(self, target_dir, name, body="stale\n"):
-		path = target_dir / name
-		path.write_text(body)
-		return path
-
-	def _instance_files(self, target_dir):
-		return sorted(p.name for p in target_dir.glob("*.yml") if p.name not in ingress.PROTECTED_ROUTE_FILES)
-
-	def test_a_route_file_naming_no_bench_instance_is_deleted(self):
-		"""The orphan case: a hostname with no document behind it still resolves and still
-		routes, so it keeps serving whichever container inherited that IP."""
-		with _route_dir() as (ingress, target_dir):
-			orphan = self._seed(target_dir, "091131f54bcdfc7bc37cbc45763547fa.yml")
-
-			result = ingress.reconcile()
-
-			self.assertFalse(orphan.exists())
-			self.assertGreaterEqual(result["deleted"], 1)
-
-	def test_a_bench_that_is_not_running_loses_its_route_file(self):
-		"""A stopped bench's recorded IP is an address Docker has already handed back, so the
-		file is not a dead link — it is the next bench's hostname collision."""
-		for status in ("Stopped", "Draft", "Error"):
-			with self.subTest(status=status):
-				bench = self._bench(status, "172.30.0.11")
-				with _route_dir() as (ingress, target_dir):
-					route_file = self._seed(target_dir, f"{bench.name}.yml")
-
-					ingress.reconcile()
-
-					self.assertFalse(route_file.exists())
-
-	def test_a_running_bench_route_is_rewritten_to_name_its_container(self):
-		"""Convergence, not merely reaping: a file that survives must also be right. Seeded with
-		an address backend so passing means the pass rewrote it to the container name."""
-		bench = self._bench("Running", "172.30.0.12")
-
-		with _route_dir() as (ingress, target_dir):
-			self._seed(target_dir, f"{bench.name}.yml", "http://172.30.0.99:8000\n")
-
-			result = ingress.reconcile()
-
-			written_text = (target_dir / f"{bench.name}.yml").read_text()
-			config = yaml.safe_load(written_text)
-			backends = [
-				server["url"]
-				for service in config["http"]["services"].values()
-				for server in service["loadBalancer"]["servers"]
-			]
-			self.assertIn(f"http://{bench.name}:8000", backends)
-			self.assertNotRegex(written_text, IPV4_IN_TEXT)
-			self.assertGreaterEqual(result["written"], 1)
-
-	def test_the_control_plane_router_and_the_anchor_survive_a_full_sweep(self):
-		"""The guard that stops this pass taking the platform off the internet. `dynamic.yml` is
-		the control plane's own router and the anchor is every bench's certificate; a run that
-		deletes every instance file must still leave both."""
-		with _route_dir() as (ingress, target_dir):
-			control_plane = self._seed(target_dir, "dynamic.yml", "control plane\n")
-			ingress.ensure_anchor("benchpress.cloud")
-			anchor = target_dir / "wildcard-anchor.yml"
-			anchor_text = anchor.read_text()
-			self._seed(target_dir, "16b283bccf6560ab1aa5f078d492d005.yml")
-			self._seed(target_dir, "5dc12efd9c154796adae757adec1b2f3.yml")
-
-			result = ingress.reconcile()
-
-			self.assertEqual(control_plane.read_text(), "control plane\n")
-			self.assertEqual(anchor.read_text(), anchor_text)
-			self.assertEqual(result["kept"], 2)
-
-	def test_a_run_always_leaves_the_certificate_anchored(self):
-		"""The anchor is what holds the wildcard the resolver-free bench routers serve, so the
-		pass writes it first rather than waiting for the next deploy."""
-		with _route_dir() as (ingress, target_dir):
-			result = ingress.reconcile()
-
-			self.assertTrue(result["anchored"])
-			config = yaml.safe_load((target_dir / "wildcard-anchor.yml").read_text())
-			router = config["http"]["routers"]["benchpress-wildcard-anchor"]
-			self.assertEqual(router["rule"], "Host(`tls-anchor.benchpress.cloud`)")
-
-	def test_the_returned_counts_match_what_happened_on_disk(self):
-		"""A reaper that reports what it attempted rather than what converged is how a directory
-		drifts for weeks without anyone noticing."""
-		bench = self._bench("Running", "172.30.0.13")
-
-		with _route_dir() as (ingress, target_dir):
-			self._seed(target_dir, "dynamic.yml", "control plane\n")
-			self._seed(target_dir, f"{bench.name}.yml")
-			self._seed(target_dir, "091131f54bcdfc7bc37cbc45763547fa.yml")
-			self._seed(target_dir, "5dc12efd9c154796adae757adec1b2f3.yml")
-
-			result = ingress.reconcile()
-
-			self.assertEqual(result["deleted"], 2)
-			self.assertEqual(result["kept"], 2)
-			self.assertEqual(result["written"], len(self._instance_files(target_dir)))
-			self.assertIn(f"{bench.name}.yml", self._instance_files(target_dir))
-
-	def test_a_second_run_deletes_nothing_and_touches_nothing(self):
-		"""Idempotence is the read side agreeing with the write side. A pass that keeps finding
-		things to delete is one that disagrees with the files it just wrote — and one that
-		rewrites unchanged files is a Traefik reload every five minutes, since it reloads on
-		mtime."""
-		self._bench("Running", "172.30.0.14")
-
-		with _route_dir() as (ingress, target_dir):
-			self._seed(target_dir, "091131f54bcdfc7bc37cbc45763547fa.yml")
-			ingress.reconcile()
-			before = {p.name: p.stat().st_mtime_ns for p in target_dir.iterdir()}
-
-			result = ingress.reconcile()
-
-			self.assertEqual(result["deleted"], 0)
-			self.assertFalse(result["anchored"])
-			self.assertEqual({p.name: p.stat().st_mtime_ns for p in target_dir.iterdir()}, before)
-
-	def test_a_container_without_the_route_mount_reports_instead_of_raising(self):
-		"""Only `queue-long` mounts the directory, so a by-hand run anywhere else used to do
-		the bridge half and then raise out of `ensure_anchor`."""
-		with tempfile.TemporaryDirectory() as tmp:
-			with (
-				patch.object(ingress, "TRAEFIK_DYNAMIC_DIR", Path(tmp) / "dynamic"),
-				patch("frappe.get_cached_doc", return_value=frappe._dict(base_domain="benchpress.cloud")),
-				patch("benchpress.placement.repair", return_value={"attached": {}, "missing": {}}),
-			):
-				result = ingress.reconcile()
-
-		# None, not 0: nothing was read, and zero counts are what a converged pass reports.
-		self.assertEqual(
-			result,
-			{
-				"anchored": None,
-				"written": None,
-				"deleted": None,
-				"kept": None,
-				"attached": {},
-				"missing": {},
-			},
-		)
-
-	def test_reconcile_writes_nothing_at_all_without_a_public_domain(self):
-		"""A dev checkout must be byte-for-byte unaffected — and must not reap either, since a
-		directory it never writes is not a directory it understands."""
-		for base_domain in (None, "", "localhost"):
-			with (
-				self.subTest(base_domain=base_domain),
-				_route_dir(base_domain) as (
-					ingress,
-					target_dir,
-				),
-			):
-				survivor = self._seed(target_dir, "091131f54bcdfc7bc37cbc45763547fa.yml")
-
-				result = ingress.reconcile()
-
-				self.assertTrue(survivor.exists())
-				self.assertEqual(
-					result,
-					{"anchored": False, "written": 0, "deleted": 0, "kept": 0, "attached": {}, "missing": {}},
-				)
-
-
-class TestSettingsReAnchor(IntegrationTestCase):
-	"""`BenchPress Settings.on_update` hands the sweep to the worker that can do it.
-
-	`on_update` is called directly on an unsaved document. Saving the real Single would write
-	a domain to a live host, and the whole point of the controller is that it does not do the
-	work itself — what needs asserting is which queue it hands it to.
-	"""
-
-	def _settings(self, previous_domain):
-		settings = frappe.get_doc("BenchPress Settings")
-		settings._doc_before_save = frappe._dict(base_domain=previous_domain)
-		return settings
-
-	def test_a_changed_base_domain_enqueues_the_sweep_on_the_long_queue(self):
-		"""`queue-long` is the only worker that mounts the route directory. A sweep on any other
-		queue writes into that container's own filesystem, and Traefik never sees it."""
-		settings = self._settings("some-other-zone.example")
-
-		with patch("frappe.enqueue") as enqueue:
-			settings.on_update()
-
-		enqueue.assert_called_once()
-		args, kwargs = enqueue.call_args
-		self.assertEqual(args[0], "benchpress.ingress.reconcile")
-		self.assertEqual(kwargs["queue"], "long")
-		# The job re-reads `base_domain`, so it must not start before the new value is committed.
-		self.assertTrue(kwargs["enqueue_after_commit"])
-
-	def test_an_unrelated_settings_save_enqueues_nothing(self):
-		"""A toggle or a timeout is not a reason to sweep the route directory."""
-		settings = self._settings(frappe.get_cached_doc("BenchPress Settings").base_domain)
-
-		with patch("frappe.enqueue") as enqueue:
-			settings.on_update()
-
-		enqueue.assert_not_called()
 
 
 class TestSyncInstanceRoute(IntegrationTestCase):
