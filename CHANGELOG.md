@@ -29,6 +29,10 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.1.0] - 2026-08-28
+
 ### Added
 
 - Nightly MariaDB dumps are now copied to host disk
@@ -122,6 +126,10 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
   ([#200](https://github.com/Venkateshvenki404224/benchpress/pull/200))
 - Corrected how the project describes itself, refreshed the brand, and fixed stale
   documentation, in preparation for the source being public. ([#139](https://github.com/Venkateshvenki404224/benchpress/pull/139))
+- Install instructions point at `main`, which now tracks the released code.
+  `develop` is the integration branch and `version-16` the staging branch; a
+  release is what lands on `main` and gets tagged. Pin an install with
+  `--branch v0.1.0`.
 - The landing page serves its own web fonts and carries the new logo lockup, and
   the documentation screenshots were recaptured against the current interface.
   ([#162](https://github.com/Venkateshvenki404224/benchpress/pull/162), [#152](https://github.com/Venkateshvenki404224/benchpress/pull/152), [#153](https://github.com/Venkateshvenki404224/benchpress/pull/153))
@@ -185,8 +193,17 @@ Read all of these before upgrading an existing install.
    Nothing meters or refuses while it is off.
 5. **Health probes apply at container creation.** Benches that predate this release
    report no health status until they are redeployed.
-6. **The host half lives in `benchpress_devops`.** The events listener needs its
-   compose service, and the kernel limits need `scripts/tune-host.sh` run once with
-   `sudo`.
+6. **Two pieces of this release are host work, and BenchPress ships neither.**
+   The events listener needs a long-running process for
+   `benchpress.docker_events.run` that carries the Docker socket and comes back
+   after a reboot — a compose service, a systemd unit, or a supervisor entry. And
+   a dense fleet needs its kernel ceilings raised once, under `/etc/sysctl.d`:
+   `kernel.pid_max`, `kernel.pty.max`, `fs.file-max`, `fs.nr_open`,
+   `net.netfilter.nf_conntrack_max`, `net.ipv4.neigh.default.gc_thresh{1,2,3}`,
+   `net.core.netdev_max_backlog` and `net.ipv4.tcp_max_syn_backlog`. Each target
+   scales with the bench count. Verify by reading `/proc/sys` afterwards, not the
+   file you wrote — a drop-in is a request, not a value. The reference deployment
+   of both lives in a separate orchestration repository that is not public.
 
-[Unreleased]: https://github.com/Venkateshvenki404224/benchpress/commits/version-16
+[Unreleased]: https://github.com/Venkateshvenki404224/benchpress/compare/v0.1.0...version-16
+[0.1.0]: https://github.com/Venkateshvenki404224/benchpress/releases/tag/v0.1.0

@@ -64,7 +64,7 @@ the full list is under [Prerequisites](#prerequisites).
 ```bash
 cd /path/to/your/frappe-bench
 
-bench get-app https://github.com/Venkateshvenki404224/benchpress --branch develop
+bench get-app https://github.com/Venkateshvenki404224/benchpress --branch main
 bench pip install docker
 bench --site your-site.localhost install-app benchpress
 bench --site your-site.localhost migrate
@@ -504,7 +504,7 @@ sudo sysctl -p /etc/sysctl.d/99-benchpress.conf
 
 ```bash
 cd /path/to/your/frappe-bench
-bench get-app https://github.com/Venkateshvenki404224/benchpress --branch develop
+bench get-app https://github.com/Venkateshvenki404224/benchpress --branch main
 bench pip install docker
 bench --site your-site.localhost install-app benchpress
 bench --site your-site.localhost migrate
@@ -522,7 +522,7 @@ bench start
 cd /path/to/your/frappe-bench
 
 # Clone and install BenchPress
-bench get-app https://github.com/Venkateshvenki404224/benchpress --branch develop
+bench get-app https://github.com/Venkateshvenki404224/benchpress --branch main
 
 # Install the Docker Python SDK (required dependency)
 bench pip install docker
@@ -669,7 +669,7 @@ The Lab Detail page's **Sites** tab shows the bench's site, its installed apps, 
 cd /path/to/your/frappe-bench
 
 # Get the app
-bench get-app https://github.com/Venkateshvenki404224/benchpress --branch develop
+bench get-app https://github.com/Venkateshvenki404224/benchpress --branch main
 bench pip install docker
 bench --site your-site.localhost install-app benchpress
 bench --site your-site.localhost migrate
