@@ -5,6 +5,10 @@
 ## Included Pages
 
 - [Quick tour](https://docs.benchpress.cloud/docs/user/quick-tour): The five screens in the BenchPress sidebar, and every number the Overview dashboard reports.
+- [Deploy from a template](https://docs.benchpress.cloud/docs/user/deploy-from-template): Turn a catalog template into a running bench, and read the eleven pipeline steps while they run.
+- [Create a lab](https://docs.benchpress.cloud/docs/user/create-a-lab): Fill in the New lab form when no catalog template matches the app list you need.
+- [Read a lab page](https://docs.benchpress.cloud/docs/user/lab-detail): Every field on the lab page, and why container status and container health can disagree.
+- [Start, stop and redeploy](https://docs.benchpress.cloud/docs/user/lifecycle): The five actions on a running bench, which of them destroy work, and which are admin-only.
 - [BenchPress documentation](https://docs.benchpress.cloud/docs): Start here. Three tracks — use a bench, run the server that hosts one, or read the data model and the API.
 
 ## Content
@@ -135,6 +139,555 @@ server.
 ## Related
 
 * [BenchPress documentation](/docs) — the three tracks, and what each one covers.
+
+# Deploy from a template
+URL: https://docs.benchpress.cloud/docs/user/deploy-from-template
+Turn a catalog template into a running bench, and read the eleven pipeline steps while they run.
+
+A template is a recipe someone already wrote. This page takes you from the
+catalog to a bench you can open, without filling in a form.
+
+**Who this is for.** Anybody who needs a working bench and does not care how the
+image was built.
+
+**Before you start.** You need a login. **Templates** is admin-only, so ask an
+admin if the item is missing from your sidebar. You do not need the VPN to
+deploy. You need it to open the bench afterwards.
+
+## Steps
+
+1. Open **Templates** in the sidebar, or go to `/frontend/labs/templates`.
+
+   ![The BenchPress Templates catalog at 1280 by 800 pixels, showing eight template cards in a three-column grid. Each card carries a logo, a title, a Frappe version, a description, app chips and resource chips. VPN Management and ERPNext are tagged Most used. The first four cards read Already used and offer a Go to lab button. Google, ChatGPT, Claude and BenchPress read a deploy estimate such as 12 min to deploy and offer a Use template button instead.](../images/user/deploy-from-template/01-templates.png)
+
+   Every card names the same five things: the app list, the Frappe version, the
+   memory and CPU the bench gets, and either a deploy estimate or the lab that
+   already exists.
+
+   |Template in the frame|Version|Size|Estimate|
+   |--|--|--|--|
+   |VPN Management|version-16|1 GB, 1 vCPU|already used|
+   |ERPNext|version-15|2 GB, 2 vCPU|already used|
+   |Frappe CRM|version-15|1 GB, 1 vCPU|already used|
+   |Frappe|version-16|4 GB, 4 vCPU|already used|
+   |Google|version-16|2 GB, 2 vCPU|\~12 min|
+   |ChatGPT|version-16|2 GB, 2 vCPU|\~12 min|
+   |Claude|version-16|4 GB, 4 vCPU|\~20 min|
+   |BenchPress|version-16|2 GB, 2 vCPU|\~8 min|
+
+   Use the three controls above the grid to narrow it: a search box, an **Apps**
+   filter and a **Version** filter.
+
+2. Press the button on the card you want. The button tells you which of two
+   things happens.
+
+   |Button|What the card says|What the press does|
+   |--|--|--|
+   |**Use template**|a deploy estimate|Creates the lab, then starts the deploy|
+   |**Go to lab**|`Already used — ready`|Opens the lab that already exists|
+
+   **Use template** is one press for two actions. BenchPress creates a lab from
+   the recipe, then deploys a bench from that lab. The estimate on the card is
+   the build time, and it applies only the first time a template is used.
+
+3. Press **Deploy** on the lab page. A lab that has already been used still
+   needs this press, because a lab is a recipe and a bench is a container.
+
+4. Watch the eleven steps. Open the **Deploy log** tab to see them.
+
+   ![An animation of the BenchPress Deploy log tab during a real deploy of the crm-demo lab. The header reads Latest deploy, Deploying, and a counter that climbs from 2 seconds to 1 minute 25 seconds. The eleven steps tick over one at a time from Checking shared infrastructure to Deploy complete, each gaining a check mark, a one-line result and its own duration. The header ends on a green Success chip.](../images/user/deploy-from-template/04-pipeline.gif)
+
+   The steps run in this order every time. The order is the order the code
+   runs, which is why the WireGuard peer comes fifth and not tenth.
+
+   |#|Step|What it does|
+   |--|--|--|
+   |1|Checking shared infrastructure|Confirms MariaDB and the Docker network answer|
+   |2|Preparing the lab image|Finds the lab's built image. A deploy never builds one|
+   |3|Creating the container|Starts the container on the bench bridge|
+   |4|Waiting for the container IP|Waits for an address, and for TLS on the wildcard certificate|
+   |5|Configuring the WireGuard peer|Gives the bench its private VPN address|
+   |6|Writing common\_site\_config.json|Points the bench at the shared database and Redis|
+   |7|Creating the site|Restores the site, or builds it from scratch|
+   |8|Preparing assets|Uses the assets already bundled into the image|
+   |9|Provisioning the SSH user|Creates the SSH account and its password|
+   |10|Starting the lab's services|Starts code-server and reports its address|
+   |11|Deploy complete|Marks the bench Running|
+
+   ![The Deploy log tab of the crm-demo lab part way through a run, at 1280 by 800 pixels. The header reads Latest deploy, a blue Deploying chip and 4s so far. The first six steps carry green check marks and durations of one second or less. Creating the site is bold with a spinner and a blue running label, and reports the site name it is creating. Preparing assets, Provisioning the SSH user, Starting the lab's services and Deploy complete are still gray.](../images/user/deploy-from-template/02-pipeline.png)
+
+   Each step keeps its own clock, and each reports one line of its own result.
+   In the frame above, six steps are done, `Creating the site` is running, and
+   four have not started.
+
+5. Wait for **Success**. The header chip turns green and reports the total.
+
+   ![The same Deploy log tab after the run finished, at 1280 by 800 pixels. The header reads Latest deploy with a green Success chip and 21s. All eleven steps carry check marks. Creating the site took 15 seconds and reports that the site was restored from the image's golden dump. The page header now offers Open VS Code and Open site instead of a Deploy button.](../images/user/deploy-from-template/03-complete.png)
+
+   This run took **21 seconds**, and 15 of those were step 7. The step-by-step
+   times were 1s, 1s, 1s, 0s, 1s, 0s, 15s, 0s, 1s, 1s.
+
+   A deploy is that fast only when the image carries a golden dump. Step 7 then
+   reports `restored from the image's golden dump`. Without one it reports
+   `built from scratch`, and the same step takes minutes rather than seconds.
+   Step 2 says so in the log when the dump is missing.
+
+## Verify
+
+The deploy worked when all four are true.
+
+* The **Deploy log** header reads **Success** and names a duration.
+* All eleven steps carry a check mark.
+* The page header offers **Open site** and **Open VS Code** in place of **Deploy**.
+* The **Sites** card lists one site and marks it **Active**.
+
+## Troubleshooting
+
+|Symptom|Cause|Fix|
+|--|--|--|
+|**Templates** is missing from the sidebar|The catalog is admin-only|Ask an admin, or deploy an existing lab from **Labs**|
+|Step 2 fails with `No built image for lab`|The lab has no image, or its recipe changed after the last build|Ask an admin to press **Rebuild image** on the lab|
+|The log stops at `Waiting for the worker to pick the deploy up…`|No worker is running, so nothing has started|Ask the operator to check `queue-long`|
+|Step 7 runs for minutes|The image has no golden dump, so the site is built from scratch|Nothing to fix. Read step 2, which reports the same thing|
+|The run ends **Error**|The step that failed names the reason|Open **Raw log** under the steps and read the last lines|
+|**Open site** opens nothing|Bench sites resolve only over the VPN|Connect the VPN, then press it again|
+
+## Reference
+
+### The two buttons on a template card
+
+|State|Footnote|Button|
+|--|--|--|
+|No lab exists yet|`~N min to deploy`|**Use template**|
+|A lab exists|`Already used — <status>`|**Go to lab**|
+
+### What a template sets
+
+|Field|Example in the catalog|
+|--|--|
+|Apps|`crm` on branch `main`|
+|Frappe version|`version-15`|
+|Instance size|Small, Medium or Large|
+|Memory and CPU|1 GB and 1 vCPU for Small|
+|Deploy estimate|4 to 20 minutes, first build only|
+
+### The three tabs a deploy fills
+
+|Tab|What it holds|
+|--|--|
+|Dashboard|Container status, health, CPU, memory and connection details|
+|Sites|Every site on the bench, and whether each is active|
+|Deploy log|The eleven steps, their durations and the raw log|
+
+## Related
+
+* [Quick tour](/docs/user/quick-tour) — the five screens, and what each one owns.
+* [Create a lab](/docs/user/create-a-lab) — when no template fits.
+* [Read a lab page](/docs/user/lab-detail) — what every field on the page means.
+* [Start, stop and redeploy](/docs/user/lifecycle) — what to do after it is running.
+
+# Create a lab
+URL: https://docs.benchpress.cloud/docs/user/create-a-lab
+Fill in the New lab form when no catalog template matches the app list you need.
+
+A lab is a recipe: a Frappe version, a list of apps and a set of container
+limits. This page fills that recipe in by hand.
+
+**Who this is for.** Admins. **New lab** is admin-only, because saving it can
+start an image build.
+
+**Before you start.** Check [Templates](/docs/user/deploy-from-template) first.
+A template is faster and its image usually exists already. Use this form only
+when no template carries the app list you need.
+
+## Steps
+
+1. Open **Labs**, then press **New lab**. The route is `/frontend/labs/new`.
+
+2. Fill in the Identity card.
+
+   ![The top of the BenchPress New lab form at 1280 by 800 pixels. The Identity card holds Title reading Support triage, Lab ID reading support-triage under a note that it cannot be changed later, a Description field, and a Frappe version row with version-16 selected out of version-15, version-14, version-16 and develop. The Apps card below holds one row with App helpdesk, Git URL github.com/frappe/helpdesk and Branch main. A What gets built panel on the right lists the size, the shared image, the version and app, the enabled features, and a note that the site is created on first deploy.](../images/user/create-a-lab/01-identity.png)
+
+   |Field|What it does|In the frame|
+   |--|--|--|
+   |Title|The display name. Free text|`Support triage`|
+   |Lab ID|Names the container and the site domain|`support-triage`|
+   |Description|One line, shown on the lab page|Helpdesk and CRM for the support team's weekly triage.|
+   |Frappe version|One of `version-15`, `version-14`, `version-16`, `develop`|`version-16`|
+
+   The Lab ID fills itself in from the Title. **It cannot be changed later.**
+   Use lowercase letters, digits and single separators, as in `crm-lab`.
+
+3. Add the apps. Press **Add app** for each one, and give it a name, a git URL
+   and a branch.
+
+   Frappe is always included. Do not add it.
+
+4. Choose the size and the access switches.
+
+   ![The lower half of the New lab form at 1280 by 800 pixels. The Apps card holds the helpdesk row and an Add app button. The Resources and access card shows three instance size cards, Small 1 GB 1 vCPU, Medium 2 GB 2 vCPU selected, and Large 4 GB 4 vCPU. Below them three numeric fields read Max IOPS 0, Max bytes per second 0 and Max processes 0, each labeled 0 equals a default. Two switches, Code server and SSH access, are both on.](../images/user/create-a-lab/02-apps-and-resources.png)
+
+   |Control|Options|Default|
+   |--|--|--|
+   |Instance size|Small 1 GB 1 vCPU, Medium 2 GB 2 vCPU, Large 4 GB 4 vCPU|Small|
+   |Max IOPS|`0` uses the default of 1000|`0`|
+   |Max bytes/sec|`0` uses the default of 40 MiB/s|`0`|
+   |Max processes|`0` uses the default of 500|`0`|
+   |Code server|Browser VS Code on the bench|On|
+   |SSH access|Adds an ssh user to the container|On|
+
+   Leave the three limits at `0` unless you know the bench needs a different
+   ceiling. `0` does not mean unlimited. It means the default in the table.
+
+5. Read the **What gets built** panel on the right. It restates the recipe in
+   plain words before anything runs.
+
+6. Press one of the two buttons. They do different things.
+
+   |Button|What it does|
+   |--|--|
+   |**Save as draft**|Writes the lab and stops. The lab is `Draft` and cannot deploy|
+   |**Save and build image**|Writes the lab and starts the image build|
+
+   A build takes **two to six minutes** for a small app list, and up to twenty
+   for a full client stack. The lab becomes `Ready` when it finishes.
+
+## Verify
+
+* The lab appears in **Labs** with the Lab ID you chose.
+* Its status reads `Draft` after **Save as draft**, or `Building` after
+  **Save and build image**.
+* The **Build log** tab on the lab page reports the build while it runs.
+* The status reaches `Ready`, and only then does **Deploy** work.
+
+## Troubleshooting
+
+|Symptom|Cause|Fix|
+|--|--|--|
+|**New lab** is missing|The form is admin-only|Ask an admin, or use a template|
+|`Lab ID is not valid`|The ID has uppercase, spaces or double separators|Use lowercase letters, digits and single `.`, `_` or `-`|
+|The status went back to `Draft` after an edit|The recipe changed, so the built image no longer matches|Press **Rebuild image** on the lab|
+|`CPU cores must be at least 1`|The CPU field was set below one core|Set one core or more|
+|Deploy says `No built image for lab`|The lab was saved as a draft and never built|Press **Rebuild image**, wait for `Ready`, deploy again|
+|The build fails on a private repo|The git URL needs credentials the builder does not have|Use a public URL, or ask the operator to add the token|
+
+## Reference
+
+### What is baked in, and what is not
+
+|Baked into the image at build time|Created at deploy time|
+|--|--|
+|Frappe and every app in the list|The site and its database|
+|The frontend assets|The SSH user and its password|
+|The Python environment|The WireGuard peer and its address|
+||The code-server session|
+
+This split is why a rebuild is slow and a deploy is fast. Changing the app list
+changes the image. Deploying again does not.
+
+### Fields that cannot change after the first save
+
+|Field|Why|
+|--|--|
+|Lab ID|It names the container and the site domain|
+
+Every other field can be edited. Editing anything the build reads sends the lab
+back to `Draft` and asks for a rebuild.
+
+### One image, many labs
+
+Two labs with the same Frappe version and the same app list share one image.
+The **What gets built** panel says so: `Docker image shared with every lab that builds these same apps`. A second lab on an existing recipe costs no build time.
+
+## Related
+
+* [Deploy from a template](/docs/user/deploy-from-template) — the faster path.
+* [Read a lab page](/docs/user/lab-detail) — the page this form produces.
+* [Start, stop and redeploy](/docs/user/lifecycle) — running the bench afterwards.
+
+# Read a lab page
+URL: https://docs.benchpress.cloud/docs/user/lab-detail
+Every field on the lab page, and why container status and container health can disagree.
+
+The lab page is one screen with two clocks on it. This page reads every field,
+and explains the one thing the screen does not say out loud: **status and health
+are separate, and either can be right while the other is stale.**
+
+**Who this is for.** Anybody who has opened a lab and wants to know what the
+page is telling them.
+
+**Before you start.** Nothing. Reading the page needs no VPN and no deploy.
+
+## Steps
+
+1. Open **Labs**, then press a lab. The route is `/frontend/labs/<lab-id>`.
+
+2. Read the header. It describes the **lab**, not the bench.
+
+   ![The BenchPress lab page for Frappe CRM demo before any deploy, at 1280 by 800 pixels. The header shows the lab logo, the title Frappe CRM demo, a green Ready chip, the lab id crm-demo in code, the description, and chips reading version-15, 1 GB, 1 vCPU, code-server and SSH. A black Deploy button sits at the top right. The left card reads This lab has never been deployed. Deploying builds a container, a site, an SSH user and an IDE. The Connection card warns VPN off and offers Register this device. The Sites card reads No site yet.](../images/user/lab-detail/01-before-deploy.png)
+
+   The `Ready` chip is the **lab** status. It means the image is built. It says
+   nothing about whether a bench is running.
+
+   |Lab status|Meaning|
+   |--|--|
+   |`Draft`|Saved, never built. Deploy refuses|
+   |`Building`|The image job is running|
+   |`Ready`|The image exists and matches the recipe|
+   |`Error`|The last build failed|
+
+   In the frame the header chips read `version-15`, `1 GB`, `1 vCPU`,
+   `code-server` and `SSH`. Those five come from the recipe, not from the
+   container.
+
+3. Read the **Container** card. This is the bench, and it carries both axes.
+
+   ![The same lab page during a deploy, at 1280 by 800 pixels. The Container card header reads Deploying in blue. Health reads Unknown with the note never checked. The CPU and MEMORY tiles both read a dash and container not running. The Sites card shows the site name with a blue Creating chip beside a gray Not running chip, and the line This site's container is stopped. Deploy the lab to bring it back.](../images/user/lab-detail/02-deploying.png)
+
+   ![The same lab page after the deploy finished, at 1280 by 800 pixels. The Container card header reads Running in green. Health reads Healthy with the note checked 2m ago. CPU reads 0 percent with quota 1 vCPU, MEMORY reads 0 percent of 1 GB limit, and the card ends with Started 2 minutes ago. The Sites card shows the site with a green Active chip and an Open button. The header now offers Open VS Code and Open site.](../images/user/lab-detail/03-running.png)
+
+   **The two axes are independent.** Status is what BenchPress last decided.
+   Health is what the last probe found. They are written by different things at
+   different times, so a fresh status can sit next to a stale health.
+
+   |Status|Health|What it means|
+   |--|--|--|
+   |`Deploying`|`Unknown`, never checked|The container is being made. No probe has run|
+   |`Running`|`Healthy`|The container is up and the site answers|
+   |`Running`|empty|The container just started. The first probe has not run|
+   |`Running`|`Unhealthy`|The container is up and the site does not answer|
+   |`Stopped`|`Healthy`|Stopped just now. The health line still shows the last probe|
+   |`Error`|any|The deploy failed. Read the deploy log|
+
+   Read the timestamp next to Health before you trust it. It says
+   `checked 2m ago` or `never checked`, and it is the age of the answer.
+
+4. Read the CPU and memory tiles. They report use against the lab's own limit,
+   not against the host.
+
+   |Tile|Reads|Under it|
+   |--|--|--|
+   |CPU|A percentage, or `—`|`quota 1 vCPU`|
+   |MEMORY|A percentage, or `—`|`of 1 GB limit`|
+
+   Both read `—` and `container not running` whenever the container is down.
+
+5. Read **Connection details**. Six rows, each with a copy button.
+
+   |Row|Example|Reachable from|
+   |--|--|--|
+   |Public URL|`https://<hash>.benchpress.cloud`|Anywhere|
+   |Private URL (VPN)|`http://172.27.0.18:8000`|The VPN only|
+   |WireGuard IP|`172.27.0.18`|The VPN only|
+   |Runtime|`sysbox`|—|
+   |code-server|`http://172.27.0.18:8080/`|The VPN only|
+   |SSH|The user and host|The VPN only|
+
+   Passwords stay hidden behind **Reveal secrets**. They are regenerated on
+   every redeploy, so a copy you saved last week may be wrong.
+
+6. Read the **Sites** card. One row per site, with the apps it carries.
+
+   |Site chip|Container chip|Meaning|
+   |--|--|--|
+   |`Active`|**Open**|The site is live|
+   |`Creating`|`Not running`|The deploy has not finished making it|
+   |`Inactive`|`Not running`|The container is stopped. The database is kept|
+
+## Verify
+
+You are reading the page correctly when all four are true.
+
+* You can say which chip is the lab status and which is the container status.
+* You can name the age of the health answer, not only its value.
+* The CPU percentage is read against the quota under it, not against the host.
+* You know which connection rows need the VPN.
+
+## Troubleshooting
+
+|Symptom|Cause|Fix|
+|--|--|--|
+|Health says `Healthy` on a stopped bench|The last probe ran before the stop|Read the timestamp. Status is the newer fact|
+|Health is empty on a running bench|No probe has run since the container started|Wait for the next probe, then reload|
+|Health says `Unhealthy` and the site works for you|Probes come from the host, not from your laptop|Open the deploy log. A failing probe is the bench, not the network|
+|CPU and memory read `—`|The container is not running|Start the bench|
+|The header has no **Build log** tab|Build logs are admin-only|Ask an admin for the build output|
+|A stopped bench shows a countdown|Stopped benches are deleted after a set number of days|Start it, or accept that it goes|
+|**Open site** does nothing|Bench sites resolve only over the VPN|Connect the VPN and press it again|
+
+## Reference
+
+### The four tabs
+
+|Tab|Holds|Who sees it|
+|--|--|--|
+|Dashboard|Container, connection details, sites|Everybody|
+|Sites|Every site on the bench|Everybody|
+|Deploy log|The eleven steps and the raw log|Everybody|
+|Build log|The image build output|Admins|
+
+### Both status fields, in full
+
+|Field|Values|
+|--|--|
+|`status`|`Draft`, `Deploying`, `Running`, `Stopped`, `Error`|
+|`container_health`|empty, `Healthy`, `Unhealthy`, `Unknown`|
+
+### What writes each one
+
+|Field|Written by|When|
+|--|--|--|
+|`status`|The deploy, start, stop and delete actions|The moment the action runs|
+|`container_health`|The container probe|Every 30 seconds, after a 10 minute grace period|
+
+The probe waits 600 seconds after a container starts before a failure counts.
+A seven-app site takes over three minutes to build on first boot, and nothing
+serves the site until it exists.
+
+### The stopped-bench countdown
+
+A stopped bench keeps its container and its database. The page counts down the
+window in which it can still be started, as in `Can be restored for 6d 23h`.
+The window is `reap_after_days` in Credit Settings, which is **7 days** here.
+`0` turns the deletion off.
+
+## Related
+
+* [Deploy from a template](/docs/user/deploy-from-template) — how the bench got here.
+* [Start, stop and redeploy](/docs/user/lifecycle) — the actions behind the chips.
+* [Create a lab](/docs/user/create-a-lab) — where the header chips come from.
+
+# Start, stop and redeploy
+URL: https://docs.benchpress.cloud/docs/user/lifecycle
+The five actions on a running bench, which of them destroy work, and which are admin-only.
+
+A running bench has five actions. Two are safe, one is destructive, one is
+final, and one is admin-only. This page says which is which before you press
+anything.
+
+**Who this is for.** Anybody with a deployed bench.
+
+**Before you start.** The bench must have been deployed at least once. An
+action on a bench that has no container is refused with
+`This instance has no container — deploy it first.`
+
+## Steps
+
+1. Open the lab. The primary button on the right is the next step in the
+   bench's own lifecycle, and it changes as the bench changes.
+
+   |Bench state|Primary button|What it does|
+   |--|--|--|
+   |Never deployed|**Deploy**|Runs the eleven-step pipeline|
+   |`Deploying`|**Deploying…**, disabled|Reports work already running|
+   |`Running`|**Open site**|Opens the site over the VPN|
+   |`Stopped`|**Start**|Resumes the same container|
+   |Lab is `Error`|**Rebuild image**|Builds the image again. Admins only|
+
+   **Start** is the primary action on a stopped bench, never **Redeploy**. The
+   container's writable layer holds everything done inside the bench, so the
+   destructive path is never the default.
+
+   ![The BenchPress lab page for Helpdesk sandbox as a non-admin user, at 1280 by 800 pixels. The Container card reads Running in green, Health Healthy checked 1m ago, CPU 0 percent of quota 2 vCPU, MEMORY 3 percent of a 2 GB limit, and Started 2 minutes ago. The overflow menu beside Open site is open and offers exactly two items, Stop bench and Redeploy bench. The Sites card lists the site with seven app chips: Frappe, ERPNext, HR, CRM, Telephony, Helpdesk, Payments and Learning.](../images/user/lifecycle/01-actions-menu.png)
+
+2. Press the **…** button beside the primary action for the rest. The menu
+   holds what the primary button is not offering.
+
+   |Menu item|Effect|Who sees it|
+   |--|--|--|
+   |**Stop bench**|Stops the container. Keeps the database|Everybody|
+   |**Redeploy bench**|Replaces the container and the site|Everybody|
+   |**Rebuild image**|Builds the lab image again|Admins|
+   |**Delete bench**|Removes the container, the sites and the databases|Admins|
+
+   In the frame above, a BenchPress User sees two items. An admin sees four.
+
+3. Confirm. Every action in the menu asks first, and the dialog names what it
+   does.
+
+   ![A confirmation dialog over the Helpdesk sandbox lab page, at 1280 by 800 pixels. The dialog is headed Stop this bench? and reads, The container stops and the site goes offline until it is started again. Nothing is deleted. A single black Confirm button sits below the text, with a close cross at the top right.](../images/user/lifecycle/02-stop-confirm.png)
+
+   Read the second sentence. It is where the dialog says whether anything is
+   lost. **Stop** says `Nothing is deleted`. **Redeploy** does not.
+
+4. Watch the page settle. A stop takes a few seconds.
+
+   ![The Helpdesk sandbox lab page after the stop, at 1280 by 800 pixels. The Container card header now reads Stopped in gray, while Health still reads Healthy with the note checked 2m ago. CPU and MEMORY both read a dash and container not running. The card ends with Started 3 minutes ago and Can be restored for 6d 23h. The primary button has become Start. The Sites card marks the site Inactive and Not running, with the line This site's container is stopped. Deploy the lab to bring it back.](../images/user/lifecycle/03-stopped.png)
+
+   Two things in that frame are worth naming. Health still reads `Healthy`,
+   because the last probe ran before the stop. And a countdown has appeared:
+   `Can be restored for 6d 23h`.
+
+5. Press **Start** to bring it back. The same container resumes with everything
+   in it. Nothing is rebuilt and nothing is downloaded.
+
+## Verify
+
+* After **Stop**, the Container card reads `Stopped` and the primary button
+  reads **Start**.
+* After **Stop**, the site row reads `Inactive` and `Not running`.
+* After **Start**, the Container card reads `Running` within a few seconds.
+* After **Redeploy**, the deploy log shows a new run with all eleven steps.
+
+## Troubleshooting
+
+|Symptom|Cause|Fix|
+|--|--|--|
+|`This instance has no container — deploy it first`|The bench was never deployed, or it was reaped|Press **Deploy**|
+|**Delete bench** is missing from the menu|Deleting is admin-only|Ask an admin|
+|**Rebuild image** is missing from the menu|Rebuilding is admin-only|Ask an admin|
+|**Start** is refused|A concurrency cap or a credit hold applies to the start|Stop another bench, or ask the operator|
+|The stopped bench disappeared|A stopped bench is deleted after `reap_after_days`|Deploy it again. The container is gone|
+|Files written inside the bench are missing after a redeploy|Redeploy replaces the container and its writable layer|Keep work in git, not only in the container|
+|SSH or code-server passwords stopped working|They are regenerated on every redeploy|Reopen **Connection details** and copy them again|
+
+## Reference
+
+### What each action keeps
+
+|Action|Container|Writable layer|Site database|WireGuard peer|
+|--|--|--|--|--|
+|**Stop**|kept, not running|kept|kept|kept|
+|**Start**|resumed|kept|kept|kept|
+|**Redeploy**|replaced|**lost**|replaced|reassigned|
+|**Delete**|removed|**lost**|**dropped**|removed|
+|**Rebuild image**|untouched until the next deploy|untouched|untouched|untouched|
+
+**Redeploy is not a restart.** It throws the container away and makes a new one
+from the lab image. Use **Start** when the bench is only stopped.
+
+### Who may do what
+
+|Action|BenchPress User|BenchPress Admin|
+|--|--|--|
+|Deploy|yes|yes|
+|Start|yes|yes|
+|Stop|yes|yes|
+|Redeploy|yes|yes|
+|Rebuild image|no|yes|
+|Delete|no|yes|
+
+A user sees only their own benches. An admin sees every bench on the server.
+
+### Stopping is the answer to a refused start
+
+A start passes the same admission gate a deploy does. Stopping and deleting do
+not, because stopping is what a refused caller is being told to do.
+
+### After a stop, the countdown
+
+|Setting|Where|Value here|
+|--|--|--|
+|`reap_after_days`|Credit Settings|7 days|
+
+A stopped bench past that window is torn down. An email goes out two days
+before, so nothing disappears without notice. `0` turns the deletion off.
+
+## Related
+
+* [Read a lab page](/docs/user/lab-detail) — the fields these actions change.
+* [Deploy from a template](/docs/user/deploy-from-template) — the eleven steps a redeploy runs again.
+* [Create a lab](/docs/user/create-a-lab) — what a rebuild rebuilds.
 
 # BenchPress documentation
 URL: https://docs.benchpress.cloud/docs

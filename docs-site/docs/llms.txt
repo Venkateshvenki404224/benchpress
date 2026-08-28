@@ -12,6 +12,13 @@ Read the summary links first. If the page links are not enough, use `/llms-full.
 
 - [Quick tour](/docs/user/quick-tour.md): The five screens in the BenchPress sidebar, and every number the Overview dashboard reports.
 
+### Get a bench running
+
+- [Deploy from a template](/docs/user/deploy-from-template.md): Turn a catalog template into a running bench, and read the eleven pipeline steps while they run.
+- [Create a lab](/docs/user/create-a-lab.md): Fill in the New lab form when no catalog template matches the app list you need.
+- [Read a lab page](/docs/user/lab-detail.md): Every field on the lab page, and why container status and container health can disagree.
+- [Start, stop and redeploy](/docs/user/lifecycle.md): The five actions on a running bench, which of them destroy work, and which are admin-only.
+
 ## Operator
 
 ## Reference
@@ -21,7 +28,6 @@ Read the summary links first. If the page links are not enough, use `/llms-full.
 - [PRODUCTION CHECKLIST](/docs/PRODUCTION_CHECKLIST.md): Reference page for production checklist.
 - [SIZING](/docs/SIZING.md): Reference page for sizing.
 - [Connecting To Benches](/docs/connecting-to-benches.md): Reference page for connecting to benches.
-- [Creating Labs](/docs/creating-labs.md): Reference page for creating labs.
 - [Database Backup Restore](/docs/database-backup-restore.md): Reference page for database backup restore.
 - [Device Management](/docs/device-management.md): Reference page for device management.
 - [Getting Started](/docs/getting-started.md): Reference page for getting started.

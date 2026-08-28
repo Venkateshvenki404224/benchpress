@@ -16,6 +16,7 @@ is done.
 ## Best Starting Points
 
 - [Quick tour](/docs/user/quick-tour.md): The five screens in the BenchPress sidebar, and every number the Overview dashboard reports.
+- [Deploy from a template](/docs/user/deploy-from-template.md): Turn a catalog template into a running bench, and read the eleven pipeline steps while they run.
 
 ## Agent Guidance
 

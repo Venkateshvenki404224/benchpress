@@ -1,0 +1,123 @@
+---
+title: Create a lab
+description: Fill in the New lab form when no catalog template matches the app
+  list you need.
+lastModified: "2026-08-28T10:10:48Z"
+lastAuthor: Venkatesh
+---
+# Create a lab
+
+A lab is a recipe: a Frappe version, a list of apps and a set of container
+limits. This page fills that recipe in by hand.
+
+**Who this is for.** Admins. **New lab** is admin-only, because saving it can
+start an image build.
+
+**Before you start.** Check [Templates](/docs/user/deploy-from-template) first.
+A template is faster and its image usually exists already. Use this form only
+when no template carries the app list you need.
+
+## Steps
+
+1. Open **Labs**, then press **New lab**. The route is `/frontend/labs/new`.
+
+2. Fill in the Identity card.
+
+   ![The top of the BenchPress New lab form at 1280 by 800 pixels. The Identity card holds Title reading Support triage, Lab ID reading support-triage under a note that it cannot be changed later, a Description field, and a Frappe version row with version-16 selected out of version-15, version-14, version-16 and develop. The Apps card below holds one row with App helpdesk, Git URL github.com/frappe/helpdesk and Branch main. A What gets built panel on the right lists the size, the shared image, the version and app, the enabled features, and a note that the site is created on first deploy.](../images/user/create-a-lab/01-identity.png)
+
+   |Field|What it does|In the frame|
+   |--|--|--|
+   |Title|The display name. Free text|`Support triage`|
+   |Lab ID|Names the container and the site domain|`support-triage`|
+   |Description|One line, shown on the lab page|Helpdesk and CRM for the support team's weekly triage.|
+   |Frappe version|One of `version-15`, `version-14`, `version-16`, `develop`|`version-16`|
+
+   The Lab ID fills itself in from the Title. **It cannot be changed later.**
+   Use lowercase letters, digits and single separators, as in `crm-lab`.
+
+3. Add the apps. Press **Add app** for each one, and give it a name, a git URL
+   and a branch.
+
+   Frappe is always included. Do not add it.
+
+4. Choose the size and the access switches.
+
+   ![The lower half of the New lab form at 1280 by 800 pixels. The Apps card holds the helpdesk row and an Add app button. The Resources and access card shows three instance size cards, Small 1 GB 1 vCPU, Medium 2 GB 2 vCPU selected, and Large 4 GB 4 vCPU. Below them three numeric fields read Max IOPS 0, Max bytes per second 0 and Max processes 0, each labeled 0 equals a default. Two switches, Code server and SSH access, are both on.](../images/user/create-a-lab/02-apps-and-resources.png)
+
+   |Control|Options|Default|
+   |--|--|--|
+   |Instance size|Small 1 GB 1 vCPU, Medium 2 GB 2 vCPU, Large 4 GB 4 vCPU|Small|
+   |Max IOPS|`0` uses the default of 1000|`0`|
+   |Max bytes/sec|`0` uses the default of 40 MiB/s|`0`|
+   |Max processes|`0` uses the default of 500|`0`|
+   |Code server|Browser VS Code on the bench|On|
+   |SSH access|Adds an ssh user to the container|On|
+
+   Leave the three limits at `0` unless you know the bench needs a different
+   ceiling. `0` does not mean unlimited. It means the default in the table.
+
+5. Read the **What gets built** panel on the right. It restates the recipe in
+   plain words before anything runs.
+
+6. Press one of the two buttons. They do different things.
+
+   |Button|What it does|
+   |--|--|
+   |**Save as draft**|Writes the lab and stops. The lab is `Draft` and cannot deploy|
+   |**Save and build image**|Writes the lab and starts the image build|
+
+   A build takes **two to six minutes** for a small app list, and up to twenty
+   for a full client stack. The lab becomes `Ready` when it finishes.
+
+## Verify
+
+* The lab appears in **Labs** with the Lab ID you chose.
+* Its status reads `Draft` after **Save as draft**, or `Building` after
+  **Save and build image**.
+* The **Build log** tab on the lab page reports the build while it runs.
+* The status reaches `Ready`, and only then does **Deploy** work.
+
+## Troubleshooting
+
+|Symptom|Cause|Fix|
+|--|--|--|
+|**New lab** is missing|The form is admin-only|Ask an admin, or use a template|
+|`Lab ID is not valid`|The ID has uppercase, spaces or double separators|Use lowercase letters, digits and single `.`, `_` or `-`|
+|The status went back to `Draft` after an edit|The recipe changed, so the built image no longer matches|Press **Rebuild image** on the lab|
+|`CPU cores must be at least 1`|The CPU field was set below one core|Set one core or more|
+|Deploy says `No built image for lab`|The lab was saved as a draft and never built|Press **Rebuild image**, wait for `Ready`, deploy again|
+|The build fails on a private repo|The git URL needs credentials the builder does not have|Use a public URL, or ask the operator to add the token|
+
+## Reference
+
+### What is baked in, and what is not
+
+|Baked into the image at build time|Created at deploy time|
+|--|--|
+|Frappe and every app in the list|The site and its database|
+|The frontend assets|The SSH user and its password|
+|The Python environment|The WireGuard peer and its address|
+||The code-server session|
+
+This split is why a rebuild is slow and a deploy is fast. Changing the app list
+changes the image. Deploying again does not.
+
+### Fields that cannot change after the first save
+
+|Field|Why|
+|--|--|
+|Lab ID|It names the container and the site domain|
+
+Every other field can be edited. Editing anything the build reads sends the lab
+back to `Draft` and asks for a rebuild.
+
+### One image, many labs
+
+Two labs with the same Frappe version and the same app list share one image.
+The **What gets built** panel says so: `Docker image shared with every lab that builds these same apps`. A second lab on an existing recipe costs no build time.
+
+## Related
+
+* [Deploy from a template](/docs/user/deploy-from-template) — the faster path.
+* [Read a lab page](/docs/user/lab-detail) — the page this form produces.
+* [Start, stop and redeploy](/docs/user/lifecycle) — running the bench afterwards.
