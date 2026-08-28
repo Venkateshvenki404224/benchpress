@@ -12,7 +12,7 @@ from unittest.mock import patch
 import frappe
 from frappe.tests import IntegrationTestCase
 
-from benchpress import api, ingress, lifecycle
+from benchpress import api, ingress, lifecycle, vpn_adapter
 from benchpress.credits import account, admission, lease
 from benchpress.tests.fakes import FakeDockerMixin
 from benchpress.tests.test_deploy_manager import (
@@ -22,10 +22,13 @@ from benchpress.tests.test_deploy_manager import (
 	_make_lab,
 	_mounted,
 )
+from benchpress.tests.test_device_wrappers import RECONCILE_HOOK, ensure_wg0_pool
 
 BENCH = "Bench Instance"
 SITE = "Bench Site"
 ADMISSION = "Bench Admission"
+ALLOCATION = "IP Allocation"
+ERROR_LOG = "Error Log"
 SETTINGS = "BenchPress Settings"
 LIFECYCLE_MODULE = "lifecycle.py"
 
@@ -129,6 +132,11 @@ class TransitionFixtures:
 
 	def _slots(self, owner: str) -> int:
 		return frappe.utils.cint(frappe.db.get_value("Credit Account", owner, "active_instances"))
+
+	def _forget_error_logs(self, bench_name: str) -> None:
+		"""One bench name serves every test here, and `log_error` commits past the rollback."""
+		frappe.db.delete(ERROR_LOG, {"method": ("like", f"%{bench_name}%")})
+		frappe.db.commit()  # nosemgrep -- the row the assertion reads was committed too
 
 	def _bench(self, status: str, container_status: str, *, container: bool = True):
 		bench = _fresh_bench(self, self.lab.name)
@@ -443,3 +451,194 @@ class TestTornDown(TransitionFixtures, FakeDockerMixin, IntegrationTestCase):
 			lifecycle.torn_down(bench)
 
 		enqueue.assert_not_called()
+
+
+class TestTeardownReports(TransitionFixtures, FakeDockerMixin, IntegrationTestCase):
+	"""What went and what did not: a teardown used to report the same silence either way."""
+
+	lab_id = "test-lab-lifecycle-teardown-reports"
+
+	@classmethod
+	def setUpClass(cls):
+		super().setUpClass()
+		if not frappe.db.exists("Database Server", {"container_name": "test-db-teardown"}):
+			frappe.get_doc(
+				{
+					"doctype": "Database Server",
+					"container_name": "test-db-teardown",
+					"mariadb_version": "10.6",
+					"status": "Active",
+					"mariadb_root_password": "test-root-password",
+				}
+			).insert(ignore_permissions=True)
+		cls.db_server_name = frappe.db.get_value(
+			"Database Server", {"container_name": "test-db-teardown"}, "name"
+		)
+		frappe.db.commit()  # nosemgrep -- the fixture outlives the per-test rollback
+
+	@classmethod
+	def tearDownClass(cls):
+		# After the benches, which link this server: Frappe refuses to delete a linked row.
+		super().tearDownClass()
+		frappe.set_user("Administrator")
+		frappe.delete_doc("Database Server", cls.db_server_name, force=True, ignore_permissions=True)
+		frappe.db.commit()  # nosemgrep -- the fixture was committed, so its removal has to be too
+
+	def _deployed_bench(self, *, with_database: bool = False):
+		bench = self._bench("Running", "running")
+		if with_database:
+			frappe.db.set_value(BENCH, bench.name, "database_server", self.db_server_name)
+			bench.reload()
+		self._forget_error_logs(bench.name)
+		self.addCleanup(self._forget_error_logs, bench.name)
+		return bench
+
+	def _container(self, bench):
+		return self.docker.containers.get(bench.container_id)
+
+	def test_a_clean_teardown_reports_every_removal_gone(self):
+		bench = self._deployed_bench()
+
+		removals = lifecycle.torn_down(bench)
+
+		self.assertEqual(set(removals), {"stop", "container", "database", "vpn_peer", "route"})
+		self.assertEqual(set(removals.values()), {lifecycle.GONE})
+
+	def test_a_refused_stop_is_named_with_the_reason_the_daemon_gave(self):
+		bench = self._deployed_bench()
+		self._container(bench).stop_refusal = "daemon is wedged"
+
+		removals = lifecycle.torn_down(bench)
+
+		self.assertIn("daemon is wedged", removals["stop"])
+		self.assertEqual(removals["container"], lifecycle.GONE)
+
+	def test_a_refused_container_removal_is_named_with_the_reason_the_daemon_gave(self):
+		bench = self._deployed_bench()
+		self._container(bench).remove_refusal = "container is in use"
+
+		removals = lifecycle.torn_down(bench)
+
+		self.assertIn("container is in use", removals["container"])
+		self.assertEqual(frappe.db.get_value(BENCH, bench.name, "status"), "Draft")
+
+	def test_a_container_removed_by_hand_first_is_named_rather_than_passed_over(self):
+		"""The reaper's own case: the row still names a container the daemon no longer has."""
+		bench = self._deployed_bench()
+		self._container(bench).remove()
+
+		removals = lifecycle.torn_down(bench)
+
+		self.assertTrue(removals["container"].startswith("failed"))
+		self.assertEqual(frappe.db.get_value(BENCH, bench.name, "status"), "Draft")
+
+	def test_a_failed_database_drop_is_named_with_its_reason(self):
+		bench = self._deployed_bench(with_database=True)
+
+		with patch("benchpress.mariadb_manager.drop_site_database", side_effect=Exception("db unreachable")):
+			removals = lifecycle.torn_down(bench)
+
+		self.assertIn("db unreachable", removals["database"])
+
+	def test_a_failed_route_removal_is_named_with_its_reason(self):
+		bench = self._deployed_bench()
+
+		with patch.object(ingress, "withdraw", side_effect=Exception("route mount is missing")):
+			removals = lifecycle.torn_down(bench)
+
+		self.assertIn("route mount is missing", removals["route"])
+
+	def test_a_teardown_whose_every_removal_failed_still_reaches_draft(self):
+		"""The swallowing stays: an instance must not be left describing what it no longer has."""
+		bench = self._deployed_bench(with_database=True)
+		container = self._container(bench)
+		container.stop_refusal = "daemon is wedged"
+		container.remove_refusal = "container is in use"
+
+		with (
+			patch("benchpress.mariadb_manager.drop_site_database", side_effect=Exception("db unreachable")),
+			patch("benchpress.vpn_adapter.remove_bench_peer", side_effect=Exception("wg agent down")),
+			patch.object(ingress, "withdraw", side_effect=Exception("route mount is missing")),
+		):
+			removals = lifecycle.torn_down(bench)
+
+		self.assertEqual([step for step, result in removals.items() if result == lifecycle.GONE], [])
+		self.assertEqual(frappe.db.get_value(BENCH, bench.name, "status"), "Draft")
+
+	def test_a_failed_removal_is_written_down_where_an_operator_reads_it(self):
+		"""A failure nobody records is the same failure as the one that was swallowed."""
+		bench = self._deployed_bench()
+		self._container(bench).remove_refusal = "container is in use"
+
+		lifecycle.torn_down(bench)
+
+		logged = frappe.get_all(ERROR_LOG, filters={"method": ("like", f"%{bench.name}%")}, pluck="error")
+		self.assertEqual(len(logged), 1)
+		self.assertIn("container is in use", logged[0])
+
+	def test_a_clean_teardown_writes_no_error_log(self):
+		bench = self._deployed_bench()
+
+		lifecycle.torn_down(bench)
+
+		self.assertEqual(frappe.db.count(ERROR_LOG, {"method": ("like", f"%{bench.name}%")}), 0)
+
+
+class TestTeardownFreesTheTunnelIP(TransitionFixtures, FakeDockerMixin, IntegrationTestCase):
+	"""The leak: every reaped bench used to hold its WireGuard address forever."""
+
+	lab_id = "test-lab-lifecycle-teardown-vpn"
+
+	def setUp(self):
+		super().setUp()
+		ensure_wg0_pool()
+
+	def _peered_bench(self):
+		bench = self._bench("Running", "running")
+		with patch("vpn_management.tasks.reconcile_interface"):
+			peer = vpn_adapter.create_container_peer(bench)
+		bench.wg_ip = peer["assigned_ip"]
+		bench.save(ignore_permissions=True)
+		frappe.db.commit()  # nosemgrep -- the teardown under test commits, so its fixture has to be durable
+		self.addCleanup(self._drop_peer, peer["peer"])
+		self.addCleanup(self._forget_error_logs, bench.name)
+		return bench, peer
+
+	def _drop_peer(self, peer_name: str) -> None:
+		if frappe.db.exists("VPN Peer", peer_name):
+			with patch(RECONCILE_HOOK):
+				frappe.delete_doc("VPN Peer", peer_name, force=True, ignore_permissions=True)
+		frappe.db.commit()  # nosemgrep -- a leaked peer would outlive the rollback and the test
+
+	@patch(RECONCILE_HOOK)
+	def test_a_teardown_gives_the_tunnel_address_back_to_the_pool(self, _reconcile):
+		bench, peer = self._peered_bench()
+		self.assertEqual(frappe.db.count(ALLOCATION, {"ip_address": peer["assigned_ip"], "allocated": 1}), 1)
+
+		removals = lifecycle.torn_down(bench)
+
+		self.assertEqual(removals["vpn_peer"], lifecycle.GONE)
+		self.assertFalse(frappe.db.exists("VPN Peer", peer["peer"]))
+		self.assertEqual(frappe.db.count(ALLOCATION, {"ip_address": peer["assigned_ip"], "allocated": 1}), 0)
+
+	@patch(RECONCILE_HOOK)
+	def test_a_teardown_forgets_the_address_it_gave_back(self, _reconcile):
+		"""The pool hands the address to the next claim, so a bench still showing it is lying."""
+		bench, _peer = self._peered_bench()
+
+		lifecycle.torn_down(bench)
+
+		self.assertIsNone(frappe.db.get_value(BENCH, bench.name, "wg_ip"))
+		self.assertIsNone(frappe.db.get_value(BENCH, bench.name, "vpn_peer"))
+
+	@patch(RECONCILE_HOOK)
+	def test_a_peer_the_teardown_could_not_remove_is_left_linked_for_the_next_deploy(self, _reconcile):
+		"""`_setup_container_vpn` removes before it claims, so the link is what lets it retry."""
+		bench, peer = self._peered_bench()
+
+		with patch("benchpress.vpn_adapter.remove_bench_peer", side_effect=Exception("wg agent down")):
+			removals = lifecycle.torn_down(bench)
+
+		self.assertIn("wg agent down", removals["vpn_peer"])
+		self.assertEqual(frappe.db.get_value(BENCH, bench.name, "vpn_peer"), peer["peer"])
+		self.assertEqual(frappe.db.get_value(BENCH, bench.name, "status"), "Draft")

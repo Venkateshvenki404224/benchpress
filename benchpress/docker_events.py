@@ -17,13 +17,10 @@ from frappe.utils import cint, convert_utc_to_system_timezone, now_datetime
 
 from benchpress import docker_manager, notifications
 
-MANAGED_LABEL = "benchpress.managed"
-BENCH_NAME_LABEL = "benchpress.bench_name"
-
 # Server-side, always. Without them the stream carries three `exec_*` events per healthcheck per
 # bench, which the fleet multiplies.
 EVENT_FILTERS = {
-	"label": f"{MANAGED_LABEL}=true",
+	"label": f"{docker_manager.MANAGED_LABEL}=true",
 	"event": ["die", "oom", "health_status"],
 }
 
@@ -127,7 +124,7 @@ def _drain(inbox: queue.Queue, pending: dict, stats: dict) -> None:
 		stats["events_seen"] += 1
 		actor = event.get("Actor") or {}
 		attributes = actor.get("Attributes") or {}
-		bench = attributes.get(BENCH_NAME_LABEL)
+		bench = attributes.get(docker_manager.BENCH_NAME_LABEL)
 		named = _incident_for(event.get("Action") or "")
 		if not bench or not named:
 			continue

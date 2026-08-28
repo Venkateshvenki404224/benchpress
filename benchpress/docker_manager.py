@@ -7,6 +7,7 @@ import re
 import subprocess
 import time
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from functools import lru_cache
 from pathlib import PurePosixPath
 
@@ -43,6 +44,12 @@ BENCH_HEALTH_PROBE = "curl -fsS -m {timeout} http://localhost:{port}/api/method/
 # Docker's health verdict -> the `container_health` label. `starting` is neither: a bench mid-deploy
 # is not healthy and is certainly not unhealthy.
 HEALTH_LABELS = {"healthy": "Healthy", "unhealthy": "Unhealthy", "starting": "Unknown"}
+
+# The stamp `create_bench_container` puts on every container and the filter `list_benches` reads
+# back. The label is the whole authority for a reconciler's removal, so it has one definition.
+MANAGED_LABEL = "benchpress.managed"
+BENCH_NAME_LABEL = "benchpress.bench_name"
+LAB_LABEL = "benchpress.lab"
 
 # Field value -> the runtime name registered with the Docker daemon. None means
 # "pass no runtime", which leaves the daemon's own default-runtime in charge.
@@ -311,9 +318,9 @@ def create_bench_container(bench_doc, lab_doc, size=None, network: str | None = 
 	name = bench_doc.bench_name
 
 	labels = {
-		"benchpress.managed": "true",
-		"benchpress.bench_name": name,
-		"benchpress.lab": lab_doc.lab_id,
+		MANAGED_LABEL: "true",
+		BENCH_NAME_LABEL: name,
+		LAB_LABEL: lab_doc.lab_id,
 	}
 
 	limits = _resolve_limits(size, lab_doc)
@@ -566,9 +573,9 @@ def container_is_down(container_id: str) -> bool:
 
 
 def get_container_health(container_id: str) -> str:
-	"""Docker's health verdict, falling back to run state on a container with no healthcheck.
+	"""Docker's health verdict for one container, or Unknown when it cannot be read.
 
-	A missing container or an inspect failure is Unknown, because callers stop benches on this.
+	Unknown rather than a raise on a missing container, because callers stop benches on this.
 	"""
 	try:
 		container = get_client().containers.get(container_id)
@@ -580,7 +587,11 @@ def get_container_health(container_id: str) -> str:
 			message=frappe.get_traceback(),
 		)
 		return "Unknown"
+	return _health_verdict(container)
 
+
+def _health_verdict(container) -> str:
+	"""The health of a container already inspected, so a fleet read costs no second call."""
 	# Run state first: the daemon keeps the last verdict on a container that has exited, and a
 	# verdict from while it ran is not a statement about a container that is no longer running.
 	if container.status != "running":
@@ -589,6 +600,34 @@ def get_container_health(container_id: str) -> str:
 	# No `Health` at all is a container created before the healthcheck existed, and it keeps
 	# answering what it always did rather than turning Unknown overnight.
 	return HEALTH_LABELS.get(health.get("Status"), "Healthy")
+
+
+def _created_at(container) -> datetime | None:
+	"""When the daemon created this container, in UTC. None when it did not say."""
+	try:
+		created = datetime.fromisoformat(container.attrs["Created"])
+	except (KeyError, TypeError, ValueError):
+		return None
+	return created if created.tzinfo else created.replace(tzinfo=UTC)
+
+
+def list_benches() -> list[dict]:
+	"""Every container this app manages, in one call, with status, health and age.
+
+	Stopped ones included: an orphan that exited still holds its writable layer.
+	"""
+	found = get_client().containers.list(all=True, filters={"label": f"{MANAGED_LABEL}=true"})
+	return [
+		{
+			"id": container.id,
+			"name": container.name,
+			"bench_name": container.labels.get(BENCH_NAME_LABEL, ""),
+			"status": container.status,
+			"health": _health_verdict(container),
+			"created": _created_at(container),
+		}
+		for container in found
+	]
 
 
 def get_container_stats(container_id: str) -> dict:

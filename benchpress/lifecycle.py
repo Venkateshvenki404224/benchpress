@@ -33,6 +33,7 @@ from benchpress.mariadb_manager import ensure_infrastructure, wait_for_mariadb
 from benchpress.notifications import notify_owner
 
 NOTHING_TO_ROLL_BACK = "Cleanup: nothing to roll back — no container was created"
+GONE = "gone"
 
 
 def running(bench, *, action: str = "start") -> None:
@@ -104,23 +105,27 @@ def _deactivate_bench_sites(bench) -> None:
 	frappe.db.set_value("Bench Site", {"bench": bench.name}, "status", "Inactive", update_modified=False)
 
 
-def torn_down(bench, *, release_admission: bool = True) -> None:
-	"""Return an instance to `Draft`: container, volume and site database all gone.
+def torn_down(bench, *, release_admission: bool = True) -> dict[str, str]:
+	"""Return an instance to `Draft`, removing its container, site database, route and VPN peer.
 
-	`release_admission=False` keeps the slot for `_redeploy_bench`, which is this plus a deploy.
+	Never raises; each removal reports `GONE` or its failure, and `release_admission=False` holds the slot.
 	"""
-	if bench.container_id:
-		try:
-			stop_container(bench.container_id)
-		except Exception:
-			pass  # best-effort
-		_remove_container(bench.container_id)
-
-	_drop_site_database(bench)
+	container_id = bench.container_id
+	removals = {
+		"stop": _removed(stop_container, container_id) if container_id else GONE,
+		"container": _removed(remove_container, container_id) if container_id else GONE,
+		"database": _drop_site_database(bench),
+		"vpn_peer": _remove_bench_peer(bench),
+	}
 	bench.container_id = None
 	bench.container_image = None
+	bench.container_ip = None
+	# The peer is gone, so the tunnel address is back in the pool and the next claim gets it.
+	bench.wg_ip = None
 	bench.started_at = None
-	_ended(bench, "Draft", release_admission=release_admission)
+	removals["route"] = _ended(bench, "Draft", release_admission=release_admission)
+	_record_teardown_failures(bench.name, removals)
+	return removals
 
 
 def errored(bench, container_id: str | None, append_log) -> None:
@@ -131,10 +136,14 @@ def errored(bench, container_id: str | None, append_log) -> None:
 	if not container_id:
 		append_log(NOTHING_TO_ROLL_BACK)
 	else:
-		_remove_container(container_id)
-		append_log("Cleanup: removed container created by this run")
-		if _remove_bench_peer(bench):
-			append_log("Cleanup: VPN peer removed")
+		container = _removed(remove_container, container_id)
+		append_log(
+			"Cleanup: removed container created by this run"
+			if container == GONE
+			else f"Cleanup: container {container}"
+		)
+		peer = _remove_bench_peer(bench)
+		append_log("Cleanup: VPN peer removed" if peer == GONE else f"Cleanup: VPN peer {peer}")
 		# Only this run's addresses are cleared: a failure before the container leaves the
 		# previous deploy's, and that container is still running.
 		bench.container_id = None
@@ -143,20 +152,17 @@ def errored(bench, container_id: str | None, append_log) -> None:
 
 	# No `_drop_site_database` here: the `Bench Site` row is the name claim, and the retry drops
 	# the database itself before it recreates the site.
-	_ended(bench, "Error", release_admission=True)
+	append_log(f"Cleanup: route file {_ended(bench, 'Error', release_admission=True)}")
 
 
-def _ended(bench, status: str, *, release_admission: bool) -> None:
-	"""Write the end of a bench's life, with the side effects both endings share.
+def _ended(bench, status: str, *, release_admission: bool) -> str:
+	"""Write the end of a bench's life, returning how the route file's removal went.
 
 	`status` is the only difference: `Draft` discards the instance, `Error` leaves it for a retry.
 	"""
-	try:
-		# Direct, not enqueued: a lost job would leave a public hostname answering for a bench
-		# that no longer runs.
-		ingress.withdraw(bench.name)
-	except Exception:
-		pass  # best-effort
+	# Direct, not enqueued: a lost job would leave a public hostname answering for a bench that
+	# no longer runs.
+	route = _removed(ingress.withdraw, bench.name)
 
 	# Marked, not deleted: the row is the site-name claim, and a redeploy refreshes it.
 	_deactivate_bench_sites(bench)
@@ -170,35 +176,43 @@ def _ended(bench, status: str, *, release_admission: bool) -> None:
 	bench.status = status
 	bench.save(ignore_permissions=True)
 	frappe.db.commit()  # nosemgrep -- the caller may redeploy next, which must see this status
+	return route
 
 
-def _remove_container(container_id: str) -> None:
+def _removed(action, *args) -> str:
+	"""Run one teardown removal, reporting `GONE` or the failure text. This must never raise."""
 	try:
-		remove_container(container_id)
-	except Exception:
-		pass  # best-effort
+		action(*args)
+	except Exception as exc:
+		return f"failed: {exc}"
+	return GONE
 
 
-def _remove_bench_peer(bench) -> bool:
-	"""Drop the WireGuard peer, reporting whether it went, since the caller logs the outcome."""
+def _record_teardown_failures(bench_name: str, removals: dict[str, str]) -> None:
+	"""Write down what a teardown could not remove, since silence is what this replaces."""
+	failed = [f"{step}: {result}" for step, result in removals.items() if result != GONE]
+	if not failed:
+		return
+	frappe.log_error(
+		title=f"BenchPress teardown incomplete: {bench_name}",
+		message="\n".join(failed),
+	)
+	frappe.db.commit()  # nosemgrep -- a record of the failure that a rollback can lose is the silence again
+
+
+def _remove_bench_peer(bench) -> str:
+	"""Drop the WireGuard peer so its tunnel IP goes back to the pool, reporting how it went."""
 	from benchpress.vpn_adapter import remove_bench_peer
 
-	try:
-		remove_bench_peer(bench)
-		return True
-	except Exception:
-		return False
+	return _removed(remove_bench_peer, bench)
 
 
-def _drop_site_database(bench) -> None:
+def _drop_site_database(bench) -> str:
 	if not (bench.database_server and bench.site_name):
-		return
+		return GONE
 	from benchpress.mariadb_manager import drop_site_database
 
-	try:
-		drop_site_database(bench.database_server, bench.site_name)
-	except Exception:
-		pass  # best-effort
+	return _removed(drop_site_database, bench.database_server, bench.site_name)
 
 
 def _log_limits(pipeline, size, created) -> None:

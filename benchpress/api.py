@@ -342,9 +342,8 @@ def _stop_bench(bench) -> dict:
 def _delete_bench(bench) -> dict:
 	"""Remove an instance and everything it owns, then the row itself.
 
-	Container, volume, site database and metering session go through `lifecycle.torn_down`,
-	the one teardown path, where every removal is best-effort. Only what it does not cover is
-	left here.
+	`lifecycle.torn_down` is the one teardown path; the other sites' databases, and a peer it
+	reported it could not remove, are what is left here.
 	"""
 	from benchpress.vpn_adapter import remove_bench_peer
 

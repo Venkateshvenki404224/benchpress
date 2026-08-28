@@ -292,6 +292,27 @@ def drop_site_database(db_server_name: str, site_name: str, database: str | None
 	)
 
 
+# What `SHOW DATABASES` returns that no site ever owns. `backups` is not a schema at all —
+# `backup_database_server` writes into the data directory and the server lists every directory
+# there — so a reconciler that reported it could never reach zero.
+NOT_SITE_DATABASES = {"information_schema", "mysql", "performance_schema", "sys", "backups"}
+
+
+def list_site_databases(db_server_name: str) -> list[str]:
+	"""Schema names on this server. A read - nothing in this app drops from a sweep."""
+	exit_code, output = execute_sql(db_server_name, "SHOW DATABASES")
+	if exit_code != 0:
+		return []
+	# The client prints a `Database` header, and sometimes its own deprecation warning, into the
+	# same stream as the rows. A schema name carries no space.
+	names = (line.strip() for line in output.splitlines())
+	return [
+		name
+		for name in names
+		if name and " " not in name and name != "Database" and name not in NOT_SITE_DATABASES
+	]
+
+
 def server_version(db_server_name: str) -> str:
 	"""The server's own `SELECT VERSION()`, or empty when it cannot be read.
 

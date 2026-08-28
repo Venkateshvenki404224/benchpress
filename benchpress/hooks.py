@@ -213,7 +213,7 @@ website_route_rules = [
 #
 # The socket-mounted services are `queue-long` and `queue-stops`. So the entry is a small function
 # that calls `frappe.enqueue(..., queue="long")`, and the Docker call lives on the other side of
-# it. `enqueue_stats_sweep`, `enqueue_route_reconcile`, `enqueue_health_check`, `enqueue_backup`
+# it. `enqueue_stats_sweep`, `reconcile.enqueue_run`, `enqueue_health_check`, `enqueue_backup`
 # and the two in `image_cache` are all that shape.
 
 scheduler_events = {
@@ -245,9 +245,10 @@ scheduler_events = {
 			# socket, and a decision queued behind Docker I/O arrives late. The clock is not
 			# this job's business — `drain` owns expiry; this one checks balances.
 			"benchpress.credits.sweep.enforce_limits",
-			# `queue-short` has no route mount either. Lifecycle triggers already converge in
-			# seconds — this is the net under them.
-			"benchpress.ingress.enqueue_route_reconcile",
+			# `queue-short` has neither the route mount nor the Docker socket, and this pass
+			# needs both. Lifecycle triggers already converge in seconds — this is the net
+			# under them, plus the only direction that can see a container with no row.
+			"benchpress.reconcile.enqueue_run",
 			# The net under the lease warden, not the primary path: `DEFAULT_SCHEDULER_TICK` is
 			# four minutes here, so no cron entry can promise better than that. The warden claims
 			# within seconds; this catches whatever it misses while the warden is restarting.

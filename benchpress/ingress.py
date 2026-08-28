@@ -18,7 +18,7 @@ import frappe
 import yaml
 from frappe.utils import cint
 
-from benchpress import addressing, placement
+from benchpress import addressing
 
 # By name rather than `from benchpress.credits import config`: a route mapping is what
 # `config` wants to name in this file, and a module bound to that name turns the next such
@@ -40,7 +40,7 @@ WILDCARD_ANCHOR_FILE = "wildcard-anchor.yml"
 # It is not this app's to write and not this app's to remove.
 CONTROL_PLANE_ROUTE_FILE = "dynamic.yml"
 
-# The two files `reconcile` must never delete, named one by one rather
+# The two files the convergence pass must never delete, named one by one rather
 # than matched by shape. Deleting `dynamic.yml` takes the control plane off the internet;
 # deleting the anchor takes every bench's certificate with it. A filename pattern is a
 # guess about what future files will look like — a set is a decision about these two.
@@ -130,7 +130,7 @@ def publish(
 	if not base_domain or base_domain == "localhost":
 		return
 
-	# What `_routable_instances` already resolved for this bench, else the same read for one.
+	# What `routable` already resolved for this bench, else the same read for one.
 	# Never the caller's own idea of the flag: the */5 pass writes this file without the
 	# deploy's context, and two writers that disagree overwrite each other every five minutes.
 	if ide is None:
@@ -244,7 +244,7 @@ def _service_health(path: str) -> dict:
 
 
 def has_ide(instance_id: str) -> bool:
-	"""Whether this bench runs code-server — the one-bench case of `_routable_instances`."""
+	"""Whether this bench runs code-server — the one-bench case of `routable`."""
 	rows = _fleet_rows(names=[instance_id])
 	return _ide_for(rows[0]) if rows else False
 
@@ -255,7 +255,7 @@ def lab_has_ide(lab_doc) -> bool:
 
 
 def rate_limits(instance_id: str) -> RateLimits:
-	"""This bench's tier request numbers — the one-bench case of `_routable_instances`."""
+	"""This bench's tier request numbers — the one-bench case of `routable`."""
 	rows = _fleet_rows(names=[instance_id])
 	return _limits_for(rows[0]) if rows else DEFAULT_RATE_LIMITS
 
@@ -311,6 +311,11 @@ def published() -> set[str]:
 def protected_present() -> int:
 	"""How many protected files the directory holds, for the reconcile report."""
 	return sum(1 for name in PROTECTED_ROUTE_FILES if (TRAEFIK_DYNAMIC_DIR / name).exists())
+
+
+def directory_mounted() -> bool:
+	"""Whether the route directory is mounted here — asked instead of the path being handed out."""
+	return TRAEFIK_DYNAMIC_DIR.is_dir()
 
 
 def ensure_anchor(base_domain: str | None) -> bool:
@@ -478,73 +483,7 @@ def enqueue_route_sync(bench_name: str) -> None:
 	)
 
 
-def enqueue_route_reconcile() -> None:
-	"""Convergence cron: hand the whole-directory pass to `queue-long`."""
-	# Scheduled jobs land on `default`, which `queue-short` also consumes — so the cron entry
-	# is this enqueuer and never the pass itself. See `TraefikRouteDirectoryMissing`.
-	frappe.enqueue(
-		"benchpress.ingress.reconcile",
-		queue="long",
-		job_id="route_reconcile",
-		deduplicate=True,
-	)
-
-
-def reconcile() -> dict:
-	"""Make the Traefik route directory agree with the database.
-
-	The Bench Instance table is the truth and the directory follows it. Containers are not
-	inspected — an orphaned container is a real problem, but it is todo item 8's, and a
-	pass that quietly took on two jobs would be harder to trust with either. Returns counts
-	rather than a bare success: a reaper that reports "issued" instead of "converged" is how
-	a directory drifts for weeks without anyone noticing.
-
-	Deleting is the load-bearing half. Routes name containers, so a file left behind is a
-	502 rather than another tenant's site — but it is still a public hostname answering
-	for a bench that no longer exists, and only this pass removes one nothing deleted.
-
-	Running on `queue-long` is also what keeps this from racing a deploy — both are `long`
-	jobs on a single worker, so a bench part-way through `_deploy_bench` is never read here
-	between its container being created and its status reaching `Running`.
-
-	Run it by hand with:
-	    bench --site frontend execute benchpress.ingress.reconcile
-	"""
-	# Ahead of the base_domain guard because this half is about container networking rather
-	# than routing: a bench that cannot reach MariaDB is broken on a dev checkout too.
-	attached = placement.repair()
-
-	base_domain = frappe.get_cached_doc("BenchPress Settings").base_domain
-	if not base_domain or base_domain == "localhost":
-		# A dev checkout has no route directory and must stay byte-for-byte unaffected —
-		# skipped silently, exactly as the writers skip it.
-		return {"anchored": False, "written": 0, "deleted": 0, "kept": 0, **attached}
-
-	if not TRAEFIK_DYNAMIC_DIR.is_dir():
-		# Only ever a by-hand run outside queue-long — the cron reaches this through
-		# `enqueue_route_reconcile`, which pins the queue. None rather than 0, because the
-		# directory was never read and zero counts would read as a converged pass.
-		return {"anchored": None, "written": None, "deleted": None, "kept": None, **attached}
-
-	anchored = ensure_anchor(base_domain)
-	routable = _routable_instances()
-	for instance_id, (ide, limits) in routable.items():
-		publish(instance_id, base_domain, ide=ide, limits=limits)
-
-	stale = published() - routable.keys()
-	for instance_id in stale:
-		withdraw(instance_id)
-
-	return {
-		"anchored": anchored,
-		"written": len(routable),
-		"deleted": len(stale),
-		"kept": protected_present(),
-		**attached,
-	}
-
-
-def _routable_instances() -> dict[str, tuple[bool, RateLimits]]:
+def routable() -> dict[str, tuple[bool, RateLimits]]:
 	"""Every bench that should own a route file, mapped to its IDE flag and its tier's rate limits.
 
 	`Running` with an IP only: a freed `container_ip` may already belong to another tenant.

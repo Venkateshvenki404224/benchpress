@@ -4,9 +4,10 @@
 """The reaper: stopped is free, but not forever.
 
 "Stopped costs nothing" is only honest if a stopped instance eventually stops costing *us*
-something too — a container, a volume and a site database sit on disk whether or not anything is
-running in them. So an instance that has sat `Stopped` past `reap_after_days` is torn down, with
-an email two days before so nobody loses work to a rule they had forgotten.
+something too — a container and a site database sit on disk whether or not anything is running in
+them, and the instance holds a tunnel address the pool cannot hand out. So an instance that has sat
+`Stopped` past `reap_after_days` is torn down, with an email two days before so nobody loses work
+to a rule they had forgotten.
 
 **The `Lab` survives.** Its apps, branches, version and size are all intact, so "reaped" means one
 click to rebuild rather than lost work — which is exactly what lets us keep saying stopped is free.
