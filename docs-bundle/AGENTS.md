@@ -55,11 +55,54 @@ is done.
 - [Admission and limits](./docs/operator/admission-and-limits.md): Optional and off by default — concurrency caps, size ceilings, device and build quotas, how a slot is claimed as a row, and the acceptance run that proves access still works.
 - [Self-serve signup](./docs/operator/hosted-signup.md): Optional and off by default — retire the waitlist and let people sign themselves up, with GitHub and Google as the primary paths and the abuse controls that make a free grant safe.
 
+## Reference Track
+
+- [Reference track](./docs/reference/index.md): The data model, the whitelisted API, the eleven deploy steps, the reconcilers, the address plan and the configuration split — for a contributor or an integrator.
+- [Architecture](./docs/reference/architecture.md): The moving parts of BenchPress — the control plane, the bench containers, the shared infrastructure, and which Python module owns each concern.
+- [Data model](./docs/reference/data-model.md): All 20 BenchPress DocTypes with their fields, links, naming and the permission rule that scopes each one — plus why there is no Device DocType.
+- [API](./docs/reference/api.md): All 50 whitelisted BenchPress endpoints, with arguments, what each returns, and the permission check each one makes for itself.
+- [Deploy pipeline](./docs/reference/deploy-pipeline.md): The eleven steps of a BenchPress deploy, in the order the code runs them, with the function behind each step and the log line it writes.
+- [Lifecycle and events](./docs/reference/lifecycle-and-events.md): The bench states and their transitions, the Docker event listener, Bench Event incidents, the stats collector, and the eleven scheduled jobs that correct the database.
+- [Networking](./docs/reference/networking.md): The BenchPress address plan — bench bridges, WireGuard tunnel addresses, the two container ports, Traefik route files and the wildcard certificate anchor.
+- [Realtime](./docs/reference/realtime.md): The six realtime events BenchPress publishes over socket.io, their payloads, who receives each one, and why the deploy log commits every line.
+- [Configuration](./docs/reference/configuration.md): Where each BenchPress setting lives — build arguments that need a rebuild, runtime environment that needs a restart, and DocType fields that apply on save.
+- [CLI and scripts](./docs/reference/cli-and-scripts.md): Every command that drives BenchPress from a shell — entry.py, the bench commands, setup.sh and upgrade.sh, the four repository scripts and the documentation pipeline.
+- [Glossary](./docs/reference/glossary.md): What each BenchPress term means here — lab, bench, site, lease, admission, golden image, peer — including the words that mean something else elsewhere.
+
 ## Agent Guidance
 
 Three tracks. Read `user/` for working inside a deployed bench, `operator/` for
-running the host, and `reference/` for the data model and the HTTP API. Start
-from the quick tour when you do not yet know which screen owns a task.
+running the host, and `reference/` for the data model, the API and the internals.
+
+Route by the task, not by the track:
+
+- Connect over SSH, or find the SSH password -> `/docs/user/connect-ssh-vpn`
+- Get a bench running from a template -> `/docs/user/deploy-from-template`
+- Open the bench site in a browser -> `/docs/user/open-your-site`
+- Put a laptop or phone on the VPN -> `/docs/user/vpn-devices`
+- Open the browser VS Code session -> `/docs/user/code-server`
+- A bench stopped, or a countdown ran out -> `/docs/user/leases-and-credits`
+- Any user-facing symptom, with its cause -> `/docs/user/troubleshooting`
+- Install BenchPress on a new host -> `/docs/operator/install`
+- Stand up WireGuard -> `/docs/operator/wireguard-setup`
+- Find a setting, its default and where it is edited -> `/docs/operator/settings-reference`
+- Back up or restore a bench site -> `/docs/operator/backup-and-restore`
+- Make deploys faster -> `/docs/operator/golden-images`
+- Diagnose a host that is misbehaving -> `/docs/operator/diagnostics`
+- Turn on metering, caps or signup -> `/docs/operator/credits-and-billing`
+- Look up a DocType, a field or a permission rule -> `/docs/reference/data-model`
+- Call an endpoint, or check what it verifies -> `/docs/reference/api`
+- Understand what a deploy does, step by step -> `/docs/reference/deploy-pipeline`
+- Find what changes a row with no user action -> `/docs/reference/lifecycle-and-events`
+- Work out which address a bench answers on -> `/docs/reference/networking`
+- Subscribe to live deploy output -> `/docs/reference/realtime`
+- Decide whether a change needs a rebuild -> `/docs/reference/configuration`
+- Run something from a shell -> `/docs/reference/cli-and-scripts`
+- Check what a word means here -> `/docs/reference/glossary`
+
+Two facts that prevent wrong answers. Devices are `VPN Peer` records in the
+`vpn_management` app, so there is no Device DocType. Credits are off by default,
+so `enable_credits` is `0` and no page about billing applies to a plain install.
 
 ## User
 
@@ -127,6 +170,32 @@ from the quick tour when you do not yet know which screen owns a task.
 - [Self-serve signup](./docs/operator/hosted-signup.md): Optional and off by default — retire the waitlist and let people sign themselves up, with GitHub and Google as the primary paths and the abuse controls that make a free grant safe.
 
 ## Reference
+
+### Start
+
+- [Reference track](./docs/reference/index.md): The data model, the whitelisted API, the eleven deploy steps, the reconcilers, the address plan and the configuration split — for a contributor or an integrator.
+
+### What it is made of
+
+- [Architecture](./docs/reference/architecture.md): The moving parts of BenchPress — the control plane, the bench containers, the shared infrastructure, and which Python module owns each concern.
+- [Data model](./docs/reference/data-model.md): All 20 BenchPress DocTypes with their fields, links, naming and the permission rule that scopes each one — plus why there is no Device DocType.
+- [API](./docs/reference/api.md): All 50 whitelisted BenchPress endpoints, with arguments, what each returns, and the permission check each one makes for itself.
+
+### What it does at runtime
+
+- [Deploy pipeline](./docs/reference/deploy-pipeline.md): The eleven steps of a BenchPress deploy, in the order the code runs them, with the function behind each step and the log line it writes.
+- [Lifecycle and events](./docs/reference/lifecycle-and-events.md): The bench states and their transitions, the Docker event listener, Bench Event incidents, the stats collector, and the eleven scheduled jobs that correct the database.
+- [Networking](./docs/reference/networking.md): The BenchPress address plan — bench bridges, WireGuard tunnel addresses, the two container ports, Traefik route files and the wildcard certificate anchor.
+- [Realtime](./docs/reference/realtime.md): The six realtime events BenchPress publishes over socket.io, their payloads, who receives each one, and why the deploy log commits every line.
+
+### Driving it yourself
+
+- [Configuration](./docs/reference/configuration.md): Where each BenchPress setting lives — build arguments that need a rebuild, runtime environment that needs a restart, and DocType fields that apply on save.
+- [CLI and scripts](./docs/reference/cli-and-scripts.md): Every command that drives BenchPress from a shell — entry.py, the bench commands, setup.sh and upgrade.sh, the four repository scripts and the documentation pipeline.
+
+### Words
+
+- [Glossary](./docs/reference/glossary.md): What each BenchPress term means here — lab, bench, site, lease, admission, golden image, peer — including the words that mean something else elsewhere.
 
 ## Other
 

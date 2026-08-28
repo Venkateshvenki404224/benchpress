@@ -32,6 +32,17 @@
 - [Credits and billing](https://docs.benchpress.cloud/docs/operator/credits-and-billing): Optional and off by default — the metering half of BenchPress, covering leases, balances, the ledger, admin adjustments, and the optional Razorpay handoff.
 - [Admission and limits](https://docs.benchpress.cloud/docs/operator/admission-and-limits): Optional and off by default — concurrency caps, size ceilings, device and build quotas, how a slot is claimed as a row, and the acceptance run that proves access still works.
 - [Self-serve signup](https://docs.benchpress.cloud/docs/operator/hosted-signup): Optional and off by default — retire the waitlist and let people sign themselves up, with GitHub and Google as the primary paths and the abuse controls that make a free grant safe.
+- [Reference track](https://docs.benchpress.cloud/docs/reference): The data model, the whitelisted API, the eleven deploy steps, the reconcilers, the address plan and the configuration split — for a contributor or an integrator.
+- [Architecture](https://docs.benchpress.cloud/docs/reference/architecture): The moving parts of BenchPress — the control plane, the bench containers, the shared infrastructure, and which Python module owns each concern.
+- [Data model](https://docs.benchpress.cloud/docs/reference/data-model): All 20 BenchPress DocTypes with their fields, links, naming and the permission rule that scopes each one — plus why there is no Device DocType.
+- [API](https://docs.benchpress.cloud/docs/reference/api): All 50 whitelisted BenchPress endpoints, with arguments, what each returns, and the permission check each one makes for itself.
+- [Deploy pipeline](https://docs.benchpress.cloud/docs/reference/deploy-pipeline): The eleven steps of a BenchPress deploy, in the order the code runs them, with the function behind each step and the log line it writes.
+- [Lifecycle and events](https://docs.benchpress.cloud/docs/reference/lifecycle-and-events): The bench states and their transitions, the Docker event listener, Bench Event incidents, the stats collector, and the eleven scheduled jobs that correct the database.
+- [Networking](https://docs.benchpress.cloud/docs/reference/networking): The BenchPress address plan — bench bridges, WireGuard tunnel addresses, the two container ports, Traefik route files and the wildcard certificate anchor.
+- [Realtime](https://docs.benchpress.cloud/docs/reference/realtime): The six realtime events BenchPress publishes over socket.io, their payloads, who receives each one, and why the deploy log commits every line.
+- [Configuration](https://docs.benchpress.cloud/docs/reference/configuration): Where each BenchPress setting lives — build arguments that need a rebuild, runtime environment that needs a restart, and DocType fields that apply on save.
+- [CLI and scripts](https://docs.benchpress.cloud/docs/reference/cli-and-scripts): Every command that drives BenchPress from a shell — entry.py, the bench commands, setup.sh and upgrade.sh, the four repository scripts and the documentation pipeline.
+- [Glossary](https://docs.benchpress.cloud/docs/reference/glossary): What each BenchPress term means here — lab, bench, site, lease, admission, golden image, peer — including the words that mean something else elsewhere.
 - [BenchPress documentation](https://docs.benchpress.cloud/docs): Start here. Three tracks — use a bench, run the server that hosts one, or read the data model and the API.
 
 ## Content
@@ -4863,6 +4874,2255 @@ keep their role, their balance and their instances.
 * [Admission and limits](/docs/operator/admission-and-limits) — what a new free account may actually do.
 * [Users and roles](/docs/operator/users-and-roles) — the role every signup lands with.
 
+# Reference track
+URL: https://docs.benchpress.cloud/docs/reference
+The data model, the whitelisted API, the eleven deploy steps, the reconcilers, the address plan and the configuration split — for a contributor or an integrator.
+
+What BenchPress is made of, rather than how to use it or how to run it.
+
+**Who this is for.** Somebody who calls the API from another program, changes
+the code, or has to answer a question the other two tracks do not cover.
+
+**Before you start.** The [user track](/docs/user/quick-tour) and the
+[operator track](/docs/operator) describe the same system as tasks. This track
+assumes you have watched one deploy run. Read
+[Deploy from a template](/docs/user/deploy-from-template) first if you have not.
+
+## Pick a page by the question you have
+
+|Question|Page|
+|--|--|
+|What are the moving parts, and which module owns each one|[Architecture](/docs/reference/architecture)|
+|What DocTypes exist, what fields they carry, and who may read a row|[Data model](/docs/reference/data-model)|
+|What can I call over HTTP, and what does it check|[API](/docs/reference/api)|
+|What happens between "Deploy" and a running site|[Deploy pipeline](/docs/reference/deploy-pipeline)|
+|What corrects the database when reality changes underneath it|[Lifecycle and events](/docs/reference/lifecycle-and-events)|
+|What address does a bench answer on, and who can reach it|[Networking](/docs/reference/networking)|
+|How does a screen update without a page reload|[Realtime](/docs/reference/realtime)|
+|Which change needs a rebuild, and which needs a restart|[Configuration](/docs/reference/configuration)|
+|What can I run from a shell|[CLI and scripts](/docs/reference/cli-and-scripts)|
+|What does this word mean here|[Glossary](/docs/reference/glossary)|
+
+## What this track is counted against
+
+The numbers below are the size of the surface each page documents. Every page
+accounts for its whole set. A page that omits a member says which one and why.
+
+|Surface|Count|Documented in|
+|--|--|--|
+|DocTypes in the BenchPress module|20|[Data model](/docs/reference/data-model)|
+|`@frappe.whitelist()` functions|50|[API](/docs/reference/api)|
+|Deploy steps|11|[Deploy pipeline](/docs/reference/deploy-pipeline)|
+|Scheduled jobs|11|[Lifecycle and events](/docs/reference/lifecycle-and-events)|
+|Realtime events|6|[Realtime](/docs/reference/realtime)|
+
+## Two rules that explain most of the code
+
+Both are repository conventions, and both are enforced.
+
+1. **Query with `frappe.qb`, never `frappe.db.sql`.** A raw string query is a
+   lint failure.
+2. **Every whitelisted function checks permissions itself.** The decorator only
+   publishes the function. It grants nothing. See
+   [How an endpoint is guarded](/docs/reference/api#how-an-endpoint-is-guarded).
+
+Behavior also lives in `hooks.py`, not only in the file you are reading. Check
+it before you assume a save does the plain thing.
+
+## Where the code lives
+
+|Path|Holds|
+|--|--|
+|`benchpress/*.py`|the modules — one concern each|
+|`benchpress/credits/*.py`|leases, balances, admission, and the caps|
+|`benchpress/benchpress/doctype/<name>/`|the DocType JSON and its controller|
+|`benchpress/hooks.py`|permission rules, document events, scheduled jobs|
+|`frontend/src/`|the Vue 3 single-page app|
+|`docs/`|this documentation, in MDX|
+
+## Related
+
+* [Architecture](/docs/reference/architecture) — the map to read first.
+* [Operator track](/docs/operator) — the same system, from the host side.
+* [Settings reference](/docs/operator/settings-reference) — every field on the two settings documents.
+
+# Architecture
+URL: https://docs.benchpress.cloud/docs/reference/architecture
+The moving parts of BenchPress — the control plane, the bench containers, the shared infrastructure, and which Python module owns each concern.
+
+What the system is made of, and which module you open when a question is about
+one of the parts.
+
+**Who this is for.** Somebody about to change the code, or about to guess which
+file a behavior lives in.
+
+**Before you start.** BenchPress is a Frappe app. It runs inside a bench of its
+own, and it deploys other benches as Docker containers. Keep the two apart while
+you read. This page calls the first one the **control plane** and the second one
+a **bench**.
+
+## The three layers
+
+|Layer|What it is|Runs as|
+|--|--|--|
+|Control plane|the BenchPress app, its database, its workers and the SPA|the parent `benchpress_devops` Docker Compose stack|
+|Shared infrastructure|one MariaDB, one Traefik, one WireGuard server|long-lived containers beside the control plane|
+|Benches|one container for each deployed bench instance|created and destroyed on demand|
+
+The control plane never runs a bench's code. It creates the container, writes
+files into it, and records what happened. Every bench keeps its site database in
+the shared MariaDB, not in a database of its own.
+
+## The request path
+
+A click in the browser reaches Docker through five hops.
+
+1. The Vue 3 single-page app calls a whitelisted method over `/api/method/`.
+2. The method checks permissions, then reads or writes DocTypes.
+3. Work that takes more than a moment is put on a queue instead of run inline.
+4. A worker picks the job up and calls `docker_manager`.
+5. `docker_manager` talks to the Docker socket.
+
+Only `backend` and `queue-long` carry the Docker socket and the Traefik route
+mount. A job that needs either must run on `queue-long`. A deploy started on the
+wrong worker fails on the route mount.
+
+## Which module owns what
+
+One concern for each module. The table is the whole `benchpress/` package.
+
+|Module|Owns|
+|--|--|
+|`api.py`|the whitelisted surface the SPA calls|
+|`lifecycle.py`|the bench state transitions, and the side effects each one must not forget|
+|`deploy_pipeline.py`|the eleven deploy steps, and how a run reports them|
+|`deploy_manager.py`|image builds, and the deploy work that is not a state change|
+|`docker_manager.py`|every call to the Docker socket|
+|`placement.py`|which bench bridge a new container joins|
+|`addressing.py`|every address a bench answers on|
+|`ingress.py`|every write to the Traefik route directory|
+|`vpn_adapter.py`|the only seam into the `vpn_management` app|
+|`mariadb_manager.py`|the shared database server, its health check and its backup|
+|`site_names.py`|the site name as an allocation, claimed and released|
+|`image_cache.py`|one image for each lab, tagged by the lab's own identity|
+|`golden.py`|a lab's finished site, baked into the lab image as a dump|
+|`reconcile.py`|the pass that compares Docker against the database, both ways|
+|`docker_events.py`|the Docker event stream, and the incidents it records|
+|`stats_collector.py`|CPU, memory and health, sampled for each running bench|
+|`permissions.py`|the role helpers and the six query conditions|
+|`overview.py`, `labs.py`, `lab_detail.py`, `run_history.py`|one screen each, assembled in a fixed number of queries|
+|`waitlist.py`, `signup.py`|the two doors open to a guest|
+|`diagnostics.py`|eleven read-only environment checks|
+|`notifications.py`|one desk alert and one email to a document owner|
+|`indexes.py`|composite indexes the DocType JSON cannot declare|
+|`request_cache.py`|a value memoised for one request, never in a module global|
+|`connection_test.py`|the tunnel test behind "A site will not open?"|
+|`vpn_access.py`|the VPN roles a BenchPress Admin needs|
+|`lab_templates.py`|the catalog of ready-made templates|
+|`install.py`|what a fresh install seeds|
+
+## The credits package
+
+Everything commercial sits under `benchpress/credits/`. It is off by default.
+`enable_credits` ships as `0`, and with it off no module below charges anybody.
+
+|Module|Owns|
+|--|--|
+|`guard.py`|one decorator that refuses an action before work is queued|
+|`admission.py`|the concurrency and credit decision, taken as a write that can fail|
+|`admission_repair.py`|the repair pass, because a claim is denormalized twice|
+|`lease.py`|what a deploy buys, when it runs out, and who may end it|
+|`warden.py`|a long-lived loop that claims a due lease within seconds|
+|`drain.py`|whether expiries land, and how late they were|
+|`sweep.py`|whose running instances must stop, and who is warned first|
+|`account.py`|one-off debits and credits, the accounting core|
+|`metering.py`|the three lifecycle sites that bill|
+|`payments.py`|a Razorpay order, settled into the ledger exactly once|
+|`reaper.py`|stopped is free, but not forever|
+|`config.py`|the single read path for every commercial number|
+|`onboarding.py`|what happens between "signed up" and "can deploy"|
+|`notify.py`|what the sweep and the reaper say, and where|
+|`seed.py`|prices a fresh install can show|
+
+## Where behavior hides
+
+Three places hold behavior that the obvious file does not show. Check all three
+before you conclude a save does nothing extra.
+
+|Place|Holds|
+|--|--|
+|`hooks.py`|permission query conditions, document events, scheduled jobs, overrides|
+|DocType controllers|`validate`, `autoname`, `before_insert`, and the doc-level methods|
+|The `vpn_management` app|every peer, every tunnel address, and the device records|
+
+Devices are not a BenchPress DocType. A device is a `VPN Peer` in
+`vpn_management`. See [Data model](/docs/reference/data-model#devices-are-vpn-peers).
+
+## The frontend
+
+A Vue 3 single-page app in `frontend/`, built with frappe-ui, vue-router and
+Tailwind. It is served from the same origin as the API, so a socket connection
+needs no separate host.
+
+Eleven routes exist. Four of them are admin-only, and one renders only while
+credits are on.
+
+|Route|Screen|Who sees it|
+|--|--|--|
+|`/`|Overview|any app user|
+|`/labs`|Labs|any app user|
+|`/bench-instances`|Instances|any app user|
+|`/labs/:labId`|Lab detail|the owner, and any admin|
+|`/devices`|Devices|any app user|
+|`/deploy-logs`|Deploy history|any app user, scoped to their benches|
+|`/labs/new`|New lab|admin only|
+|`/labs/templates`|Templates|admin only|
+|`/build-logs`|Build history|admin only|
+|`/settings`|Settings|admin only|
+|`/credits`|Credits|any app user, and only while credits are on|
+
+A guard in `frontend/src/router.js` sends a non-admin who reaches an admin-only
+route back to Labs. It does the same for `/credits` while `enable_credits` is
+`0`. The guard is a convenience, not the control. The API refuses the call as
+well, and that refusal is the one that counts.
+
+## Reference
+
+The counts a change should keep true.
+
+|Surface|Count|
+|--|--|
+|DocTypes|20|
+|Whitelisted functions|50|
+|Deploy steps|11|
+|Scheduled jobs|11|
+|Permission query conditions|6|
+|`has_permission` hooks|5|
+|Realtime events|6|
+
+## Related
+
+* [Data model](/docs/reference/data-model) — the 20 DocTypes and their links.
+* [Deploy pipeline](/docs/reference/deploy-pipeline) — what the eleven steps do.
+* [Networking](/docs/reference/networking) — the address plan for all of the above.
+* [Operator track](/docs/operator) — the same system, as tasks on a host.
+
+# Data model
+URL: https://docs.benchpress.cloud/docs/reference/data-model
+All 20 BenchPress DocTypes with their fields, links, naming and the permission rule that scopes each one — plus why there is no Device DocType.
+
+Every DocType the BenchPress module defines, what it holds, and who is allowed
+to read a row.
+
+**Who this is for.** Somebody reading rows directly, writing a report, or adding
+a field.
+
+**Before you start.** The counts here are the whole module. Twenty DocTypes
+exist, three of them are child tables and two are Singles. Read
+[How a row is scoped](#how-a-row-is-scoped) before you trust a query.
+
+## The 20 DocTypes
+
+|DocType|Kind|Named by|Holds|
+|--|--|--|--|
+|[Lab](#lab)|document|`field:lab_id`|a template made concrete: version, apps, size, image|
+|[Lab App](#lab-app)|child table|parent row|one app in a lab|
+|[Lab Template](#lab-template)|document|`field:key`|a ready-made lab in the catalog|
+|[Bench Instance](#bench-instance)|document|controller|one deployed bench|
+|[Bench Site](#bench-site)|document|`field:site_name`|a site inside a bench|
+|[Bench App](#bench-app)|child table|parent row|one app on a bench|
+|[Bench Event](#bench-event)|document|`hash`|an incident seen on a bench|
+|[Bench Admission](#bench-admission)|document|`field:bench`|the concurrency and credit claim a bench holds|
+|[Site App](#site-app)|child table|parent row|one app installed on a site|
+|[Database Server](#database-server)|document|`hash`|the shared MariaDB container|
+|[Deploy Log](#deploy-log)|document|`hash`|the text of one deploy run|
+|[Build Log](#build-log)|document|`hash`|the text of one image build|
+|[Instance Size](#instance-size)|document|`field:size_label`|a resource tier|
+|[Lease Plan](#lease-plan)|document|`field:plan_label`|a duration for sale|
+|[Credit Account](#credit-account)|document|`field:user`|one balance, one holder|
+|[Credit Ledger Entry](#credit-ledger-entry)|document|`hash`|one movement of that balance|
+|[Credit Pack](#credit-pack)|document|`field:pack_label`|a bundle of credits for sale|
+|[Credit Settings](#credit-settings)|Single|—|every commercial number|
+|[BenchPress Settings](#benchpress-settings)|Single|—|Docker, addressing, health and reconciliation|
+|[Waitlist Entry](#waitlist-entry)|document|`field:email`|one request for hosted access|
+
+Read the live list rather than this table when you suspect a drift:
+
+```bash
+bench --site <site> execute frappe.client.get_list \
+  --kwargs "{'doctype':'DocType','filters':{'module':'BenchPress'},'fields':['name','issingle','istable'],'limit_page_length':0}"
+```
+
+## Devices are VPN Peers
+
+There is no Device DocType, and looking for one is a dead end. A device is a
+`VPN Peer` in the `vpn_management` app, which BenchPress names in
+`required_apps`.
+
+`benchpress/vpn_adapter.py` is the only seam between the two apps. It keeps the
+old device field names and reply shapes, so the Devices screen calls
+`add_device` and `list_devices` and never learns the word peer.
+
+A bench container is a `VPN Peer` too. `Bench Instance.vpn_peer` links to it,
+and the insert claims the tunnel address from the server pool.
+
+|You are looking for|It is|Reached through|
+|--|--|--|
+|A user device|`VPN Peer`, named `[Type] Name`|`add_device`, `list_devices`, `remove_device`|
+|A bench tunnel address|`VPN Peer`, linked from `Bench Instance.vpn_peer`|`vpn_adapter.create_container_peer`|
+|The WireGuard server|`WireGuard Server` in `vpn_management`|the operator's [WireGuard page](/docs/operator/wireguard-setup)|
+
+## How a row is scoped
+
+Frappe applies two separate rules, and a tenant-owned DocType needs both.
+`permission_query_conditions` reaches the list engine only. A read of one
+document never consults it.
+
+|Rule|Applies to|Registered in|
+|--|--|--|
+|`permission_query_conditions`|list and report reads|`hooks.py`, 6 entries|
+|`has_permission`|a single document read|`hooks.py`, 5 entries|
+|`if_owner` on a role|both, from the DocType JSON|the DocType permission rows|
+
+Six DocTypes carry a query condition: `Bench Instance`, `Deploy Log`,
+`Build Log`, `Credit Account`, `Credit Ledger Entry` and `Bench Event`.
+
+Five carry a `has_permission` hook. `Bench Instance` is the one that does not,
+and it does not need one. Its `BenchPress User` permission row sets
+`if_owner: 1`, so Frappe scopes the single-document read itself. This is why
+`require_bench_access` works.
+
+A missing half is a leak, not a lint failure. A user could list a row they
+cannot open, or open a row they cannot list.
+
+|DocType|A BenchPress User sees|
+|--|--|
+|`Bench Instance`|rows they own, through `if_owner`|
+|`Deploy Log`|logs whose bench they own|
+|`Bench Event`|events whose bench they own|
+|`Build Log`|builds they started|
+|`Credit Account`|their own account, because the name is their email|
+|`Credit Ledger Entry`|entries whose `account` is their email|
+
+An admin sees everything. `Administrator`, `System Manager` and `BenchPress Admin` all short-circuit every rule above.
+
+## Lab
+
+A template made concrete. The unit an operator describes once and a user
+deploys many times. 22 fields.
+
+|Field|Type|Notes|
+|--|--|--|
+|`lab_id`|Data|the document name|
+|`title`|Data|shown in the app|
+|`frappe_version`|Select|the branch the image is built from|
+|`status`|Select|whether the lab can be deployed|
+|`template`|Link → Lab Template|set when the lab came from the catalog|
+|`description`|Small Text||
+|`apps`|Table → Lab App|the app list|
+|`instance_size`|Link → Instance Size|the default tier|
+|`memory_limit`, `cpu_cores`|Data, Int|overrides of the size|
+|`iops_limit`, `bps_limit`, `pids_limit`|Int|disk and process ceilings|
+|`enable_ssh`, `shell`|Check, Data|the SSH account the deploy provisions|
+|`image_tag`|Data|the cached image this lab deploys from|
+|`golden_manifest`|Code|what the golden dump contains|
+|`build_log`|Code|the last build's text|
+|`enable_code_server`|Check|whether a deploy starts the IDE|
+|`default_lease_plan`|Link → Lease Plan|credits only|
+|`max_lease_minutes`|Int|credits only|
+|`deploy_credits`|Float|credits only|
+
+## Lab App
+
+Child table. One app in a lab: `app_name`, `app_label`, `git_url`, `branch`.
+It holds what the lab asks for.
+
+## Lab Template
+
+The catalog. 13 fields, including `key` as the name, `logo`, `eta_minutes`,
+`most_used`, `is_active`, `sort_order`, an `instance_size` link and an `apps`
+child table. A template is read-only to a user. Only an admin creates a lab
+from one.
+
+## Bench Instance
+
+One deployed bench. The largest DocType at 36 fields, and the one that holds
+secrets.
+
+|Group|Fields|
+|--|--|
+|Identity|`bench_name`, `lab`, `status`, `frappe_version`, `site_name`|
+|Access|`ssh_username`, `ssh_password`, `admin_password`, `code_server_password`, `code_server_url`|
+|Address|`domain`, `public_url`, `container_ip`, `wg_ip`, `vpn_peer`, `bridge_network`|
+|Container|`container_id`, `container_image`, `runtime`, `node`, `started_at`, `instance_size`|
+|Health|`cpu_usage`, `memory_usage`, `container_health`, `last_health_check`|
+|Data|`database_server`, `apps`|
+|Lease|`expires_at_ts`, `lease_state`, `stop_claimed_at`, `stop_started_at`, `container_stopped_at`, `expiry_attempts`, `expiry_lateness`|
+|Reaper|`reap_warned_at`|
+
+The name comes from the owner and the lab, in two steps. `before_insert` sets
+`bench_name` to `get_instance_id(session_user, lab)`, an MD5 of the two.
+`autoname` then copies `bench_name` into `name`.
+
+The pair is therefore the identity. The same person deploying the same lab twice
+gets the same document, and `create_bench` treats the second call as a redeploy.
+A duplicate insert that races the first is caught and turned into a redeploy as
+well, so two clicks cannot make two benches.
+
+Three fields are passwords: `ssh_password`, `admin_password` and
+`code_server_password`. Never send the document as a whole to a client. The
+realtime helper in `credits/lease.py` builds an explicit payload for this
+reason.
+
+Ten fields sit at permlevel 1: `node`, `runtime`, `bridge_network` and the seven
+lease fields. A `BenchPress User` may read them and may not write them. Placement
+and expiry are the system's to set.
+
+## Bench Site
+
+A site inside a bench, named by `site_name`. Carries `bench`, `status`,
+`admin_password` and an `apps_installed` child table of `Site App`. A bench has
+one primary site today, and the DocType does not assume that.
+
+## Bench App
+
+Child table on `Bench Instance`. The same four fields as
+[Lab App](#lab-app): `app_name`, `app_label`, `git_url` and `branch`.
+
+The two are separate on purpose. `Lab App` is what the lab asks for, and
+`Bench App` is what a bench actually got. A lab edited after a deploy leaves the
+two disagreeing, and that difference is the record of it.
+
+## Bench Event
+
+An incident, named by `hash`. Written by the Docker event listener and by the
+reconcile pass, never by a user.
+
+|Field|Values|
+|--|--|
+|`event_type`|`bench_died`, `oom_killed`, `bench_unhealthy`, `bench_healthy`|
+|`severity`|`error`, `warning`, `info`|
+|`docker_action`|the raw Docker action, kept for evidence|
+|`exit_code`|the container exit code, when there was one|
+|`occurred_at`, `detail`, `bench`|when, what, and whose|
+
+See [Lifecycle and events](/docs/reference/lifecycle-and-events#incidents).
+
+## Bench Admission
+
+The claim a running bench holds while credits are on. Named `field:bench`, so
+one row for each bench and no way to hold two claims for one bench.
+
+`bench` is a Data field and not a Link. The claim outlives a failed insert of
+the bench it names. `account`, `claimed_at` and `held_credits` record who pays
+and how much is reserved.
+
+With credits off, nothing writes this table.
+
+## Site App
+
+Child table. `app_name` and `app_label`. What is installed on a site.
+
+## Database Server
+
+The shared MariaDB, named by `hash`. Twelve fields: `container_name`, `status`,
+`mariadb_version`, `image_tag`, `port`, `mariadb_root_password`, `container_id`,
+`container_ip`, `memory_limit`, `volume_name`, `created_at` and `error_message`.
+
+Every bench site's database lives in this one container. See
+[The shared database server](/docs/operator/database-server).
+
+## Deploy Log
+
+The text of one deploy run: `bench`, `log_type`, `message`, `timestamp`. The
+message is appended line by line and committed on each line, so a reader mid-run
+sees what has happened so far.
+
+`log_type` carries the verdict: `success`, `error`, `warning`, or `info` while
+the run is going.
+
+## Build Log
+
+The same four fields, with `lab` in place of `bench`. One row for each image
+build.
+
+Both log DocTypes are cleared after seven days. Neither is a complete record,
+and [Build history and deploy history](/docs/reference/api#history) states the
+window rather than implying completeness.
+
+## Instance Size
+
+A resource tier, named by `size_label`. Seventeen fields, and the widest set of
+knobs in the model.
+
+|Group|Fields|
+|--|--|
+|Container|`memory_limit`, `cpu_cores`, `disk_limit`, `pids_limit`|
+|Disk rate|`iops_limit`, `bps_limit`|
+|Network rate|`inflight_limit`, `rate_average`, `rate_burst`|
+|Product|`max_sites`, `include_code_server`, `is_default`, `sort_order`|
+|Price|`credits_per_hour`, `price_multiplier`, `default_lease_plan`|
+
+The size is resolved at deploy time and written onto the bench. A size edited in
+Desk reaches the next deploy. It does not change a running container.
+
+## Lease Plan
+
+A duration for sale: `plan_label`, `minutes`, `credits`, `is_active`,
+`sort_order`. The renew dialog lists the active plans in `sort_order`.
+
+## Credit Account
+
+One balance, named `field:user`, so the document name is the holder's email.
+Nothing has to be guessed to know whose account it is.
+
+`balance`, `reserved_credits`, `lifetime_purchased`, `lifetime_spent`,
+`active_instances`, `is_suspended` and `low_balance_warned`.
+
+`active_instances` and `reserved_credits` are denormalized counts.
+`credits/admission_repair.py` exists because they can drift when a worker dies.
+
+## Credit Ledger Entry
+
+One movement, named by `hash`. `account`, `entry_type`, `credits`,
+`balance_after`, `description`, and a `reference_doctype` and `reference_name`
+pair pointing at whatever caused it.
+
+`request_id` makes a movement idempotent. A retried purchase or renewal that
+carries the same `request_id` does not post twice.
+
+## Credit Pack
+
+A bundle for sale: `pack_label`, `inr_price`, `credits`, `is_active`,
+`highlight`, `sort_order`.
+
+## Credit Settings
+
+A Single. Sixteen fields, and Desk-only. Grants, charges, caps, the waitlist
+switch and the lease sweep numbers. Every field is documented in the
+[Settings reference](/docs/operator/settings-reference).
+
+## BenchPress Settings
+
+A Single. Twenty-six fields. The Settings dialog in the app shows ten of them,
+and the rest are at `/app/benchpress-settings`.
+
+`enable_credits` lives here, and it ships as `0`. Nothing in
+[Credit Settings](#credit-settings) has any effect while it is `0`.
+
+## Waitlist Entry
+
+One request for hosted access, named by `field:email`. `full_name`, `company`,
+`use_case`, `status`, `approved_on` and `invite_sent_on`.
+
+This is the only DocType a guest can cause to be written. See
+[the guest endpoints](/docs/reference/api#the-two-guest-endpoints).
+
+## Troubleshooting
+
+|Symptom|Cause|Fix|
+|--|--|--|
+|A user lists a row they cannot open|The DocType has a query condition and no `has_permission` hook|Add the missing half in `hooks.py`|
+|A user opens a row they cannot list|The reverse of the above|Same fix, from the other side|
+|A report shows every user's rows|Reports use the list engine, so check the query condition|Register the DocType in `permission_query_conditions`|
+|`Bench Instance` returns nothing for an owner|The role row lost `if_owner`|Restore it. Nothing else scopes a single read|
+|Two benches for one person and one lab|Not possible. The name is a hash of both|Look for two labs with different ids|
+|A password field is empty over the API|Frappe does not return `Password` fields in a normal read|Use the credentials endpoints|
+
+## Related
+
+* [API](/docs/reference/api) — what reads and writes these rows.
+* [Architecture](/docs/reference/architecture) — which module owns each DocType.
+* [Lifecycle and events](/docs/reference/lifecycle-and-events) — what changes `status` behind your back.
+* [Users and roles](/docs/operator/users-and-roles) — the three roles named above.
+
+# API
+URL: https://docs.benchpress.cloud/docs/reference/api
+All 50 whitelisted BenchPress endpoints, with arguments, what each returns, and the permission check each one makes for itself.
+
+Every function this app publishes over HTTP, and what each one checks before it
+does anything.
+
+**Who this is for.** Somebody calling BenchPress from another program, or adding
+an endpoint and wondering what the house rule is.
+
+**Before you start.** Read [How an endpoint is guarded](#how-an-endpoint-is-guarded).
+The decorator publishes a function. It grants nothing. Every entry in the tables
+below names its own check, because there is no check anywhere else.
+
+## Calling convention
+
+Every endpoint is a Frappe whitelisted method. Call it by dotted path.
+
+```bash
+curl -s https://<host>/api/method/benchpress.api.get_labs \
+  -H "Cookie: sid=<session id>"
+```
+
+Arguments go as query parameters on a `GET` or as form fields on a `POST`.
+Frappe decides the method from the function, not from a route table.
+
+Thirty-five of the fifty are in `benchpress.api`. Four more are module functions
+elsewhere. The remaining eleven are document methods, called through
+`run_doc_method` rather than by path. All three kinds are marked below.
+
+## How an endpoint is guarded
+
+Five helpers in `benchpress/permissions.py` do the work. An endpoint calls one
+of them as its first statement.
+
+|Helper|Passes for|Raises|
+|--|--|--|
+|`require_app_user()`|`System Manager`, `BenchPress Admin`, `BenchPress User`|`PermissionError`|
+|`require_admin()`|`System Manager`, `BenchPress Admin`|`PermissionError`|
+|`require_bench_access(name)`|whoever may read that `Bench Instance`|`PermissionError`|
+|`is_admin()`|returns a boolean, raises nothing|—|
+|`has_app_permission()`|returns a boolean, raises nothing|—|
+
+`require_bench_access` calls `frappe.has_permission` on the document itself. It
+scopes because the `BenchPress User` permission row on `Bench Instance` carries
+`if_owner: 1`. See [How a row is scoped](/docs/reference/data-model#how-a-row-is-scoped).
+
+A second gate sits above some endpoints. `requires_admission` is a decorator in
+`benchpress/credits/guard.py`. It refuses an action before any work is queued,
+and it does nothing at all while `enable_credits` is `0`.
+
+|Decorator argument|Refuses when|
+|--|--|
+|`cost=`|the caller cannot pay the hold|
+|`caps=`|the caller is at a cap — concurrency, size, devices or builds a day|
+|`payer=`|the charge belongs to somebody other than the caller|
+
+Two endpoints answer a guest. They are listed separately in
+[The two guest endpoints](#the-two-guest-endpoints), and both are rate limited.
+
+## Labs and templates
+
+|Endpoint|Arguments|Returns|Checks|
+|--|--|--|--|
+|`get_labs`|—|every lab the caller may see|`require_app_user`|
+|`get_lab`|`name`|one lab, with its instance and recent runs|`require_app_user`|
+|`get_lab_form_options`|—|the enums and defaults the New lab form builds itself from|`require_admin`|
+|`get_lab_templates`|—|the catalog|`require_app_user`|
+|`create_lab_from_template`|`template`, `lab_id`, `title`|`{name, status: "Draft"}`|`require_admin`|
+|`build_lab_image`|`lab_name`|`{name, status: "Building"}`|`require_admin`, plus `requires_admission` for cost and the builds-a-day cap|
+|`build_lab_golden`|`lab_name`|`{name, status: "Queued"}`|`require_admin`|
+|`prewarm_catalog`|—|how many builds were queued|`require_admin`|
+
+`build_lab_image` and `build_lab_golden` queue work and return at once. Watch
+the [Build Log](/docs/reference/data-model#build-log) for the result.
+
+`get_lab_form_options` is admin-only because only an admin reaches the New lab
+screen. Do not read it as a public enum list.
+
+## Benches
+
+|Endpoint|Arguments|Returns|Checks|
+|--|--|--|--|
+|`get_benches`|—|the caller's benches, or every bench for an admin|`require_app_user`|
+|`create_bench`|`data` (JSON)|`{name, status: "Deploying"}`|`require_app_user`, plus `requires_admission` for the lease cost and the size cap|
+|`bench_action`|`bench_name`, `action`|`{name, status}`|`require_bench_access`, and `is_admin` for `delete`|
+|`server_time`|—|`{server_now_ms}`|`require_app_user`|
+
+`bench_action` takes four actions: `start`, `restart`, `stop` and `delete`.
+
+|Action|Extra rule|
+|--|--|
+|`start`, `restart`|goes through `requires_admission`, so a capped caller is refused|
+|`stop`|no gate. Stopping is what a refused caller is being told to do|
+|`delete`|admin only, and it raises `PermissionError` for anybody else|
+
+`start`, `restart` and `stop` all refuse an instance with no container. A `Draft`
+bench has never been deployed, and a reaped one has had its container removed.
+
+`create_bench` is idempotent for a pair of caller and lab. The bench name is an
+MD5 of the two, so a second call redeploys rather than making a second bench.
+
+`server_time` exists so a countdown in the browser corrects against the server
+clock instead of the laptop's.
+
+## History
+
+|Endpoint|Arguments|Returns|Checks|
+|--|--|--|--|
+|`get_deploy_logs`|`bench_name`|the log rows for one bench|`require_bench_access`|
+|`get_deploy_history`|—|up to 50 recent deploy runs|`require_app_user`, inside `run_history`|
+|`get_build_history`|—|up to 50 recent image builds|`require_app_user`, inside `run_history`|
+
+The two history endpoints do not check permissions in `api.py`. They delegate
+immediately to `benchpress/run_history.py`, and the check is the first statement
+there. This is the one place where the guard is a function call away, so the
+table names where it lives.
+
+Both are endpoints rather than a generic list read for a reason.
+`Build Log` had no query condition, and reading it through the generic list API
+served every user's image builds to everybody. Scoping cannot be added to a
+generic read, so it is applied here: deploy rows go through `frappe.get_list`
+and pick up `deploy_log_query_conditions`, and build rows are filtered by owner
+for anybody who is not an admin.
+
+Both answers carry `window_days`, `limit` and `truncated`. Logs are cleared
+after seven days, so neither table is complete, and the answer says so rather
+than implying otherwise.
+
+## Devices
+
+Every device endpoint is a wrapper over `vpn_management`. A device is a
+`VPN Peer`, not a BenchPress DocType.
+
+|Endpoint|Arguments|Returns|Checks|
+|--|--|--|--|
+|`list_devices`|—|the caller's peers, with status and traffic counters|`require_app_user`|
+|`add_device`|`device_name`, `device_type`, `public_key`|the new peer, and its config when the server generated the key|`require_app_user`, plus `requires_admission` for the device cap|
+|`remove_device`|`device_name`|`{status: "removed"}`|`require_app_user`|
+|`get_device_types`|—|the seven accepted types|`require_app_user`|
+|`get_device_wg_config`|`device_name`|the WireGuard configuration text|`require_app_user`|
+|`get_vpn_status`|—|whether the caller's tunnel is up|`require_app_user`|
+|`run_connection_test`|—|a verdict on the caller's own peer|`require_app_user`|
+
+`get_device_types` exists so no screen hand-types the list.
+`run_connection_test` tests the caller's peer and never the shared
+infrastructure.
+
+## Credentials
+
+Three endpoints return secrets. All three take a bench name and check access to
+that bench.
+
+|Endpoint|Arguments|Returns|Checks|
+|--|--|--|--|
+|`get_bench_credentials`|`bench_name`|the SSH user, the SSH password and the site admin password|`require_bench_access`|
+|`get_code_server_credentials`|`bench_name`|`{url, password}`|`require_bench_access`|
+|`restart_code_server`|`bench_name`|`{ok: true}`|`require_bench_access`|
+
+These exist because Frappe does not return `Password` fields in an ordinary
+document read. Reading the `Bench Instance` gives you nothing. Ask here.
+
+## Credits
+
+Every endpoint below works while `enable_credits` is `0`. They report that
+credits are off rather than failing.
+
+|Endpoint|Arguments|Returns|Checks|
+|--|--|--|--|
+|`get_user_context`|—|who the caller is, their roles, and whether credits exist|reads roles with `is_admin`, no raise|
+|`get_credit_summary`|—|the balance chip, in one indexed read|`require_app_user`|
+|`get_credit_statement`|`limit_start`, `limit_page_length`|one page of the caller's own ledger|`require_app_user`|
+|`get_purchase_options`|—|the packs for sale, and whether a gateway exists|`require_app_user`|
+|`buy_credits`|`pack`|a Razorpay order|`require_app_user`|
+|`get_lease_plans`|—|the durations the renew dialog offers|`require_app_user`|
+|`renew_bench`|`bench_name`, `plan`, `request_id`|the new lease state|`require_bench_access` and `require_balance`|
+
+`get_user_context` is the one endpoint with no raising guard, and that is
+deliberate. It answers what the session already knows about itself. It calls
+`frappe.get_roles` and `is_admin`, and it returns no other user's data.
+
+`get_credit_statement` filters on the session, never on an argument. There is no
+way to ask for another user's ledger.
+
+`renew_bench` takes a `request_id`. A retried call carrying the same id does not
+charge twice. The new deadline extends from the deadline the caller already had,
+not from now.
+
+`buy_credits` prices from the pack, never from the caller. See
+[Credits and billing](/docs/operator/credits-and-billing) for the gateway.
+
+## Screens
+
+|Endpoint|Arguments|Returns|Checks|
+|--|--|--|--|
+|`get_overview`|—|every tile on the Overview screen, in one request|`require_app_user`|
+
+## Diagnostics
+
+|Endpoint|Arguments|Returns|Checks|
+|--|--|--|--|
+|`run_diagnostics`|—|eleven read-only environment checks|`require_admin`|
+|`preflight_runtime`|`runtime`|whether that runtime can actually start a container|`require_admin`|
+
+`run_diagnostics` reads. `preflight_runtime` creates a container, which is why
+it is separate and why it is admin-only. Neither reads the queue workers. See
+[Diagnostics](/docs/operator/diagnostics).
+
+## Document methods
+
+Eleven whitelisted methods live on controllers rather than in `api.py`. Frappe
+calls them through `run_doc_method`, and it checks the document's own permission
+before the method runs.
+
+### Bench Instance
+
+Four methods, used from the Desk form. None calls a permission helper. The
+document check plus `if_owner` on the `BenchPress User` role is the guard.
+
+|Method|Does|Extra gate|
+|--|--|--|
+|`enqueue_deploy`|queues a deploy on `queue-long`|`requires_admission`, lease cost and size cap|
+|`enqueue_redeploy`|queues a redeploy|`requires_admission`, lease cost and size cap|
+|`enqueue_start`|starts an existing container|`requires_admission`, instance lease cost|
+|`enqueue_stop`|stops through `lifecycle.stopped`|none, for the same reason `bench_action` stop has none|
+
+`enqueue_deploy` and `enqueue_redeploy` deduplicate on a job id of
+`deploy_bench:<name>`. A second click while a deploy runs says so and queues
+nothing.
+
+### Database Server
+
+Five methods. Each one calls `self.has_permission` and throws, so the check is
+explicit here rather than inherited.
+
+|Method|Does|
+|--|--|
+|`setup_mariadb`|creates the shared MariaDB container|
+|`start_mariadb`|starts it|
+|`stop_mariadb`|stops it|
+|`retry_setup`|runs setup again after a failure|
+|`get_logs`|returns the last `tail` lines, 100 by default|
+
+### Credit Account
+
+Two methods, both admin-only.
+
+|Method|Arguments|Does|
+|--|--|--|
+|`post_adjustment`|`credits`, `reason`|moves a balance by hand in either direction, with the reason on the row|
+|`post_refund`|`order`, `credits`, `reason`|gives credits back against the Razorpay order that granted them|
+
+`post_adjustment` is how a balance is set without a payment. It is the path the
+documentation screenshots used, because the gateway keys are empty on this host.
+
+## The two guest endpoints
+
+Two functions carry `allow_guest=True`. They are the whole surface an
+unauthenticated caller can reach, and both are rate limited to the same shape.
+
+|Endpoint|Arguments|Rate limit|Checks|
+|--|--|--|--|
+|`benchpress.waitlist.join`|`email`, `full_name`, `company`, `use_case`|3 an hour for each email and each IP address|none, by design|
+|`benchpress.signup.sign_up`|`email`, `full_name`, `redirect_to`|3 an hour for each email and each IP address|`waitlist_open` and the blocked domain list|
+
+`waitlist.join` always answers the same way. A caller cannot tell a new address
+from one already on the list, so the endpoint is not an account oracle.
+
+`signup.sign_up` answers exactly as Frappe's own signup does, behind two gates
+from `Credit Settings`. Both gates are off on a self-hosted install. See
+[Self-serve signup](/docs/operator/hosted-signup).
+
+Two more waitlist functions are admin-only and not guest-reachable.
+
+|Endpoint|Arguments|Does|Checks|
+|--|--|--|--|
+|`benchpress.waitlist.approve`|`entries`|approves the selected entries and invites each one|`require_admin`|
+|`benchpress.waitlist.notify_of_signup`|—|tells everybody still waiting that signup is live, once each|`require_admin`|
+
+## The whole list, counted
+
+Fifty `@frappe.whitelist()` functions. Every one is in a table above.
+
+|Location|Count|
+|--|--|
+|`benchpress/api.py`|35|
+|`benchpress/benchpress/doctype/database_server/database_server.py`|5|
+|`benchpress/benchpress/doctype/bench_instance/bench_instance.py`|4|
+|`benchpress/waitlist.py`|3|
+|`benchpress/benchpress/doctype/credit_account/credit_account.py`|2|
+|`benchpress/signup.py`|1|
+
+Recount after a change:
+
+```bash
+grep -rn "@frappe.whitelist" --include=*.py benchpress/ | wc -l
+```
+
+## Adding an endpoint
+
+1. Write the function in the module that owns the concern, not in `api.py`.
+2. Add a thin wrapper in `api.py` that calls a permission helper first.
+3. If the action costs credits or hits a cap, add `requires_admission` under
+   `@frappe.whitelist()`.
+4. Query with `frappe.qb`. A raw `frappe.db.sql` string is a lint failure.
+5. Add the endpoint to the table on this page.
+
+The decorator order matters. `@frappe.whitelist()` goes on top, and
+`@requires_admission(...)` below it, so the gate runs inside the published
+function.
+
+## Verify
+
+Confirm an endpoint refuses the caller it should refuse:
+
+```bash
+bench --site <site> run-tests --app benchpress --module benchpress.tests.test_api_authorization
+```
+
+## Troubleshooting
+
+|Symptom|Cause|Fix|
+|--|--|--|
+|`PermissionError` from every endpoint|The user holds none of the three roles|Grant `BenchPress User`. See [Users and roles](/docs/operator/users-and-roles)|
+|An admin-only screen is blank|The API refused, and the router only redirects|Grant `BenchPress Admin`|
+|A password field comes back empty|Frappe hides `Password` fields in a document read|Call `get_bench_credentials`|
+|Every deploy is refused|`enable_credits` is `1` and the caller cannot pay the hold|Set it back to `0`, or fund the account|
+|`/credits` redirects to Labs|Credits are off, so the screen does not render|Expected. See [Credits and billing](/docs/operator/credits-and-billing)|
+|A build endpoint returns at once|It queues the work|Read the Build Log|
+|A second deploy click does nothing|The job id deduplicates|Expected. Watch the running deploy|
+
+## Related
+
+* [Data model](/docs/reference/data-model) — the rows these endpoints read.
+* [Deploy pipeline](/docs/reference/deploy-pipeline) — what `create_bench` sets running.
+* [Production safety](/docs/operator/production-safety) — the endpoint-by-endpoint audit of these guards.
+* [Realtime](/docs/reference/realtime) — how a screen hears about the result.
+
+# Deploy pipeline
+URL: https://docs.benchpress.cloud/docs/reference/deploy-pipeline
+The eleven steps of a BenchPress deploy, in the order the code runs them, with the function behind each step and the log line it writes.
+
+What happens between a click on **Deploy** and a site that answers.
+
+**Who this is for.** Somebody reading a deploy log, or changing what a deploy
+does.
+
+**Before you start.** A deploy takes minutes and runs in one background job on
+`queue-long`. Nothing below happens in the web request. The request queues the
+job and returns `{"status": "Deploying"}`.
+
+## The eleven steps
+
+`benchpress/deploy_pipeline.py` defines the steps. `lifecycle._deploy_bench`
+runs ten of them, and `deploy_manager` runs the fifth.
+
+|#|Key|Label|Runs in|
+|--|--|--|--|
+|1|`infrastructure`|Checking shared infrastructure|`lifecycle._deploy_bench`|
+|2|`image`|Preparing the lab image|`lifecycle._prepare_lab_image`|
+|3|`container`|Creating the container|`docker_manager.create_bench_container`|
+|4|`container_ip`|Waiting for the container IP|`docker_manager.wait_for_container_running`|
+|5|`vpn_peer`|Configuring the WireGuard peer|`deploy_manager._setup_container_vpn`|
+|6|`site_config`|Writing common\_site\_config.json|`docker_manager.write_file_to_container`|
+|7|`site`|Creating the site|`docker_manager.create_site_in_container`|
+|8|`assets`|Preparing assets|`lifecycle._deploy_bench`|
+|9|`ssh_user`|Provisioning the SSH user|`linkuser.sh`, in the container|
+|10|`code_server`|Starting the lab's services|`serve.sh`, then `_start_code_server`|
+|11|`complete`|Deploy complete|`lifecycle._deploy_bench`|
+
+**The order is the order the code runs, not the order the design brief lists.**
+The brief puts the WireGuard peer at position 10. `_setup_container_vpn` runs it
+at 5, right after the container reports an address. The stepper reports the run,
+so do not correct this to the brief.
+
+## How a step reports itself
+
+Each boundary writes one marker line into the Deploy Log.
+
+```text
+=== Step 4/11: Waiting for the container IP [container_ip @14.2s] ===
+```
+
+The `=== … ===` wrapper is load bearing. `LogViewer.vue` and
+`lab_detail._parse_failure` both parse it, and every log written before the
+stepper existed carries only that. Step metadata goes inside the marker, never
+in place of it, so an old run still renders.
+
+A failure writes its own marker:
+
+```text
+=== Deploy failed: <reason> ===
+```
+
+Each line is committed as it is written. A deploy holds one transaction for
+minutes, so without the commit nobody could watch a run in progress or reload
+after a dropped socket.
+
+## Step 1. Checking shared infrastructure
+
+Makes sure the shared MariaDB exists and answers, with a 60 second timeout.
+Records which `Database Server` this run used, and commits that before anything
+depends on it.
+
+This step also writes the Traefik wildcard anchor when `base_domain` is set.
+It runs first on purpose. A fresh install needs DNS-01 to finish issuing the
+certificate before a bench route goes live, and that takes minutes.
+
+Then it checks the runtime is registered. That check sits ahead of the image
+step because the build is where the minutes go, and a bench the host cannot
+isolate should not pay for one.
+
+## Step 2. Preparing the lab image
+
+One step whichever way it goes. The run either builds the lab image or adopts a
+cached one, and the detail line says which.
+
+A cached image is the normal path and costs seconds. A build costs an hour and
+most of the disk. See [The image cache](/docs/operator/image-cache).
+
+## Step 3. Creating the container
+
+Before the container is made, the run removes the previous container and drops
+the site database. Both halves of the last deploy go together, and they go
+before the new container exists. Dropping a few hundred tables is teardown, not
+part of creating the site that follows.
+
+The instance size is resolved here and written onto the bench. It is never
+copied onto the Lab, so a size edited in Desk reaches the next deploy and
+billing keeps pricing what Docker was actually given.
+
+The container id is committed as soon as it exists. A crash after this point
+leaves something to clean up rather than an orphan nothing points at.
+
+## Step 4. Waiting for the container IP
+
+Waits up to 60 seconds for the container to report an address on its bridge.
+The address is committed, because the route file is written from it.
+
+## Step 5. Configuring the WireGuard peer
+
+`deploy_manager._setup_container_vpn` generates the container keypair locally
+and registers only the public key as a `VPN Peer`. The insert claims the tunnel
+address atomically from the server pool.
+
+The private key is written into the container and stored nowhere else.
+
+This runs synchronously, which is possible because deploys run on `queue-long`,
+and that worker mounts the WireGuard agent socket.
+
+## Step 6. Writing common\_site\_config.json
+
+Writes the bench's site configuration into the container, naming the database
+host, the web server port and the default site.
+
+## Step 7. Creating the site
+
+Runs `bench new-site` inside the container against the shared MariaDB, and
+installs the lab's apps. Frappe is dropped from the app list, because a site
+always has it.
+
+This step decides between two paths, and the log line says which one it took.
+
+|Path|When|Costs|
+|--|--|--|
+|Restore from the golden dump|The lab has a golden image and the server matches|seconds|
+|Create the site from scratch|No golden dump, or the server does not match|minutes|
+
+A refusal to use the golden dump is logged with its reason rather than passed
+over. See [Golden images](/docs/operator/golden-images).
+
+A non-zero exit fails the run and the whole deploy.
+
+## Step 8. Preparing assets
+
+Nothing is built. Assets ship in the image, bundled at build time, and the step
+logs exactly that.
+
+Rebuilding the lab image is how a stale bundle is refreshed. A deploy never
+builds assets, and a deploy will not fix a stale one.
+
+## Step 9. Provisioning the SSH user
+
+Runs `linkuser.sh` in the container to create the Linux account, using a
+username derived from the owner's email address. The part before the `@` is
+lowercased, stripped of invalid characters and capped at 32 characters.
+
+The app's copy of `linkuser.sh` wins over the copy baked into the image.
+
+The SSH password is generated for this run and stored on the bench as a
+`Password` field. Read it with
+[`get_bench_credentials`](/docs/reference/api#credentials).
+
+## Step 10. Starting the lab's services
+
+Runs `serve.sh` to serve the site on port 8000, then starts code-server if this
+lab and this instance size include it.
+
+The step is emitted even when code-server is off. A step the run decided to skip
+is information, and a stepper missing its tenth row is not. The log says the IDE
+was skipped and why.
+
+The check uses the same resolver the route file was written from, so the router
+and the process cannot disagree about whether this bench has an IDE.
+
+## Step 11. Deploy complete
+
+Moves the bench to `Running`, marks the Deploy Log `success`, commits, and
+notifies the owner.
+
+The eleventh step and the success line are one line. It carries the total
+elapsed time, and the words "Deploy complete" are still in its text for
+everything that reads the marker rather than the metadata.
+
+Everything above this line is free however long it took. A deploy that never
+gets here never reaches `Running`.
+
+## Verify
+
+Read the steps out of a finished run rather than trusting this page:
+
+```bash
+bench --site <site> execute frappe.client.get_list \
+  --kwargs "{'doctype':'Deploy Log','fields':['name','bench','log_type'],'limit_page_length':5}"
+```
+
+A successful run shows eleven ticked steps on the Lab detail screen. See
+[Watch a deploy](/docs/user/deploy-from-template).
+
+## Troubleshooting
+
+|Symptom|Cause|Fix|
+|--|--|--|
+|The run stops at step 1|The shared MariaDB is not answering|[The shared database server](/docs/operator/database-server)|
+|Step 2 takes an hour|The lab has no cached image, so it built one|[The image cache](/docs/operator/image-cache)|
+|The run stops at step 3|The bridge address pool is full, or the runtime is missing|[Prerequisites](/docs/operator/prerequisites)|
+|The run stops at step 5|The worker has no WireGuard agent socket|Run the deploy on `queue-long`|
+|Step 7 takes minutes every time|The lab has no golden dump|[Golden images](/docs/operator/golden-images)|
+|Step 7 logs a refusal|The golden dump does not match the database server|Rebuild the golden dump|
+|An old asset is still served|Assets ship in the image|Rebuild the lab image|
+|Step 10 says the IDE was skipped|The lab or its size has code-server off|Expected. Turn it on in the Lab|
+|The deploy log stops with no failure marker|The worker died mid-run|The `*/5` reconcile pass corrects the row|
+|A second Deploy click does nothing|The job id deduplicates|Expected. Watch the running deploy|
+
+## Reference
+
+|Fact|Value|
+|--|--|
+|Steps|11|
+|Queue|`queue-long`|
+|Job id|`deploy_bench:<bench name>`|
+|Deduplicated|yes|
+|Infrastructure timeout|60 seconds|
+|Container IP timeout|60 seconds|
+|Site HTTP port|8000|
+|IDE HTTP port|8080|
+|Marker format|`=== Step N/11: <label> [<key> @<seconds>s] ===`|
+
+## Related
+
+* [Lifecycle and events](/docs/reference/lifecycle-and-events) — what happens after step 11.
+* [Networking](/docs/reference/networking) — the addresses steps 4, 5 and 10 produce.
+* [API](/docs/reference/api#benches) — the endpoint that queues this job.
+* [Logs and monitoring](/docs/user/logs-and-monitoring) — reading a run as it happens.
+
+# Lifecycle and events
+URL: https://docs.benchpress.cloud/docs/reference/lifecycle-and-events
+The bench states and their transitions, the Docker event listener, Bench Event incidents, the stats collector, and the eleven scheduled jobs that correct the database.
+
+What changes a bench without anybody clicking anything.
+
+**Who this is for.** Somebody wondering why a row changed, or adding a job that
+changes one.
+
+**Before you start.** BenchPress converges. A click is a request, not a
+guarantee, and several passes run behind it to make the database agree with
+Docker. Read [Deploy pipeline](/docs/reference/deploy-pipeline) for the click
+path first.
+
+## The five bench states
+
+`Bench Instance.status` holds one of five values.
+
+|State|Means|Reached from|
+|--|--|--|
+|`Draft`|the row exists, nothing was ever deployed|created by `create_bench`|
+|`Deploying`|a deploy job is running|`Draft`, `Stopped`, `Error`, `Running`|
+|`Running`|the container is up and the site answers|step 11 of a deploy, or a start|
+|`Stopped`|the container exists and is not running|a stop, a lease expiry, or a balance sweep|
+|`Error`|the deploy failed|any failed step|
+
+Two more fields carry state of their own.
+
+|Field|Values|Set by|
+|--|--|--|
+|`container_health`|`Healthy`, `Unhealthy`, `Unknown`, or empty|the event listener and the stats collector|
+|`lease_state`|`Active`, `Stopping`, `Failed`, or empty|the lease warden and the drain sweep|
+
+`lease_state` is only written while credits are on. It is separate from `status`
+because a bench can be `Running` and already claimed for a stop.
+
+## The transitions
+
+`benchpress/lifecycle.py` owns every transition, and each one carries side
+effects that must not be skipped.
+
+|Function|Moves a bench to|Also does|
+|--|--|--|
+|`running(bench)`|`Running`|records the start time|
+|`stopped(name)`|`Stopped`|deactivates the bench's sites|
+|`errored(bench, ...)`|`Error`|writes the failure into the Deploy Log|
+|`torn_down(bench)`|the row is deleted|removes the container, the VPN peer, the site database and the route file, then releases the admission claim|
+
+Call these rather than setting `status` directly. A bench stopped by a direct
+write leaves its sites active, and a bench deleted by a direct write leaks a
+container, a tunnel address and a route.
+
+`torn_down` records each removal that failed rather than aborting. A teardown
+that gets halfway is worse than one that reports which half it finished.
+
+## Incidents
+
+`benchpress/docker_events.py` consumes the Docker event stream instead of
+polling it. It observes and never acts. No stop, no restart, no route write.
+`deploy_manager` owns those.
+
+The stream is filtered server side, on the BenchPress label and on three
+actions. Without the filter it carries three `exec_*` events for each health
+check on each bench, multiplied by the fleet.
+
+|Docker action|Becomes|Severity|
+|--|--|--|
+|`die`|`bench_died`|error|
+|`oom`|`oom_killed`|error|
+|`health_status: unhealthy`|`bench_unhealthy`|error|
+|`health_status: healthy`|`bench_healthy`|info|
+
+Each one is written as a [Bench Event](/docs/reference/data-model#bench-event).
+
+**Two incidents inside the settle window become one.** The window is
+`bench_event_settle_seconds`, 15 seconds by default. An OOM outranks the `die`
+that follows it by milliseconds, and a death outranks a health verdict.
+
+The precedence is fixed: `bench_healthy`, `bench_unhealthy`, `bench_died`,
+`oom_killed`, lowest first. A site that stopped answering on its way out is one
+incident, and the death is the half the owner has to be told about.
+
+A health verdict also writes `container_health` on the bench, so that field is
+fresh in seconds rather than after a poll interval.
+
+The listener writes a heartbeat every second. After 60 ticks with no beat the
+heartbeat is no longer believed, and the `*/5` reconcile pass is what keeps
+convergence going. A listener that stays down degrades BenchPress to what it
+was before the listener existed, not to silence.
+
+## The stats collector
+
+`benchpress/stats_collector.py` runs on the `*/1` cron and samples CPU, memory
+and health for each running bench.
+
+It polls at most 50 benches in one pass, set by `stats_poll_max_benches`. The
+call costs about two seconds on the Docker socket for each container, so the cap
+is what keeps the job inside its window.
+
+The collector also stops a bench it finds dead, which is the one thing on this
+page that acts rather than records.
+
+## The scheduled jobs
+
+Eleven jobs. [Diagnostics](/docs/operator/diagnostics#the-scheduled-jobs)
+carries the full table with each schedule, read off a live host. This page says
+what each one is for.
+
+### Every minute
+
+The scheduler tick on this host is four minutes, so `*/1` fires every four. The
+entry stays `*/1` so shortening the tick needs no edit.
+
+|Job|Does|
+|--|--|
+|`stats_collector.enqueue_stats_sweep`|samples CPU, memory and health|
+
+### Every five minutes
+
+Six jobs. Each is a net under a faster path, not the primary path.
+
+|Job|Corrects|
+|--|--|
+|`reconcile.enqueue_run`|the database against Docker, in both directions|
+|`docker_events.enqueue_reconcile`|whatever the event listener missed while it was down|
+|`mariadb_manager.enqueue_health_check`|the shared database server's health|
+|`credits.drain.sweep_expired_leases`|leases the warden did not claim in time|
+|`credits.sweep.enforce_limits`|who has run out of balance|
+|`credits.admission_repair.reconcile_admissions`|claim counts that drifted|
+
+Three of these need `queue-long`. `reconcile.enqueue_run` and
+`docker_events.enqueue_reconcile` need the Docker socket, and the route
+convergence needs the Traefik mount. `queue-short` has neither.
+
+`drain.sweep_expired_leases` makes no Docker call, so it is safe on either
+worker. It is the net under the lease warden, not the primary path. The
+scheduler tick is four minutes here, so no cron entry can promise better than
+that. The warden claims within seconds, and both use the same conditional
+claim, so running together cannot stop a bench twice.
+
+`enforce_limits` is deliberately not on the `*/1` cron. That job spends about
+two seconds for each container on the Docker socket, and a decision queued
+behind Docker input and output arrives late.
+
+### Daily and weekly
+
+|Job|Does|
+|--|--|
+|`mariadb_manager.enqueue_backup`|dumps every bench site, at 02:00|
+|`credits.reaper.reap_stopped_instances`|removes containers stopped for too long|
+|`image_cache.enqueue_prewarm_catalog`|builds an image for a catalog template that has none|
+|`image_cache.enqueue_sweep`|removes images no lab points at|
+
+## What the reconcile pass does
+
+`benchpress/reconcile.py` is the only pass that looks in both directions. Every
+other sweep converges outwards from a row, so it cannot see a thing that has no
+row.
+
+|Check|Finds|
+|--|--|
+|Route convergence|a running bench with no route file, or a route file with no bench|
+|Orphan containers|a BenchPress container no row points at|
+|Reap verification|a container that was told to go and did not|
+|Orphan databases|a site database no bench claims|
+|Deploy record trimming|a bench whose Deploy Logs passed the cap|
+
+**A deploy looks exactly like an orphan while it runs.** `_deploy_bench` creates
+the container before it writes `container_id`, so every deploy passes through
+that state. The 15 minute grace window from `orphan_grace_minutes` is what keeps
+the pass from reaping a live deploy.
+
+Container ids are compared on their first twelve characters. Docker reports the
+full id and a row may hold either form, so a live bench is never called an
+orphan over a difference in notation.
+
+Deploy Logs are capped at 50 for each bench, on top of Frappe's own seven day
+sweep. The cap is the second bound, for the bench redeployed in a loop that
+reaches thousands of rows inside a week.
+
+## Verify
+
+Read a bench's recent incidents:
+
+```bash
+bench --site <site> execute frappe.client.get_list \
+  --kwargs "{'doctype':'Bench Event','fields':['bench','event_type','severity','occurred_at'],'limit_page_length':10}"
+```
+
+Confirm the jobs are not stopped:
+
+```bash
+bench --site <site> execute frappe.client.get_list \
+  --kwargs "{'doctype':'Scheduled Job Type','fields':['method','stopped'],'limit_page_length':0}"
+```
+
+## Troubleshooting
+
+|Symptom|Cause|Fix|
+|--|--|--|
+|A bench outlives its lease|The stop worker is down, so the claim is made and never runs|Check the worker containers, not the job table|
+|No incident for a bench that died|The event listener is down|It restarts on its own. The `*/5` pass catches up|
+|`container_health` is stale|The listener is down and the stats collector is capped at 50|Raise `stats_poll_max_benches`, or fix the listener|
+|A container exists with no row|An orphan, if it is older than the grace window|The reconcile pass removes it|
+|A live deploy was reaped|The grace window is shorter than the deploy|Raise `orphan_grace_minutes`|
+|Nothing converges at all|The scheduler is not running|Every job here is a scheduled job. Start the scheduler|
+|A stopped bench keeps its sites active|Somebody wrote `status` directly|Call `lifecycle.stopped` instead|
+|Two stops for one expiry|Not possible. Both paths use the same conditional claim|Look for two benches|
+
+## Reference
+
+|Fact|Value|
+|--|--|
+|Bench states|`Draft`, `Deploying`, `Running`, `Stopped`, `Error`|
+|Incident types|`bench_died`, `oom_killed`, `bench_unhealthy`, `bench_healthy`|
+|Settle window|`bench_event_settle_seconds`, 15 seconds|
+|Listener tick|1 second|
+|Heartbeat stale after|60 ticks|
+|Listener error backoff|30 seconds|
+|Stats poll cap|`stats_poll_max_benches`, 50|
+|Orphan grace|`orphan_grace_minutes`, 15 minutes|
+|Deploy log cap|`deploy_log_cap`, 50 for each bench|
+|Log retention|7 days|
+
+## Related
+
+* [Deploy pipeline](/docs/reference/deploy-pipeline) — the click path these jobs correct.
+* [Data model](/docs/reference/data-model#bench-event) — the row an incident becomes.
+* [Diagnostics](/docs/operator/diagnostics) — the job table, and what diagnostics does not cover.
+* [Settings reference](/docs/operator/settings-reference) — every number named above.
+
+# Networking
+URL: https://docs.benchpress.cloud/docs/reference/networking
+The BenchPress address plan — bench bridges, WireGuard tunnel addresses, the two container ports, Traefik route files and the wildcard certificate anchor.
+
+Every address a bench answers on, and who can reach each one.
+
+**Who this is for.** Somebody who cannot reach a bench, or who is changing how
+one is addressed.
+
+**Before you start.** A bench has up to four addresses at once. They are not
+alternatives. Each one exists for a different caller, and three of the four are
+private.
+
+## The four addresses
+
+`benchpress/addressing.py` builds all of them in one place, and the app renders
+what it returns rather than assembling a URL from a port it declared itself.
+
+|Address|Form|Reachable from|
+|--|--|--|
+|Public site|`https://<instance id>.<base domain>`|the internet, through Traefik|
+|Public IDE|`https://ide-<instance id>.<base domain>`|the internet, through Traefik|
+|Tunnel site|`http://<wg ip>:8000`|a device on the VPN|
+|Tunnel IDE|`http://<wg ip>:8080/`|a device on the VPN|
+
+The two ports are properties of the bench image, not settings. They are
+constants in `addressing.py`.
+
+|Port|Serves|
+|--|--|
+|8000|the Frappe site|
+|8080|code-server, the browser IDE|
+
+When a bench has no tunnel address the same helpers fall back to the container's
+bridge address. When `base_domain` is empty or `localhost`, the two public
+addresses do not exist and the helpers return nothing.
+
+## Bench bridges
+
+A bench container joins a BenchPress bridge network, never the control plane's
+own network.
+
+|Setting|Default|Means|
+|--|--|--|
+|`bench_subnet_base`|`10.20`|the first two octets of every bench bridge|
+|`bench_bridge_count`|16|how many bridges may exist|
+|`bench_slots_per_bridge`|1000|how many endpoints one bridge holds before the next is used|
+
+Bridge `N` is derived, not configured:
+
+|Property|Value for index `N`|
+|--|--|
+|Network name|`benchpress-N`|
+|Bridge device|`bpbrN`|
+|Subnet|`<base>.<N × 16>.0/20`|
+|Gateway|`<base>.<N × 16>.1`|
+
+The third octet steps by 16 so every `/20` starts on its own boundary. A later
+scheme giving each node a `/16` renumbers nothing.
+
+**Choosing a bridge is advisory.** `placement.pick_network` names the lowest
+index with room. It takes no lock, and the count can go stale between the count
+and the create. Docker is the arbiter. It refuses the create when the address
+pool is empty, and the deploy rolls on to the next bridge.
+
+A bridge is created when a bench actually reaches it. A `Draft` bench that is
+never deployed costs no network.
+
+Three infrastructure containers are attached to every bench bridge, so Docker's
+embedded DNS answers in both directions: Traefik, the shared MariaDB and the
+shared Redis. **The control plane's own database and Redis are deliberately
+absent.** A tenant bridge that reaches them is a breach, not a convenience.
+
+## The WireGuard plane
+
+Every bench and every user device is a `VPN Peer` in the `vpn_management` app.
+`benchpress/vpn_adapter.py` is the only seam between the two apps.
+
+|Peer|Created by|Key|
+|--|--|--|
+|A bench|`create_container_peer`, at deploy step 5|generated locally, private half written into the container and stored nowhere else|
+|A device|`register_device`, from the Devices screen|supplied by the device, or generated by the server|
+
+The insert claims the tunnel address atomically from the server's pool. Nothing
+picks an address by hand.
+
+A bench peer keeps a 25 second keepalive. A device peer is named
+`[Type] Name`, which is how the adapter tells devices from bench containers in
+one peer table.
+
+Seven device types are accepted: Mobile, Laptop, Desktop, Tablet, Server, IoT
+and Embedded. `get_device_types` returns the list so no screen hand-types it.
+
+A bench created before the bridge families existed falls back to the legacy
+gateway `172.30.0.1`.
+
+## The public front door
+
+`benchpress/ingress.py` owns every write to the Traefik route directory, and
+that directory path lives in that module and nowhere else.
+
+Traefik's file provider does not recurse, so the directory is flat. One file
+holds one router for one bench, named by the instance id, which is always 32
+hexadecimal characters.
+
+Two files in that directory are never a bench's, and the convergence pass must
+never delete them. They are named one by one rather than matched by shape.
+
+|File|Owned by|Deleting it|
+|--|--|--|
+|`dynamic.yml`|the parent `benchpress_devops` repository|takes the control plane off the internet|
+|`wildcard-anchor.yml`|`ingress.ensure_anchor`|takes every bench certificate with it|
+|`<instance id>.yml`|one bench|removes that bench's public address|
+
+**A route file names the container, never an address.** The container name is
+the instance id, so no lifecycle transition can make the file stale.
+
+### Why bench routers name no certificate resolver
+
+A bench router is written with `tls: {}`. That turns TLS on and names no
+resolver, so the router serves whatever certificate the store already holds for
+the requested name.
+
+This is the point of the design. Let's Encrypt allows five certificates for each
+identifier set every seven days. A router that asked for its own certificate
+would cap bench churn at five a week.
+
+`ensure_anchor` is what puts `*.<base domain>` in the store, and it is the only
+place in this app that names a resolver. The anchor is written at deploy step 1,
+minutes ahead of the image build, because DNS-01 has to finish issuing before a
+bench route goes live.
+
+The anchor is never deleted at teardown. It has to outlive every bench, because
+it is what keeps the certificate renewing.
+
+The IDE hostname is one label under the same base domain, so the same wildcard
+covers it. Only the site hostname is checked when a deploy logs the certificate
+state.
+
+## Who can reach what
+
+|Caller|Public site|Tunnel site|SSH|Control plane|
+|--|--|--|--|--|
+|The internet|yes, if `base_domain` is set|no|no|yes|
+|A device on the VPN|yes|yes|yes|yes|
+|Another bench on the same bridge|no|no|no|no|
+|A bench, reaching the shared MariaDB|—|—|—|the database only|
+
+No bench is on the public internet by port. The only public path is Traefik, and
+it terminates TLS on the wildcard.
+
+## Verify
+
+Read what a bench answers on:
+
+```bash
+bench --site <site> execute frappe.client.get_value \
+  --kwargs "{'doctype':'Bench Instance','filters':{'name':'<id>'},'fieldname':['public_url','code_server_url','wg_ip','container_ip','bridge_network']}"
+```
+
+List the bridges Docker actually has:
+
+```bash
+docker network ls --filter name=benchpress-
+```
+
+## Troubleshooting
+
+|Symptom|Cause|Fix|
+|--|--|--|
+|The public address returns 404|The bench has no route file|The `*/5` reconcile pass rewrites it|
+|The public address returns a TLS error|The wildcard is not in the store|Check `wildcard-anchor.yml` and the DNS-01 credentials|
+|No public address at all|`base_domain` is empty or `localhost`|Set it. See [Settings reference](/docs/operator/settings-reference)|
+|The tunnel address does not answer|The device is not on the VPN|[Connect over SSH and the VPN](/docs/user/connect-ssh-vpn)|
+|A deploy fails at step 5|The worker has no WireGuard agent socket|Run deploys on `queue-long`|
+|A deploy fails to create a container|Every bridge is full|Raise `bench_bridge_count`|
+|A bench reaches the control plane database|A bridge was attached by hand|Remove it. Only three infrastructure containers belong|
+|Every bench lost its certificate|The anchor file was deleted|Redeploy any bench, or call `ensure_anchor`|
+
+## Reference
+
+|Fact|Value|
+|--|--|
+|Site port|8000|
+|IDE port|8080|
+|Default subnet base|`10.20`|
+|Bridges|16|
+|Slots for each bridge|1000|
+|Subnet for bridge `N`|`<base>.<N × 16>.0/20`|
+|Bridge device|`bpbrN`|
+|Network name|`benchpress-N`|
+|Legacy gateway|`172.30.0.1`|
+|Container keepalive|25 seconds|
+|Device types|7|
+|Route directory|flat, one file for each bench|
+|Protected route files|`dynamic.yml`, `wildcard-anchor.yml`|
+
+## Related
+
+* [WireGuard and the VPN plane](/docs/operator/wireguard-setup) — standing the tunnel up.
+* [Deploy pipeline](/docs/reference/deploy-pipeline) — the steps that produce these addresses.
+* [Open your site](/docs/user/open-your-site) — the same addresses, from a user's side.
+* [Data model](/docs/reference/data-model#devices-are-vpn-peers) — why there is no Device DocType.
+
+# Realtime
+URL: https://docs.benchpress.cloud/docs/reference/realtime
+The six realtime events BenchPress publishes over socket.io, their payloads, who receives each one, and why the deploy log commits every line.
+
+How a screen changes without a page reload, and what it is listening to.
+
+**Who this is for.** Somebody building a client, or working out why a screen
+stopped updating.
+
+**Before you start.** Realtime is an accelerator here, never the source of
+truth. Every screen below also has a read that returns the same state. A dropped
+socket costs freshness, not correctness.
+
+## The connection
+
+The single-page app connects with `socket.io-client` to the page's own origin,
+in a namespace named after the site.
+
+```javascript
+io(`${window.location.origin}/${window.site_name}`, { withCredentials: true });
+```
+
+Whatever serves the app also proxies `/socket.io` to the websocket service, so
+no second host is involved. This mirrors Frappe's own
+`socketio_client.get_host()`.
+
+**Reconnection never gives up.** `reconnectionAttempts` is infinity. Five
+attempts was about thirty seconds of trouble before the client stopped trying
+for the life of the page, and a laptop asleep through its lease woke to a frozen
+countdown and never received its expiry event.
+
+|Setting|Value|Why|
+|--|--|--|
+|`reconnectionAttempts`|infinite|a sleeping laptop must still get its expiry|
+|`reconnectionDelay`|1000 ms|first retry is quick|
+|`reconnectionDelayMax`|30000 ms|a long outage costs one attempt every half minute|
+|`randomizationFactor`|0.5|every open tab does not reconnect on the same beat|
+
+## The six events
+
+|Event|Published by|Sent to|Heard by|
+|--|--|--|--|
+|`bench_deploy_log`|`deploy_pipeline.DeployLogWriter`|the bench owner|Lab detail, and the deploy dialog|
+|`lab_build_log`|`deploy_manager`, through the same writer|whoever started the build|Lab detail, and the Build Log desk form|
+|`benchpress:lease_expired`|`credits/lease.py`|the bench owner|Lab detail|
+|`benchpress:lease_renewed`|`credits/lease.py`|the bench owner|Lab detail|
+|`benchpress:credits`|`credits/payments.py`|the paying user|no SPA listener today|
+|`mariadb_health_failure`|`mariadb_manager.py`|broadcast|no SPA listener today|
+
+The last two have no listener in the app. They are published, and a client may
+use them. Do not assume a screen reacts to either one.
+
+## bench\_deploy\_log and lab\_build\_log
+
+Both carry one line of a running log. The two differ only in what a run is of,
+so the payload shape is shared.
+
+|Key|Always present|Holds|
+|--|--|--|
+|`log`|yes|the line of text|
+|`type`|yes|`info`, `step`, `success`, `error` or `warning`|
+|`bench` and `deploy_log`|deploy only|the bench, and the Deploy Log row|
+|`lab` and `build_log`|build only|the lab, and the Build Log row|
+
+A step boundary adds five more keys. They are additive, so a client written
+before the stepper existed keeps working.
+
+|Key|Holds|
+|--|--|
+|`step_key`|one of the eleven keys, such as `container_ip`|
+|`step_index`|1 to 11|
+|`step_total`|11|
+|`step_label`|the human label, such as `Waiting for the container IP`|
+|`step_elapsed`|seconds into the run, to one decimal|
+
+Both events are published with `after_commit=False`, and each line is committed
+to the log row as it is written. A deploy runs for minutes inside one background
+job, so its transaction would otherwise hold every line until the run ended.
+Somebody opening the log mid-run, or reloading after a dropped socket, has to
+see what has happened so far.
+
+The line is also written into the log row. The socket is the fast path, and the
+row is the record.
+
+## benchpress:lease\_expired and benchpress:lease\_renewed
+
+Both carry full state, never a delta, and never the bench document.
+
+|Key|Holds|
+|--|--|
+|`bench`|the bench name|
+|`lab_id`|the lab, so a screen can route without a second read|
+|`state`|the bench status|
+|`expires_at_ts`|the new deadline|
+|`server_now_ms`|the server clock at publish time|
+|`revision`|a millisecond stamp|
+|`reason`|why the lease ended or was extended|
+
+**Never `bench.as_dict()`.** The `Bench Instance` DocType holds three passwords.
+The payload is built field by field for that reason.
+
+`revision` exists because two events can arrive out of order. A tab that
+receives both keeps the later stamp.
+
+`server_now_ms` is what a countdown corrects against. The
+[`server_time`](/docs/reference/api#benches) endpoint answers the same question
+for a client that has not received an event yet.
+
+Both are published with `after_commit=True`. A client must never learn of an
+expiry the database has not committed.
+
+## Scoping
+
+Every event except `mariadb_health_failure` is published with a `user`, so
+Frappe sends it to that user's sessions only.
+
+A deploy log is the bench owner's, and nobody else's socket has any business
+receiving it. This matters more than usual here, because a deploy log names the
+site, the container and the apps.
+
+`mariadb_health_failure` is a broadcast about shared infrastructure and names
+only the server.
+
+## Verify
+
+Watch a deploy log arrive, from the browser console with the app open:
+
+```javascript
+const socket = io(`${window.location.origin}/${window.site_name}`, { withCredentials: true });
+socket.on("bench_deploy_log", (data) => console.log(data.step_index, data.log));
+```
+
+Then deploy a bench. See
+[Deploy from a template](/docs/user/deploy-from-template).
+
+## Troubleshooting
+
+|Symptom|Cause|Fix|
+|--|--|--|
+|A log renders nothing live, then appears complete on reload|The socket is down, and the row is the record|Reload. Fix the websocket service|
+|The countdown is frozen|No lease event arrived|The client retries forever. Reload to read the deadline again|
+|The countdown disagrees with the server|The laptop clock is wrong|The client corrects against `server_now_ms`|
+|Two events give different deadlines|They arrived out of order|Keep the higher `revision`|
+|A user receives another user's log|Not possible. Events are user scoped|Check whether both sessions are the same account|
+|A step is missing from the stepper|An old run predates the step markers|Expected. The `=== … ===` wrapper still renders|
+|Nothing at all arrives|`/socket.io` is not proxied to the websocket service|Fix the proxy, not the app|
+
+## Reference
+
+|Fact|Value|
+|--|--|
+|Transport|socket.io, same origin|
+|Namespace|the site name|
+|Events|6|
+|Log events|`after_commit=False`, one commit for each line|
+|Lease events|`after_commit=True`|
+|Reconnect attempts|infinite|
+|Reconnect delay|1 s, capped at 30 s, jitter 0.5|
+|Step keys added|5|
+
+## Related
+
+* [Deploy pipeline](/docs/reference/deploy-pipeline#how-a-step-reports-itself) — the marker behind the step payload.
+* [API](/docs/reference/api) — the read that returns the same state.
+* [Logs and monitoring](/docs/user/logs-and-monitoring) — the same events, as a screen.
+* [Data model](/docs/reference/data-model#deploy-log) — the row every line is written to.
+
+# Configuration
+URL: https://docs.benchpress.cloud/docs/reference/configuration
+Where each BenchPress setting lives — build arguments that need a rebuild, runtime environment that needs a restart, and DocType fields that apply on save.
+
+Which knob lives where, and what changing it costs.
+
+**Who this is for.** Somebody who changed a value and is waiting for it to take
+effect.
+
+**Before you start.** BenchPress is configured in three layers, and they behave
+differently. A value in the wrong layer looks ignored. Read
+[The three layers](#the-three-layers) before you change anything.
+
+## The three layers
+
+|Layer|Lives in|A change costs|Owns|
+|--|--|--|--|
+|Build arguments|`Dockerfile`, passed by `entry.py`|a rebuild|what is inside the control plane image|
+|Runtime environment|`.env`, read by Docker Compose|a restart|ports, passwords, hostnames, the image tag|
+|DocType settings|`BenchPress Settings`, `Credit Settings`|a save, and a cache clear|how benches are built, placed and priced|
+
+Most of what a reader wants is the third layer, and it is documented field by
+field in the [Settings reference](/docs/operator/settings-reference). This page
+covers the first two, and the rule for telling them apart.
+
+## Build arguments
+
+Anything that changes what is inside the image is a build argument. Changing one
+needs `--build`. A restart does nothing.
+
+|Argument|Decides|
+|--|--|
+|`FRAPPE_BRANCH`|the Frappe version both image stages are built from|
+|`FRAPPE_PATH`|where Frappe is cloned from|
+|`APPS_JSON_BASE64`|the app list baked into the bench|
+
+`entry.py` base64-encodes the preset and passes it as `APPS_JSON_BASE64`. The
+preset is a JSON array of `{url, branch}` under `presets/`.
+
+Rebuild after changing any of the three:
+
+```bash
+./entry.py --build --preset benchpress --frappe-version version-16
+```
+
+## Runtime environment
+
+Everything else in `.env` is read when a container starts. A `down` and `up -d`
+is enough. No rebuild.
+
+|Variable|Decides|
+|--|--|
+|`PORT`|the port the dev checkout publishes|
+|`SITE_NAME`|the control plane site name, always `frontend`|
+|`PRESET`|which preset the checkout was built from|
+|`INSTALL_APPS`|the apps `create-site` installs|
+|`IMAGE_NAME`|the tag `--push` and `--pull` use|
+|`ADMIN_PASSWORD`, `DB_ROOT_PASSWORD`|generated at setup|
+|`PUBLIC_HOSTNAME`|the only switch between a dev checkout and a public deployment|
+|`ACME_EMAIL`, `CF_DNS_API_TOKEN`|the DNS-01 certificate challenge|
+|`DOCKER_GID`|the host's docker group, detected and never defaulted|
+|`VPN_ENDPOINT_HOST`|the address devices dial to reach the tunnel|
+
+**`PUBLIC_HOSTNAME` is the only switch.** Setting it appends the production
+overlay to `COMPOSE_FILE` and turns a dev checkout into a public deployment. No
+file in the repository names a hostname. A new domain is a flag, never an edit.
+
+**`DOCKER_GID` must be detected.** The compose default is a Fedora value, and
+Ubuntu hosts differ. `entry.py` writes the real value at setup and on every
+`--build`.
+
+## The site name invariant
+
+The control plane site is `frontend` everywhere: in `.env`, in the Compose
+defaults and in the nginx `FRAPPE_SITE_NAME_HEADER`. Do not change it without
+auditing all three.
+
+This is the control plane's site. It has nothing to do with the site inside a
+bench, which is named from the instance id and the base domain.
+
+## DocType settings
+
+The third layer is two Singles. Both are documented in full in the
+[Settings reference](/docs/operator/settings-reference), which reads its values
+off a live host rather than out of a JSON file.
+
+|Document|Fields|Edited in|
+|--|--|--|
+|`BenchPress Settings`|26|the app's Settings dialog for 10 of them, Desk for all|
+|`Credit Settings`|16|Desk only|
+
+Three rules apply to both.
+
+1. **A Single is cached in each process.** After a save, run
+   `bench --site <site> clear-cache` and restart the workers, or a worker keeps
+   the old value.
+2. **`0` often means the built-in default, not zero.** A field cleared to `0`
+   behaves as though it was never set. `max_concurrent_uncredited` is the
+   sharpest case: `0` there means unlimited.
+3. **A size applies at the next deploy.** Editing an `Instance Size` does not
+   resize a running container. The size is resolved during the deploy and
+   written onto the bench.
+
+`enable_credits` is the one field that changes what the whole product does. It
+ships as `0`. Nothing in `Credit Settings` has any effect while it is `0`.
+
+## Which change needs what
+
+|You changed|It takes effect after|
+|--|--|
+|A preset, or `FRAPPE_BRANCH`|`./entry.py --build`|
+|`PORT`, `IMAGE_NAME`, a password|`./entry.py --restart`|
+|`PUBLIC_HOSTNAME`|`./entry.py --domain <fqdn>`, which regenerates `COMPOSE_FILE`|
+|Python in the app|`docker compose restart backend`, and the workers if they import it|
+|A Vue file or a bundle|`bench build --app benchpress`, then restart `backend frontend`|
+|A hook, a fixture or a DocType schema|`bench --site frontend migrate`|
+|A `BenchPress Settings` field|save, clear the cache, restart the workers|
+|An `Instance Size`|the next deploy|
+|A `Lab` app list|rebuilding the lab image|
+
+## Verify
+
+Read a settings value as a worker sees it, not as the JSON declares it:
+
+```bash
+bench --site <site> execute frappe.client.get_value \
+  --kwargs "{'doctype':'BenchPress Settings','fieldname':['base_domain','enable_credits','default_bench_runtime']}"
+```
+
+Confirm which Compose files are in play:
+
+```bash
+grep COMPOSE_FILE .env
+```
+
+## Troubleshooting
+
+|Symptom|Cause|Fix|
+|--|--|--|
+|A saved setting has no effect|The Single is cached in another process|Clear the cache, then restart the workers|
+|A preset change did nothing|The app list is baked into the image|Rebuild with `--build`|
+|A cleared field behaves as before|`0` falls back to the built-in|Set the number you want|
+|The site is served in plaintext on a public host|The dev port mapping survived|The production overlay uses `ports: !override`|
+|Docker calls fail with a permission error|`DOCKER_GID` is the default, not this host's|Re-run `--build`, which detects it|
+|Every deploy is refused|`enable_credits` is `1` and nobody can pay|Set it back to `0`|
+|A container resize did nothing|Sizes apply at deploy time|Redeploy the bench|
+
+## Reference
+
+|Fact|Value|
+|--|--|
+|Build arguments|3|
+|`BenchPress Settings` fields|26|
+|`Credit Settings` fields|16|
+|Control plane site|`frontend`|
+|Public switch|`PUBLIC_HOSTNAME`|
+|Credits switch|`BenchPress Settings.enable_credits`, ships `0`|
+
+`enable_credits` is a field on a Single, not a site config key.
+`bench set-config -g enable_credits 0` writes an unrelated value and leaves the
+flag on.
+
+## Related
+
+* [Settings reference](/docs/operator/settings-reference) — every field, measured on a live host.
+* [Install](/docs/operator/install) — where `.env` comes from.
+* [Data model](/docs/reference/data-model#benchpress-settings) — the two Singles as DocTypes.
+* [CLI and scripts](/docs/reference/cli-and-scripts) — the commands named above.
+
+# CLI and scripts
+URL: https://docs.benchpress.cloud/docs/reference/cli-and-scripts
+Every command that drives BenchPress from a shell — entry.py, the bench commands, setup.sh and upgrade.sh, the four repository scripts and the documentation pipeline.
+
+What you can run from a terminal, and what each one changes.
+
+**Who this is for.** Somebody working on the host, or on a checkout.
+
+**Before you start.** BenchPress has no `bench` subcommands of its own. Nothing
+registers a command in `hooks.py`. Everything below is either the parent
+repository's `entry.py`, a plain Frappe command, or a script in this repository.
+
+## entry.py, in the parent repository
+
+`entry.py` orchestrates the whole control plane stack in Python standard
+library only. It has no dependencies to install.
+
+Run it from `benchpress_devops`, not from this app.
+
+|Command|Does|
+|--|--|
+|`./entry.py --preset benchpress --frappe-version version-16`|first-time setup: clones apps, builds the image, brings everything up|
+|`./entry.py --restart`|restarts the services|
+|`./entry.py --stop`|stops the services|
+|`./entry.py --destroy`|removes containers **and volumes**. This is data loss|
+|`./entry.py --build --preset benchpress`|rebuilds the image after a preset change|
+|`./entry.py --pull`|fetches the image and recreates containers, with no local build|
+|`./entry.py --push`|publishes the tag in `IMAGE_NAME`|
+|`./entry.py --check-host`|reports each kernel ceiling and exits non-zero if one is too low|
+
+Public deployment is one flag. `--domain` layers the production overlay,
+moves nginx to loopback, puts Traefik on 80 and 443, and issues a wildcard
+certificate.
+
+|Flag|Does|
+|--|--|
+|`--domain <fqdn>`|persists `PUBLIC_HOSTNAME` and covers `*.<fqdn>`|
+|`--acme-email`|the Let's Encrypt contact address|
+|`--cf-token`|the Cloudflare token for the DNS-01 challenge|
+|`--acme-staging`|issues untrusted certificates with no rate limit to burn|
+|`--acme-production`|switches back after `--acme-staging`|
+|`--reload-proxy`|re-renders the Traefik configuration and recreates only Traefik|
+|`--project <name>`|a second Compose project, to run staging beside production|
+
+Use `--acme-staging` while proving out a domain or a new token. Let's Encrypt
+allows five certificates for each identifier set every seven days, and a
+failed attempt still spends one.
+
+## Bench commands
+
+Ordinary Frappe commands, run inside the `backend` container.
+
+```bash
+docker compose exec backend bench --site frontend migrate
+docker compose exec backend bench --site frontend clear-cache
+docker compose exec backend bench --site frontend console
+docker compose exec backend bench --site frontend run-tests --app benchpress
+docker compose exec backend bench build --app benchpress
+```
+
+After a Python change, restart `backend` and any worker that imports the
+changed module. After a frontend change, run `bench build --app benchpress`,
+then restart `backend` and `frontend`.
+
+**A multi-line block piped to `bench console` fails silently.** The console is
+IPython. A block arriving on a pipe is auto-indented until it no longer parses,
+and it produces no output and no error, which reads exactly like a query that
+found nothing.
+
+Wrap it in a single `exec()` call, or use `bench execute` instead:
+
+```bash
+bench --site frontend execute frappe.client.get_list \
+  --kwargs "{'doctype':'Lab','fields':['name','status'],'limit_page_length':0}"
+```
+
+Use `--kwargs`, never `--args`. There is no `set-value` command. Write a value
+with `frappe.client.set_value` through the same `execute` call.
+
+## Scripts in this repository
+
+Two shell scripts run against an existing bench.
+
+|Script|Usage|Does|
+|--|--|--|
+|`setup.sh`|`bash apps/benchpress/setup.sh <site> [--strict]`|the one-time post-install setup, after `bench install-app benchpress`|
+|`upgrade.sh`|`bash apps/benchpress/upgrade.sh <site> [ref] [--dry-run]`|upgrades an install end to end, behind a backup gate|
+
+`setup.sh --strict` exits non-zero when Docker userns-remap is absent or cannot
+be verified. Use it on a production host. The default warns and continues, which
+suits a development box.
+
+`upgrade.sh` aborts on any failure and takes a backup first. `--dry-run` reports
+what it would do. It follows [Upgrading](/docs/operator/upgrading) step for step.
+
+Neither script owns the VPN. Tunnels, peers and address allocation belong to the
+`vpn_management` app.
+
+## The four Python scripts
+
+|Script|Answers|
+|--|--|
+|`scripts/seed_docs_demo.py`|creates or removes the demo labs and users the documentation screenshots come from|
+|`scripts/admission_drill.py`|how many of N parallel deploys the admission gate really admits|
+|`scripts/density_drill.py`|how many endpoints a bridge of a given prefix length really takes|
+|`scripts/golden_drill.py`|what a golden restore costs against a cold deploy|
+
+The three drills are measurement harnesses. None of them reimplements the thing
+it measures. Every request goes over HTTP to the shipped endpoint, and every
+duration is read back out of the run's own Deploy Log.
+
+All three share three safety properties, and they are worth knowing before you
+run one on a host serving real users.
+
+|Property|Means|
+|--|--|
+|They call the host's own nginx|the public name is behind Cloudflare, which answers a dozen machine clients with `1010` rather than with the endpoint. `BENCHPRESS_URL` overrides the target|
+|They refuse the wrong site|`--i-know-this-is` must match the site's own `base_domain`, read back from the control plane|
+|They clean up in a `finally`|and only ever touch what they created, never filtering on status|
+
+`density_drill.py` fills a network it made, always named `bpdrill-<n>`, and
+asserts the name before the first create. A drill that filled `benchpress-0`
+would take every bench on that bridge offline at the moment it believed it was
+measuring capacity.
+
+`admission_drill.py` stops `queue-long` for the run unless `--allow-deploys`.
+Every deploy is enqueued after commit, so nothing reaches Redis and the whole
+admission decision stays measurable with no worker running.
+
+`golden_drill.py --cold` is the control arm. It turns `restore_from_golden` off
+for the run and puts it back afterwards, so both arms deploy the same lab.
+
+`seed_docs_demo.py --destroy` removes only what the script creates and refuses
+every other name.
+
+## The frontend
+
+```bash
+cd frontend && yarn dev        # hot reload
+cd frontend && yarn test:run   # unit tests
+cd e2e && npx playwright test  # end to end
+```
+
+Playwright has its own configuration in `e2e/`. Running it from the app root
+resolves nothing.
+
+**Never run `yarn lint`.** That is biome, a different style than this repository
+has ever used, and it rewrites every frontend file. Lint with pre-commit:
+
+```bash
+git add -A && uvx pre-commit@4.3.0 run --all-files
+```
+
+`git add` first. pre-commit skips untracked files, so a new file lints green
+while it is invisible and then fails in CI.
+
+## The documentation pipeline
+
+Four commands build and gate these pages. Read the exit code, never the last
+line of output.
+
+```bash
+npm run docs:build && npm run docs:lint && npm run docs:score; echo "exit=$?"
+```
+
+|Command|Does|
+|--|--|
+|`npm run docs:site`|generates `docs-site/`: `llms.txt`, `llms-full.txt`, search and sitemap|
+|`npm run docs:bundle`|generates `docs-bundle/`: `AGENTS.md`, `SKILL.md` and a markdown mirror|
+|`npm run docs:build`|both of the above|
+|`npm run docs:lint`|`leadtype lint docs --max-warnings 0`|
+|`npm run docs:score`|`leadtype score --src docs --out docs-site --min 100`|
+
+Two traps are already handled by the scripts, and both cost a debugging session
+to find.
+
+1. **Lint the source folder positionally.** `leadtype lint --src .` walks the
+   whole project root, finds the generated `AGENTS.md`, `SKILL.md` and
+   `sitemap.md`, and reports errors because none of them carries a `title`.
+   Generated files are not pages.
+2. **The config is `docs.config.mjs`, not `.ts`.** A TypeScript config needs the
+   optional peer dependency `jiti`. Do not convert it.
+
+Never hand-edit anything under `docs-site/` or `docs-bundle/`. They are
+generated, and a gate regenerates and fails on any difference.
+
+## Verify
+
+Confirm the whole pipeline is clean:
+
+```bash
+npm run docs:build && npm run docs:lint && npm run docs:score; echo "exit=$?"
+```
+
+`exit=0` is the only passing result.
+
+## Troubleshooting
+
+|Symptom|Cause|Fix|
+|--|--|--|
+|`bench console` printed nothing|A piped multi-line block was truncated|Wrap it in one `exec()`, or use `bench execute`|
+|`bench execute` rejects its arguments|`--args` was used|Use `--kwargs` with a dict|
+|Lint fails on files you did not write|`lint --src .` scanned generated output|Run `npm run docs:lint`, which lints `docs` positionally|
+|Lint passes locally and fails in CI|The new file is untracked|`git add -A` first|
+|The docs config is not loaded|It was renamed to `.ts`|Rename it back to `.mjs`|
+|Playwright finds no tests|It was run from the app root|Run it from `e2e/`|
+|A frontend change is not visible|Assets are built, not served from source|`bench build --app benchpress`, then restart|
+|`--destroy` lost the database|It removes volumes as well as containers|It says so. Use `--stop`|
+
+## Reference
+
+|Fact|Value|
+|--|--|
+|Bench subcommands this app adds|0|
+|Shell scripts|`setup.sh`, `upgrade.sh`|
+|Python scripts|4|
+|Documentation commands|5|
+|Passing pipeline result|`exit=0`|
+|Lint|`uvx pre-commit@4.3.0 run --all-files`|
+
+## Related
+
+* [Install](/docs/operator/install) — the first `entry.py` run.
+* [Upgrading](/docs/operator/upgrading) — what `upgrade.sh` automates.
+* [Configuration](/docs/reference/configuration) — which change needs a rebuild.
+* [Golden images](/docs/operator/golden-images) — what the golden drill measures.
+
+# Glossary
+URL: https://docs.benchpress.cloud/docs/reference/glossary
+What each BenchPress term means here — lab, bench, site, lease, admission, golden image, peer — including the words that mean something else elsewhere.
+
+One name for one thing. This page is the list of names.
+
+**Who this is for.** Anybody reading the other pages, or a diff, and unsure
+whether two words mean the same thing.
+
+**Before you start.** Four words in this product also mean something else in
+Frappe or in Docker. They are marked. A wrong reading of one of them is the
+most common way to misread this codebase.
+
+## The core nouns
+
+|Term|Means here|
+|--|--|
+|**Lab**|a description of an environment: a Frappe version and a list of apps. An operator writes one, a user deploys it many times. A `Lab` DocType|
+|**Lab template**|a ready-made lab in the catalog. Only an admin turns one into a lab|
+|**Bench instance**|one deployed container made from a lab. A `Bench Instance` DocType. Often shortened to **bench**|
+|**Bench site**|the Frappe site running inside a bench instance. A `Bench Site` DocType|
+|**Control plane**|the BenchPress app itself, and the stack it runs in. It never runs a bench's code|
+|**Shared infrastructure**|the one MariaDB, one Traefik and one WireGuard server that every bench uses|
+|**Instance size**|a resource tier: memory, CPU, disk rate, network rate and price|
+|**Deploy**|the eleven step job that turns a lab into a running bench|
+|**Redeploy**|the same job on a bench that already exists. It replaces the container and the site database|
+|**Teardown**|removing the container, the peer, the site database, the route file and the row|
+
+## The words that mean something else elsewhere
+
+These four are the traps.
+
+|Term|Here|Elsewhere|
+|--|--|--|
+|**Bench**|a deployed container BenchPress created|in Frappe, a directory holding apps and sites. The control plane runs inside one of those|
+|**Site**|the Frappe site inside a bench|the control plane also has a site, always named `frontend`|
+|**Image**|a lab's Docker image, one for each lab|the control plane image is a different thing, built by `entry.py`|
+|**Device**|a laptop or phone on the VPN|not a DocType. It is a `VPN Peer` in the `vpn_management` app|
+
+The site invariant is worth stating twice. The control plane's site is
+`frontend`, everywhere and always. A bench's site is named from the instance id
+and the base domain. The two are never the same thing.
+
+## Credits and leases
+
+Every term here applies only while `enable_credits` is `1`. It ships as `0`.
+
+|Term|Means|
+|--|--|
+|**Credit**|the unit of account. Not money. A credit pack converts money into credits|
+|**Credit account**|one balance, named by the holder's email address|
+|**Ledger entry**|one movement of a balance, with what caused it on the row|
+|**Lease**|the window a deploy buys. It has a deadline, and the bench stops at it|
+|**Lease plan**|a duration for sale, in minutes and credits|
+|**Renew**|buying one more window. It extends from the deadline you had, not from now|
+|**Hold**|credits reserved against a running bench, not yet spent|
+|**Admission**|the decision that lets an action start: can this caller pay, and are they under their caps|
+|**Cap**|a ceiling on concurrency, size, devices or builds a day|
+|**Drain**|the sweep that ends leases that have run out|
+|**Warden**|the long-lived loop that claims a due lease within seconds of its deadline|
+|**Reaper**|the daily job that removes containers stopped for too long. Stopped is free, but not forever|
+|**Sweep**|the balance pass: whose running benches must stop, and who is warned first|
+
+**Admission is not authorization.** Authorization asks whether the caller may do
+this at all, and lives in `permissions.py`. Admission asks whether they can
+afford it right now, and lives in `credits/guard.py`. An endpoint can pass one
+and fail the other.
+
+## Images and speed
+
+|Term|Means|
+|--|--|
+|**Lab image**|the Docker image a lab deploys from, tagged by the lab's own identity|
+|**Golden image**|a lab image that also carries a database dump of the finished site|
+|**Golden dump**|that dump. Restoring it is the difference between a deploy in seconds and one in minutes|
+|**Cold deploy**|a deploy that creates the site from scratch instead of restoring|
+|**Prewarm**|building an image for a catalog template that has none yet|
+|**Image cache**|the set of built lab images on the host. Large. 5 GB to 20 GB each|
+
+## Networking
+
+|Term|Means|
+|--|--|
+|**Bench bridge**|a Docker bridge network holding bench containers. Named `benchpress-N`|
+|**Peer**|a WireGuard participant. Both a bench and a user device are peers|
+|**Tunnel address**|the WireGuard address a bench answers on. The `wg_ip` field|
+|**Public address**|the Traefik-served HTTPS address, under the base domain|
+|**Base domain**|the zone every public bench address sits under. Empty means no public address|
+|**Route file**|one YAML file in Traefik's flat directory, publishing one bench|
+|**Anchor**|`wildcard-anchor.yml`, the one file that names a certificate resolver|
+|**Instance id**|the 32 character hexadecimal name of a bench. Also the container name|
+
+## Logs and events
+
+|Term|Means|
+|--|--|
+|**Deploy Log**|the text of one deploy run, appended line by line|
+|**Build Log**|the same, for one image build|
+|**Step**|one of the eleven deploy boundaries, reported inside a `=== … ===` marker|
+|**Bench Event**|an incident: a bench died, ran out of memory, or changed health|
+|**Settle window**|15 seconds, inside which two incidents for one bench become one|
+|**Reconcile**|the pass that compares Docker against the database, in both directions|
+|**Orphan**|a BenchPress container no row points at, older than the grace window|
+
+## Roles
+
+Three roles, and everything in the product keys off them.
+
+|Role|May|
+|--|--|
+|`BenchPress User`|deploy, use and stop their own benches, and manage their own devices|
+|`BenchPress Admin`|everything a user may, plus every bench, labs, templates, settings and builds|
+|`System Manager`|the Frappe role. Treated as an admin everywhere here|
+
+An admin sees every row. Both admin roles short-circuit every scoping rule. See
+[How a row is scoped](/docs/reference/data-model#how-a-row-is-scoped).
+
+## Related
+
+* [Data model](/docs/reference/data-model) — the DocType behind each noun.
+* [Architecture](/docs/reference/architecture) — which module owns each concept.
+* [Users and roles](/docs/operator/users-and-roles) — granting the three roles.
+* [Credits and billing](/docs/operator/credits-and-billing) — the whole optional half.
+
 # BenchPress documentation
 URL: https://docs.benchpress.cloud/docs
 Start here. Three tracks — use a bench, run the server that hosts one, or read the data model and the API.
@@ -4879,11 +7139,11 @@ your job. You do not need the other two.
 |Track|Read it when|Start at|
 |--|--|--|
 |User|Somebody gave you a login and you need a bench|[Quick tour](/docs/user/quick-tour)|
-|Operator|You run the server that hosts the benches|Not published yet|
-|Reference|You call the API or change the code|Not published yet|
+|Operator|You run the server that hosts the benches|[Operator track](/docs/operator)|
+|Reference|You call the API or change the code|[Reference track](/docs/reference)|
 
-The operator and reference tracks arrive in later releases. Until then, read the
-Markdown guides in the repository `docs/` folder. The README links all of them.
+All three tracks are published. Forty pages in total: 12 for a user, 16 for an
+operator, 11 for reference, and this one.
 
 ## What BenchPress does
 

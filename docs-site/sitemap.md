@@ -69,6 +69,32 @@ Structured documentation sitemap for BenchPress.
 
 ## Reference
 
+### Start
+
+- [Reference track](/docs/reference): The data model, the whitelisted API, the eleven deploy steps, the reconcilers, the address plan and the configuration split — for a contributor or an integrator.
+
+### What it is made of
+
+- [Architecture](/docs/reference/architecture): The moving parts of BenchPress — the control plane, the bench containers, the shared infrastructure, and which Python module owns each concern.
+- [Data model](/docs/reference/data-model): All 20 BenchPress DocTypes with their fields, links, naming and the permission rule that scopes each one — plus why there is no Device DocType.
+- [API](/docs/reference/api): All 50 whitelisted BenchPress endpoints, with arguments, what each returns, and the permission check each one makes for itself.
+
+### What it does at runtime
+
+- [Deploy pipeline](/docs/reference/deploy-pipeline): The eleven steps of a BenchPress deploy, in the order the code runs them, with the function behind each step and the log line it writes.
+- [Lifecycle and events](/docs/reference/lifecycle-and-events): The bench states and their transitions, the Docker event listener, Bench Event incidents, the stats collector, and the eleven scheduled jobs that correct the database.
+- [Networking](/docs/reference/networking): The BenchPress address plan — bench bridges, WireGuard tunnel addresses, the two container ports, Traefik route files and the wildcard certificate anchor.
+- [Realtime](/docs/reference/realtime): The six realtime events BenchPress publishes over socket.io, their payloads, who receives each one, and why the deploy log commits every line.
+
+### Driving it yourself
+
+- [Configuration](/docs/reference/configuration): Where each BenchPress setting lives — build arguments that need a rebuild, runtime environment that needs a restart, and DocType fields that apply on save.
+- [CLI and scripts](/docs/reference/cli-and-scripts): Every command that drives BenchPress from a shell — entry.py, the bench commands, setup.sh and upgrade.sh, the four repository scripts and the documentation pipeline.
+
+### Words
+
+- [Glossary](/docs/reference/glossary): What each BenchPress term means here — lab, bench, site, lease, admission, golden image, peer — including the words that mean something else elsewhere.
+
 ## Other
 
 - [BenchPress documentation](/docs): Start here. Three tracks — use a bench, run the server that hosts one, or read the data model and the API.
