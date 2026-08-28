@@ -1,0 +1,285 @@
+---
+title: Diagnostics
+description: The eleven read-only checks that ask Docker, MariaDB, Redis and the kernel what is true — how to run them, what each failure means, and the four things they do not cover.
+---
+
+# Diagnostics
+
+Eleven checks that read the host rather than the configuration, and what to do
+about each one that fails.
+
+**Who this is for.** Whoever is holding a broken host and does not yet know
+which part is broken.
+
+**Before you start.** Every check is read-only. Nothing here creates, starts
+or repairs anything, and `run_diagnostics` cannot throw — a check that fails
+to run reports itself as a failed row. So it is safe on a live host, including
+one you have already made worse.
+
+## Steps
+
+1. **Run the checks.**
+
+   ```bash
+   bench --site <site> execute benchpress.diagnostics.run_diagnostics
+   ```
+
+   Each row is `{check, status, hint, severity}`. The hint names the fix.
+
+2. **Or read them in the app.** Open **Overview** as an admin and look at the
+   **Shared infrastructure** panel, which renders the same eleven rows.
+
+   ![The Shared infrastructure panel on the BenchPress Overview, listing eleven checks with a status badge each. Docker socket, Docker network, Bridge capacity, MariaDB, Redis, Container runtimes, Event listener and WireGuard read Active. Kernel ceilings and Clock skew read Error, and Golden images reads Warning.](../images/operator/diagnostics/01-shared-infrastructure.png)
+
+   On this host eight rows read **Active**, `kernel_ceilings` and `clock_skew`
+   read **Error**, and `golden_images` reads **Warning**. A badge is the
+   check's severity, not a second verdict — see
+   [Severity](#severity-is-not-status).
+
+3. **Fix the failing rows in the order the table below gives**, then run the
+   checks again. Several rows fail together for one cause, and the first fix
+   often clears three.
+
+## The eleven checks
+
+| Check | On screen | What it asks | Severity of a failure |
+|---|---|---|---|
+| `docker_socket` | Docker socket | `ping` the daemon | Error |
+| `docker_network` | Docker network | the `benchpress` network exists | Error |
+| `bridge_capacity` | Bridge capacity | how many free addresses the bench bridges hold | Error |
+| `kernel_ceilings` | Kernel ceilings | three `/proc/sys` values against one bridge's worth of benches | Error |
+| `mariadb` | MariaDB | the shared server answers `SELECT 1`, plus config drift and the buffer-pool hit rate | Error, or Warning for drift alone |
+| `clock_skew` | Clock skew | the app clock and the database clock agree to within 2 seconds | Error |
+| `redis` | Redis | the container runs, and `maxmemory` and the eviction policy match what compose declares | Error, or Warning for drift alone |
+| `container_runtimes` | Container runtimes | `sysbox-runc` is registered with Docker | Error |
+| `golden_images` | Golden images | how many built labs carry a golden dump | Warning |
+| `docker_events` | Event listener | the listener's heartbeat is newer than 60 seconds | Error |
+| `vpn_server` | WireGuard | `vpn_management` is installed, `wg0` exists, and it has a public key | Error |
+
+## Severity is not status
+
+Two rows fail in ways that are not the same kind of problem, so they carry
+their own severity.
+
+- **`golden_images` is always a Warning.** A lab with no golden dump deploys
+  exactly as it always has, only slowly. See
+  [Golden images](/docs/operator/golden-images).
+- **Config drift on `mariadb` or `redis` is a Warning.** The cache still
+  serves every bench, and it stays drifted until a human recreates the pair.
+  A server that does not answer at all is an Error.
+
+Everything else is an Error, because a bench cannot deploy through it.
+
+## What each failure means
+
+### `docker_socket` — Cannot reach Docker daemon
+
+The bench user is not in the `docker` group, or the group change has not taken
+effect in the running process. Log out and back in, then restart the bench.
+See [Prerequisites](/docs/operator/prerequisites).
+
+### `docker_network` — benchpress network missing
+
+Expected on a host that has never deployed. The network is created on the
+first deploy. If deploys have run, something removed it — `docker network
+create benchpress` brings it back.
+
+### `bridge_capacity` — no headroom
+
+Every bridge in the family is full. Raise `bench_bridge_count`, or delete
+benches. On this host the check reads:
+
+```text
+benchpress-0 8 used / 992 free, benchpress-1 4 used / 996 free,
+benchpress-2 3 used / 997 free — 15985 benches of headroom
+```
+
+Three bridges exist because bridges are created as they are needed, not up
+front. See [Settings reference](/docs/operator/settings-reference).
+
+### `kernel_ceilings` — a value is below its target
+
+The targets are arithmetic against one bridge's worth of benches:
+`kernel.pty.max` at 8 terminals per bench plus 1,024 reserved for root,
+`kernel.pid_max` at 500 per bench, and `net.netfilter.nf_conntrack_max` at 256
+per bench. This host fails it:
+
+```text
+kernel.pty.max is 4096, below 9024 for 1000 benches
+```
+
+Only the host can raise these, and only with the script in the
+`benchpress_devops` checkout:
+
+```bash
+sudo scripts/tune-host.sh --benches 1000
+```
+
+**The neighbour table is not in this list**, and the check says so in its own
+hint. `/proc/sys/net/ipv4/neigh/default/` does not exist in a container's
+network namespace, so it is read on the host with `./entry.py --check-host`. A
+row that quietly left it out would read as checked and fine.
+
+### `mariadb` — not answering, or drifted
+
+If the server does not answer `SELECT 1`, every bench site is down at once.
+Start the container, then read its log. See
+[The shared database server](/docs/operator/database-server).
+
+Drift means the live server disagrees with what the compose file declares.
+Recreating the pair adopts the flags — and takes every bench site's database
+offline while it happens. This host reads:
+
+```text
+MariaDB responding at benchpress-mariadb, buffer pool hit rate 99.97%,
+on the declared settings
+```
+
+### `clock_skew` — the two clocks disagree
+
+Frappe writes datetimes naive in the site timezone. SQL `NOW()` answers in the
+database container's. A gap between them silently lengthens every deadline SQL
+evaluates, which is how a lease outlives its own expiry.
+
+This host fails it by exactly one timezone:
+
+```text
+App clock says 2026-08-28 18:23:49 and the database says 2026-08-28 12:53:49
+— a gap of 19800s
+```
+
+19,800 seconds is 5 hours 30 minutes, which is `Asia/Kolkata` against UTC. The
+fix in code is the one the hint gives: compare a stored deadline against an
+epoch integer bound in Python, never against SQL `NOW()`. The fix in
+infrastructure is to give the database container the site's timezone.
+
+The tolerance is 2 seconds, not 0. Two seconds absorbs MariaDB truncating
+`NOW()` to whole seconds. What the check is looking for is a timezone
+difference, which is hours.
+
+### `redis` — stopped, or drifted
+
+A stock Redis is unbounded and never evicts, which on a small box shared by
+every bench is a real ceiling. The declared settings are `maxmemory`
+268435456 and `maxmemory-policy` `allkeys-lru`, and this host runs both.
+
+### `container_runtimes` — a runtime is not registered
+
+`sysbox-runc` is missing, so benches on that runtime cannot deploy. Install
+sysbox, or change `default_bench_runtime` — and read
+[Production safety](/docs/operator/production-safety) before you do.
+
+**Registered is not working.** This check reads Docker's runtime list.
+Proving one actually starts a container takes a deploy.
+
+### `golden_images` — partial coverage
+
+The row names every built lab whose image has no dump. This host reads
+**4 of 12 built labs carry a golden dump**. Those eight build their site from
+scratch on every deploy, which is 3 to 5 times slower. See
+[Golden images](/docs/operator/golden-images).
+
+### `docker_events` — the heartbeat is stale
+
+The listener publishes a heartbeat every second and is given 60 before it is
+disbelieved. A streaming listener that dies looks exactly like a quiet fleet,
+which is why the heartbeat exists at all. Restart it:
+
+```bash
+docker compose up -d docker-events
+```
+
+### `vpn_server` — not configured
+
+Either `vpn_management` is not installed, or `wg0` does not exist, or it
+exists with no server public key. See
+[WireGuard and the VPN plane](/docs/operator/wireguard-setup).
+
+## What diagnostics does not cover
+
+This is the important half of the page. Every check above reads
+infrastructure. **None of them reads the queue workers**, and on this host
+that gap is live.
+
+| Not checked | Why it matters | How to check it yourself |
+|---|---|---|
+| The queue workers | A stopped `queue-long` means no build and no deploy starts. It is the only worker with a Docker socket | `docker ps --filter name=queue` |
+| The scheduler | Every job in the table below stops. Nothing else reports it | `bench --site <site> doctor` |
+| A job that raises every run | `Scheduled Job Type.last_execution` still advances, so the row goes on looking healthy | Read the job's error log in Desk |
+| Whether a runtime starts | `container_runtimes` reads a list, not a container | Deploy a bench |
+
+**A worked example from this host.** `benchpress.credits.drain.sweep_expired_leases`
+is not stopped and runs every five minutes, so an expired lease is correctly
+claimed into `Stopping`. The container that runs the `stops` queue is in a
+restart loop, so the stop itself never executes. Every diagnostic row is green
+and benches still outlive their leases. Read the workers, not the checks.
+
+## The scheduled jobs
+
+Eleven jobs, none stopped on this host. Diagnostics does not read this table,
+so read it yourself when something is not happening on time.
+
+| Job | Schedule |
+|---|---|
+| `benchpress.stats_collector.enqueue_stats_sweep` | every minute |
+| `benchpress.reconcile.enqueue_run` | every 5 minutes |
+| `benchpress.docker_events.enqueue_reconcile` | every 5 minutes |
+| `benchpress.mariadb_manager.enqueue_health_check` | every 5 minutes |
+| `benchpress.credits.admission_repair.reconcile_admissions` | every 5 minutes |
+| `benchpress.credits.sweep.enforce_limits` | every 5 minutes |
+| `benchpress.credits.drain.sweep_expired_leases` | every 5 minutes |
+| `benchpress.mariadb_manager.enqueue_backup` | daily at 02:00 |
+| `benchpress.credits.reaper.reap_stopped_instances` | daily |
+| `benchpress.image_cache.enqueue_prewarm_catalog` | weekly |
+| `benchpress.image_cache.enqueue_sweep` | weekly |
+
+Read the live table rather than this one, because a row can be stopped:
+
+```bash
+bench --site <site> execute frappe.client.get_list \
+  --kwargs "{'doctype':'Scheduled Job Type','fields':['method','frequency','stopped'],'limit_page_length':0}"
+```
+
+## Verify
+
+A pass is not a claim that the host is healthy. It is a claim that these
+eleven questions have good answers. Confirm the rest by deploying a bench and
+opening it, which exercises Docker, the bridge, the VPN, the database and the
+router in one action. See
+[Deploy from a template](/docs/user/deploy-from-template).
+
+## Troubleshooting
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| Every row fails at once | The Docker socket is unreachable, and most checks go through it | Fix `docker_socket` first, then re-run |
+| Every row passes and deploys still fail | `queue-long` is stopped | `docker start benchpress_queue-long` |
+| `kernel_ceilings` fails on a host you cannot tune | The ceilings are sized for 1,000 benches per bridge | Lower `bench_slots_per_bridge` to what the host can carry |
+| `clock_skew` fails after a container restart | The database container has a different timezone than the site | Set the container's timezone, and never compare a deadline to SQL `NOW()` |
+| `golden_images` warns after every build | `enable_golden_images` is off | Set it to `1`. Images already built keep what they have |
+| `docker_events` is stale but the container is up | The listener crashed inside a running container | `docker compose restart docker-events`, then re-run |
+| The Overview shows no infrastructure panel | The screen is admin-only | See [Users and roles](/docs/operator/users-and-roles) |
+
+## Reference
+
+| Item | Value |
+|---|---|
+| Entry point | `benchpress.diagnostics.run_diagnostics` |
+| VPN check alone | `benchpress.diagnostics.check_vpn_server` |
+| Row shape | `{check, status, hint, severity}` |
+| Statuses | `pass`, `fail` |
+| Severities | `Error`, `Warning` |
+| Clock tolerance | 2 seconds |
+| Heartbeat patience | 60 seconds |
+| Terminals per bench, for `kernel.pty.max` | 8, plus 1,024 reserved |
+| PIDs per bench, for `kernel.pid_max` | 500 |
+| Conntrack per bench | 256 |
+| Host tuning script | `sudo scripts/tune-host.sh --benches <n>`, in the `benchpress_devops` checkout |
+| Neighbour table | `./entry.py --check-host`, on the host |
+
+## Related
+
+- [Prerequisites](/docs/operator/prerequisites) — the same requirements, before you install.
+- [The shared database server](/docs/operator/database-server) — the `mariadb` and `redis` rows in full.
+- [Golden images](/docs/operator/golden-images) — the coverage the `golden_images` row measures.
+- [Production safety](/docs/operator/production-safety) — the checks that a human runs, not the app.

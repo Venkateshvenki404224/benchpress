@@ -8,7 +8,7 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
 > **Why this file exists.** When you upgrade an install across more than one
 > release, read every entry between your current version and the target version
 > before running the upgrade — some changes need manual steps. The
-> [upgrade runbook](docs/upgrading.md) points here for exactly that reason.
+> [upgrade runbook](docs/operator/upgrading.mdx) points here for exactly that reason.
 >
 > This changelog was introduced partway through development, so it does not
 > restate the project's full early history — for changes before the first entry
@@ -39,11 +39,11 @@ Nothing yet.
   (`sites/<site>/private/backups/mariadb/`), off the database volume, with 7-day
   retention enforced on the new location — losing the DB volume no longer loses
   the backups. A documented, once-verified restore runbook
-  ([`docs/database-backup-restore.md`](docs/database-backup-restore.md)) and a
+  ([`docs/operator/backup-and-restore.mdx`](docs/operator/backup-and-restore.mdx)) and a
   console-only `restore_database_server()` helper close the loop.
   ([#96](https://github.com/Venkateshvenki404224/benchpress/issues/96))
 - Documented, backup-gated upgrade path for installed instances: a manual
-  runbook ([`docs/upgrading.md`](docs/upgrading.md)) and a scripted
+  runbook ([`docs/operator/upgrading.mdx`](docs/operator/upgrading.mdx)) and a scripted
   [`upgrade.sh`](upgrade.sh) that chains backup → app update → `bench migrate` →
   asset rebuild → restart → health verify. The pre-upgrade backup is a hard
   gate — the upgrade aborts if it fails, so there is always something to roll

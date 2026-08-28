@@ -52,6 +52,28 @@ export default defineDocsConfig({
         ],
       },
       {
+        type: "links",
+        heading: "Operator Track",
+        links: [
+          { urlPath: "/docs/operator" },
+          { urlPath: "/docs/operator/prerequisites" },
+          { urlPath: "/docs/operator/install" },
+          { urlPath: "/docs/operator/wireguard-setup" },
+          { urlPath: "/docs/operator/settings-reference" },
+          { urlPath: "/docs/operator/database-server" },
+          { urlPath: "/docs/operator/backup-and-restore" },
+          { urlPath: "/docs/operator/golden-images" },
+          { urlPath: "/docs/operator/image-cache" },
+          { urlPath: "/docs/operator/users-and-roles" },
+          { urlPath: "/docs/operator/upgrading" },
+          { urlPath: "/docs/operator/production-safety" },
+          { urlPath: "/docs/operator/diagnostics" },
+          { urlPath: "/docs/operator/credits-and-billing" },
+          { urlPath: "/docs/operator/admission-and-limits" },
+          { urlPath: "/docs/operator/hosted-signup" },
+        ],
+      },
+      {
         type: "markdown",
         heading: "Agent Guidance",
         body: [
@@ -107,7 +129,42 @@ export default defineDocsConfig({
         { title: "When it goes wrong", pages: ["troubleshooting"] },
       ],
     },
-    { title: "Operator", base: "operator", children: [] },
+    {
+      title: "Operator",
+      base: "operator",
+      children: [
+        { title: "Start", pages: ["index"] },
+        {
+          title: "Stand a host up",
+          pages: ["prerequisites", "install", "wireguard-setup"],
+        },
+        {
+          title: "Run it",
+          pages: [
+            "settings-reference",
+            "database-server",
+            "backup-and-restore",
+            "users-and-roles",
+          ],
+        },
+        {
+          title: "Images and speed",
+          pages: ["golden-images", "image-cache"],
+        },
+        {
+          title: "Keep it safe",
+          pages: ["upgrading", "production-safety", "diagnostics"],
+        },
+        {
+          title: "Optional — running it for a team",
+          pages: [
+            "credits-and-billing",
+            "admission-and-limits",
+            "hosted-signup",
+          ],
+        },
+      ],
+    },
     { title: "Reference", base: "reference", children: [] },
   ],
 });

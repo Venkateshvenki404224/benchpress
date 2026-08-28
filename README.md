@@ -51,7 +51,7 @@ browser.
 
 > **Disposable sandboxes, not production hosting.** A Lab is a throwaway
 > development environment, and its UI shows the credentials in plain text. See
-> [Production Safety & Compatibility](docs/production-safety.md) before you
+> [Production safety](docs/operator/production-safety.mdx) before you
 > point anything important at it.
 
 ---
@@ -74,7 +74,7 @@ bench build --app benchpress
 
 Then open `http://your-site.localhost:8000/frontend` and create your first Lab.
 [Installation](#installation) covers each step, and
-[docs/getting-started.md](docs/getting-started.md) walks through it slowly.
+[docs/operator/install.mdx](docs/operator/install.mdx) walks through it slowly.
 
 ---
 
@@ -119,8 +119,10 @@ users the corresponding source. See [License](#license) for the notice, and
 
 ### Detailed Guides
 
-- [Getting Started](docs/getting-started.md) -- Installation and first setup
-- [Production Safety & Compatibility](docs/production-safety.md) -- Readiness caveats, supported platforms, and version matrix
+- [Operator track](docs/operator/index.mdx) -- Everything about the machine BenchPress runs on
+- [Prerequisites](docs/operator/prerequisites.mdx) -- Platforms, versions, Docker socket, IP forwarding, sysbox and sizing
+- [Install](docs/operator/install.mdx) -- Installation and first setup
+- [Production safety](docs/operator/production-safety.mdx) -- Readiness caveats, the privilege boundary and the release checklist
 - [Deploy from a template](docs/user/deploy-from-template.mdx) -- The catalog, the deploy, and the eleven pipeline steps
 - [Create a lab](docs/user/create-a-lab.mdx) -- The New lab form, for when no template fits
 - [Read a lab page](docs/user/lab-detail.mdx) -- Every field, and why status and health disagree
@@ -132,9 +134,18 @@ users the corresponding source. See [License](#license) for the notice, and
 - [Read logs and container stats](docs/user/logs-and-monitoring.mdx) -- The deploy stepper, the raw log and the resource bars
 - [Leases and credits](docs/user/leases-and-credits.mdx) -- The countdown, the renew dialog, the meter and the ledger
 - [Troubleshooting](docs/user/troubleshooting.mdx) -- Every user-facing symptom, its cause and its fix
-- [WireGuard Setup](docs/wireguard-setup.md) -- Detailed WireGuard configuration
-- [Upgrading a BenchPress Install](docs/upgrading.md) -- Backup-gated upgrade and rollback runbook
-- [Database Backup & Restore](docs/database-backup-restore.md) -- Where nightly MariaDB dumps live and the verified restore runbook
+- [WireGuard and the VPN plane](docs/operator/wireguard-setup.mdx) -- Who owns the tunnel, and what BenchPress asks of it
+- [Settings reference](docs/operator/settings-reference.mdx) -- Every field on both settings documents, measured on a live host
+- [The shared database server](docs/operator/database-server.mdx) -- The one MariaDB every bench site lives in
+- [Backup and restore](docs/operator/backup-and-restore.mdx) -- Where nightly MariaDB dumps live and both restore paths
+- [Golden images](docs/operator/golden-images.mdx) -- Why a deploy takes 13 seconds instead of 43
+- [The image cache](docs/operator/image-cache.mdx) -- What lab images cost on disk, and what is safe to prune
+- [Users and roles](docs/operator/users-and-roles.mdx) -- The two roles, and why ownership decides who sees a bench
+- [Upgrading](docs/operator/upgrading.mdx) -- Backup-gated upgrade and rollback runbook
+- [Diagnostics](docs/operator/diagnostics.mdx) -- The eleven checks, and the four things they do not cover
+- [Credits and billing](docs/operator/credits-and-billing.mdx) -- Optional, off by default. Leases, balances and the ledger
+- [Admission and limits](docs/operator/admission-and-limits.mdx) -- Optional, off by default. Concurrency caps and quotas
+- [Self-serve signup](docs/operator/hosted-signup.mdx) -- Optional, off by default. Retire the waitlist
 - [Changelog](CHANGELOG.md) -- Notable changes per release. Read it before a multi-release upgrade
 
 ---
@@ -592,9 +603,9 @@ sudo ufw reload
 
 Also open UDP 44556 in your cloud provider's security group / firewall if applicable.
 
-For a full WireGuard reference and troubleshooting, see the **[WireGuard Setup Guide](docs/wireguard-setup.md)**.
+For a full WireGuard reference and troubleshooting, see **[WireGuard and the VPN plane](docs/operator/wireguard-setup.mdx)**.
 
-> **Note**: WireGuard is optional. If the VPN is not configured, BenchPress still works — containers run normally but without VPN access. Users can connect via Docker bridge IPs on the local machine. See the [Local Development section](docs/wireguard-setup.md#local-development-no-vpn) in the guide.
+> **Note**: WireGuard is optional. If the VPN is not configured, BenchPress still works — containers run normally but without VPN access. Users can connect via Docker bridge IPs on the local machine. See [WireGuard and the VPN plane](docs/operator/wireguard-setup.mdx) for what BenchPress asks of the tunnel.
 
 ### 5. Start BenchPress
 
@@ -819,7 +830,7 @@ socket.on("bench_deploy_log", (data) => {
 
 ## Networking
 
-> For complete WireGuard setup instructions, see the **[WireGuard Setup Guide](docs/wireguard-setup.md)**.
+> For complete WireGuard setup instructions, see **[WireGuard and the VPN plane](docs/operator/wireguard-setup.mdx)**.
 
 | Network | Subnet | Purpose |
 |---------|--------|---------|

@@ -1,7 +1,7 @@
 #!/bin/bash
 # BenchPress upgrade script
 # Upgrades an existing BenchPress install end-to-end with a pre-upgrade backup
-# gate and abort-on-failure, following docs/upgrading.md.
+# gate and abort-on-failure, following docs/operator/upgrading.mdx.
 #
 # Usage:
 #   cd /path/to/frappe-bench
@@ -12,7 +12,7 @@
 #   bash apps/benchpress/upgrade.sh sponge.localhost version-16
 #   bash apps/benchpress/upgrade.sh sponge.localhost --dry-run
 #
-# This is the scripted counterpart to the manual runbook in docs/upgrading.md.
+# This is the scripted counterpart to the manual runbook in docs/operator/upgrading.mdx.
 # It does NOT roll back automatically (that is a later slice) — on failure it
 # points you at the recorded revision and your backup so you can follow the
 # runbook's Rollback section.
@@ -142,7 +142,7 @@ on_failure() {
     echo "    Your install may be partially upgraded. To roll back:"
     echo "      1. Restore code: git -C apps/benchpress checkout \$(cat $ROLLBACK_FILE)"
     echo "      2. Restore data: bench --site $SITE_NAME restore <Step 0 backup>"
-    echo "    See the Rollback section of docs/upgrading.md for the full procedure."
+    echo "    See the Rollback section of docs/operator/upgrading.mdx for the full procedure."
 }
 trap on_failure ERR
 
@@ -207,5 +207,5 @@ success "BenchPress is upgraded. Open the dashboard and confirm it loads:"
 echo "    http://$SITE_NAME/frontend"
 echo ""
 echo "If anything looks wrong, roll back using the recorded revision and your"
-echo "Step 0 backup — see docs/upgrading.md (Rollback)."
+echo "Step 0 backup — see docs/operator/upgrading.mdx (Rollback)."
 echo ""
