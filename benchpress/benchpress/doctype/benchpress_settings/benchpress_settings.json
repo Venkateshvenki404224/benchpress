@@ -18,6 +18,15 @@
   "bench_subnet_base",
   "bench_bridge_count",
   "bench_slots_per_bridge",
+  "bench_event_settle_seconds",
+  "enable_bench_healthcheck",
+  "bench_health_interval_seconds",
+  "bench_health_timeout_seconds",
+  "bench_health_retries",
+  "bench_health_start_period_seconds",
+  "stats_poll_max_benches",
+  "traefik_health_interval_seconds",
+  "traefik_health_timeout_seconds",
   "resource_section",
   "container_memory_limit",
   "column_break_resource",
@@ -106,6 +115,69 @@
    "label": "Bench Slots Per Bridge"
   },
   {
+   "default": "15",
+   "description": "Seconds a container death waits before the listener asks the database about it. Must exceed Stop Grace Seconds: a stop holds its transaction open for the whole grace period, so a bench being stopped on purpose still reads Running until it commits.",
+   "fieldname": "bench_event_settle_seconds",
+   "fieldtype": "Int",
+   "label": "Bench Event Settle Seconds"
+  },
+  {
+   "default": "1",
+   "description": "Whether a new bench container is given a Docker healthcheck that asks its site to answer. Off, a bench reports only whether its container exists, which is what every bench did before this switch. Takes effect at the next container create.",
+   "fieldname": "enable_bench_healthcheck",
+   "fieldtype": "Check",
+   "label": "Enable Bench Healthcheck"
+  },
+  {
+   "default": "30",
+   "description": "Seconds between two probes of a bench's site. Each probe is an exec, so this is also the event stream's noise floor: three events per bench per interval.",
+   "fieldname": "bench_health_interval_seconds",
+   "fieldtype": "Int",
+   "label": "Bench Health Interval Seconds"
+  },
+  {
+   "default": "5",
+   "description": "Seconds one probe waits for the site to answer before it counts as a failure.",
+   "fieldname": "bench_health_timeout_seconds",
+   "fieldtype": "Int",
+   "label": "Bench Health Timeout Seconds"
+  },
+  {
+   "default": "3",
+   "description": "Consecutive failed probes before Docker calls a bench unhealthy. With the interval above, this is how long a site may be down before anything says so.",
+   "fieldname": "bench_health_retries",
+   "fieldtype": "Int",
+   "label": "Bench Health Retries"
+  },
+  {
+   "default": "600",
+   "description": "Seconds after a container starts during which a failed probe does not count. Must exceed the longest deploy: on first boot nothing serves the site until the deploy has created it, and a seven-app site takes over three minutes to build.",
+   "fieldname": "bench_health_start_period_seconds",
+   "fieldtype": "Int",
+   "label": "Bench Health Start Period Seconds"
+  },
+  {
+   "default": "50",
+   "description": "Benches one stats poll samples, least recently checked first. Docker's stats endpoint samples twice a second apart, so an unbounded pass over a large fleet cannot finish inside its own minute. 0 removes the bound.",
+   "fieldname": "stats_poll_max_benches",
+   "fieldtype": "Int",
+   "label": "Stats Poll Max Benches"
+  },
+  {
+   "default": "10",
+   "description": "Seconds between two of Traefik's own probes of a bench. This is a fleet-wide request rate against gunicorn, not a preference: Traefik probes every server on every service, so 100 benches at 10 seconds is 20 full Frappe requests a second.",
+   "fieldname": "traefik_health_interval_seconds",
+   "fieldtype": "Int",
+   "label": "Traefik Health Interval Seconds"
+  },
+  {
+   "default": "3",
+   "description": "Seconds one Traefik probe waits before it counts as a failure. A failure ejects the server from routing and the bench answers 503 until a probe succeeds again.",
+   "fieldname": "traefik_health_timeout_seconds",
+   "fieldtype": "Int",
+   "label": "Traefik Health Timeout Seconds"
+  },
+  {
    "fieldname": "resource_section",
    "fieldtype": "Section Break",
    "label": "Container Resource Limits"
@@ -158,7 +230,7 @@
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2026-08-24 19:00:00.000000",
+ "modified": "2026-08-27 17:20:00.000000",
  "modified_by": "Administrator",
  "module": "Benchpress",
  "name": "BenchPress Settings",

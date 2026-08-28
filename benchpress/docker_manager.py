@@ -15,6 +15,7 @@ import frappe
 from frappe import _
 from frappe.utils import cint, flt
 
+from benchpress import addressing
 from benchpress.image_cache import cache_tag, clear_cached_tags
 from benchpress.request_cache import local_cache
 
@@ -25,6 +26,23 @@ DEFAULT_IOPS = 1000
 DEFAULT_BPS = 40 * 1024 * 1024
 
 DISK_QUOTA_UNSUPPORTED = "this host enforces no writable-layer quota (overlay2 on xfs required)"
+
+DEFAULT_HEALTH_INTERVAL = 30
+DEFAULT_HEALTH_TIMEOUT = 5
+DEFAULT_HEALTH_RETRIES = 3
+DEFAULT_HEALTH_START_PERIOD = 600
+
+# Docker's healthcheck durations are nanoseconds. Passing seconds gives an interval of a few
+# nanoseconds that the daemon clamps, and an inspect then makes the wrong value look right.
+NANOSECONDS = 1_000_000_000
+
+# `localhost`, so the probe tests the server and not the bridge. Any Host header resolves:
+# `common_site_config.json` names the bench's own site as `default_site`.
+BENCH_HEALTH_PROBE = "curl -fsS -m {timeout} http://localhost:{port}/api/method/ping || exit 1"
+
+# Docker's health verdict -> the `container_health` label. `starting` is neither: a bench mid-deploy
+# is not healthy and is certainly not unhealthy.
+HEALTH_LABELS = {"healthy": "Healthy", "unhealthy": "Unhealthy", "starting": "Unknown"}
 
 # Field value -> the runtime name registered with the Docker daemon. None means
 # "pass no runtime", which leaves the daemon's own default-runtime in charge.
@@ -247,6 +265,34 @@ def _resolve_limits(size, lab_doc) -> dict:
 	}
 
 
+def bench_healthcheck() -> dict | None:
+	"""The Docker healthcheck for a bench container, or None when the switch is off."""
+	settings = frappe.get_cached_doc("BenchPress Settings")
+	# A Single stores only the fields somebody has written, so an unset Check reads None here. The
+	# switch exists to turn a healthcheck off, never to be off because nothing has written it.
+	switch = settings.get("enable_bench_healthcheck")
+	if switch is not None and not cint(switch):
+		return None
+
+	timeout = _health_setting(settings, "bench_health_timeout_seconds", DEFAULT_HEALTH_TIMEOUT)
+	interval = _health_setting(settings, "bench_health_interval_seconds", DEFAULT_HEALTH_INTERVAL)
+	start_period = _health_setting(settings, "bench_health_start_period_seconds", DEFAULT_HEALTH_START_PERIOD)
+	return {
+		"Test": ["CMD-SHELL", BENCH_HEALTH_PROBE.format(timeout=timeout, port=addressing.SITE_HTTP_PORT)],
+		"Interval": interval * NANOSECONDS,
+		"Timeout": timeout * NANOSECONDS,
+		"StartPeriod": start_period * NANOSECONDS,
+		"Retries": _health_setting(settings, "bench_health_retries", DEFAULT_HEALTH_RETRIES),
+	}
+
+
+def _health_setting(settings, field: str, default: int) -> int:
+	"""A healthcheck setting, or its default when the field is unset or zero."""
+	# `.get`, not attribute access: a Single field has no row in `tabSingles` until the settings
+	# are saved once, and an AttributeError here would take the container create with it.
+	return cint(settings.get(field)) or default
+
+
 def create_bench_container(bench_doc, lab_doc, size=None, network: str | None = None) -> CreatedContainer:
 	"""Create a container at a resolved `Instance Size`. Does NOT start it.
 
@@ -277,6 +323,8 @@ def create_bench_container(bench_doc, lab_doc, size=None, network: str | None = 
 
 	runtime = resolve_runtime(bench_doc)
 	runtime_kwargs = {"runtime": runtime} if runtime else {}
+
+	healthcheck = bench_healthcheck()
 
 	devices = _get_host_block_devices()
 	device_read_iops = [{"Path": dev, "Rate": iops} for dev in devices]
@@ -311,6 +359,7 @@ def create_bench_container(bench_doc, lab_doc, size=None, network: str | None = 
 		device_read_bps=device_read_bps or None,
 		device_write_bps=device_write_bps or None,
 		network=network,
+		**({"healthcheck": healthcheck} if healthcheck else {}),
 		**({"storage_opt": storage_opt} if storage_opt else {}),
 		**runtime_kwargs,
 	)
@@ -503,14 +552,13 @@ def _decoded(output) -> str:
 	return "" if output is None else str(output)
 
 
-def container_is_gone(container_id: str) -> bool:
-	"""True only when Docker positively reports the container does not exist.
+def container_is_down(container_id: str) -> bool:
+	"""True only when Docker positively reports the container absent or not running.
 
-	A daemon error is not "gone": callers stop benches on this answer.
+	A daemon error is not "down": callers stop benches on this answer.
 	"""
 	try:
-		get_client().containers.get(container_id)
-		return False
+		return get_client().containers.get(container_id).status != "running"
 	except docker.errors.NotFound:
 		return True
 	except Exception:
@@ -518,17 +566,12 @@ def container_is_gone(container_id: str) -> bool:
 
 
 def get_container_health(container_id: str) -> str:
-	"""Return a coarse health label for a bench container.
+	"""Docker's health verdict, falling back to run state on a container with no healthcheck.
 
-	A "running" container is Healthy; any other known Docker state (exited,
-	paused, dead, restarting) is Unhealthy; a missing container or inspect
-	failure is Unknown. This deliberately mirrors the actual container state so
-	a bench whose DB status drifts from reality is flagged.
+	A missing container or an inspect failure is Unknown, because callers stop benches on this.
 	"""
-	client = get_client()
 	try:
-		container = client.containers.get(container_id)
-		return "Healthy" if container.status == "running" else "Unhealthy"
+		container = get_client().containers.get(container_id)
 	except docker.errors.NotFound:
 		return "Unknown"
 	except Exception:
@@ -537,6 +580,15 @@ def get_container_health(container_id: str) -> str:
 			message=frappe.get_traceback(),
 		)
 		return "Unknown"
+
+	# Run state first: the daemon keeps the last verdict on a container that has exited, and a
+	# verdict from while it ran is not a statement about a container that is no longer running.
+	if container.status != "running":
+		return "Unhealthy"
+	health = (container.attrs.get("State") or {}).get("Health") or {}
+	# No `Health` at all is a container created before the healthcheck existed, and it keeps
+	# answering what it always did rather than turning Unknown overnight.
+	return HEALTH_LABELS.get(health.get("Status"), "Healthy")
 
 
 def get_container_stats(container_id: str) -> dict:

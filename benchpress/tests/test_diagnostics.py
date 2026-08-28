@@ -1,7 +1,7 @@
 # Copyright (c) 2026, Venkatesh and Contributors
 # See license.txt
 
-"""run_diagnostics contract: ten rows, fixed order, never raises, never mutates."""
+"""run_diagnostics contract: eleven rows, fixed order, never raises, never mutates."""
 
 import inspect
 import unittest
@@ -12,6 +12,7 @@ import docker
 import frappe
 
 from benchpress.diagnostics import check_row, display_row, run_diagnostics
+from benchpress.docker_events import HEARTBEAT_STALE_SECONDS
 from benchpress.image_cache import clear_cached_tags
 
 CHECK_ORDER = [
@@ -24,9 +25,10 @@ CHECK_ORDER = [
 	"redis",
 	"container_runtimes",
 	"golden_images",
+	"docker_events",
 	"vpn_server",
 ]
-COUNT_WORDS = {6: "six", 7: "seven", 8: "eight", 9: "nine", 10: "ten"}
+COUNT_WORDS = {6: "six", 7: "seven", 8: "eight", 9: "nine", 10: "ten", 11: "eleven"}
 HOST_RUNTIMES = {"names": {"runc", "sysbox-runc"}, "default": "runc"}
 # Small enough that a full bridge leaves the family with no headroom, which is the only
 # way `bridge_capacity` reports a fail.
@@ -45,6 +47,8 @@ NO_DRIFT = ([], "99.94%")
 # What this host really answers: MariaDB is UTC, Python is Asia/Calcutta.
 DB_CLOCK = datetime(2026, 8, 24, 23, 11, 53)
 IST_OFFSET = timedelta(hours=5, minutes=30)
+
+FRESH_HEARTBEAT = {"age": 2, "events_seen": 41, "orphans": 0, "pending": 0}
 
 
 def _lab_image(tag, golden=True):
@@ -78,6 +82,8 @@ class TestDiagnostics(unittest.TestCase):
 		ceilings=None,
 		mariadb_drift=None,
 		redis_drift=None,
+		heartbeat=FRESH_HEARTBEAT,
+		heartbeat_error=None,
 	):
 		"""Run run_diagnostics with everything healthy unless overridden.
 
@@ -103,6 +109,11 @@ class TestDiagnostics(unittest.TestCase):
 			patch("benchpress.placement.bridge_count", return_value=BRIDGE_COUNT),
 			patch("benchpress.placement.slots_per_bridge", return_value=BRIDGE_SLOTS),
 			patch("benchpress.diagnostics._read_sysctl", side_effect=ceilings.get),
+			patch(
+				"benchpress.diagnostics.heartbeat_value",
+				side_effect=heartbeat_error,
+				return_value=heartbeat,
+			),
 			patch("benchpress.diagnostics.frappe") as frappe_mock,
 		):
 			frappe_mock.get_all.return_value = [DB_ROW] if db_rows is None else db_rows
@@ -187,6 +198,7 @@ class TestDiagnostics(unittest.TestCase):
 			installed_apps=["frappe"],
 			db_clock_error=Exception("down"),
 			ceilings={},
+			heartbeat=None,
 		)
 		# Capacity is the one exception: a family with no bridge yet is the lazy-creation
 		# invariant, not a broken environment.
@@ -274,6 +286,42 @@ class TestDiagnostics(unittest.TestCase):
 		self.assertEqual(
 			display_row({"check": "redis", "status": "fail", "hint": ""}, "Redis")["status"], "Error"
 		)
+
+	def test_a_fresh_heartbeat_passes_and_reports_what_the_listener_has_seen(self):
+		by_check, _rows = self._run()
+		row = by_check["docker_events"]
+		self.assertEqual(row["status"], "pass")
+		self.assertIn("2s ago", row["hint"])
+		self.assertIn("41 events seen", row["hint"])
+
+	def test_a_stale_heartbeat_fails_and_names_the_service_to_start(self):
+		"""The row this phase exists for: a listener that dies otherwise looks like a quiet fleet."""
+		stale = {**FRESH_HEARTBEAT, "age": HEARTBEAT_STALE_SECONDS + 1}
+		by_check, _rows = self._run(heartbeat=stale)
+
+		row = by_check["docker_events"]
+		self.assertEqual(row["status"], "fail")
+		self.assertIn(f"{HEARTBEAT_STALE_SECONDS + 1}s ago", row["hint"])
+		self.assertIn("docker compose up -d docker-events", row["hint"])
+
+	def test_a_heartbeat_exactly_at_the_threshold_is_still_believed(self):
+		by_check, _rows = self._run(heartbeat={**FRESH_HEARTBEAT, "age": HEARTBEAT_STALE_SECONDS})
+		self.assertEqual(by_check["docker_events"]["status"], "pass")
+
+	def test_no_heartbeat_at_all_fails_and_names_the_service_to_start(self):
+		by_check, _rows = self._run(heartbeat=None)
+
+		row = by_check["docker_events"]
+		self.assertEqual(row["status"], "fail")
+		self.assertIn("no heartbeat", row["hint"])
+		self.assertIn("docker compose up -d docker-events", row["hint"])
+
+	def test_an_unreachable_cache_is_a_fail_row_not_an_exception(self):
+		by_check, rows = self._run(heartbeat_error=Exception("redis is gone"))
+
+		self.assertEqual(len(rows), len(CHECK_ORDER))
+		self.assertEqual(by_check["docker_events"]["status"], "fail")
+		self.assertIn("redis is gone", by_check["docker_events"]["hint"])
 
 	def test_the_diagnostics_row_count_moved_in_both_places(self):
 		"""One count, stated twice: the test_api fixture and the overview docstring."""

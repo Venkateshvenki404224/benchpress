@@ -30,6 +30,7 @@ TENANT_SCOPED = {
 	"Credit Ledger Entry",  # what that balance is made of
 	"Deploy Log",  # one deployment's output
 	"Build Log",  # one image build's output, which is credential-adjacent
+	"Bench Event",  # when somebody's bench died, and why
 }
 
 # Shared catalogues. Every app user may read every row, and no user can create one.

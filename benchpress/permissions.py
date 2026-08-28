@@ -103,6 +103,21 @@ def deploy_log_has_permission(doc, ptype=None, user=None) -> bool:
 	return _own_doc_only(user, frappe.db.get_value("Bench Instance", doc.bench, "owner"))
 
 
+def bench_event_query_conditions(user):
+	if not user:
+		user = frappe.session.user
+	if user == "Administrator":
+		return ""
+	if not set(frappe.get_roles(user)).isdisjoint(ADMIN_ROLES):
+		return ""
+	return f"`tabBench Event`.bench IN (SELECT name FROM `tabBench Instance` WHERE owner = {frappe.db.escape(user)})"
+
+
+def bench_event_has_permission(doc, ptype=None, user=None) -> bool:
+	"""A bench event belongs to its bench's owner, scoped the same way its list rule is."""
+	return _own_doc_only(user, frappe.db.get_value("Bench Instance", doc.bench, "owner"))
+
+
 def build_log_query_conditions(user):
 	"""`run_history._build_filters` applied this rule by hand; it belongs here."""
 	return _own_rows_only(user, "`tabBuild Log`.owner")

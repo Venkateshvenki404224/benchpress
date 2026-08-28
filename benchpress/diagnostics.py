@@ -15,6 +15,7 @@ import frappe
 from frappe.query_builder.functions import Now
 
 from benchpress import placement
+from benchpress.docker_events import HEARTBEAT_STALE_SECONDS, heartbeat_value
 from benchpress.docker_manager import (
 	CONTAINER_RUNTIMES,
 	DEFAULT_PIDS_LIMIT,
@@ -30,6 +31,8 @@ from benchpress.mariadb_manager import (
 from benchpress.vpn_adapter import DEFAULT_INTERFACE
 
 DRIFT_FIX = "Recreate the shared pair: docker compose up -d in benchpress/config"
+# A row that says a listener is dead without naming what restarts it costs the reader a search.
+LISTENER_FIX = "start it with docker compose up -d docker-events"
 
 # Not an operator preference: past this, arithmetic on a stored deadline is wrong.
 # Two seconds absorbs MariaDB truncating NOW() to whole seconds; what it catches
@@ -81,6 +84,7 @@ def run_diagnostics() -> list[dict]:
 		_check_redis(),
 		_check_container_runtimes(),
 		_check_golden_images(),
+		_check_docker_events(),
 		check_vpn_server(),
 	]
 
@@ -294,6 +298,37 @@ def _check_golden_images() -> dict:
 		return check_row("golden_images", True, coverage)
 	except Exception as e:
 		return check_row("golden_images", False, f"Could not read golden image labels: {e}")
+
+
+def _check_docker_events() -> dict:
+	"""Whether the event listener's heartbeat is fresh enough to be believed.
+
+	A streaming listener that dies looks exactly like a quiet fleet, which the cron it replaced
+	never did.
+	"""
+	try:
+		published = heartbeat_value()
+		if not published:
+			return check_row(
+				"docker_events",
+				False,
+				f"The Docker event listener has published no heartbeat — {LISTENER_FIX}",
+			)
+		age = published["age"]
+		if age > HEARTBEAT_STALE_SECONDS:
+			return check_row(
+				"docker_events",
+				False,
+				f"The Docker event listener last reported {age}s ago, past the "
+				f"{HEARTBEAT_STALE_SECONDS}s it is given — {LISTENER_FIX}",
+			)
+		return check_row(
+			"docker_events",
+			True,
+			f"Docker event listener reported {age}s ago, {published['events_seen']} events seen",
+		)
+	except Exception as e:
+		return check_row("docker_events", False, f"Could not read the listener heartbeat: {e}")
 
 
 def check_vpn_server() -> dict:
