@@ -97,7 +97,7 @@ reached from Labs and Instances respectively.
 
 The fastest route is **Templates** — pick a recipe and BenchPress creates the lab and deploys
 it in one click. To define an environment yourself, follow the
-[Creating Labs](creating-labs.md) guide.
+[Deploy from a template](user/deploy-from-template.mdx) guide.
 
 ---
 
@@ -105,7 +105,8 @@ it in one click. To define an environment yourself, follow the
 
 | Guide | Description |
 |-------|-------------|
-| [Creating Labs](creating-labs.md) | Create lab templates and deploy bench instances |
+| [Deploy from a template](user/deploy-from-template.mdx) | Deploy a bench from the catalog |
+| [Create a lab](user/create-a-lab.mdx) | Define a lab by hand when no template fits |
 | [Connecting to Benches](connecting-to-benches.md) | SSH access, VPN setup, and connection info |
 | [Logs and Monitoring](logs-and-monitoring.md) | Build logs, deploy logs, and container stats |
 | [VPN Device Management](device-management.md) | Register devices for persistent WireGuard access |

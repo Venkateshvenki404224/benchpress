@@ -212,6 +212,6 @@ You can also view MariaDB logs from the Database Server DocType in Frappe Desk u
 
 ## Next Steps
 
-- [Creating Labs](creating-labs.md) — Create and deploy benches
+- [Deploy from a template](user/deploy-from-template.mdx) — Create and deploy benches
 - [Connecting to Benches](connecting-to-benches.md) — SSH and web access
 - [VPN Device Management](device-management.md) — Register VPN devices

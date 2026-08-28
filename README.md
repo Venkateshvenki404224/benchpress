@@ -121,7 +121,10 @@ users the corresponding source. See [License](#license) for the notice, and
 
 - [Getting Started](docs/getting-started.md) -- Installation and first setup
 - [Production Safety & Compatibility](docs/production-safety.md) -- Readiness caveats, supported platforms, and version matrix
-- [Creating Labs & Deploying](docs/creating-labs.md) -- Labs, builds, and deployments
+- [Deploy from a template](docs/user/deploy-from-template.mdx) -- The catalog, the deploy, and the eleven pipeline steps
+- [Create a lab](docs/user/create-a-lab.mdx) -- The New lab form, for when no template fits
+- [Read a lab page](docs/user/lab-detail.mdx) -- Every field, and why status and health disagree
+- [Start, stop and redeploy](docs/user/lifecycle.mdx) -- The five actions, and what each one keeps
 - [Connecting to Benches](docs/connecting-to-benches.md) -- SSH, VPN, and connection info
 - [Logs & Monitoring](docs/logs-and-monitoring.md) -- Build logs, deploy logs, and stats
 - [VPN Device Management](docs/device-management.md) -- Register devices for WireGuard access

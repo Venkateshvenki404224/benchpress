@@ -1,0 +1,154 @@
+---
+title: Read a lab page
+description: Every field on the lab page, and why container status and container health can disagree.
+---
+
+# Read a lab page
+
+The lab page is one screen with two clocks on it. This page reads every field,
+and explains the one thing the screen does not say out loud: **status and health
+are separate, and either can be right while the other is stale.**
+
+**Who this is for.** Anybody who has opened a lab and wants to know what the
+page is telling them.
+
+**Before you start.** Nothing. Reading the page needs no VPN and no deploy.
+
+## Steps
+
+1. Open **Labs**, then press a lab. The route is `/frontend/labs/<lab-id>`.
+
+2. Read the header. It describes the **lab**, not the bench.
+
+   ![The BenchPress lab page for Frappe CRM demo before any deploy, at 1280 by 800 pixels. The header shows the lab logo, the title Frappe CRM demo, a green Ready chip, the lab id crm-demo in code, the description, and chips reading version-15, 1 GB, 1 vCPU, code-server and SSH. A black Deploy button sits at the top right. The left card reads This lab has never been deployed. Deploying builds a container, a site, an SSH user and an IDE. The Connection card warns VPN off and offers Register this device. The Sites card reads No site yet.](../images/user/lab-detail/01-before-deploy.png)
+
+   The `Ready` chip is the **lab** status. It means the image is built. It says
+   nothing about whether a bench is running.
+
+   | Lab status | Meaning |
+   |---|---|
+   | `Draft` | Saved, never built. Deploy refuses |
+   | `Building` | The image job is running |
+   | `Ready` | The image exists and matches the recipe |
+   | `Error` | The last build failed |
+
+   In the frame the header chips read `version-15`, `1 GB`, `1 vCPU`,
+   `code-server` and `SSH`. Those five come from the recipe, not from the
+   container.
+
+3. Read the **Container** card. This is the bench, and it carries both axes.
+
+   ![The same lab page during a deploy, at 1280 by 800 pixels. The Container card header reads Deploying in blue. Health reads Unknown with the note never checked. The CPU and MEMORY tiles both read a dash and container not running. The Sites card shows the site name with a blue Creating chip beside a gray Not running chip, and the line This site's container is stopped. Deploy the lab to bring it back.](../images/user/lab-detail/02-deploying.png)
+
+   ![The same lab page after the deploy finished, at 1280 by 800 pixels. The Container card header reads Running in green. Health reads Healthy with the note checked 2m ago. CPU reads 0 percent with quota 1 vCPU, MEMORY reads 0 percent of 1 GB limit, and the card ends with Started 2 minutes ago. The Sites card shows the site with a green Active chip and an Open button. The header now offers Open VS Code and Open site.](../images/user/lab-detail/03-running.png)
+
+   **The two axes are independent.** Status is what BenchPress last decided.
+   Health is what the last probe found. They are written by different things at
+   different times, so a fresh status can sit next to a stale health.
+
+   | Status | Health | What it means |
+   |---|---|---|
+   | `Deploying` | `Unknown`, never checked | The container is being made. No probe has run |
+   | `Running` | `Healthy` | The container is up and the site answers |
+   | `Running` | empty | The container just started. The first probe has not run |
+   | `Running` | `Unhealthy` | The container is up and the site does not answer |
+   | `Stopped` | `Healthy` | Stopped just now. The health line still shows the last probe |
+   | `Error` | any | The deploy failed. Read the deploy log |
+
+   Read the timestamp next to Health before you trust it. It says
+   `checked 2m ago` or `never checked`, and it is the age of the answer.
+
+4. Read the CPU and memory tiles. They report use against the lab's own limit,
+   not against the host.
+
+   | Tile | Reads | Under it |
+   |---|---|---|
+   | CPU | A percentage, or `—` | `quota 1 vCPU` |
+   | MEMORY | A percentage, or `—` | `of 1 GB limit` |
+
+   Both read `—` and `container not running` whenever the container is down.
+
+5. Read **Connection details**. Six rows, each with a copy button.
+
+   | Row | Example | Reachable from |
+   |---|---|---|
+   | Public URL | `https://<hash>.benchpress.cloud` | Anywhere |
+   | Private URL (VPN) | `http://172.27.0.18:8000` | The VPN only |
+   | WireGuard IP | `172.27.0.18` | The VPN only |
+   | Runtime | `sysbox` | — |
+   | code-server | `http://172.27.0.18:8080/` | The VPN only |
+   | SSH | The user and host | The VPN only |
+
+   Passwords stay hidden behind **Reveal secrets**. They are regenerated on
+   every redeploy, so a copy you saved last week may be wrong.
+
+6. Read the **Sites** card. One row per site, with the apps it carries.
+
+   | Site chip | Container chip | Meaning |
+   |---|---|---|
+   | `Active` | **Open** | The site is live |
+   | `Creating` | `Not running` | The deploy has not finished making it |
+   | `Inactive` | `Not running` | The container is stopped. The database is kept |
+
+## Verify
+
+You are reading the page correctly when all four are true.
+
+- You can say which chip is the lab status and which is the container status.
+- You can name the age of the health answer, not only its value.
+- The CPU percentage is read against the quota under it, not against the host.
+- You know which connection rows need the VPN.
+
+## Troubleshooting
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| Health says `Healthy` on a stopped bench | The last probe ran before the stop | Read the timestamp. Status is the newer fact |
+| Health is empty on a running bench | No probe has run since the container started | Wait for the next probe, then reload |
+| Health says `Unhealthy` and the site works for you | Probes come from the host, not from your laptop | Open the deploy log. A failing probe is the bench, not the network |
+| CPU and memory read `—` | The container is not running | Start the bench |
+| The header has no **Build log** tab | Build logs are admin-only | Ask an admin for the build output |
+| A stopped bench shows a countdown | Stopped benches are deleted after a set number of days | Start it, or accept that it goes |
+| **Open site** does nothing | Bench sites resolve only over the VPN | Connect the VPN and press it again |
+
+## Reference
+
+### The four tabs
+
+| Tab | Holds | Who sees it |
+|---|---|---|
+| Dashboard | Container, connection details, sites | Everybody |
+| Sites | Every site on the bench | Everybody |
+| Deploy log | The eleven steps and the raw log | Everybody |
+| Build log | The image build output | Admins |
+
+### Both status fields, in full
+
+| Field | Values |
+|---|---|
+| `status` | `Draft`, `Deploying`, `Running`, `Stopped`, `Error` |
+| `container_health` | empty, `Healthy`, `Unhealthy`, `Unknown` |
+
+### What writes each one
+
+| Field | Written by | When |
+|---|---|---|
+| `status` | The deploy, start, stop and delete actions | The moment the action runs |
+| `container_health` | The container probe | Every 30 seconds, after a 10 minute grace period |
+
+The probe waits 600 seconds after a container starts before a failure counts.
+A seven-app site takes over three minutes to build on first boot, and nothing
+serves the site until it exists.
+
+### The stopped-bench countdown
+
+A stopped bench keeps its container and its database. The page counts down the
+window in which it can still be started, as in `Can be restored for 6d 23h`.
+The window is `reap_after_days` in Credit Settings, which is **7 days** here.
+`0` turns the deletion off.
+
+## Related
+
+- [Deploy from a template](/docs/user/deploy-from-template) — how the bench got here.
+- [Start, stop and redeploy](/docs/user/lifecycle) — the actions behind the chips.
+- [Create a lab](/docs/user/create-a-lab) — where the header chips come from.

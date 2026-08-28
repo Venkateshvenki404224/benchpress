@@ -24,7 +24,10 @@ export default defineDocsConfig({
       {
         type: "links",
         heading: "Best Starting Points",
-        links: [{ urlPath: "/docs/user/quick-tour" }],
+        links: [
+          { urlPath: "/docs/user/quick-tour" },
+          { urlPath: "/docs/user/deploy-from-template" },
+        ],
       },
       {
         type: "markdown",
@@ -55,7 +58,18 @@ export default defineDocsConfig({
     {
       title: "User",
       base: "user",
-      children: [{ title: "Start", pages: ["quick-tour"] }],
+      children: [
+        { title: "Start", pages: ["quick-tour"] },
+        {
+          title: "Get a bench running",
+          pages: [
+            "deploy-from-template",
+            "create-a-lab",
+            "lab-detail",
+            "lifecycle",
+          ],
+        },
+      ],
     },
     { title: "Operator", base: "operator", children: [] },
     { title: "Reference", base: "reference", children: [] },

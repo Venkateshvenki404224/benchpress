@@ -213,7 +213,7 @@ bump it yourself):
 - **Existing benches keep their current image** until you explicitly redeploy
   them — upgrades are non-disruptive to running benches by default.
 - To adopt the new version, open the Lab, run **Build Image**, then redeploy the
-  affected benches. See [Creating Labs](creating-labs.md).
+  affected benches. See [Deploy from a template](user/deploy-from-template.mdx).
 
 Treat lab rebuilds as an opt-in follow-up, not part of the control-plane upgrade.
 
