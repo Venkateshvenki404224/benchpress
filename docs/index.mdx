@@ -1,0 +1,59 @@
+---
+title: BenchPress documentation
+description: Start here. Three tracks — use a bench, run the server that hosts one, or read the data model and the API.
+---
+
+# BenchPress documentation
+
+BenchPress deploys a Frappe bench from a template. An operator describes the
+bench once. Anybody with access deploys it, works in it, and destroys it when
+the task is done.
+
+**Who this is for.** Three readers, three tracks. Read the track that matches
+your job. You do not need the other two.
+
+## Tracks
+
+| Track | Read it when | Start at |
+|---|---|---|
+| User | Somebody gave you a login and you need a bench | [Quick tour](/docs/user/quick-tour) |
+| Operator | You run the server that hosts the benches | Not published yet |
+| Reference | You call the API or change the code | Not published yet |
+
+The operator and reference tracks arrive in later releases. Until then, read the
+Markdown guides in the repository `docs/` folder. The README links all of them.
+
+## What BenchPress does
+
+An operator describes a **lab** once: a Frappe version and a list of apps. A
+deploy turns that lab into a running **bench instance**. The deploy restores a
+cached image, creates a site, and puts the container on a WireGuard network.
+
+You get a site address, an SSH login and a browser VS Code session. When the
+work is done, you destroy the environment. Spin up, use, tear down.
+
+No bench is on the public internet. Every site, SSH port and IDE session is
+reachable only from a device that joined the VPN.
+
+## Reference
+
+One MDX source builds three surfaces. The `leadtype` pipeline writes all three.
+
+| Surface | Path | Read by |
+|---|---|---|
+| Rendered pages | `docs-site/docs/**` | a person |
+| Offline index | `docs-bundle/AGENTS.md` | a coding agent with a clone |
+| Routing hints | `docs-site/llms.txt` | an agent over HTTP |
+
+Rebuild every surface with one command:
+
+```bash
+npm run docs:build && npm run docs:lint && npm run docs:score
+```
+
+Every page states in prose whatever its screenshots show. Strip the images and
+the page is still complete.
+
+## Related
+
+- [Quick tour](/docs/user/quick-tour) — the five screens, and what the dashboard reports.

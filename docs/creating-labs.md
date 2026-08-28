@@ -6,7 +6,7 @@ Labs are reusable templates that define what goes into a bench — the Frappe ve
 
 ## Understanding the Workflow
 
-```
+```text
 Create Lab  -->  Build Image  -->  Deploy Bench  -->  Connect & Develop
 (template)      (Docker build)    (container)        (SSH / web)
 ```
@@ -40,7 +40,7 @@ can tweak the apps, version, or limits afterwards just like a hand-built one.
 
 The catalog and the create action are exposed as whitelisted APIs:
 
-```
+```python
 benchpress.api.get_lab_templates()
 benchpress.api.create_lab_from_template(template="erpnext", lab_id="erp-demo", title="ERP Demo")
 ```

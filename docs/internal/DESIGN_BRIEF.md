@@ -62,7 +62,7 @@ User view will end up as an afterthought with holes in the layout.
 
 This is the spine of the product. Everything on every screen is one of these.
 
-```
+```text
 Lab  ──build image──▶  Docker image  ──deploy──▶  Bench Instance  ──▶  Bench Site
  │                                                     │
  │                                                     ├── Database Server (shared MariaDB)

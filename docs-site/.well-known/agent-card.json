@@ -1,0 +1,27 @@
+{
+  "name": "BenchPress",
+  "description": "Press a button. Get a Frappe bench.",
+  "url": "https://docs.benchpress.cloud",
+  "version": "1.0.0",
+  "documentationUrl": "https://docs.benchpress.cloud/docs",
+  "capabilities": {
+    "streaming": false,
+    "pushNotifications": false
+  },
+  "defaultInputModes": [
+    "text/plain"
+  ],
+  "defaultOutputModes": [
+    "text/markdown"
+  ],
+  "skills": [
+    {
+      "id": "benchpress-docs",
+      "name": "benchpress-docs",
+      "description": "Read and search the BenchPress documentation. Use when working with BenchPress — its setup, configuration, API, and behavior.",
+      "tags": [
+        "documentation"
+      ]
+    }
+  ]
+}

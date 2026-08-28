@@ -7,7 +7,12 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "postinstall": "cd frontend && yarn install",
     "dev": "cd frontend && yarn dev",
-    "build": "cd frontend && yarn build"
+    "build": "cd frontend && yarn build",
+    "docs:site": "leadtype generate --src . --out docs-site --base-url https://docs.benchpress.cloud",
+    "docs:bundle": "leadtype generate --src . --out docs-bundle --bundle --name benchpress --summary \"Self-hosted Frappe dev environments, deployed from a template.\"",
+    "docs:build": "npm run docs:site && npm run docs:bundle",
+    "docs:lint": "leadtype lint docs --max-warnings 0",
+    "docs:score": "leadtype score --src docs --out docs-site --min 100"
   },
   "repository": {
     "type": "git",
@@ -22,6 +27,7 @@
   },
   "homepage": "https://github.com/Venkateshvenki404224/benchpress#readme",
   "devDependencies": {
-    "@playwright/test": "^1.58.2"
+    "@playwright/test": "^1.58.2",
+    "leadtype": "^0.4.3"
   }
 }

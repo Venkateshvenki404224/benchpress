@@ -71,7 +71,7 @@ bench --site <your-site> backup --with-files
 A successful run prints the paths of the database dump and the public/private
 file archives, written under:
 
-```
+```text
 sites/<your-site>/private/backups/
 ```
 

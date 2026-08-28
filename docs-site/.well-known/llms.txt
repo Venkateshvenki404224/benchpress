@@ -1,0 +1,24 @@
+# BenchPress
+
+> Press a button. Get a Frappe bench.
+
+## Overview
+
+BenchPress deploys a Frappe bench from a template. An operator describes a lab
+once — a Frappe version and a list of apps — and anyone with access deploys it,
+works in it over SSH or a browser VS Code session, and destroys it when the task
+is done.
+
+- Self-hosted. One box, Docker, no external control plane.
+- Every bench reachable only over WireGuard.
+- Built on the Frappe framework, with a Vue 3 single-page app on the front.
+
+## Best Starting Points
+
+- [Quick tour](/docs/user/quick-tour.md): The five screens in the BenchPress sidebar, and every number the Overview dashboard reports.
+
+## Agent Guidance
+
+Three tracks. Read `user/` for working inside a deployed bench, `operator/` for
+running the host, and `reference/` for the data model and the HTTP API. Start
+from the quick tour when you do not yet know which screen owns a task.

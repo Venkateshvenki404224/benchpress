@@ -80,7 +80,7 @@ sudo ufw allow 44556/udp
 
 Open your browser to:
 
-```
+```text
 http://your-site.localhost:8000/frontend
 ```
 
