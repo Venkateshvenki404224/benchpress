@@ -573,6 +573,106 @@ class TestPathSplitAndRateLimits(IntegrationTestCase):
 		self.assertEqual(fleet_rows.call_count, 1)
 
 
+class TestInFlightCap(IntegrationTestCase):
+	"""The render router's `inFlightReq` and the clamp over it — see phase-2-inflight.md.
+
+	The cap exists so one saturated bench queues its own requests instead of holding an
+	unbounded share of the shared MariaDB connection pool.
+	"""
+
+	@classmethod
+	def setUpClass(cls):
+		super().setUpClass()
+		frappe.set_user("Administrator")
+		cls.capped_size = _make_size("In Flight Capped", 1, "783m", inflight_limit=16)
+		# `Instance Size` is admin-editable, so the realistic bad value is a typo'd row rather
+		# than a hand-written route file — which the */5 reconcile overwrites anyway.
+		cls.typo_size = _make_size("In Flight Typo", 1, "784m", inflight_limit=999)
+		cls.unseeded_size = _make_size("In Flight Unseeded", 1, "785m", inflight_limit=0)
+		cls.lab = _make_lab("test-lab-inflight")
+		frappe.db.commit()
+
+	@classmethod
+	def tearDownClass(cls):
+		frappe.set_user("Administrator")
+		for name in frappe.get_all("Bench Instance", filters={"lab": cls.lab.name}, pluck="name"):
+			frappe.delete_doc("Bench Instance", name, force=True, ignore_permissions=True)
+		cls.lab.delete(ignore_permissions=True)
+		for size in (cls.capped_size, cls.typo_size, cls.unseeded_size):
+			frappe.delete_doc("Instance Size", size.name, force=True, ignore_permissions=True)
+		frappe.db.commit()
+		clear_size_index()
+		super().tearDownClass()
+
+	def setUp(self):
+		super().setUp()
+		clear_size_index()
+
+	@contextmanager
+	def _published(self, lab_size):
+		"""One bench of `lab_size`, and the `http` block its deploy wrote."""
+		frappe.db.set_value("Lab", self.lab.name, {"instance_size": lab_size, "enable_code_server": 1})
+		bench = _fresh_bench(self, self.lab.name)
+		bench.status = "Running"
+		bench.container_ip = "172.30.0.23"
+		bench.save(ignore_permissions=True)
+		frappe.db.commit()
+		with _route_dir() as (published_ingress, target_dir):
+			published_ingress.publish(bench.name, "benchpress.cloud")
+			yield bench, yaml.safe_load((target_dir / f"{bench.name}.yml").read_text())["http"]
+
+	def test_the_cap_lands_on_the_render_router_and_nowhere_else(self):
+		"""One tab pulls nine same-host assets, so a cap on `assets-` would 429 a single user;
+		code-server holds one upgraded connection per session, so a cap on `ide-` counts
+		sessions. The rate limit is listed first so a refused request takes no slot."""
+		with self._published(self.capped_size.name) as (bench, http):
+			carried = {name: router["middlewares"] for name, router in http["routers"].items()}
+			# Traefik drops a router naming a middleware it cannot resolve, and a dropped
+			# router is a bench nobody can reach.
+			defined = set(http["middlewares"])
+
+		self.assertEqual(
+			carried,
+			{
+				f"site-{bench.name}": [f"{bench.name}-rl-site", f"{bench.name}-inflight"],
+				f"assets-{bench.name}": [f"{bench.name}-rl-assets"],
+				f"ide-{bench.name}": [f"{bench.name}-rl-ide"],
+			},
+		)
+		self.assertEqual(defined, {name for names in carried.values() for name in names})
+
+	def test_the_amount_is_the_tier_number(self):
+		with self._published(self.capped_size.name) as (bench, http):
+			cap = http["middlewares"][f"{bench.name}-inflight"]
+
+		self.assertEqual(cap["inFlightReq"]["amount"], 16)
+
+	def test_a_typod_tier_cannot_exceed_the_ceiling(self):
+		"""The clamp is the whole reason the ceiling is a module constant: 151 shared database
+		connections divided by 24 is about the number of saturated benches this host holds."""
+		with self._published(self.typo_size.name) as (bench, http):
+			amount = http["middlewares"][f"{bench.name}-inflight"]["inFlightReq"]["amount"]
+
+		self.assertEqual(amount, 24)
+		self.assertEqual(amount, ingress.INFLIGHT_CEILING)
+
+	def test_an_unseeded_tier_gets_no_cap_rather_than_a_default(self):
+		"""Unlike the rate numbers, which have a floor. A row nobody seeded is an operator who
+		has not chosen yet, and imposing 4 on every bench the day this ships would be a
+		capacity change nobody asked for."""
+		with self._published(self.unseeded_size.name) as (bench, http):
+			self.assertEqual(http["routers"][f"site-{bench.name}"]["middlewares"], [f"{bench.name}-rl-site"])
+			self.assertNotIn(f"{bench.name}-inflight", http["middlewares"])
+
+	def test_the_cap_carries_no_source_criterion_at_all(self):
+		"""`site-<id>` matches exactly one host, so the router is already the bucket. A
+		`sourceCriterion` would only split the one count across two limiter instances."""
+		with self._published(self.capped_size.name) as (bench, http):
+			cap = http["middlewares"][f"{bench.name}-inflight"]
+
+		self.assertEqual(cap, {"inFlightReq": {"amount": 16}})
+
+
 class TestWildcardAnchor(unittest.TestCase):
 	"""`ensure_anchor` — the one place in this app that names a resolver.
 

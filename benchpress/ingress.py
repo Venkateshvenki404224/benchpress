@@ -60,9 +60,9 @@ IDE_HEALTH_PATH = "/healthz"
 DEFAULT_TRAEFIK_HEALTH_INTERVAL = 10
 DEFAULT_TRAEFIK_HEALTH_TIMEOUT = 3
 
-# What a browser fetches without rendering a page, split onto their own router so a later
-# in-flight cap lands on the render path alone — one that also counted a tab's nine assets
-# would 429 the tab. `/private/files` is deliberately absent: it needs a permission check, and
+# What a browser fetches without rendering a page, split onto their own router so the in-flight
+# cap lands on the render path alone — one that also counted a tab's nine assets would 429 the
+# tab. `/private/files` is deliberately absent: it needs a permission check, and
 # PathPrefix(`/files`) does not match it anyway.
 ASSET_PATH_PREFIXES = ("/assets", "/files")
 
@@ -81,15 +81,22 @@ CLIENT_IP_DEPTH = 1
 DEFAULT_RATE_AVERAGE = 20
 DEFAULT_RATE_BURST = 60
 
+# A platform safety clamp rather than a tier's choice, which is why it is a constant here and not
+# an `Instance Size` field: 151 shared database connections ÷ 24 is 6.3 simultaneously-saturated
+# benches against a host that holds about 6, so an operator who could raise it from Desk could
+# exhaust the pool.
+INFLIGHT_CEILING = 24
+
 
 class RateLimits(NamedTuple):
-	"""The per-tier request-rate numbers a bench's routers carry."""
+	"""The per-tier request numbers a bench's routers carry. An `inflight` of 0 is no cap at all."""
 
 	average: int
 	burst: int
+	inflight: int
 
 
-DEFAULT_RATE_LIMITS = RateLimits(DEFAULT_RATE_AVERAGE, DEFAULT_RATE_BURST)
+DEFAULT_RATE_LIMITS = RateLimits(DEFAULT_RATE_AVERAGE, DEFAULT_RATE_BURST, inflight=0)
 
 
 class TraefikRouteDirectoryMissing(Exception):
@@ -135,20 +142,30 @@ def publish(
 	host = f"Host(`{instance_id}.{base_domain}`)"
 	asset_paths = " || ".join(f"PathPrefix(`{prefix}`)" for prefix in ASSET_PATH_PREFIXES)
 
-	# Both routers name the same service: the split is about what a request costs, not where
-	# it goes.
-	routers = {
-		site: _router(host, site, f"{instance_id}-rl-site", ROUTER_PRIORITY),
-		f"assets-{instance_id}": _router(
-			f"{host} && ({asset_paths})",
-			site,
-			f"{instance_id}-rl-assets",
-			ASSETS_ROUTER_PRIORITY,
-		),
-	}
 	middlewares = {
 		f"{instance_id}-rl-site": _rate_limit(limits),
 		f"{instance_id}-rl-assets": _rate_limit(limits),
+	}
+
+	# The render path alone, and only when its tier sets a number. An unseeded row is an operator
+	# who has not chosen, so it gets no middleware rather than a default nobody asked for.
+	site_middlewares = [f"{instance_id}-rl-site"]
+	if limits.inflight:
+		# After the rate limit, not before: Traefik runs the chain in order, so a request the
+		# rate limit is about to refuse never takes an in-flight slot to be refused in.
+		site_middlewares.append(f"{instance_id}-inflight")
+		middlewares[f"{instance_id}-inflight"] = _in_flight(limits.inflight)
+
+	# Both routers name the same service: the split is about what a request costs, not where
+	# it goes.
+	routers = {
+		site: _router(host, site, site_middlewares, ROUTER_PRIORITY),
+		f"assets-{instance_id}": _router(
+			f"{host} && ({asset_paths})",
+			site,
+			[f"{instance_id}-rl-assets"],
+			ASSETS_ROUTER_PRIORITY,
+		),
 	}
 	# Resolved by Docker's embedded DNS: traefik is on the `benchpress` network.
 	services = {
@@ -161,10 +178,12 @@ def publish(
 	}
 
 	if ide:
+		# Never an `inFlightReq` here: code-server holds one upgraded connection for the whole
+		# session, so any cap would count sessions and 429 the one after it.
 		routers[f"ide-{instance_id}"] = _router(
 			f"Host(`ide-{instance_id}.{base_domain}`)",
 			f"ide-{instance_id}",
-			f"{instance_id}-rl-ide",
+			[f"{instance_id}-rl-ide"],
 			ROUTER_PRIORITY,
 		)
 		middlewares[f"{instance_id}-rl-ide"] = _rate_limit(limits)
@@ -181,14 +200,14 @@ def publish(
 	)
 
 
-def _router(rule: str, service: str, middleware: str, priority: int) -> dict:
-	"""One router, carrying exactly one middleware — see `publish` for why TLS names no resolver."""
+def _router(rule: str, service: str, middlewares: list[str], priority: int) -> dict:
+	"""One router and the chain it carries — see `publish` for why TLS names no resolver."""
 	return {
 		"rule": rule,
 		"entryPoints": ["websecure"],
 		"priority": priority,
 		"service": service,
-		"middlewares": [middleware],
+		"middlewares": middlewares,
 		"tls": {},
 	}
 
@@ -202,6 +221,11 @@ def _rate_limit(limits: RateLimits) -> dict:
 			"sourceCriterion": {"ipStrategy": {"depth": CLIENT_IP_DEPTH}},
 		}
 	}
+
+
+def _in_flight(amount: int) -> dict:
+	"""One `inFlightReq`. No `sourceCriterion`: the router matches one host, so it is the bucket."""
+	return {"inFlightReq": {"amount": amount}}
 
 
 def _service_health(path: str) -> dict:
@@ -231,7 +255,7 @@ def lab_has_ide(lab_doc) -> bool:
 
 
 def rate_limits(instance_id: str) -> RateLimits:
-	"""This bench's tier rate numbers — the one-bench case of `_routable_instances`."""
+	"""This bench's tier request numbers — the one-bench case of `_routable_instances`."""
 	rows = _fleet_rows(names=[instance_id])
 	return _limits_for(rows[0]) if rows else DEFAULT_RATE_LIMITS
 
@@ -250,11 +274,14 @@ def _ide_for(row) -> bool:
 
 
 def _limits_for(row) -> RateLimits:
-	"""The rate numbers this bench's tier sets, each falling back on its own — see `RateLimits`."""
+	"""The request numbers this bench's tier sets, each falling back on its own — see `RateLimits`."""
 	size = _size_for(row) or {}
 	return RateLimits(
 		average=cint(size.get("rate_average")) or DEFAULT_RATE_AVERAGE,
 		burst=cint(size.get("rate_burst")) or DEFAULT_RATE_BURST,
+		# No floor under this one, unlike the two above: an unseeded 0 has to stay 0 so the bench
+		# publishes no cap. The clamp is what an admin-editable field cannot be trusted without.
+		inflight=min(cint(size.get("inflight_limit")), INFLIGHT_CEILING),
 	)
 
 
