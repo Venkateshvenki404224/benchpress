@@ -33,6 +33,40 @@ Structured documentation sitemap for BenchPress.
 
 ## Operator
 
+### Start
+
+- [Operator track](/docs/operator): Run BenchPress on your own box — install, the VPN plane, settings, the shared database, images, upgrades, safety and diagnostics.
+
+### Stand a host up
+
+- [Prerequisites](/docs/operator/prerequisites): What a BenchPress host needs before you install — supported platforms, versions, Docker socket access, IP forwarding, sysbox, and the measured CPU sizing.
+- [Install](/docs/operator/install): Install BenchPress into a Frappe v16 bench — get-app, setup.sh, the frontend build, the base domain, and the first screen.
+- [WireGuard and the VPN plane](/docs/operator/wireguard-setup): How the vpn_management app owns the tunnel, what BenchPress consumes from it, the measured server and pool values, and why userns-remap matters.
+
+### Run it
+
+- [Settings reference](/docs/operator/settings-reference): Every field on BenchPress Settings and Credit Settings, with the value measured on a live host, where each one is edited, and what changing it costs.
+- [The shared database server](/docs/operator/database-server): One MariaDB holds every bench site's database — where it lives, how BenchPress drives it, what drift detection watches, and the four actions on the record.
+- [Backup and restore](/docs/operator/backup-and-restore): Where the nightly MariaDB dumps land, how long they are kept, and the two restore paths — a scratch container for verification, and managed recovery from bench console.
+- [Users and roles](/docs/operator/users-and-roles): The two BenchPress roles, what each one may read and write, which screens are admin-only, and how ownership rather than a role decides who sees a bench.
+
+### Images and speed
+
+- [Golden images](/docs/operator/golden-images): A lab's finished site is baked into its own image as a database dump, so a deploy restores it instead of creating tables — the measured numbers, the two settings, and why a golden gets refused.
+- [The image cache](/docs/operator/image-cache): One image per lab, tagged benchpress/<lab_id>:lab — what it costs on disk, how the weekly prewarm and sweep work, and what is safe to prune.
+
+### Keep it safe
+
+- [Upgrading](/docs/operator/upgrading): Move a BenchPress install to a newer release — the backup gate, the five steps, the scripted path, rollback, and why lab images are a separate opt-in.
+- [Production safety](/docs/operator/production-safety): What BenchPress is and is not ready to carry — the alpha verdict, the container privilege boundary, what is backed up, and the endpoint-by-endpoint release checklist.
+- [Diagnostics](/docs/operator/diagnostics): The eleven read-only checks that ask Docker, MariaDB, Redis and the kernel what is true — how to run them, what each failure means, and the four things they do not cover.
+
+### Optional — running it for a team
+
+- [Credits and billing](/docs/operator/credits-and-billing): Optional and off by default — the metering half of BenchPress, covering leases, balances, the ledger, admin adjustments, and the optional Razorpay handoff.
+- [Admission and limits](/docs/operator/admission-and-limits): Optional and off by default — concurrency caps, size ceilings, device and build quotas, how a slot is claimed as a row, and the acceptance run that proves access still works.
+- [Self-serve signup](/docs/operator/hosted-signup): Optional and off by default — retire the waitlist and let people sign themselves up, with GitHub and Google as the primary paths and the abuse controls that make a free grant safe.
+
 ## Reference
 
 ## Other

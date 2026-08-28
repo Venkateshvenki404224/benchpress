@@ -1,0 +1,159 @@
+---
+title: Self-serve signup
+description: Optional and off by default — retire the waitlist and let people
+  sign themselves up, with GitHub and Google as the primary paths and the abuse
+  controls that make a free grant safe.
+lastModified: "2026-08-28T13:08:38Z"
+lastAuthor: Venkatesh
+---
+# Self-serve signup
+
+**Optional, and off by default.** This applies to a **hosted** BenchPress,
+which means `enable_credits` is on. With credits off none of it runs, and the
+login page is Frappe's unmodified one.
+
+**Who this is for.** Somebody running a public BenchPress who wants to stop
+approving people by hand.
+
+**Before you start.** Read
+[Credits and billing](/docs/operator/credits-and-billing) first. Self-serve
+signup hands out the credit grant, so it is meaningless without the metering
+half switched on.
+
+## The one switch
+
+`Credit Settings → Self-serve Signup → Waitlist Open`.
+
+![The Credit Settings document in Frappe Desk, Self-serve Signup section. The Waitlist Open checkbox is ticked, and its help text says that while it is on the landing page shows the waitlist form and self-serve signup is refused. The Blocked Email Domains text area beside it is empty, and its help says OAuth signups are not checked.](../images/operator/hosted-signup/01-waitlist-switch.png)
+
+On this host `waitlist_open` is **on**, which is how it ships, and
+`blocked_email_domains` is empty.
+
+|Waitlist Open|Landing page action|`waitlist.join`|`signup.sign_up`|
+|--|--|--|--|
+|On (default)|**Start free** opens the waitlist form|accepts|refuses|
+|Off|**Start free** opens `/login#signup`|refuses|accepts|
+
+Saving this field also writes `Website Settings → Disable Signup` to match.
+That one Frappe field gates all three signup methods — the email form, and
+through `provider_allows_signup` both OAuth providers. Turning the waitlist
+off with Disable Signup still on would put a **Start free** button in front of
+a page Frappe refuses to render, so the second switch follows the first.
+
+The `Waitlist Entry` doctype and every row in it are kept. Flipping the switch
+deletes nothing.
+
+## Steps
+
+1. **Set up at least one OAuth provider.** GitHub and Google are the paths to
+   prefer. For each:
+
+   1. Register an OAuth app with the provider. The callback URL is
+      `https://<your-domain>/api/method/frappe.integrations.oauth2_logins.login_via_github`,
+      or `…login_via_google` for Google.
+   2. In Desk, open **Social Login Key → New**, pick the provider under
+      *Social Login Provider*, and paste the client id and secret.
+   3. Tick **Enable Social Login** and **Allow Sign-up**. Without the second,
+      an existing user can sign in but a new one cannot be created.
+   4. Save. The buttons appear on `/login` on the next request.
+
+   GitHub is the primary button on purpose. An aged GitHub account is evidence
+   that the person is real in a way a fresh email address is not, and that is
+   what makes a free grant safe to hand out without a card.
+
+2. **Set up email, if you want it.** There is nothing to configure beyond an
+   outgoing **Email Account** — the verification mail is what proves the
+   address. A site with no Email Account creates the user and then has no way
+   to let them in.
+
+3. **Set the abuse controls.** See [Abuse controls](#abuse-controls).
+
+4. **Turn the waitlist off.** Set `waitlist_open` to `0`.
+
+5. **Tell the people already on the waitlist.** Run this once as an admin:
+
+   ```bash
+   bench --site <site> execute benchpress.waitlist.notify_of_signup
+   ```
+
+   It emails every entry that has not been told, stamps `Invite Sent On` on
+   the row, and mails nobody twice. Approved entries get the login page and
+   everybody else gets signup. Re-running it is safe if a batch stops half
+   way.
+
+## Verify
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' https://<your-domain>/login
+```
+
+Then open `/login` in a browser. With the waitlist off you should see the
+signup form and any provider buttons you configured. Register a throwaway
+account and confirm it lands with the `BenchPress User` role and a
+`Credit Account` holding the grant.
+
+## When the grant is posted
+
+Never on the appearance of a `User` row. A row proves somebody typed an
+address, not that they hold it, and free credits are what a throwaway-address
+farm is after.
+
+|Path|Granted at|Why there|
+|--|--|--|
+|OAuth (GitHub, Google)|insert|`frappe.utils.oauth` writes the provider row before it saves the user, so the row is itself proof the flow completed|
+|Email|first login|`sign_up` sets a password the user never sees, so the only route to a session is the verification link|
+
+Either way it happens **exactly once, ever**. `Credit Account` is named after
+the email address, so a second arrival by any route finds the account already
+open. A re-signup after an account was deleted does not re-grant. That needs
+an operator's adjustment, on purpose. See
+[Credits and billing](/docs/operator/credits-and-billing).
+
+## Abuse controls
+
+|Control|Where|Ships as|
+|--|--|--|
+|Signups per hour, per IP and address|`benchpress.signup.SIGNUPS_PER_HOUR`|3|
+|Signups per hour, site-wide|`System Settings → Max Signups Allowed Per Hour`|300|
+|Disposable-domain blocklist|`Credit Settings → Blocked Email Domains`|empty|
+|Concurrent instances before a first purchase|`Credit Settings → Max Concurrent (Free)`|2|
+
+**Blocked Email Domains** takes one domain per line. A leading `@` and any
+casing are both accepted. It is checked on the email path only — an OAuth
+signup has already been vouched for by the provider, which is the other reason
+to prefer those buttons.
+
+## Turning it back off
+
+Set **Waitlist Open** back on. Signup refuses, Disable Signup goes back on,
+and the landing page shows the waitlist form again. Accounts already created
+keep their role, their balance and their instances.
+
+## Troubleshooting
+
+|Symptom|Cause|Fix|
+|--|--|--|
+|**Start free** opens a page that refuses to render|`Disable Signup` and `Waitlist Open` disagree|Save `Waitlist Open` again. It writes the Frappe field to match|
+|A provider button does not appear|**Enable Social Login** is off|Tick it, then reload `/login`|
+|An existing user can sign in but a new one cannot|**Allow Sign-up** is off on the Social Login Key|Tick it|
+|Email signup creates the user and nothing arrives|No outgoing Email Account|Configure one. The verification mail is the only way in|
+|A new account has no credits|The grant only posts once per address, ever|Check for an existing `Credit Account` with that name|
+|A user signed up and cannot deploy|They are at `max_concurrent_free`|See [Admission and limits](/docs/operator/admission-and-limits)|
+|Signups stop at three from one address|`SIGNUPS_PER_HOUR`|Expected. Wait an hour|
+
+## Reference
+
+|Item|Value on this host|
+|--|--|
+|`waitlist_open`|`1`|
+|`blocked_email_domains`|empty|
+|`signup_grant_credits`|40|
+|`SIGNUPS_PER_HOUR`|3|
+|Retirement mailer|`benchpress.waitlist.notify_of_signup`|
+|Roles granted|`BenchPress User`|
+
+## Related
+
+* [Credits and billing](/docs/operator/credits-and-billing) — the switch this page assumes is on.
+* [Admission and limits](/docs/operator/admission-and-limits) — what a new free account may actually do.
+* [Users and roles](/docs/operator/users-and-roles) — the role every signup lands with.

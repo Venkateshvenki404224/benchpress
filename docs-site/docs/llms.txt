@@ -37,22 +37,47 @@ Read the summary links first. If the page links are not enough, use `/llms-full.
 
 ## Operator
 
+### Start
+
+- [Operator track](/docs/operator.md): Run BenchPress on your own box — install, the VPN plane, settings, the shared database, images, upgrades, safety and diagnostics.
+
+### Stand a host up
+
+- [Prerequisites](/docs/operator/prerequisites.md): What a BenchPress host needs before you install — supported platforms, versions, Docker socket access, IP forwarding, sysbox, and the measured CPU sizing.
+- [Install](/docs/operator/install.md): Install BenchPress into a Frappe v16 bench — get-app, setup.sh, the frontend build, the base domain, and the first screen.
+- [WireGuard and the VPN plane](/docs/operator/wireguard-setup.md): How the vpn_management app owns the tunnel, what BenchPress consumes from it, the measured server and pool values, and why userns-remap matters.
+
+### Run it
+
+- [Settings reference](/docs/operator/settings-reference.md): Every field on BenchPress Settings and Credit Settings, with the value measured on a live host, where each one is edited, and what changing it costs.
+- [The shared database server](/docs/operator/database-server.md): One MariaDB holds every bench site's database — where it lives, how BenchPress drives it, what drift detection watches, and the four actions on the record.
+- [Backup and restore](/docs/operator/backup-and-restore.md): Where the nightly MariaDB dumps land, how long they are kept, and the two restore paths — a scratch container for verification, and managed recovery from bench console.
+- [Users and roles](/docs/operator/users-and-roles.md): The two BenchPress roles, what each one may read and write, which screens are admin-only, and how ownership rather than a role decides who sees a bench.
+
+### Images and speed
+
+- [Golden images](/docs/operator/golden-images.md): A lab's finished site is baked into its own image as a database dump, so a deploy restores it instead of creating tables — the measured numbers, the two settings, and why a golden gets refused.
+- [The image cache](/docs/operator/image-cache.md): One image per lab, tagged benchpress/<lab_id>:lab — what it costs on disk, how the weekly prewarm and sweep work, and what is safe to prune.
+
+### Keep it safe
+
+- [Upgrading](/docs/operator/upgrading.md): Move a BenchPress install to a newer release — the backup gate, the five steps, the scripted path, rollback, and why lab images are a separate opt-in.
+- [Production safety](/docs/operator/production-safety.md): What BenchPress is and is not ready to carry — the alpha verdict, the container privilege boundary, what is backed up, and the endpoint-by-endpoint release checklist.
+- [Diagnostics](/docs/operator/diagnostics.md): The eleven read-only checks that ask Docker, MariaDB, Redis and the kernel what is true — how to run them, what each failure means, and the four things they do not cover.
+
+### Optional — running it for a team
+
+- [Credits and billing](/docs/operator/credits-and-billing.md): Optional and off by default — the metering half of BenchPress, covering leases, balances, the ledger, admin adjustments, and the optional Razorpay handoff.
+- [Admission and limits](/docs/operator/admission-and-limits.md): Optional and off by default — concurrency caps, size ceilings, device and build quotas, how a slot is claimed as a row, and the acceptance run that proves access still works.
+- [Self-serve signup](/docs/operator/hosted-signup.md): Optional and off by default — retire the waitlist and let people sign themselves up, with GitHub and Google as the primary paths and the abuse controls that make a free grant safe.
+
 ## Reference
 
 ## Other
 
-- [PRODUCTION CHECKLIST](/docs/PRODUCTION_CHECKLIST.md): Reference page for production checklist.
-- [SIZING](/docs/SIZING.md): Reference page for sizing.
-- [Database Backup Restore](/docs/database-backup-restore.md): Reference page for database backup restore.
-- [Getting Started](/docs/getting-started.md): Reference page for getting started.
-- [Hosted Signup](/docs/hosted-signup.md): Reference page for hosted signup.
 - [BenchPress documentation](/docs/index.md): Start here. Three tracks — use a bench, run the server that hosts one, or read the data model and the API.
 - [Integration Notices](/docs/integration-notices.md): Reference page for integration notices.
 - [DESIGN BRIEF](/docs/internal/DESIGN_BRIEF.md): Reference page for design brief.
 - [SCREENSHOT CHECKLIST](/docs/internal/SCREENSHOT-CHECKLIST.md): Reference page for screenshot checklist.
 - [DESIGN BRIEF](/docs/internal/design_handoff_benchpress_ui/DESIGN_BRIEF.md): Reference page for design brief.
 - [Design Handoff Benchpress Ui](/docs/internal/design_handoff_benchpress_ui/README.md): Reference page for design handoff benchpress ui.
-- [Lab Access Acceptance](/docs/lab-access-acceptance.md): Reference page for lab access acceptance.
-- [Production Safety](/docs/production-safety.md): Reference page for production safety.
-- [Upgrading](/docs/upgrading.md): Reference page for upgrading.
-- [Wireguard Setup](/docs/wireguard-setup.md): Reference page for wireguard setup.
