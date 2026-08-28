@@ -12,6 +12,7 @@ import os
 import socket
 import ssl
 from pathlib import Path
+from typing import NamedTuple
 
 import frappe
 import yaml
@@ -59,6 +60,37 @@ IDE_HEALTH_PATH = "/healthz"
 DEFAULT_TRAEFIK_HEALTH_INTERVAL = 10
 DEFAULT_TRAEFIK_HEALTH_TIMEOUT = 3
 
+# What a browser fetches without rendering a page, split onto their own router so a later
+# in-flight cap lands on the render path alone — one that also counted a tab's nine assets
+# would 429 the tab. `/private/files` is deliberately absent: it needs a permission check, and
+# PathPrefix(`/files`) does not match it anyway.
+ASSET_PATH_PREFIXES = ("/assets", "/files")
+
+# Traefik's default priority is the rule length, so a long enough base domain would let the
+# bare host rule out-rank the longer assets rule and the split would silently do nothing.
+# Both are stated rather than left to be derived.
+ROUTER_PRIORITY = 100
+ASSETS_ROUTER_PRIORITY = 200
+
+# Counted from the right, so 1 is Cloudflare's view of the client. A client-supplied
+# X-Forwarded-For arrives to the *left* of the real address, which makes depth 2 spoofable.
+CLIENT_IP_DEPTH = 1
+
+# Traefik reads `average: 0` as no limit at all, so an `Instance Size` row nobody seeded would
+# publish a route with the brake off. These are the floor under that, not a tier's choice.
+DEFAULT_RATE_AVERAGE = 20
+DEFAULT_RATE_BURST = 60
+
+
+class RateLimits(NamedTuple):
+	"""The per-tier request-rate numbers a bench's routers carry."""
+
+	average: int
+	burst: int
+
+
+DEFAULT_RATE_LIMITS = RateLimits(DEFAULT_RATE_AVERAGE, DEFAULT_RATE_BURST)
+
 
 class TraefikRouteDirectoryMissing(Exception):
 	"""Raised when the Traefik route directory is not mounted in this container.
@@ -69,7 +101,12 @@ class TraefikRouteDirectoryMissing(Exception):
 	"""
 
 
-def publish(instance_id: str, base_domain: str, ide: bool | None = None) -> None:
+def publish(
+	instance_id: str,
+	base_domain: str,
+	ide: bool | None = None,
+	limits: RateLimits | None = None,
+) -> None:
 	"""Write Traefik file-provider routes for this instance's site, and its IDE when it has one.
 
 	`tls: {}` turns TLS on and names no resolver, so these routers serve whatever
@@ -91,18 +128,31 @@ def publish(instance_id: str, base_domain: str, ide: bool | None = None) -> None
 	# deploy's context, and two writers that disagree overwrite each other every five minutes.
 	if ide is None:
 		ide = has_ide(instance_id)
+	if limits is None:
+		limits = rate_limits(instance_id)
 
+	site = f"site-{instance_id}"
+	host = f"Host(`{instance_id}.{base_domain}`)"
+	asset_paths = " || ".join(f"PathPrefix(`{prefix}`)" for prefix in ASSET_PATH_PREFIXES)
+
+	# Both routers name the same service: the split is about what a request costs, not where
+	# it goes.
 	routers = {
-		f"site-{instance_id}": {
-			"rule": f"Host(`{instance_id}.{base_domain}`)",
-			"entryPoints": ["websecure"],
-			"service": f"site-{instance_id}",
-			"tls": {},
-		}
+		site: _router(host, site, f"{instance_id}-rl-site", ROUTER_PRIORITY),
+		f"assets-{instance_id}": _router(
+			f"{host} && ({asset_paths})",
+			site,
+			f"{instance_id}-rl-assets",
+			ASSETS_ROUTER_PRIORITY,
+		),
+	}
+	middlewares = {
+		f"{instance_id}-rl-site": _rate_limit(limits),
+		f"{instance_id}-rl-assets": _rate_limit(limits),
 	}
 	# Resolved by Docker's embedded DNS: traefik is on the `benchpress` network.
 	services = {
-		f"site-{instance_id}": {
+		site: {
 			"loadBalancer": {
 				"servers": [{"url": f"http://{instance_id}:{addressing.SITE_HTTP_PORT}"}],
 				"healthCheck": _service_health(SITE_HEALTH_PATH),
@@ -111,12 +161,13 @@ def publish(instance_id: str, base_domain: str, ide: bool | None = None) -> None
 	}
 
 	if ide:
-		routers[f"ide-{instance_id}"] = {
-			"rule": f"Host(`ide-{instance_id}.{base_domain}`)",
-			"entryPoints": ["websecure"],
-			"service": f"ide-{instance_id}",
-			"tls": {},
-		}
+		routers[f"ide-{instance_id}"] = _router(
+			f"Host(`ide-{instance_id}.{base_domain}`)",
+			f"ide-{instance_id}",
+			f"{instance_id}-rl-ide",
+			ROUTER_PRIORITY,
+		)
+		middlewares[f"{instance_id}-rl-ide"] = _rate_limit(limits)
 		services[f"ide-{instance_id}"] = {
 			"loadBalancer": {
 				"servers": [{"url": f"http://{instance_id}:{addressing.IDE_HTTP_PORT}"}],
@@ -126,8 +177,31 @@ def publish(instance_id: str, base_domain: str, ide: bool | None = None) -> None
 
 	_atomic_write(
 		TRAEFIK_DYNAMIC_DIR / f"{instance_id}.yml",
-		yaml.safe_dump({"http": {"routers": routers, "services": services}}),
+		yaml.safe_dump({"http": {"routers": routers, "middlewares": middlewares, "services": services}}),
 	)
+
+
+def _router(rule: str, service: str, middleware: str, priority: int) -> dict:
+	"""One router, carrying exactly one middleware — see `publish` for why TLS names no resolver."""
+	return {
+		"rule": rule,
+		"entryPoints": ["websecure"],
+		"priority": priority,
+		"service": service,
+		"middlewares": [middleware],
+		"tls": {},
+	}
+
+
+def _rate_limit(limits: RateLimits) -> dict:
+	"""One `rateLimit` middleware, bucketed on the client address Cloudflare saw."""
+	return {
+		"rateLimit": {
+			"average": limits.average,
+			"burst": limits.burst,
+			"sourceCriterion": {"ipStrategy": {"depth": CLIENT_IP_DEPTH}},
+		}
+	}
 
 
 def _service_health(path: str) -> dict:
@@ -156,6 +230,12 @@ def lab_has_ide(lab_doc) -> bool:
 	return _ide_for(lab_doc)
 
 
+def rate_limits(instance_id: str) -> RateLimits:
+	"""This bench's tier rate numbers — the one-bench case of `_routable_instances`."""
+	rows = _fleet_rows(names=[instance_id])
+	return _limits_for(rows[0]) if rows else DEFAULT_RATE_LIMITS
+
+
 def _ide_for(row) -> bool:
 	"""The one rule: the Lab asks for an IDE and the size it resolves to includes one.
 
@@ -163,12 +243,27 @@ def _ide_for(row) -> bool:
 	"""
 	if not cint(row.get("enable_code_server")):
 		return False
-	# The size the bench was deployed at, else its Lab's — the order billing prices at, so
-	# re-pointing a Lab leaves a running bench's routers alone.
-	size = size_index()["by_name"].get(row.get("bench_size")) or size_for_lab(row)
+	size = _size_for(row)
 	if not size:
 		return True
 	return bool(cint(size.include_code_server))
+
+
+def _limits_for(row) -> RateLimits:
+	"""The rate numbers this bench's tier sets, each falling back on its own — see `RateLimits`."""
+	size = _size_for(row) or {}
+	return RateLimits(
+		average=cint(size.get("rate_average")) or DEFAULT_RATE_AVERAGE,
+		burst=cint(size.get("rate_burst")) or DEFAULT_RATE_BURST,
+	)
+
+
+def _size_for(row):
+	"""The `Instance Size` a bench's routers answer from — the one it deployed at, else its Lab's.
+
+	That is the order billing prices at, so re-pointing a Lab leaves a running bench alone.
+	"""
+	return size_index()["by_name"].get(row.get("bench_size")) or size_for_lab(row)
 
 
 def withdraw(instance_id: str) -> None:
@@ -406,8 +501,8 @@ def reconcile() -> dict:
 
 	anchored = ensure_anchor(base_domain)
 	routable = _routable_instances()
-	for instance_id, ide in routable.items():
-		publish(instance_id, base_domain, ide=ide)
+	for instance_id, (ide, limits) in routable.items():
+		publish(instance_id, base_domain, ide=ide, limits=limits)
 
 	stale = published() - routable.keys()
 	for instance_id in stale:
@@ -422,15 +517,16 @@ def reconcile() -> dict:
 	}
 
 
-def _routable_instances() -> dict[str, bool]:
-	"""Every bench that should own a route file, mapped to whether it gets an IDE router too.
+def _routable_instances() -> dict[str, tuple[bool, RateLimits]]:
+	"""Every bench that should own a route file, mapped to its IDE flag and its tier's rate limits.
 
-	`Running` and nothing else. A `Stopped`, `Draft` or `Error` bench has no container
-	answering, and its recorded `container_ip` is a freed address Docker is free to hand
-	to somebody else's bench — which is the misroute, not a dead link. A row with no IP
-	at all is dropped for the same reason a route to nowhere is worse than no route.
+	`Running` with an IP only: a freed `container_ip` may already belong to another tenant.
 	"""
-	return {row.name: _ide_for(row) for row in _fleet_rows(status="Running") if row.container_ip}
+	return {
+		row.name: (_ide_for(row), _limits_for(row))
+		for row in _fleet_rows(status="Running")
+		if row.container_ip
+	}
 
 
 def _fleet_rows(names: list[str] | None = None, status: str | None = None) -> list[dict]:

@@ -23,7 +23,12 @@
   "max_sites",
   "iops_limit",
   "bps_limit",
-  "include_code_server"
+  "include_code_server",
+  "limits_section",
+  "inflight_limit",
+  "column_break_limits",
+  "rate_average",
+  "rate_burst"
  ],
  "fields": [
   {
@@ -141,12 +146,44 @@
    "fieldname": "include_code_server",
    "fieldtype": "Check",
    "label": "Include Code Server"
+  },
+  {
+   "fieldname": "limits_section",
+   "fieldtype": "Section Break",
+   "label": "Request Limits"
+  },
+  {
+   "description": "Simultaneous requests a bench of this size may have in flight on its site router. 0 = uncapped.",
+   "fieldname": "inflight_limit",
+   "fieldtype": "Int",
+   "label": "In-Flight Request Limit",
+   "non_negative": 1
+  },
+  {
+   "fieldname": "column_break_limits",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "20",
+   "description": "Requests per second one client IP may sustain against a bench of this size. 0 = the default (20).",
+   "fieldname": "rate_average",
+   "fieldtype": "Int",
+   "label": "Request Rate (per second)",
+   "non_negative": 1
+  },
+  {
+   "default": "60",
+   "description": "Requests one client IP may spend at once before the rate applies. 0 = the default (60).",
+   "fieldname": "rate_burst",
+   "fieldtype": "Int",
+   "label": "Request Burst",
+   "non_negative": 1
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-08-27 10:00:00.000000",
+ "modified": "2026-08-28 04:00:00.000000",
  "modified_by": "Administrator",
  "module": "Benchpress",
  "name": "Instance Size",
