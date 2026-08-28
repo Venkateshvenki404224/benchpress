@@ -1,0 +1,31 @@
+{
+  "linkset": [
+    {
+      "anchor": "https://docs.benchpress.cloud/",
+      "api-catalog": [
+        {
+          "href": "https://docs.benchpress.cloud/.well-known/api-catalog",
+          "type": "application/linkset+json"
+        }
+      ],
+      "service-doc": [
+        {
+          "href": "https://docs.benchpress.cloud/docs/llms.txt",
+          "type": "text/plain"
+        }
+      ],
+      "service-desc": [
+        {
+          "href": "https://docs.benchpress.cloud/docs/agent-readability.json",
+          "type": "application/json"
+        }
+      ],
+      "describedby": [
+        {
+          "href": "https://docs.benchpress.cloud/sitemap.xml",
+          "type": "application/xml"
+        }
+      ]
+    }
+  ]
+}

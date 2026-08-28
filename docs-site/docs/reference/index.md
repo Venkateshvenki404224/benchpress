@@ -1,0 +1,77 @@
+---
+title: Reference track
+description: The data model, the whitelisted API, the eleven deploy steps, the
+  reconcilers, the address plan and the configuration split — for a contributor
+  or an integrator.
+lastModified: "2026-08-28T16:15:34Z"
+lastAuthor: Venkatesh
+---
+# Reference track
+
+What BenchPress is made of, rather than how to use it or how to run it.
+
+**Who this is for.** Somebody who calls the API from another program, changes
+the code, or has to answer a question the other two tracks do not cover.
+
+**Before you start.** The [user track](/docs/user/quick-tour) and the
+[operator track](/docs/operator) describe the same system as tasks. This track
+assumes you have watched one deploy run. Read
+[Deploy from a template](/docs/user/deploy-from-template) first if you have not.
+
+## Pick a page by the question you have
+
+|Question|Page|
+|--|--|
+|What are the moving parts, and which module owns each one|[Architecture](/docs/reference/architecture)|
+|What DocTypes exist, what fields they carry, and who may read a row|[Data model](/docs/reference/data-model)|
+|What can I call over HTTP, and what does it check|[API](/docs/reference/api)|
+|What happens between "Deploy" and a running site|[Deploy pipeline](/docs/reference/deploy-pipeline)|
+|What corrects the database when reality changes underneath it|[Lifecycle and events](/docs/reference/lifecycle-and-events)|
+|What address does a bench answer on, and who can reach it|[Networking](/docs/reference/networking)|
+|How does a screen update without a page reload|[Realtime](/docs/reference/realtime)|
+|Which change needs a rebuild, and which needs a restart|[Configuration](/docs/reference/configuration)|
+|What can I run from a shell|[CLI and scripts](/docs/reference/cli-and-scripts)|
+|What does this word mean here|[Glossary](/docs/reference/glossary)|
+
+## What this track is counted against
+
+The numbers below are the size of the surface each page documents. Every page
+accounts for its whole set. A page that omits a member says which one and why.
+
+|Surface|Count|Documented in|
+|--|--|--|
+|DocTypes in the BenchPress module|20|[Data model](/docs/reference/data-model)|
+|`@frappe.whitelist()` functions|50|[API](/docs/reference/api)|
+|Deploy steps|11|[Deploy pipeline](/docs/reference/deploy-pipeline)|
+|Scheduled jobs|11|[Lifecycle and events](/docs/reference/lifecycle-and-events)|
+|Realtime events|6|[Realtime](/docs/reference/realtime)|
+
+## Two rules that explain most of the code
+
+Both are repository conventions, and both are enforced.
+
+1. **Query with `frappe.qb`, never `frappe.db.sql`.** A raw string query is a
+   lint failure.
+2. **Every whitelisted function checks permissions itself.** The decorator only
+   publishes the function. It grants nothing. See
+   [How an endpoint is guarded](/docs/reference/api#how-an-endpoint-is-guarded).
+
+Behavior also lives in `hooks.py`, not only in the file you are reading. Check
+it before you assume a save does the plain thing.
+
+## Where the code lives
+
+|Path|Holds|
+|--|--|
+|`benchpress/*.py`|the modules — one concern each|
+|`benchpress/credits/*.py`|leases, balances, admission, and the caps|
+|`benchpress/benchpress/doctype/<name>/`|the DocType JSON and its controller|
+|`benchpress/hooks.py`|permission rules, document events, scheduled jobs|
+|`frontend/src/`|the Vue 3 single-page app|
+|`docs/`|this documentation, in MDX|
+
+## Related
+
+* [Architecture](/docs/reference/architecture) — the map to read first.
+* [Operator track](/docs/operator) — the same system, from the host side.
+* [Settings reference](/docs/operator/settings-reference) — every field on the two settings documents.

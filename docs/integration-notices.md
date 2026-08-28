@@ -12,8 +12,8 @@ The redistributed Python and npm dependency trees are a separate, generated list
 | Family | Source | Licence | Where |
 |---|---|---|---|
 | Poppins | <https://github.com/itfoundry/Poppins> | OFL-1.1 | Landing page chrome — `benchpress/public/fonts/` |
-| Inter | <https://github.com/rsms/inter> | OFL-1.1 | Product mocks on the landing page, and the docs page — `benchpress/public/fonts/`, `docs/fonts/` |
-| JetBrains Mono | <https://github.com/JetBrains/JetBrainsMono> | OFL-1.1 | Terminal blocks on the docs page — `docs/fonts/` |
+| Inter | <https://github.com/rsms/inter> | OFL-1.1 | Product mocks on the landing page, and the docs page — `benchpress/public/fonts/`, `site/fonts/` |
+| JetBrains Mono | <https://github.com/JetBrains/JetBrainsMono> | OFL-1.1 | Terminal blocks on the docs page — `site/fonts/` |
 
 The Vue SPA is not in that table. It gets Inter from `frappe-ui`, which vendors the font itself,
 so the app already had no external font request.

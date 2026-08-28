@@ -1,0 +1,251 @@
+---
+title: Leases and credits
+description: The countdown on a running bench, the renew dialog and its plans, the credit meter, the ledger, and where a purchase hands off to the payment gateway.
+---
+
+# Leases and credits
+
+On a server with credits switched on, a deploy buys a fixed window of time and
+the bench stops when the window closes. This page reads the clock, renews it,
+and explains every line in the ledger.
+
+**Who this is for.** Anybody using a BenchPress server that charges for time.
+
+**Before you start.** Credits are off by default, and off means the feature
+does not exist. With credits off there is no countdown, no meter in the
+sidebar, and `/frontend/credits` sends you back to Labs. If your server looks
+like that, skip this page. Nothing on it applies.
+
+## What costs credits
+
+Two things, and the Credits screen says so at the top.
+
+| Action | Cost |
+|---|---|
+| The lease an instance runs on | the plan's price |
+| A custom image build nobody has built before | 40 credits |
+| Creating a site | free |
+| Registering a device | free |
+| A build that fails | free |
+
+## Steps
+
+1. Find the countdown. Every running bench with a lease shows one on the
+   **Labs** list, under the instance it is deployed as.
+
+   ![The BenchPress Labs list at 1280 by 800 pixels with credits switched on. Ten labs are listed. The Frappe CRM demo row reads version-15, the app chip CRM, a green Running badge, the bench hostname, bench-crm-demo Running, a green line reading Lease ends in 29:48, and 23 minutes ago in the Last run column. Every other lab reads Ready or Draft with Never deployed and an em dash. At the foot of the sidebar a credit meter reads 60 of 65 with a green progress bar, which only appears while credits are on.](../images/user/leases-and-credits/01-labs-countdown.png)
+
+   In the frame the `crm-demo` row reads `Lease ends in 29:48`. The credit
+   meter at the foot of the sidebar reads `60` of `65`.
+
+   The meter is a fuel gauge, not a total. The number is what is left, the
+   denominator is everything ever put into the account, and the bar empties as
+   credits are spent.
+
+2. Open the lab for the same clock beside a **Renew** button.
+
+   ![The Dashboard tab of the Frappe CRM demo lab at 1280 by 800 pixels with credits on. The Container card is headed Running, Health reads Healthy checked 23m ago, CPU reads 0 percent of quota 1 vCPU and MEMORY 0 percent of a 1 GB limit. The foot of the card reads Started 24 minutes ago, then a green Lease ends in 29:39, then a Renew button. The lab header carries an extra orange chip reading 5 credits slash 30 minutes beside version-15, 1 GB, 1 vCPU, code-server and SSH.](../images/user/leases-and-credits/02-container-countdown.png)
+
+   The lab header gains one chip while credits are on. In the frame it reads
+   `5 credits / 30 minutes`, which is what one lease on this lab costs at the
+   default plan.
+
+   The countdown ticks once a second against the server clock, not the
+   browser's.
+
+   ![An animation of the Container card on a running bench, cropped to the card and lasting about thirteen seconds. The card reads Running, Health Healthy checked 23m ago, CPU 0 percent of quota 1 vCPU and MEMORY 0 percent of a 1 GB limit. The bottom line reads Started 24 minutes ago, then the green countdown Lease ends in 29:26, which ticks down one second at a time to 29:14 while nothing else on the card changes, with the Renew button steady beside it.](../images/user/leases-and-credits/08-countdown.gif)
+
+   Only the countdown moves. Everything else on the card holds still, which is
+   the point: the deadline is the one number on this screen that changes on
+   its own.
+
+3. Press **Renew** and pick a duration. The dialog offers eight.
+
+   ![The Renew lease dialog over the lab page at 1280 by 800 pixels. It is headed Renew lease with the line, Time is added to the deadline you already have. Eight radio rows list a duration on the left and a price on the right: 5 minutes 1 credits, 30 minutes 5 credits, 2 hours 18 credits, 8 hours 60 credits, 1 day 150 credits, 2 days 260 credits, 4 days 460 credits and 1 week 700 credits. None is selected and the Renew button at the foot is grayed out.](../images/user/leases-and-credits/03-renew-plans.png)
+
+   Read the first line of the dialog. **Time is added to the deadline you
+   already have.** Renewing early does not throw away what is left.
+
+   | Duration | Credits | Credits per hour |
+   |---|---|---|
+   | 5 minutes | 1 | 12.0 |
+   | 30 minutes | 5 | 10.0 |
+   | 2 hours | 18 | 9.0 |
+   | 8 hours | 60 | 7.5 |
+   | 1 day | 150 | 6.25 |
+   | 2 days | 260 | 5.4 |
+   | 4 days | 460 | 4.8 |
+   | 1 week | 700 | 4.2 |
+
+   The longer window is cheaper per hour. The **Renew** button stays disabled
+   until a duration is chosen, then names the choice and its price.
+
+4. If the account cannot afford the plan, the dialog refuses in place and says
+   by how much.
+
+   ![The Renew lease dialog with the 1 week row selected at 1280 by 800 pixels. The button now reads Renew 1 week, 700 credits, and a red message under it reads, Not enough credits: this needs 700.0 and 60.0 are available — 640.0 short. Top up at slash frontend slash credits. The credit meter in the sidebar reads 60 of 65 and the other seven durations remain selectable above the button.](../images/user/leases-and-credits/04-renew-refused.png)
+
+   The refusal carries four things: what the plan costs, what is available,
+   the gap, and where to fix it. Nothing is charged and nothing changes.
+
+   Available is not the same as the balance. Credits already held against a
+   running deploy are reserved and cannot be committed twice.
+
+5. Pick a duration you can afford and press the button. The charge and the
+   extension happen together.
+
+   ![The lab page after a successful renewal at 1280 by 800 pixels. The countdown now reads Lease ends in 58:02 where it read 29:48 before, and the credit meter in the sidebar has fallen from 60 to 55 of 65. The Container card is otherwise unchanged, still Running and Healthy, and the header chip still reads 5 credits slash 30 minutes.](../images/user/leases-and-credits/05-renewed.png)
+
+   In the frame, 30 minutes was added to a lease with about 28 minutes left,
+   so the countdown went from `29:48` to `58:02`, and the balance fell from
+   `60` to `55`.
+
+6. Open **Credits** from the meter in the sidebar for the balance, the packs
+   and the full ledger.
+
+   ![The BenchPress Credits page at 1280 by 800 pixels. Two tiles read Balance 55 of 65 allocated and Entries 4. A Buy credits card offers three packs side by side: Starter 200 credits for 499 rupees at 2.50 rupees per credit, Regular 1,000 credits for 1,999 rupees at 2.00 rupees per credit and highlighted, and Heavy 4,000 credits for 6,999 rupees at 1.75 rupees per credit. Below them a table with the columns Type, Credits, Balance after, What happened and When lists four rows: Usage −5 leaving 55, Usage −5 leaving 60, Adjustment +25 leaving 65 described as Documentation demo top-up, and Grant +40 leaving 40 described as Signup grant.](../images/user/leases-and-credits/06-credits-page.png)
+
+   Every row names what happened and what the balance was afterward, so the
+   column reads down to the current figure with no arithmetic.
+
+   | Type | Credits | Balance after | What happened |
+   |---|---|---|---|
+   | Usage | −5 | 55 | `bench-crm-demo — 30 minutes lease` |
+   | Usage | −5 | 60 | `bench-crm-demo — 30 minutes lease` |
+   | Adjustment | +25 | 65 | Documentation demo top-up |
+   | Grant | +40 | 40 | Signup grant |
+
+   The `Grant` at the bottom is the signup grant. A new account is opened with
+   40 credits on this server.
+
+## Buying credits
+
+Press a pack on the Credits page and BenchPress opens an order with the
+payment gateway. The price is read from the pack, never from the browser, so
+the amount cannot be changed on the way.
+
+![The Credits page after pressing the Regular pack at 1280 by 800 pixels. The Regular card is highlighted and a red message under the three packs reads, Password not found for Razorpay Settings Razorpay Settings key_secret. The Balance tile still reads 55 of 65 allocated, the Entries tile still reads 4, and the ledger below is unchanged with its four rows.](../images/user/leases-and-credits/07-checkout-handoff.png)
+
+The frame above is a server whose gateway has no keys configured. The press
+reaches the gateway handoff and stops there with
+`Password not found for Razorpay Settings Razorpay Settings key_secret`.
+Nothing is charged and the ledger does not change.
+
+With keys configured, the press opens a checkout instead. Credits land in the
+account when the payment settles, as a `Purchase` row in the ledger.
+
+**A purchase is applied exactly once.** The gateway retries, and every retry
+is matched against the order already settled.
+
+| Pack | Credits | Price | Per credit |
+|---|---|---|---|
+| Starter | 200 | ₹499 | ₹2.50 |
+| Regular | 1,000 | ₹1,999 | ₹2.00 |
+| Heavy | 4,000 | ₹6,999 | ₹1.75 |
+
+There are no subscriptions and no auto-renewal. Money buys credits, and
+credits buy time.
+
+## Verify
+
+- The Labs row for a running bench shows `Lease ends in …`.
+- The countdown falls by one second a second.
+- After a renewal the countdown jumps by the plan's duration and the meter
+  falls by its price.
+- The Credits page shows one `Usage` row for the renewal, with the new
+  balance in **Balance after**.
+
+## Troubleshooting
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| No countdown and no meter | Credits are switched off on this server | Nothing to do. There are no leases |
+| `/frontend/credits` sends you to Labs | Same. The screen exists only while credits are on | Ask the operator whether credits are meant to be on |
+| No **Renew** button beside the countdown | The bench never held a lease | Redeploy it |
+| `Not enough credits` | The plan costs more than is available | Pick a shorter plan, or buy credits |
+| The refusal names less than the balance | Credits are reserved against a running deploy | Stop an instance, or buy credits |
+| `A lease on this lab cannot run longer than … minutes` | The plan would push the lease past the lab's ceiling | Pick a shorter plan |
+| `This bench is already stopping` | The expiry sweep claimed the row first | Wait for the stop, start the bench, then renew |
+| `This bench has been torn down. Redeploy it` | The stopped container was reaped | Redeploy. A new lease starts with it |
+| `Credits are switched off on this site` | Credits were turned off between opening the dialog and pressing it | Reload the page |
+| A purchase fails at the gateway | The server has no gateway keys | Ask the operator. Nothing was charged |
+| The deadline passed and the bench is still up | The sweep that stops expired leases is not running | Tell the operator. The clock is right, the sweep is not |
+
+## Reference
+
+### The lease clock
+
+The deadline is a fixed instant stored on the bench. Nothing accrues and
+nothing settles later. A deploy spends the plan's price once and writes the
+deadline.
+
+A scheduled sweep on the server claims each due lease and hands the stop to a
+background worker. **That sweep, not the browser, is what stops a bench.** A
+server whose sweep or stop worker is not running keeps benches alive past
+their deadline. The countdown still tells the truth about the deadline.
+
+### After the deadline
+
+A stop keeps the container. It is a stop, not a delete.
+
+| Then | What happens |
+|---|---|
+| The bench stops | The container is kept. The database is kept |
+| Inside the grace window | **Renew** starts the same container again |
+| After `reap_after_days` | The container is removed. Only a redeploy brings it back |
+
+`reap_after_days` is 7 on this server. `0` turns the deletion off.
+
+### Ledger entry types
+
+| Type | Sign | Written by |
+|---|---|---|
+| `Grant` | + | signup, or an operator granting credits |
+| `Purchase` | + | a settled payment |
+| `Usage` | − | a lease, or a custom image build |
+| `Refund` | − | credits taken back |
+| `Adjustment` | ± | an operator correcting an account by hand |
+
+An `Adjustment` moves a balance without a payment. It is how an operator tops
+up an account on a server with no gateway.
+
+### The meter
+
+| Figure | Meaning |
+|---|---|
+| Balance | what is left to spend |
+| Allocated | the balance plus everything already spent |
+| Entries | how many ledger rows the account has |
+
+Allocated holds still while the balance falls, which is what makes the bar
+read as a gauge. A refund or a negative adjustment lowers it, because those
+credits were taken back.
+
+The meter turns a warning color below 20% of allocated.
+
+### Concurrency
+
+How many instances one account may run at once depends on whether credits are
+on, and whether the account has ever bought any.
+
+| Account | Limit here |
+|---|---|
+| Credits off | unlimited |
+| Credits on, never purchased | 2 |
+| Credits on, has purchased | 5 |
+
+`0` in any of these settings means unlimited. A refusal names the number that
+was hit.
+
+### Renewing is free of the concurrency cap
+
+The cap forbids new instances, not touching existing ones. A renew, a restart
+and a retry on a bench you already hold are never refused for concurrency.
+They can still be refused for credits.
+
+## Related
+
+- [Start, stop and redeploy](/docs/user/lifecycle) — the grace window after a stop.
+- [Read a lab page](/docs/user/lab-detail) — where the countdown and the price chip sit.
+- [Deploy from a template](/docs/user/deploy-from-template) — the deploy that buys the first lease.
+- [Troubleshooting](/docs/user/troubleshooting) — symptoms across the whole app.

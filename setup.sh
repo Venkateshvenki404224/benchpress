@@ -115,7 +115,7 @@ else
     warn "Docker userns-remap is NOT enabled — in-container root maps to HOST root"
     warn "Lab users get container root; without remap that is one kernel bug from host root."
     warn "Enable it: add {\"userns-remap\": \"default\"} to /etc/docker/daemon.json, restart docker."
-    warn "Details and migration caveats: apps/benchpress/docs/wireguard-setup.md#docker-userns-remap"
+    warn "Details and migration caveats: apps/benchpress/docs/operator/wireguard-setup.mdx, section 'Container root is not host root'"
     [ "$STRICT" -eq 1 ] && error "--strict: refusing to continue without userns-remap"
 fi
 

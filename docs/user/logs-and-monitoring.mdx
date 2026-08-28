@@ -1,0 +1,188 @@
+---
+title: Read logs and container stats
+description: The deploy stepper, the raw log and its step markers, the build log, and the CPU and memory bars on a running bench.
+---
+
+# Read logs and container stats
+
+Every deploy and every image build writes a log you can read while it runs and
+months after it finished. This page finds those logs and reads them.
+
+**Who this is for.** Anybody whose deploy failed, or who wants to know where
+the time went.
+
+**Before you start.** Nothing. A log exists as soon as a run starts. Build logs
+and build history are admin-only.
+
+## Steps
+
+1. Open the lab and pick the **Deploy log** tab. It shows the most recent run
+   for that bench.
+
+   ![The Deploy log tab of a BenchPress lab page at 1280 by 800 pixels. The card header reads Latest deploy, a green Success chip and the total 4m 52s. Nine of the eleven steps are visible, each with a check mark, a name, a one-line result in monospace and its own duration on the right: Checking shared infrastructure 2s with MariaDB reachable at benchpress-mariadb 3306, Preparing the lab image 9s, Creating the container 1s on bench bridge benchpress-0, Waiting for the container IP 0s with TLS ready on the wildcard, Configuring the WireGuard peer 1s with container VPN 172.27.0.19, Writing common_site_config.json 0s, Creating the site 4m 37s reading Site created successfully, Preparing assets 0s, and Provisioning the SSH user 1s.](../images/user/logs-and-monitoring/01-deploy-steps.png)
+
+   The header carries three things: which run this is, how it ended, and how
+   long it took. In the frame that is `Latest deploy`, `Success` and `4m 52s`.
+
+   Each row is one of the eleven pipeline steps. It carries a check mark, the
+   step name, one line of result, and its own duration.
+
+   Read the durations to find where a deploy spends its time. In the frame,
+   `Creating the site` took 4m 37s of a 4m 52s run. Every other step took a
+   second or less. A slow deploy is almost always site creation.
+
+   The step names and their order are the same on every run. See
+   [Deploy from a template](/docs/user/deploy-from-template) for what each of
+   the eleven does.
+
+2. Watch a running deploy on the same tab. The steps arrive one at a time over
+   a WebSocket, so the tab fills in as the pipeline advances.
+
+   ![An animation of the BenchPress Deploy log tab during a real deploy of the crm-demo lab. The header reads Latest deploy, Deploying, and a counter that climbs from 2 seconds to 1 minute 25 seconds. The eleven steps tick over one at a time from Checking shared infrastructure to Deploy complete, each gaining a check mark, a one-line result and its own duration. The header ends on a green Success chip.](../images/user/deploy-from-template/04-pipeline.gif)
+
+   A step appears when the pipeline opens it. Its duration appears when the
+   next one opens. The header counter climbs until the run ends, then it
+   freezes at the total and the chip turns green.
+
+   Nothing is lost if the tab is closed. The stream is a live view of a record
+   that is written either way.
+
+3. Expand **Raw log** under the steps for the unsummarized output.
+
+   ![The Deploy log tab scrolled down at 1280 by 800 pixels. The last three steps end with Deploy complete at 4m 52s. Below them a Raw log section reports 35 lines and offers a Download button. The log text is monospace with blue step markers reading, for example, Step 4/11 colon Waiting for the container IP, container underscore ip at 11.2s. Between the markers are plain lines such as limits Medium memory 2g nano cpus 2000000000 pids limit 500, container runtime sysbox-runc, container ip 10.20.0.9, VPN peer PEER-00142 registered, claimed IP 172.27.0.19.](../images/user/logs-and-monitoring/02-raw-log.png)
+
+   The raw log carries facts the stepper summarizes away: the container
+   limits, the runtime, the bridge address, the peer name.
+
+   Every step writes a marker into the raw log in this shape:
+
+   ```text
+   === Step 4/11: Waiting for the container IP [container_ip @11.2s] ===
+   ```
+
+   The marker holds the step number, the total, the name, a stable key and how
+   many seconds into the run it opened. The offsets are why a finished log
+   still yields per-step durations months later. A step lasted from its own
+   offset to the next marker's.
+
+   Press **Download** to save the whole log as a file.
+
+4. Read the container stats on the **Dashboard** tab. This is the running
+   bench rather than the run that made it.
+
+   ![The Dashboard tab of a running BenchPress lab at 1280 by 800 pixels. The Container card is headed Running in green. Health reads Healthy with the note checked 58s ago. Two meters below read CPU 1 percent of quota 2 vCPU and MEMORY 1 percent of a 2 GB limit, each with a thin progress bar. The card ends with Started 33 minutes ago. To the right, a Connection card carries a yellow VPN off panel, and a Sites card lists the site with seven app chips and the pills Inactive and Not running.](../images/user/logs-and-monitoring/03-container-stats.png)
+
+   | Reading | Value in the frame | What it means |
+   |---|---|---|
+   | Container | `Running` | the container state |
+   | Health | `Healthy`, checked 58s ago | the last health probe, and its age |
+   | CPU | 1% of a 2 vCPU quota | share of the quota the lab's size sets |
+   | MEMORY | 1% of a 2 GB limit | share of the memory limit |
+   | Started | 33 minutes ago | when this container started |
+
+   The percentages are of the bench's own quota, not of the server. A bench at
+   100% CPU is using the whole share its instance size bought, and no more.
+
+   **Health and status are two different readings.** A stopped container can
+   still report `Healthy`, because that was true when the last probe ran. Read
+   the age beside it.
+
+   A stats sweep runs on a schedule, so the numbers are a recent sample rather
+   than a live meter. `checked 58s ago` is the honest age of the reading.
+
+5. Open the **Build log** tab for the image the bench was made from. This tab
+   and the build history are admin-only.
+
+   ![The Build log tab of the Frappe CRM lab, seen as an admin at 1280 by 800 pixels. The sidebar carries an extra Templates entry that a non-admin does not see. Six collapsible rows each carry a green dot: Build started, Step 1 of 4 FROM benchpress slash crm colon lab, Step 2 of 4 COPY golden to slash opt slash benchpress slash golden, Step 3 of 4 COPY setup-site.sh, Step 4 of 4 LABEL benchpress.golden equals 1 and benchpress.golden.mariadb equals 10.6.28-MariaDB-ubu2204, and Build complete, golden in benchpress slash crm colon lab. The last row is expanded and reads No output.](../images/user/logs-and-monitoring/04-build-log.png)
+
+   Each Docker step is one collapsible row with a status dot. Expand a row to
+   read its output. A row with nothing to show says `No output` rather than
+   opening empty.
+
+   The build in the frame is a golden build: four steps that layer a prepared
+   database dump onto the lab image. It records the MariaDB version the dump
+   came from, `10.6.28-MariaDB-ubu2204`, because a dump only restores onto a
+   matching server.
+
+## Find an older run
+
+Neither history is in the sidebar. Both hang off the list they belong to.
+
+| History | Where | Who |
+|---|---|---|
+| Deploy history | **Instances** page | everybody, for the benches they can see |
+| Build history | **Labs** page, beside **From template** | admins |
+
+Each row carries the run, a result badge, the last step the run opened, the
+duration and when it started. Clicking a row opens the lab.
+
+A run recorded before the pipeline emitted step markers shows an em dash for
+its last step and its duration. The table does not guess.
+
+## Verify
+
+- The **Deploy log** tab shows eleven steps and ends on `Deploy complete`.
+- The durations on the steps add up to the total in the header.
+- **Raw log** reports a line count and downloads a file.
+- The Container card's `checked … ago` is minutes old, not hours.
+
+## Troubleshooting
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| The Deploy log tab is empty | The bench has never been deployed | Deploy the lab |
+| The log stops mid-run and never finishes | The live stream dropped | Reload the tab. The record is complete either way |
+| A run is missing from Deploy history | Logs are cleared after 7 days | Nothing to recover. Read a newer run |
+| A row shows an em dash for duration | The run predates the step markers | Read the raw log instead |
+| No **Build log** tab | Build logs are admin-only | Ask an admin |
+| CPU and MEMORY read a dash | The container is not running | Start the bench |
+| Health reads `Healthy` on a stopped bench | The last probe ran before the stop | Read the `checked … ago` age |
+| The deploy failed and the reason is not in the steps | The failing step's detail is in the raw output | Expand **Raw log** and read the end of the failed step |
+
+## Reference
+
+### Where each log lives
+
+| Log | Tab | Scope |
+|---|---|---|
+| Deploy log | **Deploy log** on the lab page | the latest run for that bench |
+| Deploy history | **Instances** page | your benches, or all of them for an admin |
+| Build log | **Build log** on the lab page | the latest image build for that lab. Admins |
+| Build history | **Labs** page | every build. Admins |
+
+### Retention
+
+Deploy Log and Build Log rows are cleared after **7 days**. Every window the
+app reports is bounded by that number rather than by a longer one, so the
+Overview dashboard's deploy-time average also covers 7 days.
+
+Download a log you need to keep.
+
+### The step marker
+
+```text
+=== Step <n>/11: <label> [<key> @<seconds>s] ===
+```
+
+| Part | Example | Use |
+|---|---|---|
+| `<n>/11` | `4/11` | position in the pipeline |
+| `<label>` | `Waiting for the container IP` | the name in the stepper |
+| `<key>` | `container_ip` | the stable key. Match on this, not on the label |
+| `@<seconds>s` | `@11.2s` | seconds from the start of the run |
+
+Match on the key. The label is written for a reader and may be reworded.
+
+### What the health check reads
+
+Health is a probe against the container, kept separate from the container
+state on purpose. A bench can be `Running` and `Unhealthy`, which means the
+container is up and the site is not answering. Both readings are on the same
+card, and the deploy log says which of them changed.
+
+## Related
+
+- [Deploy from a template](/docs/user/deploy-from-template) — what the eleven steps do.
+- [Read a lab page](/docs/user/lab-detail) — the rest of the Dashboard tab.
+- [Start, stop and redeploy](/docs/user/lifecycle) — the actions that start a new run.
+- [Troubleshooting](/docs/user/troubleshooting) — symptoms across the whole app.

@@ -250,7 +250,7 @@ in exactly two ways, both over the WireGuard tunnel:
 The deploy log is not a terminal either. It is a stored `Deploy Log` document plus a `bench_deploy_log`
 socket stream, rendered by the components in the table above.
 
-The terminal windows in [docs/index.html](docs/index.html) and `www/home.html` are **marketing mockups** —
+The terminal windows in [site/index.html](site/index.html) and `www/home.html` are **marketing mockups** —
 static markup of a session that is not running anywhere.
 
 ## Complete Workflow: Lab → Bench → SSH

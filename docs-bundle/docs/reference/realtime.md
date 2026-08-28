@@ -1,0 +1,171 @@
+---
+title: Realtime
+description: The six realtime events BenchPress publishes over socket.io, their
+  payloads, who receives each one, and why the deploy log commits every line.
+lastModified: "2026-08-28T16:15:34Z"
+lastAuthor: Venkatesh
+---
+# Realtime
+
+How a screen changes without a page reload, and what it is listening to.
+
+**Who this is for.** Somebody building a client, or working out why a screen
+stopped updating.
+
+**Before you start.** Realtime is an accelerator here, never the source of
+truth. Every screen below also has a read that returns the same state. A dropped
+socket costs freshness, not correctness.
+
+## The connection
+
+The single-page app connects with `socket.io-client` to the page's own origin,
+in a namespace named after the site.
+
+```javascript
+io(`${window.location.origin}/${window.site_name}`, { withCredentials: true });
+```
+
+Whatever serves the app also proxies `/socket.io` to the websocket service, so
+no second host is involved. This mirrors Frappe's own
+`socketio_client.get_host()`.
+
+**Reconnection never gives up.** `reconnectionAttempts` is infinity. Five
+attempts was about thirty seconds of trouble before the client stopped trying
+for the life of the page, and a laptop asleep through its lease woke to a frozen
+countdown and never received its expiry event.
+
+|Setting|Value|Why|
+|--|--|--|
+|`reconnectionAttempts`|infinite|a sleeping laptop must still get its expiry|
+|`reconnectionDelay`|1000 ms|first retry is quick|
+|`reconnectionDelayMax`|30000 ms|a long outage costs one attempt every half minute|
+|`randomizationFactor`|0.5|every open tab does not reconnect on the same beat|
+
+## The six events
+
+|Event|Published by|Sent to|Heard by|
+|--|--|--|--|
+|`bench_deploy_log`|`deploy_pipeline.DeployLogWriter`|the bench owner|Lab detail, and the deploy dialog|
+|`lab_build_log`|`deploy_manager`, through the same writer|whoever started the build|Lab detail, and the Build Log desk form|
+|`benchpress:lease_expired`|`credits/lease.py`|the bench owner|Lab detail|
+|`benchpress:lease_renewed`|`credits/lease.py`|the bench owner|Lab detail|
+|`benchpress:credits`|`credits/payments.py`|the paying user|no SPA listener today|
+|`mariadb_health_failure`|`mariadb_manager.py`|broadcast|no SPA listener today|
+
+The last two have no listener in the app. They are published, and a client may
+use them. Do not assume a screen reacts to either one.
+
+## bench\_deploy\_log and lab\_build\_log
+
+Both carry one line of a running log. The two differ only in what a run is of,
+so the payload shape is shared.
+
+|Key|Always present|Holds|
+|--|--|--|
+|`log`|yes|the line of text|
+|`type`|yes|`info`, `step`, `success`, `error` or `warning`|
+|`bench` and `deploy_log`|deploy only|the bench, and the Deploy Log row|
+|`lab` and `build_log`|build only|the lab, and the Build Log row|
+
+A step boundary adds five more keys. They are additive, so a client written
+before the stepper existed keeps working.
+
+|Key|Holds|
+|--|--|
+|`step_key`|one of the eleven keys, such as `container_ip`|
+|`step_index`|1 to 11|
+|`step_total`|11|
+|`step_label`|the human label, such as `Waiting for the container IP`|
+|`step_elapsed`|seconds into the run, to one decimal|
+
+Both events are published with `after_commit=False`, and each line is committed
+to the log row as it is written. A deploy runs for minutes inside one background
+job, so its transaction would otherwise hold every line until the run ended.
+Somebody opening the log mid-run, or reloading after a dropped socket, has to
+see what has happened so far.
+
+The line is also written into the log row. The socket is the fast path, and the
+row is the record.
+
+## benchpress:lease\_expired and benchpress:lease\_renewed
+
+Both carry full state, never a delta, and never the bench document.
+
+|Key|Holds|
+|--|--|
+|`bench`|the bench name|
+|`lab_id`|the lab, so a screen can route without a second read|
+|`state`|the bench status|
+|`expires_at_ts`|the new deadline|
+|`server_now_ms`|the server clock at publish time|
+|`revision`|a millisecond stamp|
+|`reason`|why the lease ended or was extended|
+
+**Never `bench.as_dict()`.** The `Bench Instance` DocType holds three passwords.
+The payload is built field by field for that reason.
+
+`revision` exists because two events can arrive out of order. A tab that
+receives both keeps the later stamp.
+
+`server_now_ms` is what a countdown corrects against. The
+[`server_time`](/docs/reference/api#benches) endpoint answers the same question
+for a client that has not received an event yet.
+
+Both are published with `after_commit=True`. A client must never learn of an
+expiry the database has not committed.
+
+## Scoping
+
+Every event except `mariadb_health_failure` is published with a `user`, so
+Frappe sends it to that user's sessions only.
+
+A deploy log is the bench owner's, and nobody else's socket has any business
+receiving it. This matters more than usual here, because a deploy log names the
+site, the container and the apps.
+
+`mariadb_health_failure` is a broadcast about shared infrastructure and names
+only the server.
+
+## Verify
+
+Watch a deploy log arrive, from the browser console with the app open:
+
+```javascript
+const socket = io(`${window.location.origin}/${window.site_name}`, { withCredentials: true });
+socket.on("bench_deploy_log", (data) => console.log(data.step_index, data.log));
+```
+
+Then deploy a bench. See
+[Deploy from a template](/docs/user/deploy-from-template).
+
+## Troubleshooting
+
+|Symptom|Cause|Fix|
+|--|--|--|
+|A log renders nothing live, then appears complete on reload|The socket is down, and the row is the record|Reload. Fix the websocket service|
+|The countdown is frozen|No lease event arrived|The client retries forever. Reload to read the deadline again|
+|The countdown disagrees with the server|The laptop clock is wrong|The client corrects against `server_now_ms`|
+|Two events give different deadlines|They arrived out of order|Keep the higher `revision`|
+|A user receives another user's log|Not possible. Events are user scoped|Check whether both sessions are the same account|
+|A step is missing from the stepper|An old run predates the step markers|Expected. The `=== … ===` wrapper still renders|
+|Nothing at all arrives|`/socket.io` is not proxied to the websocket service|Fix the proxy, not the app|
+
+## Reference
+
+|Fact|Value|
+|--|--|
+|Transport|socket.io, same origin|
+|Namespace|the site name|
+|Events|6|
+|Log events|`after_commit=False`, one commit for each line|
+|Lease events|`after_commit=True`|
+|Reconnect attempts|infinite|
+|Reconnect delay|1 s, capped at 30 s, jitter 0.5|
+|Step keys added|5|
+
+## Related
+
+* [Deploy pipeline](/docs/reference/deploy-pipeline#how-a-step-reports-itself) — the marker behind the step payload.
+* [API](/docs/reference/api) — the read that returns the same state.
+* [Logs and monitoring](/docs/user/logs-and-monitoring) — the same events, as a screen.
+* [Data model](/docs/reference/data-model#deploy-log) — the row every line is written to.

@@ -87,3 +87,11 @@ docs/design/
 # Skills that ship from the Shipcraft plugin marketplace, not from this repo.
 .claude/skills/improve-codebase-architecture/
 .claude/skills/wayfinder/
+
+# Three leadtype artifacts stamp a build clock into their body, so two runs of
+# `npm run docs:build` can never be byte-identical. Everything else it generates
+# — the markdown mirrors, AGENTS.md, llms.txt, sitemap.xml, robots.txt — is
+# committed and gated against hand edits by the CI docs job.
+docs-site/docs/agent-readability.json
+docs-site/docs/search-content.json
+docs-site/docs/search-index.json

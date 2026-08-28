@@ -1,0 +1,14 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "skills": [
+    {
+      "name": "benchpress-docs",
+      "description": "Read and search the BenchPress documentation. Use when working with BenchPress — its setup, configuration, API, and behavior.",
+      "type": "skill-md",
+      "url": "./benchpress-docs/SKILL.md",
+      "digest": "sha256:cd351768c13d8a20950fe420e9f74efcb8489b14c92ca3b61cfdd3279c0df924",
+      "path": "./benchpress-docs/SKILL.md",
+      "integrity": "sha256-zTUXaME9iiCVD+Qg6fdO/LhImxTJLKO2HP3TJ5wN+SQ="
+    }
+  ]
+}

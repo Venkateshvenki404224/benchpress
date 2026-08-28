@@ -205,3 +205,50 @@ jobs:
       - name: Build
         working-directory: frontend
         run: yarn build
+
+  docs:
+    runs-on: ubuntu-latest
+    name: Docs
+    timeout-minutes: 10
+
+    steps:
+      # fetch-depth: 0 because generate stamps each page with the commit date
+      # that last touched it. A shallow clone has no such commit, so the
+      # generated files would differ from the committed ones and drift.
+      - name: Clone
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          check-latest: true
+          cache: npm
+
+      # --ignore-scripts skips the root postinstall, which runs `yarn install`
+      # in frontend/. The docs pipeline never reads the SPA.
+      - name: Install
+        run: npm ci --ignore-scripts
+
+      - name: Build both generate modes
+        run: npm run docs:build
+
+      - name: Lint
+        run: npm run docs:lint
+
+      - name: Score
+        run: npm run docs:score
+
+      # `git status --porcelain` rather than `git diff`: diff alone misses a
+      # generated file that was added but never committed.
+      - name: Generated docs are committed and current
+        run: |
+          if [ -n "$(git status --porcelain -- docs-site docs-bundle)" ]; then
+            echo "docs-site/ or docs-bundle/ is stale or hand-edited."
+            echo "Run: npm run docs:build && git add docs-site docs-bundle"
+            git status --porcelain -- docs-site docs-bundle
+            git diff -- docs-site docs-bundle
+            exit 1
+          fi

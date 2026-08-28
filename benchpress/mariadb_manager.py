@@ -613,7 +613,7 @@ def restore_database_server(db_server_name: str, backup_file: str) -> None:
 
 	Scratch/recovery use only — never point this at a live tenant DB server.
 	Not whitelisted on purpose; run it from `bench console`.
-	See docs/database-backup-restore.md for the full runbook.
+	See docs/operator/backup-and-restore.mdx for the full runbook.
 	"""
 	db_server = frappe.get_doc("Database Server", db_server_name)
 	container = _get_container(db_server)
