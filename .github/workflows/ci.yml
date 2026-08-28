@@ -212,8 +212,13 @@ jobs:
     timeout-minutes: 10
 
     steps:
+      # fetch-depth: 0 because generate stamps each page with the commit date
+      # that last touched it. A shallow clone has no such commit, so the
+      # generated files would differ from the committed ones and drift.
       - name: Clone
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
       - name: Setup Node
         uses: actions/setup-node@v6

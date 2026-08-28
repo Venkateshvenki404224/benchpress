@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-08-28T09:12:38.868Z",
+  "generatedAt": "2026-08-28T09:13:41.859Z",
   "baseUrl": "https://docs.benchpress.cloud",
   "product": {
     "name": "BenchPress",
@@ -37,7 +37,7 @@
       "markdownAbsoluteUrl": "https://docs.benchpress.cloud/docs/user/quick-tour.md",
       "relativePath": "user/quick-tour",
       "groups": [],
-      "lastModified": "2026-08-28T09:12:38.830Z",
+      "lastModified": "2026-08-28T09:13:07.000Z",
       "logicalPath": "user/quick-tour"
     },
     {
@@ -49,7 +49,7 @@
       "markdownAbsoluteUrl": "https://docs.benchpress.cloud/docs/index.md",
       "relativePath": "index",
       "groups": [],
-      "lastModified": "2026-08-28T09:12:38.830Z",
+      "lastModified": "2026-08-28T09:13:07.000Z",
       "logicalPath": "index"
     }
   ],
