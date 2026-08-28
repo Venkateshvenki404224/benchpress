@@ -551,3 +551,48 @@ class TestSharedSettingDrift(IntegrationTestCase):
 		_returned, log_error = self._health_check_with([([], "99.94%")])
 
 		log_error.assert_not_called()
+
+
+LIVE_SHOW_DATABASES = (
+	"Database\n"
+	"_0f466d815af80ea5\n"
+	"_30097bd7739c8788_limited\n"
+	"backups\n"
+	"information_schema\n"
+	"mysql\n"
+	"performance_schema\n"
+	"sys\n"
+)
+
+
+class TestListSiteDatabases(IntegrationTestCase):
+	def _listed(self, exit_code, output):
+		from benchpress.mariadb_manager import list_site_databases
+
+		with patch("benchpress.mariadb_manager.execute_sql", return_value=(exit_code, output)):
+			return list_site_databases("db-server-name")
+
+	def test_the_server_s_own_schemas_are_not_a_site_s(self):
+		listed = self._listed(0, LIVE_SHOW_DATABASES)
+
+		self.assertEqual(listed, ["_0f466d815af80ea5", "_30097bd7739c8788_limited", "backups"])
+
+	def test_the_column_header_is_not_a_schema(self):
+		self.assertNotIn("Database", self._listed(0, LIVE_SHOW_DATABASES))
+
+	def test_a_client_warning_in_the_same_stream_is_not_a_schema(self):
+		output = "mariadb: Deprecated program name.\n" + LIVE_SHOW_DATABASES
+
+		self.assertNotIn("mariadb: Deprecated program name.", self._listed(0, output))
+
+	def test_a_failed_read_reports_nothing_rather_than_everything(self):
+		"""An empty list read as "every database is an orphan" is the reason this is a read only."""
+		self.assertEqual(self._listed(1, "ERROR 1045: Access denied"), [])
+
+	def test_it_only_reads(self):
+		from benchpress.mariadb_manager import list_site_databases
+
+		with patch("benchpress.mariadb_manager.execute_sql", return_value=(0, LIVE_SHOW_DATABASES)) as sql:
+			list_site_databases("db-server-name")
+
+		self.assertEqual(sql.call_args.args[1], "SHOW DATABASES")

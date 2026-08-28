@@ -3,6 +3,7 @@
 
 import types
 import unittest
+from datetime import UTC, datetime
 from unittest.mock import MagicMock, patch
 
 import docker
@@ -724,3 +725,60 @@ class TestStartBenchContainer(unittest.TestCase):
 
 		with self.assertRaises(docker.errors.APIError):
 			docker_manager.start_bench_container("abc123", MagicMock(), MagicMock())
+
+
+def _managed_labels(bench_name="bench-one") -> dict:
+	return {docker_manager.MANAGED_LABEL: "true", docker_manager.BENCH_NAME_LABEL: bench_name}
+
+
+class TestListBenches(FakeDockerMixin, IntegrationTestCase):
+	def test_only_a_managed_container_is_returned(self):
+		"""The negative control: the label is the whole authority for a reconciler's removal."""
+		self.docker.add_container("mine", labels=_managed_labels())
+		self.docker.add_container("benchpress-mariadb", labels={"com.docker.compose.project": "x"})
+		self.docker.add_container("stranger")
+
+		self.assertEqual([c["name"] for c in docker_manager.list_benches()], ["mine"])
+
+	def test_a_stopped_container_is_returned(self):
+		"""An orphan that exited still holds its writable layer."""
+		self.docker.add_container("mine", labels=_managed_labels(), status="exited")
+
+		self.assertEqual([c["name"] for c in docker_manager.list_benches()], ["mine"])
+
+	def test_every_consumer_gets_id_status_health_and_age(self):
+		self.docker.add_container("mine", labels=_managed_labels(), health="healthy")
+
+		[entry] = docker_manager.list_benches()
+
+		self.assertTrue(entry["id"])
+		self.assertEqual(entry["bench_name"], "bench-one")
+		self.assertEqual(entry["status"], "running")
+		self.assertEqual(entry["health"], "Healthy")
+		self.assertLess((datetime.now(UTC) - entry["created"]).total_seconds(), 60)
+
+	def test_the_age_is_the_container_s_own_creation_time(self):
+		self.docker.add_container("mine", labels=_managed_labels(), age_minutes=45)
+
+		[entry] = docker_manager.list_benches()
+
+		self.assertAlmostEqual((datetime.now(UTC) - entry["created"]).total_seconds(), 45 * 60, delta=60)
+
+	def test_a_container_the_daemon_gave_no_timestamp_for_has_no_age(self):
+		container = self.docker.add_container("mine", labels=_managed_labels())
+		container.attrs.pop("Created")
+
+		self.assertIsNone(docker_manager.list_benches()[0]["created"])
+
+	def test_a_stopped_container_reports_unhealthy_not_its_last_verdict(self):
+		self.docker.add_container("mine", labels=_managed_labels(), status="exited", health="healthy")
+
+		self.assertEqual(docker_manager.list_benches()[0]["health"], "Unhealthy")
+
+	def test_the_fleet_costs_one_call(self):
+		"""107 ms for the fleet against 0.87 ms x N is only true while this stays one call."""
+		for index in range(5):
+			self.docker.add_container(f"bench-{index}", labels=_managed_labels())
+
+		with patch.object(self.docker.containers, "get", side_effect=AssertionError("inspected")):
+			self.assertEqual(len(docker_manager.list_benches()), 5)

@@ -7,6 +7,7 @@ Tests read state (`self.docker.created[-1]`) rather than mock call records.
 """
 
 import base64
+from datetime import UTC, datetime, timedelta
 from unittest.mock import patch
 
 import docker
@@ -33,6 +34,11 @@ DEFAULT_STATS = {
 }
 
 
+def _docker_timestamp(moment: datetime) -> str:
+	"""The daemon's own `Created` form: RFC 3339 in UTC, to nanoseconds."""
+	return moment.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%S.%f000Z")
+
+
 class UnscriptedExec(AssertionError):
 	"""A strict FakeDocker was asked to run a command no test registered."""
 
@@ -47,7 +53,9 @@ def sql_of(exec_command: str) -> str:
 
 
 class FakeContainer:
-	def __init__(self, client, container_id, name, labels, network, runtime, ip, status="created"):
+	def __init__(
+		self, client, container_id, name, labels, network, runtime, ip, status="created", created=None
+	):
 		self.client = client
 		self.id = container_id
 		self.name = name
@@ -61,6 +69,7 @@ class FakeContainer:
 		self.remove_refusal = ""
 		self.archives: dict[str, bytes] = {}
 		self.attrs = {
+			"Created": created or _docker_timestamp(datetime.now(UTC)),
 			"HostConfig": {"Runtime": runtime or "runc", "NetworkMode": network},
 			"NetworkSettings": {"Networks": {network: {"IPAddress": ip}}, "IPAddress": ip},
 			"State": {"Health": {"Status": self.health}},
@@ -251,15 +260,18 @@ class FakeDocker:
 		"""Make this container's `start()` raise `APIError`, the way a daemon refusing one does."""
 		self._start_refusals[name] = message
 
-	def add_container(self, name, *, labels=None, status="running", health="", network="benchpress"):
+	def add_container(
+		self, name, *, labels=None, status="running", health="", network="benchpress", age_minutes=0
+	):
 		"""Seed a container the app did not create, for `containers.get` and `list`."""
 		return self._add(
 			{"name": name, "labels": labels, "network": network},
 			status=status,
 			health=health,
+			created=_docker_timestamp(datetime.now(UTC) - timedelta(minutes=age_minutes)),
 		)
 
-	def _add(self, kwargs, status="created", health=""):
+	def _add(self, kwargs, status="created", health="", created=None):
 		self._next_id += 1
 		container_id = f"fake{self._next_id:04d}"
 		network = kwargs.get("network") or docker_manager.LEGACY_NETWORK
@@ -272,6 +284,7 @@ class FakeDocker:
 			kwargs.get("runtime"),
 			f"172.30.0.{self._next_id % 250 + 2}",
 			status=status,
+			created=created,
 		)
 		container.health = health
 		container.start_refusal = self._start_refusals.get(container.name, "")

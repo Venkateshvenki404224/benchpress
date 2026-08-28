@@ -34,7 +34,9 @@
   "code_server_version",
   "stop_grace_seconds",
   "credits_section",
-  "enable_credits"
+  "enable_credits",
+  "reconcile_section",
+  "orphan_grace_minutes"
  ],
  "fields": [
   {
@@ -224,13 +226,25 @@
    "fieldname": "enable_credits",
    "fieldtype": "Check",
    "label": "Enable Credits"
+  },
+  {
+   "fieldname": "reconcile_section",
+   "fieldtype": "Section Break",
+   "label": "Reconciliation"
+  },
+  {
+   "default": "15",
+   "description": "A container younger than this is never named an orphan: a deploy creates the container before it writes the row.",
+   "fieldname": "orphan_grace_minutes",
+   "fieldtype": "Int",
+   "label": "Orphan Grace Minutes"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2026-08-27 17:20:00.000000",
+ "modified": "2026-08-28 06:00:00.000000",
  "modified_by": "Administrator",
  "module": "Benchpress",
  "name": "BenchPress Settings",
