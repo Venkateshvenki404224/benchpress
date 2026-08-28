@@ -57,6 +57,8 @@ class FakeContainer:
 		self.stats_response = dict(DEFAULT_STATS)
 		self.execs: list[str] = []
 		self.start_refusal = ""
+		self.stop_refusal = ""
+		self.remove_refusal = ""
 		self.archives: dict[str, bytes] = {}
 		self.attrs = {
 			"HostConfig": {"Runtime": runtime or "runc", "NetworkMode": network},
@@ -74,6 +76,8 @@ class FakeContainer:
 		self.status = "running"
 
 	def stop(self, **kwargs):
+		if self.stop_refusal:
+			raise docker.errors.APIError(self.stop_refusal)
 		self.client.stopped.append(self.name)
 		self.status = "exited"
 
@@ -81,6 +85,8 @@ class FakeContainer:
 		self.status = "running"
 
 	def remove(self, **kwargs):
+		if self.remove_refusal:
+			raise docker.errors.APIError(self.remove_refusal)
 		self.client.removed.append(self.name)
 		self.client._store.pop(self.id, None)
 
