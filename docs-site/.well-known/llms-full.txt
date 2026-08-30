@@ -4,51 +4,51 @@
 
 ## Included Pages
 
-- [Quick tour](https://docs.benchpress.cloud/docs/user/quick-tour): The five screens in the BenchPress sidebar, and every number the Overview dashboard reports.
-- [Deploy from a template](https://docs.benchpress.cloud/docs/user/deploy-from-template): Turn a catalog template into a running bench, and read the eleven pipeline steps while they run.
-- [Create a lab](https://docs.benchpress.cloud/docs/user/create-a-lab): Fill in the New lab form when no catalog template matches the app list you need.
-- [Read a lab page](https://docs.benchpress.cloud/docs/user/lab-detail): Every field on the lab page, and why container status and container health can disagree.
-- [Start, stop and redeploy](https://docs.benchpress.cloud/docs/user/lifecycle): The five actions on a running bench, which of them destroy work, and which are admin-only.
-- [Register a VPN device](https://docs.benchpress.cloud/docs/user/vpn-devices): Put a laptop or a phone on the WireGuard network, import the config, read the device status, and run the connection test when a site will not open.
-- [Open the bench site](https://docs.benchpress.cloud/docs/user/open-your-site): The Sites card, the three states of its Open button, and logging in to the Frappe site a deploy created.
-- [Connect over SSH and the VPN](https://docs.benchpress.cloud/docs/user/connect-ssh-vpn): The connection card on a lab page — two addresses, the SSH command, the three passwords, and which of them work without the tunnel.
-- [Use code-server](https://docs.benchpress.cloud/docs/user/code-server): Open the browser VS Code session on a bench, find its password, hand the session to a teammate, and restart it when it stops answering.
-- [Read logs and container stats](https://docs.benchpress.cloud/docs/user/logs-and-monitoring): The deploy stepper, the raw log and its step markers, the build log, and the CPU and memory bars on a running bench.
-- [Leases and credits](https://docs.benchpress.cloud/docs/user/leases-and-credits): The countdown on a running bench, the renew dialog and its plans, the credit meter, the ledger, and where a purchase hands off to the payment gateway.
-- [Troubleshooting](https://docs.benchpress.cloud/docs/user/troubleshooting): Every symptom a BenchPress user meets, its cause, and the page that fixes it — deploys, the VPN, SSH, code-server, logs and credits.
-- [Operator track](https://docs.benchpress.cloud/docs/operator): Run BenchPress on your own box — install, the VPN plane, settings, the shared database, images, upgrades, safety and diagnostics.
-- [Prerequisites](https://docs.benchpress.cloud/docs/operator/prerequisites): What a BenchPress host needs before you install — the four preconditions, supported platforms, versions, Docker socket access, and the measured CPU and disk sizing.
-- [Install](https://docs.benchpress.cloud/docs/operator/install): Install BenchPress into a Frappe v16 bench — get-app, setup.sh, the frontend build, the base domain, and the first screen.
-- [WireGuard and the VPN plane](https://docs.benchpress.cloud/docs/operator/wireguard-setup): How the vpn_management app owns the tunnel, what BenchPress consumes from it, the measured server and pool values, and why userns-remap matters.
-- [Settings reference](https://docs.benchpress.cloud/docs/operator/settings-reference): Every field on BenchPress Settings and Credit Settings, with the value measured on a live host, where each one is edited, and what changing it costs.
-- [The shared database server](https://docs.benchpress.cloud/docs/operator/database-server): One MariaDB holds every bench site's database — where it lives, how BenchPress drives it, what drift detection watches, and the four actions on the record.
-- [Backup and restore](https://docs.benchpress.cloud/docs/operator/backup-and-restore): Where the nightly MariaDB dumps land, how long they are kept, and the two restore paths — a scratch container for verification, and managed recovery from bench console.
-- [Users and roles](https://docs.benchpress.cloud/docs/operator/users-and-roles): The two BenchPress roles, what each one may read and write, which screens are admin-only, and how ownership rather than a role decides who sees a bench.
-- [Golden images](https://docs.benchpress.cloud/docs/operator/golden-images): A lab's finished site is baked into its own image as a database dump, so a deploy restores it instead of creating tables — the measured numbers, the two settings, and why a golden gets refused.
-- [The image cache](https://docs.benchpress.cloud/docs/operator/image-cache): One image per lab, tagged benchpress/<lab_id>:lab — what it costs on disk, how the weekly prewarm and sweep work, and what is safe to prune.
-- [Upgrading](https://docs.benchpress.cloud/docs/operator/upgrading): Move a BenchPress install to a newer release — the backup gate, the five steps, the scripted path, rollback, and why lab images are a separate opt-in.
-- [Production safety](https://docs.benchpress.cloud/docs/operator/production-safety): What BenchPress is and is not ready to carry — the alpha verdict, the container privilege boundary, what is backed up, and the release checklist that covers 25 of 52 whitelisted callables.
-- [Diagnostics](https://docs.benchpress.cloud/docs/operator/diagnostics): The twelve read-only checks that ask Docker, MariaDB, Redis and the kernel what is true — how to run them, what each failure means, and the four things they do not cover.
-- [Credits and billing](https://docs.benchpress.cloud/docs/operator/credits-and-billing): Optional and off by default — the metering half of BenchPress, covering leases, balances, the ledger, admin adjustments, and the optional Razorpay handoff.
-- [Admission and limits](https://docs.benchpress.cloud/docs/operator/admission-and-limits): Optional and off by default — concurrency caps, size ceilings, device and build quotas, how a slot is claimed as a row, and the acceptance run that proves access still works.
-- [Self-serve signup](https://docs.benchpress.cloud/docs/operator/hosted-signup): Optional and off by default — retire the waitlist and let people sign themselves up, with GitHub and Google as the primary paths and the abuse controls that make a free grant safe.
-- [Reference track](https://docs.benchpress.cloud/docs/reference): The data model, the whitelisted API, the eleven deploy steps, the reconcilers, the address plan and the configuration split — for a contributor or an integrator.
-- [Architecture](https://docs.benchpress.cloud/docs/reference/architecture): The moving parts of BenchPress — the control plane, the bench containers, the shared infrastructure, and which Python module owns each concern.
-- [Data model](https://docs.benchpress.cloud/docs/reference/data-model): All 20 BenchPress DocTypes with their fields, links, naming and the permission rule that scopes each one — plus why there is no Device DocType.
-- [API](https://docs.benchpress.cloud/docs/reference/api): Every whitelisted BenchPress endpoint, with arguments, what each returns, and the permission check each one makes for itself.
-- [Deploy pipeline](https://docs.benchpress.cloud/docs/reference/deploy-pipeline): The eleven steps of a BenchPress deploy, in the order the code runs them, with the function behind each step and the log line it writes.
-- [Lifecycle and events](https://docs.benchpress.cloud/docs/reference/lifecycle-and-events): The bench states and their transitions, the Docker event listener, Bench Event incidents, the stats collector, and the eleven scheduled jobs that correct the database.
-- [Networking](https://docs.benchpress.cloud/docs/reference/networking): The BenchPress address plan — bench bridges, WireGuard tunnel addresses, the two container ports, Traefik route files and the wildcard certificate anchor.
-- [Realtime](https://docs.benchpress.cloud/docs/reference/realtime): The six realtime events BenchPress publishes over socket.io, their payloads, who receives each one, and why the deploy log commits every line.
-- [Configuration](https://docs.benchpress.cloud/docs/reference/configuration): Where each BenchPress setting lives — build arguments that need a rebuild, runtime environment that needs a restart, and DocType fields that apply on save.
-- [CLI and scripts](https://docs.benchpress.cloud/docs/reference/cli-and-scripts): Every command that drives BenchPress from a shell — entry.py, the bench commands, setup.sh and upgrade.sh, the four repository scripts and the documentation pipeline.
-- [Glossary](https://docs.benchpress.cloud/docs/reference/glossary): What each BenchPress term means here — lab, bench, site, lease, admission, golden image, peer — including the words that mean something else elsewhere.
-- [BenchPress documentation](https://docs.benchpress.cloud/docs): Start here. Three tracks — use a bench, run the server that hosts one, or read the data model and the API.
+- [Quick tour](https://benchpress.cloud/docs/user/quick-tour): The five screens in the BenchPress sidebar, and every number the Overview dashboard reports.
+- [Deploy from a template](https://benchpress.cloud/docs/user/deploy-from-template): Turn a catalog template into a running bench, and read the eleven pipeline steps while they run.
+- [Create a lab](https://benchpress.cloud/docs/user/create-a-lab): Fill in the New lab form when no catalog template matches the app list you need.
+- [Read a lab page](https://benchpress.cloud/docs/user/lab-detail): Every field on the lab page, and why container status and container health can disagree.
+- [Start, stop and redeploy](https://benchpress.cloud/docs/user/lifecycle): The five actions on a running bench, which of them destroy work, and which are admin-only.
+- [Register a VPN device](https://benchpress.cloud/docs/user/vpn-devices): Put a laptop or a phone on the WireGuard network, import the config, read the device status, and run the connection test when a site will not open.
+- [Open the bench site](https://benchpress.cloud/docs/user/open-your-site): The Sites card, the three states of its Open button, and logging in to the Frappe site a deploy created.
+- [Connect over SSH and the VPN](https://benchpress.cloud/docs/user/connect-ssh-vpn): The connection card on a lab page — two addresses, the SSH command, the three passwords, and which of them work without the tunnel.
+- [Use code-server](https://benchpress.cloud/docs/user/code-server): Open the browser VS Code session on a bench, find its password, hand the session to a teammate, and restart it when it stops answering.
+- [Read logs and container stats](https://benchpress.cloud/docs/user/logs-and-monitoring): The deploy stepper, the raw log and its step markers, the build log, and the CPU and memory bars on a running bench.
+- [Leases and credits](https://benchpress.cloud/docs/user/leases-and-credits): The countdown on a running bench, the renew dialog and its plans, the credit meter, the ledger, and where a purchase hands off to the payment gateway.
+- [Troubleshooting](https://benchpress.cloud/docs/user/troubleshooting): Every symptom a BenchPress user meets, its cause, and the page that fixes it — deploys, the VPN, SSH, code-server, logs and credits.
+- [Operator track](https://benchpress.cloud/docs/operator): Run BenchPress on your own box — install, the VPN plane, settings, the shared database, images, upgrades, safety and diagnostics.
+- [Prerequisites](https://benchpress.cloud/docs/operator/prerequisites): What a BenchPress host needs before you install — the four preconditions, supported platforms, versions, Docker socket access, and the measured CPU and disk sizing.
+- [Install](https://benchpress.cloud/docs/operator/install): Install BenchPress into a Frappe v16 bench — get-app, setup.sh, the frontend build, the base domain, and the first screen.
+- [WireGuard and the VPN plane](https://benchpress.cloud/docs/operator/wireguard-setup): How the vpn_management app owns the tunnel, what BenchPress consumes from it, the measured server and pool values, and why userns-remap matters.
+- [Settings reference](https://benchpress.cloud/docs/operator/settings-reference): Every field on BenchPress Settings and Credit Settings, with the value measured on a live host, where each one is edited, and what changing it costs.
+- [The shared database server](https://benchpress.cloud/docs/operator/database-server): One MariaDB holds every bench site's database — where it lives, how BenchPress drives it, what drift detection watches, and the four actions on the record.
+- [Backup and restore](https://benchpress.cloud/docs/operator/backup-and-restore): Where the nightly MariaDB dumps land, how long they are kept, and the two restore paths — a scratch container for verification, and managed recovery from bench console.
+- [Users and roles](https://benchpress.cloud/docs/operator/users-and-roles): The two BenchPress roles, what each one may read and write, which screens are admin-only, and how ownership rather than a role decides who sees a bench.
+- [Golden images](https://benchpress.cloud/docs/operator/golden-images): A lab's finished site is baked into its own image as a database dump, so a deploy restores it instead of creating tables — the measured numbers, the two settings, and why a golden gets refused.
+- [The image cache](https://benchpress.cloud/docs/operator/image-cache): One image per lab, tagged benchpress/<lab_id>:lab — what it costs on disk, how the weekly prewarm and sweep work, and what is safe to prune.
+- [Upgrading](https://benchpress.cloud/docs/operator/upgrading): Move a BenchPress install to a newer release — the backup gate, the five steps, the scripted path, rollback, and why lab images are a separate opt-in.
+- [Production safety](https://benchpress.cloud/docs/operator/production-safety): What BenchPress is and is not ready to carry — the alpha verdict, the container privilege boundary, what is backed up, and the release checklist that covers 25 of 52 whitelisted callables.
+- [Diagnostics](https://benchpress.cloud/docs/operator/diagnostics): The twelve read-only checks that ask Docker, MariaDB, Redis and the kernel what is true — how to run them, what each failure means, and the four things they do not cover.
+- [Credits and billing](https://benchpress.cloud/docs/operator/credits-and-billing): Optional and off by default — the metering half of BenchPress, covering leases, balances, the ledger, admin adjustments, and the optional Razorpay handoff.
+- [Admission and limits](https://benchpress.cloud/docs/operator/admission-and-limits): Optional and off by default — concurrency caps, size ceilings, device and build quotas, how a slot is claimed as a row, and the acceptance run that proves access still works.
+- [Self-serve signup](https://benchpress.cloud/docs/operator/hosted-signup): Optional and off by default — retire the waitlist and let people sign themselves up, with GitHub and Google as the primary paths and the abuse controls that make a free grant safe.
+- [Reference track](https://benchpress.cloud/docs/reference): The data model, the whitelisted API, the eleven deploy steps, the reconcilers, the address plan and the configuration split — for a contributor or an integrator.
+- [Architecture](https://benchpress.cloud/docs/reference/architecture): The moving parts of BenchPress — the control plane, the bench containers, the shared infrastructure, and which Python module owns each concern.
+- [Data model](https://benchpress.cloud/docs/reference/data-model): All 20 BenchPress DocTypes with their fields, links, naming and the permission rule that scopes each one — plus why there is no Device DocType.
+- [API](https://benchpress.cloud/docs/reference/api): Every whitelisted BenchPress endpoint, with arguments, what each returns, and the permission check each one makes for itself.
+- [Deploy pipeline](https://benchpress.cloud/docs/reference/deploy-pipeline): The eleven steps of a BenchPress deploy, in the order the code runs them, with the function behind each step and the log line it writes.
+- [Lifecycle and events](https://benchpress.cloud/docs/reference/lifecycle-and-events): The bench states and their transitions, the Docker event listener, Bench Event incidents, the stats collector, and the eleven scheduled jobs that correct the database.
+- [Networking](https://benchpress.cloud/docs/reference/networking): The BenchPress address plan — bench bridges, WireGuard tunnel addresses, the two container ports, Traefik route files and the wildcard certificate anchor.
+- [Realtime](https://benchpress.cloud/docs/reference/realtime): The six realtime events BenchPress publishes over socket.io, their payloads, who receives each one, and why the deploy log commits every line.
+- [Configuration](https://benchpress.cloud/docs/reference/configuration): Where each BenchPress setting lives — build arguments that need a rebuild, runtime environment that needs a restart, and DocType fields that apply on save.
+- [CLI and scripts](https://benchpress.cloud/docs/reference/cli-and-scripts): Every command that drives BenchPress from a shell — entry.py, the bench commands, setup.sh and upgrade.sh, the four repository scripts and the documentation pipeline.
+- [Glossary](https://benchpress.cloud/docs/reference/glossary): What each BenchPress term means here — lab, bench, site, lease, admission, golden image, peer — including the words that mean something else elsewhere.
+- [BenchPress documentation](https://benchpress.cloud/docs): Start here. Three tracks — use a bench, run the server that hosts one, or read the data model and the API.
 
 ## Content
 
 # Quick tour
-URL: https://docs.benchpress.cloud/docs/user/quick-tour
+URL: https://benchpress.cloud/docs/user/quick-tour
 The five screens in the BenchPress sidebar, and every number the Overview dashboard reports.
 
 This page names every screen in BenchPress and reads the first one out loud.
@@ -128,7 +128,7 @@ You have read the tour correctly when all four are true.
 |--|--|--|
 |`/frontend` returns to the login page|You have no session, or it expired|Sign in at `/login`, then open `/frontend` again|
 |The VPN chip is amber and reads VPN off|This device has no WireGuard tunnel|Open **Devices**, register the device, install the config it gives you|
-|**Open site** opens nothing|Bench sites resolve only over the VPN|Connect the VPN, then click again|
+|**Open site** opens nothing|The site has no public name, so it answers only on the VPN|Connect the VPN, then click again|
 |**Templates** is missing from the sidebar|Templates is admin-only|Ask an admin, or start a bench from **Labs**|
 |**Needs attention** is above zero|A bench errored or stopped answering|Open **Instances**, open the bench, read its deploy log|
 |**Credits** is missing everywhere|Credits are off on this server|Nothing to fix. A self-hosted server runs without them|
@@ -175,7 +175,7 @@ server.
 * [BenchPress documentation](/docs) — the three tracks, and what each one covers.
 
 # Deploy from a template
-URL: https://docs.benchpress.cloud/docs/user/deploy-from-template
+URL: https://benchpress.cloud/docs/user/deploy-from-template
 Turn a catalog template into a running bench, and read the eleven pipeline steps while they run.
 
 A template is a recipe someone already wrote. This page takes you from the
@@ -284,7 +284,7 @@ The deploy worked when all four are true.
 |The log stops at `Waiting for the worker to pick the deploy up…`|No worker is running, so nothing has started|Ask the operator to check `queue-long`|
 |Step 7 runs for minutes|The image has no golden dump, so the site is built from scratch|Nothing to fix. Read step 2, which reports the same thing|
 |The run ends **Error**|The step that failed names the reason|Open **Raw log** under the steps and read the last lines|
-|**Open site** opens nothing|Bench sites resolve only over the VPN|Connect the VPN, then press it again|
+|**Open site** opens nothing|The site has no public name, so it answers only on the VPN|Connect the VPN, then press it again|
 
 ## Reference
 
@@ -321,7 +321,7 @@ The deploy worked when all four are true.
 * [Start, stop and redeploy](/docs/user/lifecycle) — what to do after it is running.
 
 # Create a lab
-URL: https://docs.benchpress.cloud/docs/user/create-a-lab
+URL: https://benchpress.cloud/docs/user/create-a-lab
 Fill in the New lab form when no catalog template matches the app list you need.
 
 A lab is a recipe: a Frappe version, a list of apps and a set of container
@@ -440,7 +440,7 @@ The **What gets built** panel says so: `Docker image shared with every lab that 
 * [Start, stop and redeploy](/docs/user/lifecycle) — running the bench afterwards.
 
 # Read a lab page
-URL: https://docs.benchpress.cloud/docs/user/lab-detail
+URL: https://benchpress.cloud/docs/user/lab-detail
 Every field on the lab page, and why container status and container health can disagree.
 
 The lab page is one screen with two clocks on it. This page reads every field,
@@ -547,7 +547,7 @@ You are reading the page correctly when all four are true.
 |CPU and memory read `—`|The container is not running|Start the bench|
 |The header has no **Build log** tab|Build logs are admin-only|Ask an admin for the build output|
 |A stopped bench shows a countdown|Stopped benches are deleted after a set number of days|Start it, or accept that it goes|
-|**Open site** does nothing|Bench sites resolve only over the VPN|Connect the VPN and press it again|
+|**Open site** does nothing|The site has no public name, so it answers only on the VPN|Connect the VPN and press it again|
 
 ## Reference
 
@@ -592,7 +592,7 @@ The window is `reap_after_days` in Credit Settings, which is **7 days** here.
 * [Create a lab](/docs/user/create-a-lab) — where the header chips come from.
 
 # Start, stop and redeploy
-URL: https://docs.benchpress.cloud/docs/user/lifecycle
+URL: https://benchpress.cloud/docs/user/lifecycle
 The five actions on a running bench, which of them destroy work, and which are admin-only.
 
 A running bench has five actions. Two are safe, one is destructive, one is
@@ -724,7 +724,7 @@ before, so nothing disappears without notice. `0` turns the deletion off.
 * [Create a lab](/docs/user/create-a-lab) — what a rebuild rebuilds.
 
 # Register a VPN device
-URL: https://docs.benchpress.cloud/docs/user/vpn-devices
+URL: https://benchpress.cloud/docs/user/vpn-devices
 Put a laptop or a phone on the WireGuard network, import the config, read the device status, and run the connection test when a site will not open.
 
 No bench is published to the internet on a tunnel-only address. Register the
@@ -904,7 +904,7 @@ not go through BenchPress while the tunnel is on.
 * [Troubleshooting](/docs/user/troubleshooting) — symptoms across the whole app.
 
 # Open the bench site
-URL: https://docs.benchpress.cloud/docs/user/open-your-site
+URL: https://benchpress.cloud/docs/user/open-your-site
 The Sites card, the three states of its Open button, and logging in to the Frappe site a deploy created.
 
 A deploy ends with a working Frappe site. This page opens it and logs in, and
@@ -1033,7 +1033,7 @@ redeploy.
 * [Read a lab page](/docs/user/lab-detail) — the rest of the lab screen.
 
 # Connect over SSH and the VPN
-URL: https://docs.benchpress.cloud/docs/user/connect-ssh-vpn
+URL: https://benchpress.cloud/docs/user/connect-ssh-vpn
 The connection card on a lab page — two addresses, the SSH command, the three passwords, and which of them work without the tunnel.
 
 A running bench publishes one card with everything needed to reach it. This
@@ -1182,7 +1182,7 @@ benches. An admin sees every bench on the server.
 * [Read a lab page](/docs/user/lab-detail) — the rest of the screen this card sits on.
 
 # Use code-server
-URL: https://docs.benchpress.cloud/docs/user/code-server
+URL: https://benchpress.cloud/docs/user/code-server
 Open the browser VS Code session on a bench, find its password, hand the session to a teammate, and restart it when it stops answering.
 
 Every bench whose lab enables it runs code-server, which is VS Code in a
@@ -1311,7 +1311,7 @@ benches.
 * [Read a lab page](/docs/user/lab-detail) — the chips that say whether a lab has an IDE.
 
 # Read logs and container stats
-URL: https://docs.benchpress.cloud/docs/user/logs-and-monitoring
+URL: https://benchpress.cloud/docs/user/logs-and-monitoring
 The deploy stepper, the raw log and its step markers, the build log, and the CPU and memory bars on a running bench.
 
 Every deploy and every image build writes a log you can read while it runs and
@@ -1497,7 +1497,7 @@ card, and the deploy log says which of them changed.
 * [Troubleshooting](/docs/user/troubleshooting) — symptoms across the whole app.
 
 # Leases and credits
-URL: https://docs.benchpress.cloud/docs/user/leases-and-credits
+URL: https://benchpress.cloud/docs/user/leases-and-credits
 The countdown on a running bench, the renew dialog and its plans, the credit meter, the ledger, and where a purchase hands off to the payment gateway.
 
 On a server with credits switched on, a deploy buys a fixed window of time and
@@ -1746,7 +1746,7 @@ They can still be refused for credits.
 * [Troubleshooting](/docs/user/troubleshooting) — symptoms across the whole app.
 
 # Troubleshooting
-URL: https://docs.benchpress.cloud/docs/user/troubleshooting
+URL: https://benchpress.cloud/docs/user/troubleshooting
 Every symptom a BenchPress user meets, its cause, and the page that fixes it — deploys, the VPN, SSH, code-server, logs and credits.
 
 One index of symptoms across the whole app. Find the line that matches what
@@ -1869,7 +1869,7 @@ address and its password instead of retyping the error.
 * [Connect over SSH and the VPN](/docs/user/connect-ssh-vpn) — the card behind most access problems.
 
 # Operator track
-URL: https://docs.benchpress.cloud/docs/operator
+URL: https://benchpress.cloud/docs/operator
 Run BenchPress on your own box — install, the VPN plane, settings, the shared database, images, upgrades, safety and diagnostics.
 
 Everything about the machine BenchPress runs on, rather than the benches it
@@ -1943,7 +1943,7 @@ elsewhere, and there is no second machine to keep in step.
 * [Troubleshooting](/docs/user/troubleshooting) — the symptom index a user reads before calling you.
 
 # Prerequisites
-URL: https://docs.benchpress.cloud/docs/operator/prerequisites
+URL: https://benchpress.cloud/docs/operator/prerequisites
 What a BenchPress host needs before you install — the four preconditions, supported platforms, versions, Docker socket access, and the measured CPU and disk sizing.
 
 What the machine must already have before [Install](/docs/operator/install)
@@ -2188,7 +2188,7 @@ ran **4 to 26 minutes**, and the golden pass 5 to 11 — see
 * [Diagnostics](/docs/operator/diagnostics) — the same checks, run by the app against the live host.
 
 # Install
-URL: https://docs.benchpress.cloud/docs/operator/install
+URL: https://benchpress.cloud/docs/operator/install
 Install BenchPress into a Frappe v16 bench — get-app, setup.sh, the frontend build, the base domain, and the first screen.
 
 From a prepared host to the BenchPress Overview, in six steps.
@@ -2377,7 +2377,7 @@ that image in seconds. See [The image cache](/docs/operator/image-cache).
 * [Quick tour](/docs/user/quick-tour) — the screens you just installed.
 
 # WireGuard and the VPN plane
-URL: https://docs.benchpress.cloud/docs/operator/wireguard-setup
+URL: https://benchpress.cloud/docs/operator/wireguard-setup
 How the vpn_management app owns the tunnel, what BenchPress consumes from it, the measured server and pool values, and why userns-remap matters.
 
 BenchPress does not manage WireGuard. This page says who does, what BenchPress
@@ -2566,7 +2566,7 @@ documentation. It owns every one of these values.
 * [Diagnostics](/docs/operator/diagnostics) — the `vpn_server` check and what it does not cover.
 
 # Settings reference
-URL: https://docs.benchpress.cloud/docs/operator/settings-reference
+URL: https://benchpress.cloud/docs/operator/settings-reference
 Every field on BenchPress Settings and Credit Settings, with the value measured on a live host, where each one is edited, and what changing it costs.
 
 Every field on the two settings documents, what it controls, and what it reads
@@ -2822,7 +2822,7 @@ wrap it in a single `exec()` call.
 * [Golden images](/docs/operator/golden-images) — the two settings that decide deploy speed.
 
 # The shared database server
-URL: https://docs.benchpress.cloud/docs/operator/database-server
+URL: https://benchpress.cloud/docs/operator/database-server
 One MariaDB holds every bench site's database — where it lives, how BenchPress drives it, what drift detection watches, and the four actions on the record.
 
 Every bench site's database lives in one shared MariaDB container. This page
@@ -2990,7 +2990,7 @@ Status values are `Pending`, `Active`, `Stopped` and `Error`.
 * [Production safety](/docs/operator/production-safety) — what is and is not backed up.
 
 # Backup and restore
-URL: https://docs.benchpress.cloud/docs/operator/backup-and-restore
+URL: https://benchpress.cloud/docs/operator/backup-and-restore
 Where the nightly MariaDB dumps land, how long they are kept, and the two restore paths — a scratch container for verification, and managed recovery from bench console.
 
 Where BenchPress's automatic MariaDB dumps live, and how to turn one back into
@@ -3158,7 +3158,7 @@ older than that, the scheduled job is not running — see
 * [Production safety](/docs/operator/production-safety) — the full list of what is not backed up.
 
 # Users and roles
-URL: https://docs.benchpress.cloud/docs/operator/users-and-roles
+URL: https://benchpress.cloud/docs/operator/users-and-roles
 The two BenchPress roles, what each one may read and write, which screens are admin-only, and how ownership rather than a role decides who sees a bench.
 
 Two roles, and one rule that matters more than either: a user sees their own
@@ -3329,7 +3329,7 @@ that would let a new endpoint ship unguarded by omission.
 * [Quick tour](/docs/user/quick-tour) — the sidebar as a user sees it.
 
 # Golden images
-URL: https://docs.benchpress.cloud/docs/operator/golden-images
+URL: https://benchpress.cloud/docs/operator/golden-images
 A lab's finished site is baked into its own image as a database dump, so a deploy restores it instead of creating tables — the measured numbers, the two settings, and why a golden gets refused.
 
 Why a deploy takes 13 seconds instead of 43, what turns it off, and how to
@@ -3504,7 +3504,7 @@ it is the field the deploy compares.
 * [Read logs and container stats](/docs/user/logs-and-monitoring) — where the site step's wording appears.
 
 # The image cache
-URL: https://docs.benchpress.cloud/docs/operator/image-cache
+URL: https://benchpress.cloud/docs/operator/image-cache
 One image per lab, tagged benchpress/<lab_id>:lab — what it costs on disk, how the weekly prewarm and sweep work, and what is safe to prune.
 
 Lab images are the largest thing on a BenchPress host. This page says how they
@@ -3678,7 +3678,7 @@ These are safe:
 * [Create a lab](/docs/user/create-a-lab) — the screen that orders a build.
 
 # Upgrading
-URL: https://docs.benchpress.cloud/docs/operator/upgrading
+URL: https://benchpress.cloud/docs/operator/upgrading
 Move a BenchPress install to a newer release — the backup gate, the five steps, the scripted path, rollback, and why lab images are a separate opt-in.
 
 App code, database schema and frontend assets, with a backup gate in front and
@@ -3880,7 +3880,7 @@ and never skip the step 0 gate.
 * [Diagnostics](/docs/operator/diagnostics) — the post-upgrade health check in full.
 
 # Production safety
-URL: https://docs.benchpress.cloud/docs/operator/production-safety
+URL: https://benchpress.cloud/docs/operator/production-safety
 What BenchPress is and is not ready to carry — the alpha verdict, the container privilege boundary, what is backed up, and the release checklist that covers 25 of 52 whitelisted callables.
 
 Whether BenchPress is safe to run on your host, and what has to be true first.
@@ -4092,7 +4092,7 @@ any password. The `create_site` item described an endpoint that does not exist.
 * [Diagnostics](/docs/operator/diagnostics) — the checks that read the host.
 
 # Diagnostics
-URL: https://docs.benchpress.cloud/docs/operator/diagnostics
+URL: https://benchpress.cloud/docs/operator/diagnostics
 The twelve read-only checks that ask Docker, MariaDB, Redis and the kernel what is true — how to run them, what each failure means, and the four things they do not cover.
 
 Twelve checks that read the host rather than the configuration, and what to do
@@ -4404,7 +4404,7 @@ router in one action. See
 * [Production safety](/docs/operator/production-safety) — the checks that a human runs, not the app.
 
 # Credits and billing
-URL: https://docs.benchpress.cloud/docs/operator/credits-and-billing
+URL: https://benchpress.cloud/docs/operator/credits-and-billing
 Optional and off by default — the metering half of BenchPress, covering leases, balances, the ledger, admin adjustments, and the optional Razorpay handoff.
 
 **Optional, and off by default.** `enable_credits` ships as `0`, and nothing
@@ -4617,7 +4617,7 @@ Measured on this host.
 * [Settings reference](/docs/operator/settings-reference) — every field above, in one table.
 
 # Admission and limits
-URL: https://docs.benchpress.cloud/docs/operator/admission-and-limits
+URL: https://benchpress.cloud/docs/operator/admission-and-limits
 Optional and off by default — concurrency caps, size ceilings, device and build quotas, how a slot is claimed as a row, and the acceptance run that proves access still works.
 
 **Optional, and off by default.** The caps on this page only bind while
@@ -4860,7 +4860,7 @@ cannot close that cycle.
 * [Troubleshooting](/docs/user/troubleshooting) — the same refusals, indexed for the user who hit one.
 
 # Self-serve signup
-URL: https://docs.benchpress.cloud/docs/operator/hosted-signup
+URL: https://benchpress.cloud/docs/operator/hosted-signup
 Optional and off by default — retire the waitlist and let people sign themselves up, with GitHub and Google as the primary paths and the abuse controls that make a free grant safe.
 
 **Optional, and off by default.** This applies to a **hosted** BenchPress,
@@ -5014,7 +5014,7 @@ keep their role, their balance and their instances.
 * [Users and roles](/docs/operator/users-and-roles) — the role every signup lands with.
 
 # Reference track
-URL: https://docs.benchpress.cloud/docs/reference
+URL: https://benchpress.cloud/docs/reference
 The data model, the whitelisted API, the eleven deploy steps, the reconcilers, the address plan and the configuration split — for a contributor or an integrator.
 
 What BenchPress is made of, rather than how to use it or how to run it.
@@ -5086,7 +5086,7 @@ it before you assume a save does the plain thing.
 * [Settings reference](/docs/operator/settings-reference) — every field on the two settings documents.
 
 # Architecture
-URL: https://docs.benchpress.cloud/docs/reference/architecture
+URL: https://benchpress.cloud/docs/reference/architecture
 The moving parts of BenchPress — the control plane, the bench containers, the shared infrastructure, and which Python module owns each concern.
 
 What the system is made of, and which module you open when a question is about
@@ -5247,7 +5247,7 @@ The counts a change should keep true.
 * [Operator track](/docs/operator) — the same system, as tasks on a host.
 
 # Data model
-URL: https://docs.benchpress.cloud/docs/reference/data-model
+URL: https://benchpress.cloud/docs/reference/data-model
 All 20 BenchPress DocTypes with their fields, links, naming and the permission rule that scopes each one — plus why there is no Device DocType.
 
 Every DocType the BenchPress module defines, what it holds, and who is allowed
@@ -5576,7 +5576,7 @@ This is the only DocType a guest can cause to be written. See
 * [Users and roles](/docs/operator/users-and-roles) — the three roles named above.
 
 # API
-URL: https://docs.benchpress.cloud/docs/reference/api
+URL: https://benchpress.cloud/docs/reference/api
 Every whitelisted BenchPress endpoint, with arguments, what each returns, and the permission check each one makes for itself.
 
 Every function this app publishes over HTTP, and what each one checks before it
@@ -5985,7 +5985,7 @@ bench --site <site> run-tests --app benchpress --module benchpress.tests.test_ap
 * [Realtime](/docs/reference/realtime) — how a screen hears about the result.
 
 # Deploy pipeline
-URL: https://docs.benchpress.cloud/docs/reference/deploy-pipeline
+URL: https://benchpress.cloud/docs/reference/deploy-pipeline
 The eleven steps of a BenchPress deploy, in the order the code runs them, with the function behind each step and the log line it writes.
 
 What happens between a click on **Deploy** and a site that answers.
@@ -6212,7 +6212,7 @@ A successful run shows eleven ticked steps on the Lab detail screen. See
 * [Logs and monitoring](/docs/user/logs-and-monitoring) — reading a run as it happens.
 
 # Lifecycle and events
-URL: https://docs.benchpress.cloud/docs/reference/lifecycle-and-events
+URL: https://benchpress.cloud/docs/reference/lifecycle-and-events
 The bench states and their transitions, the Docker event listener, Bench Event incidents, the stats collector, and the eleven scheduled jobs that correct the database.
 
 What changes a bench without anybody clicking anything.
@@ -6443,7 +6443,7 @@ bench --site <site> execute frappe.client.get_list \
 * [Settings reference](/docs/operator/settings-reference) — every number named above.
 
 # Networking
-URL: https://docs.benchpress.cloud/docs/reference/networking
+URL: https://benchpress.cloud/docs/reference/networking
 The BenchPress address plan — bench bridges, WireGuard tunnel addresses, the two container ports, Traefik route files and the wildcard certificate anchor.
 
 Every address a bench answers on, and who can reach each one.
@@ -6674,7 +6674,7 @@ docker network ls --filter name=benchpress-
 * [Data model](/docs/reference/data-model#devices-are-vpn-peers) — why there is no Device DocType.
 
 # Realtime
-URL: https://docs.benchpress.cloud/docs/reference/realtime
+URL: https://benchpress.cloud/docs/reference/realtime
 The six realtime events BenchPress publishes over socket.io, their payloads, who receives each one, and why the deploy log commits every line.
 
 How a screen changes without a page reload, and what it is listening to.
@@ -6841,7 +6841,7 @@ Then deploy a bench. See
 * [Data model](/docs/reference/data-model#deploy-log) — the row every line is written to.
 
 # Configuration
-URL: https://docs.benchpress.cloud/docs/reference/configuration
+URL: https://benchpress.cloud/docs/reference/configuration
 Where each BenchPress setting lives — build arguments that need a rebuild, runtime environment that needs a restart, and DocType fields that apply on save.
 
 Which knob lives where, and what changing it costs.
@@ -7010,7 +7010,7 @@ flag on.
 * [CLI and scripts](/docs/reference/cli-and-scripts) — the commands named above.
 
 # CLI and scripts
-URL: https://docs.benchpress.cloud/docs/reference/cli-and-scripts
+URL: https://benchpress.cloud/docs/reference/cli-and-scripts
 Every command that drives BenchPress from a shell — entry.py, the bench commands, setup.sh and upgrade.sh, the four repository scripts and the documentation pipeline.
 
 What you can run from a terminal, and what each one changes.
@@ -7237,7 +7237,7 @@ npm run docs:build && npm run docs:lint && npm run docs:score; echo "exit=$?"
 * [Golden images](/docs/operator/golden-images) — what the golden drill measures.
 
 # Glossary
-URL: https://docs.benchpress.cloud/docs/reference/glossary
+URL: https://benchpress.cloud/docs/reference/glossary
 What each BenchPress term means here — lab, bench, site, lease, admission, golden image, peer — including the words that mean something else elsewhere.
 
 One name for one thing. This page is the list of names.
@@ -7361,7 +7361,7 @@ An admin sees every row. Both admin roles short-circuit every scoping rule. See
 * [Credits and billing](/docs/operator/credits-and-billing) — the whole optional half.
 
 # BenchPress documentation
-URL: https://docs.benchpress.cloud/docs
+URL: https://benchpress.cloud/docs
 Start here. Three tracks — use a bench, run the server that hosts one, or read the data model and the API.
 
 BenchPress deploys a Frappe bench from a template. An operator describes the

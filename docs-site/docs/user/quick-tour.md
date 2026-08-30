@@ -2,7 +2,7 @@
 title: Quick tour
 description: The five screens in the BenchPress sidebar, and every number the
   Overview dashboard reports.
-lastModified: "2026-08-28T22:10:21+05:30"
+lastModified: "2026-08-30T10:28:35-04:00"
 lastAuthor: Venkatesh
 ---
 # Quick tour
@@ -84,7 +84,7 @@ You have read the tour correctly when all four are true.
 |--|--|--|
 |`/frontend` returns to the login page|You have no session, or it expired|Sign in at `/login`, then open `/frontend` again|
 |The VPN chip is amber and reads VPN off|This device has no WireGuard tunnel|Open **Devices**, register the device, install the config it gives you|
-|**Open site** opens nothing|Bench sites resolve only over the VPN|Connect the VPN, then click again|
+|**Open site** opens nothing|The site has no public name, so it answers only on the VPN|Connect the VPN, then click again|
 |**Templates** is missing from the sidebar|Templates is admin-only|Ask an admin, or start a bench from **Labs**|
 |**Needs attention** is above zero|A bench errored or stopped answering|Open **Instances**, open the bench, read its deploy log|
 |**Credits** is missing everywhere|Credits are off on this server|Nothing to fix. A self-hosted server runs without them|

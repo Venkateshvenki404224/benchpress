@@ -2,7 +2,7 @@
 title: Read a lab page
 description: Every field on the lab page, and why container status and container
   health can disagree.
-lastModified: "2026-08-28T22:10:21+05:30"
+lastModified: "2026-08-30T10:28:35-04:00"
 lastAuthor: Venkatesh
 ---
 # Read a lab page
@@ -111,7 +111,7 @@ You are reading the page correctly when all four are true.
 |CPU and memory read `—`|The container is not running|Start the bench|
 |The header has no **Build log** tab|Build logs are admin-only|Ask an admin for the build output|
 |A stopped bench shows a countdown|Stopped benches are deleted after a set number of days|Start it, or accept that it goes|
-|**Open site** does nothing|Bench sites resolve only over the VPN|Connect the VPN and press it again|
+|**Open site** does nothing|The site has no public name, so it answers only on the VPN|Connect the VPN and press it again|
 
 ## Reference
 

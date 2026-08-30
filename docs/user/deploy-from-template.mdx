@@ -111,7 +111,7 @@ The deploy worked when all four are true.
 | The log stops at `Waiting for the worker to pick the deploy up…` | No worker is running, so nothing has started | Ask the operator to check `queue-long` |
 | Step 7 runs for minutes | The image has no golden dump, so the site is built from scratch | Nothing to fix. Read step 2, which reports the same thing |
 | The run ends **Error** | The step that failed names the reason | Open **Raw log** under the steps and read the last lines |
-| **Open site** opens nothing | Bench sites resolve only over the VPN | Connect the VPN, then press it again |
+| **Open site** opens nothing | The site has no public name, so it answers only on the VPN | Connect the VPN, then press it again |
 
 ## Reference
 
