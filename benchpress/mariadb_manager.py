@@ -252,7 +252,7 @@ def _recover(server) -> None:
 		# re-create the container every running bench is talking to, to repair a flag that is
 		# already wrong — so a healthy server costs one status flip and nothing else.
 		frappe.db.set_value("Database Server", server.name, {"status": SERVER_ACTIVE, "error_message": ""})
-		frappe.db.commit()
+		frappe.db.commit()  # nosemgrep -- a proven-healthy verdict must survive a later deploy failure
 		return
 
 	# Pending, or Error and genuinely not answering. Idempotent, and exactly what
