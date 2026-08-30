@@ -2,7 +2,7 @@
 title: Quick tour
 description: The five screens in the BenchPress sidebar, and every number the
   Overview dashboard reports.
-lastModified: "2026-08-30T10:28:35-04:00"
+lastModified: "2026-08-30T20:13:11+05:30"
 lastAuthor: Venkatesh
 ---
 # Quick tour
