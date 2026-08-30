@@ -2,7 +2,7 @@
 title: Read a lab page
 description: Every field on the lab page, and why container status and container
   health can disagree.
-lastModified: "2026-08-28T22:10:21+05:30"
+lastModified: "2026-08-30T10:28:35-04:00"
 lastAuthor: Venkatesh
 ---
 # Read a lab page
