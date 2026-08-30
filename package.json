@@ -1,6 +1,6 @@
 {
   "name": "benchpress",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "Press a button. Get a Frappe bench. Self-hosted, Docker-powered, VPN-secured.",
   "main": "index.js",
   "scripts": {

@@ -1,9 +1,17 @@
+import { createRequire } from "node:module";
 import { defineDocsConfig } from "leadtype";
+
+// leadtype defaults the agent card to 1.0.0, which advertised a version this app has never
+// shipped. Read the real one instead, so the card cannot drift from the package again.
+const { version } = createRequire(import.meta.url)("../package.json");
 
 export default defineDocsConfig({
   product: {
     name: "BenchPress",
     tagline: "Press a button. Get a Frappe bench.",
+  },
+  agents: {
+    agentCard: { version },
   },
   llms: {
     sections: [
