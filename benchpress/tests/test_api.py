@@ -59,6 +59,11 @@ DIAGNOSTICS_ROWS = [
 	{"check": "container_runtimes", "status": "pass", "hint": "Docker has sysbox-runc registered"},
 	{"check": "golden_images", "status": "pass", "hint": "8 of 8 built labs carry a golden dump"},
 	{"check": "docker_events", "status": "pass", "hint": "Docker event listener reported 2s ago"},
+	{
+		"check": "route_directory",
+		"status": "pass",
+		"hint": "2 bench routes published beside benchpress.yml, *.example.test anchored",
+	},
 	{"check": "vpn_server", "status": "pass", "hint": "WireGuard server 'wg0' configured"},
 ]
 

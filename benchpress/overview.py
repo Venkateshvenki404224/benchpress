@@ -38,6 +38,7 @@ INFRASTRUCTURE_LABELS = {
 	"container_runtimes": "Container runtimes",
 	"golden_images": "Golden images",
 	"docker_events": "Event listener",
+	"route_directory": "Route directory",
 	"vpn_server": "WireGuard",
 }
 
@@ -306,7 +307,7 @@ def _bench_labels(bench_names: list[str]) -> dict:
 
 
 def _infrastructure(admin: bool) -> list[dict] | None:
-	"""The eleven real diagnostics checks — admins only, never a placeholder."""
+	"""The twelve real diagnostics checks — admins only, never a placeholder."""
 	if not admin:
 		return None
 	from benchpress.diagnostics import display_row, run_diagnostics

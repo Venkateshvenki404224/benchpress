@@ -1,17 +1,27 @@
 # Copyright (c) 2026, Venkatesh and Contributors
 # See license.txt
 
-"""run_diagnostics contract: eleven rows, fixed order, never raises, never mutates."""
+"""run_diagnostics contract: twelve rows, fixed order, never raises, never mutates."""
 
 import inspect
+import tempfile
+import time
 import unittest
 from datetime import datetime, timedelta
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import docker
 import frappe
 
-from benchpress.diagnostics import check_row, display_row, run_diagnostics
+from benchpress import ingress
+from benchpress.diagnostics import (
+	ROUTE_STATE_UNREPORTED,
+	_check_route_directory,
+	check_row,
+	display_row,
+	run_diagnostics,
+)
 from benchpress.docker_events import HEARTBEAT_STALE_SECONDS
 from benchpress.image_cache import clear_cached_tags
 
@@ -26,9 +36,10 @@ CHECK_ORDER = [
 	"container_runtimes",
 	"golden_images",
 	"docker_events",
+	"route_directory",
 	"vpn_server",
 ]
-COUNT_WORDS = {6: "six", 7: "seven", 8: "eight", 9: "nine", 10: "ten", 11: "eleven"}
+COUNT_WORDS = {6: "six", 7: "seven", 8: "eight", 9: "nine", 10: "ten", 11: "eleven", 12: "twelve"}
 HOST_RUNTIMES = {"names": {"runc", "sysbox-runc"}, "default": "runc"}
 # Small enough that a full bridge leaves the family with no headroom, which is the only
 # way `bridge_capacity` reports a fail.
@@ -50,6 +61,13 @@ IST_OFFSET = timedelta(hours=5, minutes=30)
 
 FRESH_HEARTBEAT = {"age": 2, "events_seen": 41, "orphans": 0, "pending": 0}
 
+# What a rendered, mounted route directory holds before any bench deploys. Named from `ingress`
+# rather than spelled out, so a rename there fails here rather than passing against a stale name.
+PROTECTED_FILES = (ingress.CONTROL_PLANE_ROUTE_FILE, ingress.WILDCARD_ANCHOR_FILE)
+BASE_DOMAIN = "benchpress.cloud"
+# Its own key, so a test run on a live host never clobbers the report its dashboard is reading.
+TEST_ROUTE_STATE_KEY = "benchpress:route_directory:test_diagnostics"
+
 
 def _lab_image(tag, golden=True):
 	return MagicMock(tags=[tag], labels={"benchpress.golden": "1"} if golden else {})
@@ -66,6 +84,11 @@ def _healthy_client(bridge_endpoints=4):
 
 
 class TestDiagnostics(unittest.TestCase):
+	def setUp(self):
+		"""The route-directory report is a cache key, so every test starts with none of its own."""
+		frappe.cache().delete_value(TEST_ROUTE_STATE_KEY)
+		self.addCleanup(frappe.cache().delete_value, TEST_ROUTE_STATE_KEY)
+
 	def _run(
 		self,
 		client=None,
@@ -84,6 +107,11 @@ class TestDiagnostics(unittest.TestCase):
 		redis_drift=None,
 		heartbeat=FRESH_HEARTBEAT,
 		heartbeat_error=None,
+		base_domain=BASE_DOMAIN,
+		route_dir_mounted=True,
+		route_files=PROTECTED_FILES,
+		published_routes=(),
+		route_state_reported=True,
 	):
 		"""Run run_diagnostics with everything healthy unless overridden.
 
@@ -91,6 +119,12 @@ class TestDiagnostics(unittest.TestCase):
 		client = client or _healthy_client()
 		ceilings = HEALTHY_CEILINGS if ceilings is None else ceilings
 		with (
+			# A real directory recorded through the real recorder, rather than a patched
+			# `directory_state`: what is on disk is the subject, and the empty-directory case
+			# this row exists to catch is invisible to a mocked answer.
+			tempfile.TemporaryDirectory() as tmp,
+			patch.object(ingress, "TRAEFIK_DYNAMIC_DIR", Path(tmp) / "dynamic"),
+			patch.object(ingress, "ROUTE_STATE_KEY", TEST_ROUTE_STATE_KEY),
 			patch("benchpress.diagnostics.get_client", side_effect=client_error, return_value=client),
 			# A separate patch, because the runtime check reads `docker info` through
 			# its own memoised helper rather than through this client.
@@ -116,6 +150,14 @@ class TestDiagnostics(unittest.TestCase):
 			),
 			patch("benchpress.diagnostics.frappe") as frappe_mock,
 		):
+			if route_dir_mounted:
+				ingress.TRAEFIK_DYNAMIC_DIR.mkdir()
+				for name in (*route_files, *(f"{route}.yml" for route in published_routes)):
+					(ingress.TRAEFIK_DYNAMIC_DIR / name).write_text("")
+			if route_state_reported:
+				# What queue-long does on every deploy and every reconcile pass.
+				ingress.record_directory_state()
+			frappe_mock.get_cached_doc.return_value = frappe._dict(base_domain=base_domain)
 			frappe_mock.get_all.return_value = [DB_ROW] if db_rows is None else db_rows
 			frappe_mock.get_installed_apps.return_value = installed_apps or [
 				"frappe",
@@ -199,6 +241,7 @@ class TestDiagnostics(unittest.TestCase):
 			db_clock_error=Exception("down"),
 			ceilings={},
 			heartbeat=None,
+			route_dir_mounted=False,
 		)
 		# Capacity is the one exception: a family with no bridge yet is the lazy-creation
 		# invariant, not a broken environment.
@@ -347,6 +390,138 @@ class TestDiagnostics(unittest.TestCase):
 		self.assertIn("max_connections is 151, declared 500", row["hint"])
 		self.assertIn("88.00%", row["hint"])
 		self.assertIn("docker compose up -d", row["hint"])
+
+	def test_a_missing_route_directory_fails_and_names_what_mounts_it(self):
+		"""The stock install: Base Domain is required, so it is filled on a host with no mount."""
+		by_check, _rows = self._run(route_dir_mounted=False)
+
+		row = by_check["route_directory"]
+		self.assertEqual(row["status"], "fail")
+		self.assertEqual(row["severity"], "Error")
+		self.assertIn("queue-long", row["hint"])
+		self.assertIn("docker-compose.prod.yml", row["hint"])
+		self.assertIn("./entry.py --domain", row["hint"])
+
+	def test_the_row_reads_a_workers_report_never_this_containers_filesystem(self):
+		"""`backend` serves this screen and mounts no route directory — only queue-long and
+		traefik do — so a stat here would fail on a correctly configured host."""
+		with tempfile.TemporaryDirectory() as tmp:
+			route_dir = Path(tmp) / "dynamic"
+			route_dir.mkdir()
+			for name in PROTECTED_FILES:
+				(route_dir / name).write_text("")
+			with (
+				patch.object(ingress, "ROUTE_STATE_KEY", TEST_ROUTE_STATE_KEY),
+				patch.object(ingress, "TRAEFIK_DYNAMIC_DIR", route_dir),
+			):
+				ingress.record_directory_state()
+
+			# The reader's own view of the path: absent, exactly as in `backend`.
+			with (
+				patch.object(ingress, "ROUTE_STATE_KEY", TEST_ROUTE_STATE_KEY),
+				patch.object(ingress, "TRAEFIK_DYNAMIC_DIR", Path(tmp) / "not-here"),
+				patch("benchpress.diagnostics.frappe") as frappe_mock,
+			):
+				frappe_mock.get_cached_doc.return_value = frappe._dict(base_domain=BASE_DOMAIN)
+				row = _check_route_directory()
+
+		self.assertEqual(row["status"], "pass")
+		self.assertIn(f"*.{BASE_DOMAIN} anchored", row["hint"])
+
+	def test_no_report_at_all_is_a_warning_that_names_what_writes_one(self):
+		"""A public install nothing has reported on is unverified, not healthy."""
+		by_check, _rows = self._run(route_state_reported=False)
+
+		row = by_check["route_directory"]
+		self.assertEqual(row["status"], "fail")
+		self.assertEqual(row["severity"], "Warning")
+		self.assertEqual(row["hint"], ROUTE_STATE_UNREPORTED)
+
+	def test_a_stale_report_is_named_by_its_age_and_not_believed(self):
+		"""The reconcile pass refreshes it, so a report this old means the pass stopped running."""
+		age = ingress.ROUTE_STATE_STALE_SECONDS + 60
+		with patch.object(ingress, "ROUTE_STATE_KEY", TEST_ROUTE_STATE_KEY):
+			frappe.cache().set_value(
+				TEST_ROUTE_STATE_KEY,
+				{"ts": int(time.time()) - age, "mounted": True, "missing": [], "published": 3},
+			)
+			with patch("benchpress.diagnostics.frappe") as frappe_mock:
+				frappe_mock.get_cached_doc.return_value = frappe._dict(base_domain=BASE_DOMAIN)
+				row = _check_route_directory()
+
+		self.assertEqual(row["status"], "fail")
+		self.assertEqual(row["severity"], "Warning")
+		self.assertIn(f"{age}s ago", row["hint"])
+		self.assertIn(str(ingress.ROUTE_STATE_STALE_SECONDS), row["hint"])
+
+	def test_an_empty_route_directory_is_a_fail_not_a_mounted_pass(self):
+		"""Docker turns a bind source that does not exist into an empty directory, which is how
+		this bug hides from every check that only asks whether the path is there."""
+		by_check, _rows = self._run(route_files=())
+
+		row = by_check["route_directory"]
+		self.assertEqual(row["status"], "fail")
+		self.assertIn(ingress.CONTROL_PLANE_ROUTE_FILE, row["hint"])
+		self.assertIn("never rendered", row["hint"])
+
+	def test_a_rendered_directory_passes_and_counts_what_is_published(self):
+		by_check, _rows = self._run(published_routes=("inst-1", "inst-2"))
+
+		row = by_check["route_directory"]
+		self.assertEqual(row["status"], "pass")
+		self.assertIn("2 bench routes published", row["hint"])
+		self.assertIn(f"*.{BASE_DOMAIN} anchored", row["hint"])
+
+	def test_an_install_that_has_never_deployed_is_not_a_failure(self):
+		"""The anchor is written by the first deploy, so its absence before one is normal."""
+		by_check, _rows = self._run(route_files=(ingress.CONTROL_PLANE_ROUTE_FILE,))
+
+		row = by_check["route_directory"]
+		self.assertEqual(row["status"], "pass")
+		self.assertIn("no bench route published yet", row["hint"])
+
+	def test_published_routes_with_no_anchor_are_a_warning_naming_the_certificate(self):
+		by_check, _rows = self._run(
+			route_files=(ingress.CONTROL_PLANE_ROUTE_FILE,), published_routes=("inst-1",)
+		)
+
+		row = by_check["route_directory"]
+		self.assertEqual(row["status"], "fail")
+		self.assertEqual(row["severity"], "Warning")
+		self.assertIn("fail TLS", row["hint"])
+
+	def test_a_dev_checkout_advertising_no_public_url_passes(self):
+		for base_domain in ("localhost", ""):
+			with self.subTest(base_domain=base_domain):
+				by_check, _rows = self._run(base_domain=base_domain, route_dir_mounted=False)
+
+				self.assertEqual(by_check["route_directory"]["status"], "pass")
+				self.assertIn("No public base domain", by_check["route_directory"]["hint"])
+
+	def test_the_route_directory_check_writes_nothing(self):
+		"""Every diagnostics check is read-only, and this one names a directory Traefik reads live
+		and a report the workers own — it must leave both exactly as it found them."""
+		with tempfile.TemporaryDirectory() as tmp:
+			route_dir = Path(tmp) / "dynamic"
+			route_dir.mkdir()
+			for name in PROTECTED_FILES:
+				(route_dir / name).write_text("")
+
+			with (
+				patch.object(ingress, "ROUTE_STATE_KEY", TEST_ROUTE_STATE_KEY),
+				patch.object(ingress, "TRAEFIK_DYNAMIC_DIR", route_dir),
+			):
+				ingress.record_directory_state()
+				before = {path.name: path.stat().st_mtime_ns for path in route_dir.iterdir()}
+				reported = frappe.cache().get_value(TEST_ROUTE_STATE_KEY)
+
+				with patch("benchpress.diagnostics.frappe") as frappe_mock:
+					frappe_mock.get_cached_doc.return_value = frappe._dict(base_domain=BASE_DOMAIN)
+					self.assertEqual(_check_route_directory()["status"], "pass")
+
+				self.assertEqual(frappe.cache().get_value(TEST_ROUTE_STATE_KEY), reported)
+
+			self.assertEqual({path.name: path.stat().st_mtime_ns for path in route_dir.iterdir()}, before)
 
 	def test_a_redis_on_the_declared_settings_passes(self):
 		by_check, _rows = self._run()
