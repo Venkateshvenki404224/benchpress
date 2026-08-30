@@ -3,7 +3,7 @@ title: Production safety
 description: What BenchPress is and is not ready to carry — the alpha verdict,
   the container privilege boundary, what is backed up, and the
   endpoint-by-endpoint release checklist.
-lastModified: "2026-08-28T13:08:38Z"
+lastModified: "2026-08-28T22:10:21+05:30"
 lastAuthor: Venkatesh
 ---
 # Production safety

@@ -3,7 +3,7 @@ title: Configuration
 description: Where each BenchPress setting lives — build arguments that need a
   rebuild, runtime environment that needs a restart, and DocType fields that
   apply on save.
-lastModified: "2026-08-28T16:15:34Z"
+lastModified: "2026-08-28T22:10:21+05:30"
 lastAuthor: Venkatesh
 ---
 # Configuration

@@ -3,7 +3,7 @@ title: Register a VPN device
 description: Put a laptop or a phone on the WireGuard network, import the
   config, read the device status, and run the connection test when a site will
   not open.
-lastModified: "2026-08-28T11:17:35Z"
+lastModified: "2026-08-28T22:10:21+05:30"
 lastAuthor: Venkatesh
 ---
 # Register a VPN device

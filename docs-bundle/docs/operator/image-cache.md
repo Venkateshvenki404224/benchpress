@@ -2,7 +2,7 @@
 title: The image cache
 description: One image per lab, tagged benchpress/<lab_id>:lab — what it costs
   on disk, how the weekly prewarm and sweep work, and what is safe to prune.
-lastModified: "2026-08-28T13:08:38Z"
+lastModified: "2026-08-28T22:10:21+05:30"
 lastAuthor: Venkatesh
 ---
 # The image cache

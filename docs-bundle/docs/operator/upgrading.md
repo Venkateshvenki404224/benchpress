@@ -3,7 +3,7 @@ title: Upgrading
 description: Move a BenchPress install to a newer release — the backup gate, the
   five steps, the scripted path, rollback, and why lab images are a separate
   opt-in.
-lastModified: "2026-08-28T13:08:38Z"
+lastModified: "2026-08-28T22:10:21+05:30"
 lastAuthor: Venkatesh
 ---
 # Upgrading

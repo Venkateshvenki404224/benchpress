@@ -3,7 +3,7 @@ title: Self-serve signup
 description: Optional and off by default — retire the waitlist and let people
   sign themselves up, with GitHub and Google as the primary paths and the abuse
   controls that make a free grant safe.
-lastModified: "2026-08-28T13:08:38Z"
+lastModified: "2026-08-28T22:10:21+05:30"
 lastAuthor: Venkatesh
 ---
 # Self-serve signup

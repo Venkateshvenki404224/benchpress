@@ -3,7 +3,7 @@ title: The shared database server
 description: One MariaDB holds every bench site's database — where it lives, how
   BenchPress drives it, what drift detection watches, and the four actions on
   the record.
-lastModified: "2026-08-28T13:08:38Z"
+lastModified: "2026-08-28T22:10:21+05:30"
 lastAuthor: Venkatesh
 ---
 # The shared database server

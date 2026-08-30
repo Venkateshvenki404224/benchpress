@@ -3,7 +3,7 @@ title: Lifecycle and events
 description: The bench states and their transitions, the Docker event listener,
   Bench Event incidents, the stats collector, and the eleven scheduled jobs that
   correct the database.
-lastModified: "2026-08-28T16:15:34Z"
+lastModified: "2026-08-28T22:10:21+05:30"
 lastAuthor: Venkatesh
 ---
 # Lifecycle and events

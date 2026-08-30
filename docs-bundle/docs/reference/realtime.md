@@ -2,7 +2,7 @@
 title: Realtime
 description: The six realtime events BenchPress publishes over socket.io, their
   payloads, who receives each one, and why the deploy log commits every line.
-lastModified: "2026-08-28T16:15:34Z"
+lastModified: "2026-08-28T22:10:21+05:30"
 lastAuthor: Venkatesh
 ---
 # Realtime

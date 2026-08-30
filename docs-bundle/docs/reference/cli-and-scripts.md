@@ -3,7 +3,7 @@ title: CLI and scripts
 description: Every command that drives BenchPress from a shell — entry.py, the
   bench commands, setup.sh and upgrade.sh, the four repository scripts and the
   documentation pipeline.
-lastModified: "2026-08-28T16:15:34Z"
+lastModified: "2026-08-28T22:10:21+05:30"
 lastAuthor: Venkatesh
 ---
 # CLI and scripts

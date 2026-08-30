@@ -3,7 +3,7 @@ title: Backup and restore
 description: Where the nightly MariaDB dumps land, how long they are kept, and
   the two restore paths — a scratch container for verification, and managed
   recovery from bench console.
-lastModified: "2026-08-28T13:08:38Z"
+lastModified: "2026-08-28T22:10:21+05:30"
 lastAuthor: Venkatesh
 ---
 # Backup and restore

@@ -2,7 +2,7 @@
 title: Start, stop and redeploy
 description: The five actions on a running bench, which of them destroy work,
   and which are admin-only.
-lastModified: "2026-08-28T10:10:48Z"
+lastModified: "2026-08-28T22:10:21+05:30"
 lastAuthor: Venkatesh
 ---
 # Start, stop and redeploy

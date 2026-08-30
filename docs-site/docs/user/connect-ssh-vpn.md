@@ -2,7 +2,7 @@
 title: Connect over SSH and the VPN
 description: The connection card on a lab page — two addresses, the SSH command,
   the three passwords, and which of them work without the tunnel.
-lastModified: "2026-08-28T11:17:35Z"
+lastModified: "2026-08-28T22:10:21+05:30"
 lastAuthor: Venkatesh
 ---
 # Connect over SSH and the VPN

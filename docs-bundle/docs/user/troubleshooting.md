@@ -2,7 +2,7 @@
 title: Troubleshooting
 description: Every symptom a BenchPress user meets, its cause, and the page that
   fixes it — deploys, the VPN, SSH, code-server, logs and credits.
-lastModified: "2026-08-28T11:17:35Z"
+lastModified: "2026-08-28T22:10:21+05:30"
 lastAuthor: Venkatesh
 ---
 # Troubleshooting
