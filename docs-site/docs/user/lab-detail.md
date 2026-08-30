@@ -111,7 +111,7 @@ You are reading the page correctly when all four are true.
 |CPU and memory read `—`|The container is not running|Start the bench|
 |The header has no **Build log** tab|Build logs are admin-only|Ask an admin for the build output|
 |A stopped bench shows a countdown|Stopped benches are deleted after a set number of days|Start it, or accept that it goes|
-|**Open site** does nothing|Bench sites resolve only over the VPN|Connect the VPN and press it again|
+|**Open site** does nothing|The site has no public name, so it answers only on the VPN|Connect the VPN and press it again|
 
 ## Reference
 

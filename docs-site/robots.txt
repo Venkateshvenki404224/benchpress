@@ -207,4 +207,4 @@ Allow: /docs/llms.txt
 Allow: /sitemap.xml
 Allow: /sitemap.md
 
-Sitemap: https://docs.benchpress.cloud/sitemap.xml
+Sitemap: https://benchpress.cloud/sitemap.xml
