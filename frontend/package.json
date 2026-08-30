@@ -23,7 +23,7 @@
     "vue-router": "^4.5.0"
   },
   "devDependencies": {
-    "@biomejs/biome": "1.9.4",
+    "@biomejs/biome": "2.5.10",
     "@iconify-json/lucide": "^1.2.99",
     "@vitejs/plugin-vue": "^5.1.4",
     "@vitest/coverage-v8": "^2.1.8",
