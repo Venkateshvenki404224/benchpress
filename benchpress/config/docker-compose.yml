@@ -35,6 +35,66 @@ services:
     networks:
       - benchpress
 
+  # The Docker event stream, consumed rather than polled: a bench that dies, is OOM-killed
+  # or stops answering is written down within seconds of the daemon saying so. The daemon
+  # keeps only its last few hundred events, so a cron reading `--since` loses them; this
+  # holds the stream open instead. It observes only — no stop, no restart, no route write.
+  #
+  # `benchpress.docker_events.run` republishes a heartbeat every tick, and the Diagnostics
+  # `docker_events` row fails once that heartbeat is older than HEARTBEAT_STALE_SECONDS
+  # (benchpress/docker_events.py). The listener therefore has to reach the same site, the
+  # same database and the same Redis as the backend — which is the `bench` network below,
+  # not the `benchpress` lab network the shared database and cache sit on.
+  #
+  #   docker compose -f <this file> up -d docker-events
+  #
+  # Run ONE listener per site. If the stack that runs your bench already defines a
+  # docker-events service, start that one instead: two listeners record every incident
+  # twice and notify the bench owner twice.
+  docker-events:
+    image: ${IMAGE_NAME:-benchpress:latest}
+    container_name: benchpress-docker-events
+    hostname: benchpress-docker-events
+    # A real `restart:`, not `deploy.restart_policy`, which `docker compose up` ignores.
+    # Without one the listener does not come back after a reboot and the fleet goes blind.
+    restart: unless-stopped
+    command:
+      - bench
+      - --site
+      - ${SITE_NAME:-frontend}
+      - execute
+      - benchpress.docker_events.run
+    # The backend's own mounts, taken from the running container. This file is run from
+    # inside the backend container, so it cannot name the host path behind the `apps`
+    # bind; `volumes_from` is how the listener gets it without guessing.
+    #
+    # Docker resolves `volumes_from` ONCE, at container create, and never re-resolves it.
+    # So recreate this container every time the backend container is recreated — both
+    # `./entry.py --pull` and `./entry.py --build` recreate it:
+    #
+    #   docker compose -f <this file> up -d --force-recreate docker-events
+    #
+    # Skip that and the listener keeps the pre-upgrade apps bind and the old sites volume,
+    # runs old code, and still publishes its heartbeat — so the Diagnostics `docker_events`
+    # row reads pass while the listener is stale. `restart: unless-stopped` above keeps a
+    # stale container alive indefinitely. tests/test_shared_compose.py does not catch this:
+    # it reads `volumes:` keys, and this service declares none.
+    #
+    # `volumes_from` is also all-or-nothing. It inherits every mount the backend has, not
+    # just sites, logs, apps and the socket: on this stack that is `${HOME}/.ssh`
+    # (read-only) and the wg-agent socket, neither of which the listener uses.
+    #
+    # The backend container must exist when this service is created.
+    volumes_from:
+      - container:${BENCH_BACKEND_CONTAINER:-benchpress_backend}
+    # The group that owns /var/run/docker.sock on the host: `getent group docker | cut -d: -f3`.
+    # Wrong number and the listener cannot read the socket, publishes no heartbeat, and the
+    # docker_events row stays red however often it is restarted.
+    group_add:
+      - "${DOCKER_GID:-988}"
+    networks:
+      - bench
+
 volumes:
   mariadb-data:
     name: benchpress-mariadb-data
@@ -43,6 +103,14 @@ volumes:
     name: benchpress-redis-data
 
 networks:
+  # The lab network every bench container and the shared database join, created by
+  # benchpress/docker_manager.py (ensure_network) on first deploy.
   benchpress:
     name: benchpress
+    external: true
+  # The network the BenchPress site itself runs on, so the listener can reach the site's
+  # database and Redis. `<compose project>_frappe_network` for a compose-run bench; the
+  # project defaults to `benchpress`. Only docker-events joins it.
+  bench:
+    name: ${BENCH_NETWORK:-benchpress_frappe_network}
     external: true

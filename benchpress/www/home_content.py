@@ -1,124 +1,118 @@
 # Copyright (c) 2026, Venkatesh and contributors
 # For license information, please see license.txt
 
-"""The eleven deploy steps, as the landing page tells them.
-
-Ported from the design handoff. The only edits are the ones the credit decisions force: a deploy
-is free, so nothing is "held" and nothing is "spent" — the hourly meter starts when the container
-is handed over, and a run that never gets there costs nothing.
-
-This is copy, not configuration. The rates on the page come from `Credit Pack` / `Instance Size`;
-these strings describe the mechanism and change with the code, not in Desk.
+"""The eleven deploy steps as `deploy_pipeline.DEPLOY_STEPS` runs them, grouped into four phases.
+Every `cmd` is a line the pipeline actually writes or a command it actually runs — quote, don't invent.
 """
 
 PHASES = [
 	{
-		"key": "request",
-		"label": "Request",
+		"key": "prepare",
+		"label": "Prepare",
 		"range": "Steps 1-2",
-		"summary": "Benchpress checks the plan, confirms your balance and reserves room on your host before anything is pulled.",
-		"timing": "Under a second — deploying is free; nothing is metered until the container runs.",
-		"nodes": ["device", "control"],
-		"chips": ["api", "queue", "ledger"],
+		"summary": "The run proves the shared database is up and the lab's image is on the host. The deploy itself never builds one.",
+		"timing": "One click on an unbuilt lab builds the image ahead of this step, under a lock so two clicks cannot build the same tag twice.",
+		"nodes": ["control", "host"],
+		"chips": ["api", "queue"],
 		"steps": [
 			{
 				"n": 1,
-				"title": "Reserve a container slot",
-				"detail": "The API validates the template, checks concurrency against your plan and reserves CPU, memory and a site name on the target host.",
-				"cmd": 'POST /api/method/benchpress.deploy { template: "erpnext-v15" }',
+				"title": "Check the shared infrastructure",
+				"detail": "One MariaDB and one Redis are shared by every bench. Both are started if they are down, and the run waits until MariaDB accepts connections.",
+				"cmd": "MariaDB reachable at benchpress-mariadb:3306",
 			},
 			{
 				"n": 2,
-				"title": "Check the balance",
-				"detail": "Deploying costs nothing. Benchpress confirms the account can cover the first hour of runtime and that you are inside your concurrency cap.",
-				"cmd": 'credits.check(user="you@example.com", size="Small")',
+				"title": "Resolve the lab image",
+				"detail": "The lab's tag has to be on the host already, or this step stops the run and says to build it — a deploy is never a 10-40 minute build in disguise. The log also says whether the image carries a golden database dump.",
+				"cmd": "Using built image benchpress/crm:lab",
 			},
 		],
 	},
 	{
-		"key": "image",
-		"label": "Image",
-		"range": "Steps 3-4",
-		"summary": "The app list becomes a layer. Templates reuse a cached image; a custom lab builds one once and keeps it.",
-		"timing": "Cached template: ~10s. First custom build: 3-6 minutes.",
-		"nodes": ["control", "host"],
-		"chips": ["queue"],
+		"key": "container",
+		"label": "Container",
+		"range": "Steps 3-5",
+		"summary": "The container is created at its instance size, started on a BenchPress bridge, and given a tunnel address.",
+		"timing": "No port is published on the host — the bench is reached through the bridge or the tunnel.",
+		"nodes": ["host", "container", "wg"],
+		"chips": [],
 		"steps": [
 			{
 				"n": 3,
-				"title": "Resolve the app list",
-				"detail": "Frappe version, apps and branches are pinned into an apps.json — the same file a manual bench build would use.",
-				"cmd": "apps.json → frappe@version-15, erpnext@version-15",
+				"title": "Create the container",
+				"detail": "Memory, CPU, PIDs and disk come from the Instance Size, read at deploy time. The container is never privileged; isolation comes from the runtime.",
+				"cmd": "container runtime sysbox-runc",
 			},
 			{
 				"n": 4,
-				"title": "Pull or build the image",
-				"detail": "A matching layer is pulled from the registry. Custom labs run a real image build, and its log is streamed into Build logs line by line.",
-				"cmd": "docker build --build-arg APPS_JSON_BASE64=… -t bp/erpnext-v15 .",
+				"title": "Wait for the container IP",
+				"detail": "Nothing can be written into the bench or routed at it until it reports an address on its bridge.",
+				"cmd": "container_ip <address on the bench bridge>",
+			},
+			{
+				"n": 5,
+				"title": "Configure the WireGuard peer",
+				"detail": "Any stale peer is removed, a fresh tunnel IP is claimed from vpn_management, and the container is configured with it.",
+				"cmd": "VPN peer <peer> registered, claimed IP <tunnel ip>",
 			},
 		],
 	},
 	{
 		"key": "site",
 		"label": "Site",
-		"range": "Steps 5-8",
-		"summary": "The container comes up and Benchpress runs the exact bench commands you would have typed, in order.",
-		"timing": "Roughly 60-120 seconds depending on the app set.",
+		"range": "Steps 6-8",
+		"summary": "Config is written into the container and the site is made — restored from the image's dump when it has one, created app by app when it does not.",
+		"timing": "For a CRM lab on an idle 2-vCPU host, the site step is 9.1s of a 13.3s deploy when the dump is restored; 37.2s of 43.3s when it is refused.",
 		"nodes": ["host", "container", "services"],
 		"chips": [],
 		"steps": [
 			{
-				"n": 5,
-				"title": "Start the container and services",
-				"detail": "The bench container starts alongside MariaDB and Redis, with the sites directory on a named volume so data survives a restart.",
-				"cmd": "docker run -v bp_sites:/home/frappe/frappe-bench/sites …",
-			},
-			{
 				"n": 6,
-				"title": "Create the site",
-				"detail": "A fresh site is created with a generated administrator password, which is stored encrypted and revealed only to you.",
-				"cmd": "bench new-site erpnext-demo.bp.local --admin-password ****",
+				"title": "Write common_site_config.json",
+				"detail": "The shared database host and credentials, three Redis URLs, the socket.io port and the site's own port, written into the container.",
+				"cmd": "/home/frappe/frappe-bench/sites/common_site_config.json written",
 			},
 			{
 				"n": 7,
-				"title": "Install apps and migrate",
-				"detail": "Every app in the template is installed, then migrations run. This is the step that fails loudest, so its output is kept verbatim.",
-				"cmd": "bench --site erpnext-demo.bp.local install-app erpnext && bench migrate",
+				"title": "Create the site",
+				"detail": "setup-site.sh runs as the bench user against a temporary MariaDB account that is dropped afterwards. It restores the image's golden dump when restore is left on in Settings, the image carries a dump and the server's MariaDB major version matches; it installs the apps itself when any of the three does not hold.",
+				"cmd": "bash /opt/benchpress/scripts/setup-site.sh",
 			},
 			{
 				"n": 8,
-				"title": "Build assets",
-				"detail": "Frontend bundles are built inside the container and served by its own nginx — no shared asset host to drift out of sync.",
-				"cmd": "bench build --production",
+				"title": "Assets",
+				"detail": "Nothing is built here. Frontend bundles are baked into the lab image at build time; a stale bundle is fixed by rebuilding the lab.",
+				"cmd": "Assets ship in the image — bundled at build time",
 			},
 		],
 	},
 	{
-		"key": "network",
-		"label": "Network",
+		"key": "access",
+		"label": "Access",
 		"range": "Steps 9-11",
-		"summary": "The site joins your mesh, gets health-checked, and only then are the credentials handed over and the meter started.",
-		"timing": "5-10 seconds, then the site is yours.",
-		"nodes": ["host", "wg", "device"],
-		"chips": ["ledger"],
+		"summary": "The tenant's account is made inside the container, the site is served, and only then is the instance marked Running.",
+		"timing": "Nothing before this line counts: a deploy that never reaches step 11 leaves no running bench.",
+		"nodes": ["host", "container", "device"],
+		"chips": [],
 		"steps": [
 			{
 				"n": 9,
-				"title": "Attach the WireGuard route",
-				"detail": "The container is given a mesh address and a peer entry per registered device. Nothing is bound to a public interface.",
-				"cmd": "wg set wg0 peer <pubkey> allowed-ips 10.13.13.24/32",
+				"title": "Provision the SSH user",
+				"detail": "linkuser.sh creates the account inside the container with a generated password. The app's own copy of the script is written in first, so it wins over the one baked into the image.",
+				"cmd": "bash /opt/benchpress/scripts/linkuser.sh <username>",
 			},
 			{
 				"n": 10,
-				"title": "Health check",
-				"detail": "Benchpress fetches the site over the mesh until it answers. If it never does, the run is marked failed and the container is torn down.",
-				"cmd": "GET https://erpnext-demo.bp.local/api/method/ping → pong",
+				"title": "Start the lab's services",
+				"detail": "serve.sh serves the site on port 8000. code-server is configured and started on 8080 when the lab and its size include it, and the log says so when it is skipped.",
+				"cmd": "bash /opt/benchpress/scripts/serve.sh <username>",
 			},
 			{
 				"n": 11,
-				"title": "Hand over credentials",
-				"detail": "Site URL, mesh IP, code-server link and passwords appear on the lab page. The hourly meter starts at this point, and only this point.",
-				"cmd": 'ledger.start(lab="erpnext-demo", size="Small")',
+				"title": "Deploy complete",
+				"detail": "The instance goes to Running, the deploy log is marked a success and the owner is notified. The last line carries the run's total elapsed time.",
+				"cmd": "=== Step 11/11: Deploy complete [complete @13.3s] ===",
 			},
 		],
 	},

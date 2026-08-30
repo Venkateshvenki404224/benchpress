@@ -2,7 +2,7 @@
 title: BenchPress documentation
 description: Start here. Three tracks — use a bench, run the server that hosts
   one, or read the data model and the API.
-lastModified: "2026-08-28T22:10:21+05:30"
+lastModified: "2026-08-30T08:05:07-04:00"
 lastAuthor: Venkatesh
 ---
 # BenchPress documentation
@@ -34,8 +34,12 @@ cached image, creates a site, and puts the container on a WireGuard network.
 You get a site address, an SSH login and a browser VS Code session. When the
 work is done, you destroy the environment. Spin up, use, tear down.
 
-No bench is on the public internet. Every site, SSH port and IDE session is
-reachable only from a device that joined the VPN.
+A bench answers on up to four addresses at once: two public HTTPS addresses
+served by Traefik, which anyone on the internet can reach once `base_domain` is
+set, and two tunnel addresses that only a device on the VPN can reach.
+`base_domain` is a required setting, so a bench is not VPN-only on the
+documented install. [Networking](/docs/reference/networking) states the address
+plan in full.
 
 ## Reference
 
@@ -59,3 +63,4 @@ the page is still complete.
 ## Related
 
 * [Quick tour](/docs/user/quick-tour) — the five screens, and what the dashboard reports.
+* [Networking](/docs/reference/networking) — the four addresses a bench answers on, and who can reach each one.

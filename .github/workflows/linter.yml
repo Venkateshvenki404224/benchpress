@@ -1,6 +1,11 @@
 name: Linters
 
 on:
+  # The README badge reports the newest run on the default branch. Without a
+  # push trigger there is no such run and the badge renders blank.
+  push:
+    branches:
+      - version-16
   pull_request:
   workflow_dispatch:
 
@@ -15,6 +20,9 @@ jobs:
   linter:
     name: 'Frappe Linter'
     runs-on: ubuntu-latest
+    # `semgrep ci` diff-scans against the merge base on pull_request and
+    # full-scans on push, so a push run can fail on findings no pull request
+    # has ever seen. Keep it on pull requests only.
     if: github.event_name == 'pull_request'
 
     steps:

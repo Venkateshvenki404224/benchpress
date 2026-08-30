@@ -14,7 +14,7 @@ import docker
 import frappe
 from frappe.query_builder.functions import Now
 
-from benchpress import placement
+from benchpress import ingress, placement
 from benchpress.docker_events import HEARTBEAT_STALE_SECONDS, heartbeat_value
 from benchpress.docker_manager import (
 	CONTAINER_RUNTIMES,
@@ -31,6 +31,13 @@ from benchpress.mariadb_manager import (
 from benchpress.vpn_adapter import DEFAULT_INTERFACE
 
 DRIFT_FIX = "Recreate the shared pair: docker compose up -d in benchpress/config"
+# What refreshes the route-directory report. Named in every row that has none to read, because a
+# row that says only "no report" leaves the reader with nothing to start it.
+ROUTE_STATE_FIX = "the scheduler and queue-long refresh it every reconcile pass, so check both"
+ROUTE_STATE_UNREPORTED = (
+	"No worker has reported on the Traefik route directory yet. The first deploy records it, and "
+	f"so does every reconcile pass — until one does, no public URL is verified: {ROUTE_STATE_FIX}"
+)
 # A row that says a listener is dead without naming what restarts it costs the reader a search.
 LISTENER_FIX = "start it with docker compose up -d docker-events"
 
@@ -85,6 +92,7 @@ def run_diagnostics() -> list[dict]:
 		_check_container_runtimes(),
 		_check_golden_images(),
 		_check_docker_events(),
+		_check_route_directory(),
 		check_vpn_server(),
 	]
 
@@ -329,6 +337,76 @@ def _check_docker_events() -> dict:
 		)
 	except Exception as e:
 		return check_row("docker_events", False, f"Could not read the listener heartbeat: {e}")
+
+
+def _check_route_directory() -> dict:
+	"""Whether the route directory the advertised public URL depends on is mounted and rendered.
+
+	Read from what a worker recorded: this screen renders in `backend`, which never mounts it.
+	"""
+	# The one check that fails on a stock install: `base_domain` is required, so step 5 of
+	# docs/operator/install.mdx advertises `<bench>.<domain>` on a checkout whose queue-long has
+	# no route mount, because only docker-compose.prod.yml declares one. Without this row every
+	# other check passes on a host where no public URL can ever answer.
+	try:
+		base_domain = frappe.get_cached_doc("BenchPress Settings").base_domain
+		if not base_domain or base_domain == "localhost":
+			return check_row("route_directory", True, "No public base domain, so no route is published")
+
+		state = ingress.directory_state()
+		if not state:
+			return check_row("route_directory", False, ROUTE_STATE_UNREPORTED, severity="Warning")
+		if state["age"] > ingress.ROUTE_STATE_STALE_SECONDS:
+			return check_row(
+				"route_directory",
+				False,
+				f"The route directory was last reported on {state['age']}s ago, past the "
+				f"{ingress.ROUTE_STATE_STALE_SECONDS}s it is given — {ROUTE_STATE_FIX}",
+				severity="Warning",
+			)
+
+		if not state["mounted"]:
+			return check_row("route_directory", False, ingress.route_directory_fix())
+
+		missing = state["missing"]
+		if ingress.CONTROL_PLANE_ROUTE_FILE in missing:
+			# The failure this row exists to name: docker turns a bind source that does not exist
+			# into an empty directory, which passes every "is the path there" test there is.
+			return check_row(
+				"route_directory",
+				False,
+				f"The route directory holds no {ingress.CONTROL_PLANE_ROUTE_FILE}, so it is an "
+				"empty directory docker created for a bind source that was never rendered, not "
+				"the mount. Render it on the host: ./entry.py --domain <fqdn>",
+			)
+
+		if ingress.WILDCARD_ANCHOR_FILE not in missing:
+			return check_row(
+				"route_directory",
+				True,
+				f"{state['published']} bench routes published beside "
+				f"{ingress.CONTROL_PLANE_ROUTE_FILE}, *.{base_domain} anchored",
+			)
+		if not state["published"]:
+			return check_row(
+				"route_directory",
+				True,
+				"Route directory mounted and rendered, no bench route published yet — the first "
+				f"deploy writes {ingress.WILDCARD_ANCHOR_FILE}",
+			)
+		# Warning, not Error: every deploy and every reconcile pass writes the anchor, so this is a
+		# state that heals itself. Still worth a row, because until it does each of those published
+		# hostnames answers on a certificate the browser refuses.
+		return check_row(
+			"route_directory",
+			False,
+			f"{state['published']} bench routes are published but no {ingress.WILDCARD_ANCHOR_FILE} "
+			f"holds *.{base_domain} in Traefik's certificate store, so those URLs fail TLS. The "
+			"next deploy or reconcile pass writes it",
+			severity="Warning",
+		)
+	except Exception as e:
+		return check_row("route_directory", False, f"Could not read the route directory report: {e}")
 
 
 def check_vpn_server() -> dict:

@@ -22,6 +22,22 @@ from benchpress.tests.test_deploy_manager import _fresh_bench, _make_lab
 IPV4_IN_TEXT = re.compile(r"\b\d{1,3}(?:\.\d{1,3}){3}\b")
 
 
+# The report `ensure_anchor` and `sync_instance_route` publish is a cache key, and these tests
+# write it for real. Redirected for the whole module so a run on a live host never clobbers the
+# report its own dashboard is reading.
+TEST_ROUTE_STATE_KEY = "benchpress:route_directory:test_ingress"
+_ROUTE_STATE_PATCH = patch.object(ingress, "ROUTE_STATE_KEY", TEST_ROUTE_STATE_KEY)
+
+
+def setUpModule():
+	_ROUTE_STATE_PATCH.start()
+
+
+def tearDownModule():
+	_ROUTE_STATE_PATCH.stop()
+	frappe.cache().delete_value(TEST_ROUTE_STATE_KEY)
+
+
 def _mounted(tmp) -> Path:
 	"""The route directory arranged the way production has it: a bind mount that exists.
 
@@ -86,9 +102,20 @@ class TestPublish(unittest.TestCase):
 			ide_service = config["http"]["services"]["ide-inst-1"]
 			self.assertEqual(ide_service["loadBalancer"]["servers"], [{"url": "http://inst-1:8080"}])
 
+	def test_publish_reports_the_route_is_on_disk_not_that_it_changed(self):
+		"""Two calls, one file, True both times — an unchanged route is published just as much
+		as a rewritten one, and the caller asks the first question, never the second."""
+		with tempfile.TemporaryDirectory() as tmp:
+			with (
+				patch.object(ingress, "TRAEFIK_DYNAMIC_DIR", _mounted(tmp)),
+				patch.object(ingress, "has_ide", return_value=False),
+			):
+				self.assertTrue(ingress.publish("inst-1", "benchpress.cloud"))
+				self.assertTrue(ingress.publish("inst-1", "benchpress.cloud"))
+
 	def test_publish_no_ops_for_localhost(self):
-		"""Runs unmounted: the localhost return has to come before the missing-mount guard,
-		or a dev checkout would raise where it used to write nothing."""
+		"""Runs unmounted: the localhost return has to come before the missing-mount gate, or a
+		dev checkout could not tell "advertises no public URL" from "cannot publish one"."""
 		with tempfile.TemporaryDirectory() as tmp:
 			target_dir = Path(tmp) / "instances"
 			with (
@@ -760,10 +787,13 @@ class TestWildcardAnchor(unittest.TestCase):
 
 
 class TestRouteDirectoryGuard(unittest.TestCase):
-	"""A routing write from a container without the mount fails loudly.
+	"""A routing write from a container without the mount reports, and still creates nothing.
 
 	See specs/in-progress/restart-free-dynamic-routing/phase-3-invariant-and-convergence.md.
 	"""
+
+	# `base_domain` is a required field, so the documented install (docs/operator/install.mdx
+	# step 5) reaches this state on any checkout brought up without `./entry.py --domain`.
 
 	@contextmanager
 	def _unmounted(self):
@@ -772,32 +802,51 @@ class TestRouteDirectoryGuard(unittest.TestCase):
 			with patch.object(ingress, "TRAEFIK_DYNAMIC_DIR", target_dir):
 				yield target_dir
 
-	def test_writing_a_route_without_the_mount_raises_and_creates_nothing(self):
-		"""Creating the directory is the defect being replaced: the file then lands in this
-		container's own filesystem, which is the same outcome with none of the evidence."""
+	def test_writing_a_route_without_the_mount_creates_nothing_and_does_not_raise(self):
+		"""Creating the directory is not the alternative and never was: `/etc` is root-owned and
+		bench runs as uid 1000, so a container without the mount cannot make one."""
 		with self._unmounted() as target_dir:
-			with self.assertRaises(ingress.TraefikRouteDirectoryMissing):
-				ingress.publish("inst-1", "benchpress.cloud")
+			self.assertFalse(ingress.publish("inst-1", "benchpress.cloud"))
 
 			self.assertFalse(target_dir.exists())
 
 	def test_the_anchor_write_is_guarded_too(self):
-		"""Both writers go through `_atomic_write`, so the guard cannot drift between them."""
+		"""Both writers gate on `directory_mounted`, so the answer cannot drift between them."""
 		with self._unmounted() as target_dir:
-			with self.assertRaises(ingress.TraefikRouteDirectoryMissing):
-				ingress.ensure_anchor("benchpress.cloud")
+			self.assertFalse(ingress.ensure_anchor("benchpress.cloud"))
 
 			self.assertFalse(target_dir.exists())
 
+	def test_a_deploy_is_not_failed_by_a_host_that_publishes_no_routes(self):
+		"""The defect: `publish` raised out of the deploy after the container was already built,
+		on the one path the install guide walks. A bench still works over the VPN."""
+		with self._unmounted():
+			for base_domain in ("benchpress.cloud", "localhost", ""):
+				with self.subTest(base_domain=base_domain):
+					self.assertFalse(ingress.publish("inst-1", base_domain))
+					self.assertFalse(ingress.ensure_anchor(base_domain))
+
 	def test_the_error_names_the_queue_that_has_the_mount(self):
-		"""The whole value of a custom exception here: a bare `FileNotFoundError` leaves the
-		reader to rediscover the mount topology from a traceback that shows none of it."""
-		with self._unmounted() as _target_dir:
+		"""The guard under `_atomic_write` is now the invariant for a future writer that forgets
+		to gate. A bare `FileNotFoundError` there shows none of the mount topology."""
+		with self._unmounted() as target_dir:
 			with self.assertRaises(ingress.TraefikRouteDirectoryMissing) as raised:
-				ingress.publish("inst-1", "benchpress.cloud")
+				ingress._atomic_write(target_dir / "inst-1.yml", "http: {}\n")
+
+			self.assertFalse(target_dir.exists())
 
 		self.assertIn("queue-long", str(raised.exception))
 		self.assertIn("enqueue_route_sync", str(raised.exception))
+
+	def test_the_reported_fix_names_the_directory_and_both_ways_out(self):
+		"""One wording behind the deploy-log line and the diagnostics row, so they cannot drift."""
+		with self._unmounted() as target_dir:
+			fix = ingress.route_directory_fix()
+
+		self.assertIn(str(target_dir), fix)
+		self.assertIn("docker-compose.prod.yml", fix)
+		self.assertIn("./entry.py --domain", fix)
+		self.assertIn("localhost", fix)
 
 
 class TestDirectoryReads(unittest.TestCase):
@@ -833,6 +882,98 @@ class TestDirectoryReads(unittest.TestCase):
 		with self._dir_holding("wildcard-anchor.yml"):
 			self.assertEqual(ingress.protected_present(), 1)
 
+	def test_protected_missing_names_the_absent_file_rather_than_counting(self):
+		"""`route_directory` acts on which one is gone: no `dynamic.yml` is an unrendered bind
+		source, and no anchor is a certificate that was never asked for."""
+		with self._dir_holding("dynamic.yml", "inst-1.yml"):
+			self.assertEqual(ingress.protected_missing(), ["wildcard-anchor.yml"])
+
+		with self._dir_holding("wildcard-anchor.yml"):
+			self.assertEqual(ingress.protected_missing(), ["dynamic.yml"])
+
+	def test_protected_missing_is_empty_on_a_rendered_directory(self):
+		with self._dir_holding("dynamic.yml", "wildcard-anchor.yml"):
+			self.assertEqual(ingress.protected_missing(), [])
+
+	def test_an_empty_directory_reports_both_protected_files_missing(self):
+		"""What docker leaves behind for a bind source that was never rendered."""
+		with self._dir_holding():
+			self.assertEqual(ingress.protected_missing(), ["dynamic.yml", "wildcard-anchor.yml"])
+
+
+class TestRouteDirectoryReport(unittest.TestCase):
+	"""What a worker records about the route directory, for the screen that cannot stat it.
+
+	`backend` renders diagnostics and mounts no route directory; queue-long and traefik do.
+	"""
+
+	def setUp(self):
+		frappe.cache().delete_value(TEST_ROUTE_STATE_KEY)
+		self.addCleanup(frappe.cache().delete_value, TEST_ROUTE_STATE_KEY)
+
+	@contextmanager
+	def _directory(self, *names, mounted=True):
+		with tempfile.TemporaryDirectory() as tmp:
+			target_dir = Path(tmp) / "dynamic"
+			if mounted:
+				target_dir.mkdir()
+				for name in names:
+					(target_dir / name).write_text("")
+			with patch.object(ingress, "TRAEFIK_DYNAMIC_DIR", target_dir):
+				yield target_dir
+
+	def test_nothing_recorded_reads_as_no_report_rather_than_a_healthy_one(self):
+		self.assertIsNone(ingress.directory_state())
+
+	def test_a_rendered_directory_is_recorded_with_what_it_holds(self):
+		with self._directory("dynamic.yml", "wildcard-anchor.yml", "inst-1.yml", "inst-2.yml"):
+			ingress.record_directory_state()
+
+			state = ingress.directory_state()
+
+		self.assertTrue(state["mounted"])
+		self.assertEqual(state["missing"], [])
+		self.assertEqual(state["published"], 2)
+		self.assertLess(state["age"], 5)
+
+	def test_an_absent_directory_is_recorded_as_absent_and_not_as_silence(self):
+		"""Silence is the fresh install; this is the host that cannot route, and the row for the
+		two must differ."""
+		with self._directory(mounted=False):
+			ingress.record_directory_state()
+
+			state = ingress.directory_state()
+
+		self.assertFalse(state["mounted"])
+		self.assertEqual(state["missing"], ["dynamic.yml", "wildcard-anchor.yml"])
+		self.assertEqual(state["published"], 0)
+
+	def test_the_anchor_write_records_before_its_own_gate(self):
+		"""The one call every deploy makes on its first step, and the reconcile pass makes every
+		time — so the host that publishes nothing is exactly the host that reports."""
+		with self._directory(mounted=False):
+			self.assertFalse(ingress.ensure_anchor("benchpress.cloud"))
+
+		self.assertFalse(ingress.directory_state()["mounted"])
+
+	def test_a_dev_checkout_records_nothing_at_all(self):
+		"""No public URL is advertised, so there is nothing to report on and nothing to alarm."""
+		with self._directory(mounted=False):
+			for base_domain in (None, "", "localhost"):
+				with self.subTest(base_domain=base_domain):
+					ingress.ensure_anchor(base_domain)
+
+		self.assertIsNone(ingress.directory_state())
+
+	def test_publishing_one_bench_route_records_nothing(self):
+		"""The convergence loop calls `publish` once per bench, and 300 identical reports a pass
+		is what recording there would cost."""
+		with self._directory("dynamic.yml", "wildcard-anchor.yml"):
+			with patch.object(ingress, "has_ide", return_value=False):
+				self.assertTrue(ingress.publish("inst-1", "benchpress.cloud"))
+
+		self.assertIsNone(ingress.directory_state())
+
 
 class TestCertificateVerification(unittest.TestCase):
 	"""`log_certificate_state` / `_certificate_error` — phase 2.
@@ -843,6 +984,14 @@ class TestCertificateVerification(unittest.TestCase):
 
 	See specs/completed/wildcard-cert-routing/phase-2-certificate-verification.md.
 	"""
+
+	def setUp(self):
+		"""The route directory is present for every test here — its absence outranks the handshake."""
+		tmp = tempfile.TemporaryDirectory()
+		self.addCleanup(tmp.cleanup)
+		patcher = patch.object(ingress, "TRAEFIK_DYNAMIC_DIR", _mounted(tmp.name))
+		patcher.start()
+		self.addCleanup(patcher.stop)
 
 	def _pipeline(self):
 		pipeline = MagicMock()
@@ -897,6 +1046,24 @@ class TestCertificateVerification(unittest.TestCase):
 
 				mock_check.assert_not_called()
 				self.assertEqual(pipeline.logged, [])
+
+	def test_a_missing_route_directory_is_reported_instead_of_the_handshake(self):
+		"""The deploy-log line for the stock install. `could not reach Traefik` is true of the
+		same host and sends the operator to look at TLS, which is not what is wrong."""
+		pipeline = self._pipeline()
+		with tempfile.TemporaryDirectory() as tmp:
+			with (
+				patch.object(ingress, "TRAEFIK_DYNAMIC_DIR", Path(tmp) / "dynamic"),
+				patch.object(ingress, "_certificate_error", autospec=True) as mock_check,
+			):
+				ingress.log_certificate_state("inst-1", "benchpress.cloud", pipeline)
+
+			mock_check.assert_not_called()
+
+		self.assertEqual(len(pipeline.logged), 1)
+		self.assertIn("WARNING:", pipeline.logged[0])
+		self.assertIn("is not mounted in queue-long", pipeline.logged[0])
+		self.assertIn("./entry.py --domain", pipeline.logged[0])
 
 	def test_an_unreachable_traefik_is_not_reported_as_a_bad_certificate(self):
 		"""The two causes call for different actions, so they must stay apart in a log
@@ -1046,6 +1213,29 @@ class TestSyncInstanceRoute(IntegrationTestCase):
 
 			self.assertEqual(ingress.sync_instance_route(bench.name), "skipped")
 			self.assertEqual(seeded.read_text(), "untouched\n")
+
+	def test_a_host_with_no_route_directory_reports_unmounted_rather_than_raising(self):
+		"""The job ran on `queue-long` already, so the exception's advice — reach routing through
+		`enqueue_route_sync` — was met. Every start, stop and restart raised it instead."""
+		bench = self._bench("Running")
+
+		with _route_dir() as (ingress, target_dir):
+			with patch.object(ingress, "TRAEFIK_DYNAMIC_DIR", target_dir / "absent"):
+				result = ingress.sync_instance_route(bench.name)
+
+			self.assertEqual(result, "unmounted")
+			self.assertFalse((target_dir / "absent").exists())
+
+	def test_unmounted_is_its_own_answer_and_not_skipped(self):
+		"""`skipped` is an operator advertising no public URL; this one advertises one the host
+		cannot serve. Folding them together loses the only difference worth acting on."""
+		bench = self._bench("Stopped")
+
+		with _route_dir() as (ingress, target_dir):
+			with patch.object(ingress, "TRAEFIK_DYNAMIC_DIR", target_dir / "absent"):
+				self.assertEqual(ingress.sync_instance_route(bench.name), "unmounted")
+
+			self.assertEqual(ingress.sync_instance_route(bench.name), "deleted")
 
 	def test_the_written_route_names_the_container_and_no_address(self):
 		"""Phase 1's property has to survive this path too, since it is now the common one."""

@@ -1,8 +1,8 @@
 ---
 title: API
-description: All 50 whitelisted BenchPress endpoints, with arguments, what each
+description: Every whitelisted BenchPress endpoint, with arguments, what each
   returns, and the permission check each one makes for itself.
-lastModified: "2026-08-28T22:10:21+05:30"
+lastModified: "2026-08-30T08:05:07-04:00"
 lastAuthor: Venkatesh
 ---
 # API
@@ -29,9 +29,12 @@ curl -s https://<host>/api/method/benchpress.api.get_labs \
 Arguments go as query parameters on a `GET` or as form fields on a `POST`.
 Frappe decides the method from the function, not from a route table.
 
-Thirty-five of the fifty are in `benchpress.api`. Four more are module functions
-elsewhere. The remaining eleven are document methods, called through
-`run_doc_method` rather than by path. All three kinds are marked below.
+Endpoints come in three kinds. Most are module functions in `benchpress.api`. A
+few more are module functions elsewhere, in `benchpress.waitlist` and
+`benchpress.signup`. The rest are document methods on controllers, called
+through `run_doc_method` rather than by path. All three kinds are marked below.
+[The whole list, counted](#the-whole-list-counted) has the breakdown and the
+command that derives it.
 
 ## How an endpoint is guarded
 
@@ -107,6 +110,61 @@ MD5 of the two, so a second call redeploys rather than making a second bench.
 
 `server_time` exists so a countdown in the browser corrects against the server
 clock instead of the laptop's.
+
+## Launch
+
+`create_bench` deploys a lab whose image already exists. The two launch
+endpoints do not require one. They build the image first, when there is no
+image, and deploy from it in the same job.
+
+|Endpoint|Arguments|Returns|Checks|
+|--|--|--|--|
+|`launch_template`|`template`, `instance_size`, `site_name`|the launch response below|`require_app_user`, then `is_active` on the `Lab Template` row, then `requires_admission` inside `_launch`|
+|`launch_lab`|`data` (JSON, with at least `lab`)|the launch response below|`require_app_user`, then `requires_admission` inside `_launch`|
+
+Both live in `benchpress/api.py`. Both call the private
+`_launch`, which claims the instance and enqueues
+`benchpress.launch.run_launch` on `queue-long` under the deduplicated job id
+`launch:<bench name>`. The job timeout is the image build timeout plus the
+deploy timeout, because one job does both.
+
+**The admission gate is on `_launch`, not on the published function.** This
+looks like a missing decorator and is not. `requires_admission` binds its cost
+and cap arguments by name and needs a lab that exists, which is only true after
+`launch_template` has resolved a template to one. `launch_template` resolves or
+creates that lab first, so a caller the gate then refuses can leave a new `Lab`
+row behind. The gate still runs before any work is queued, which is the property
+that matters.
+
+`launch_template` checks `is_active` on the `Lab Template` itself.
+`lab_templates.get_template` checks only that the key exists, so without this
+check a user could materialise a template an admin had retired.
+
+`launch_template` reuses a lab before it makes one. It takes the newest lab
+built from that template whose recipe still matches the template's own, and
+creates a lab only when there is no match. A second developer launching the same
+template rides the image the first launch paid for. A lab an admin has edited
+away from the template is skipped, because deploying it would install apps the
+template never named.
+
+Both endpoints claim the bench through the same path `create_bench` uses, so the
+same pair of caller and lab is the same bench. A second launch redeploys.
+
+The launch response carries seven keys:
+
+|Key|Is|
+|--|--|
+|`name`|the bench id|
+|`bench`|the same string as `name`, so a caller still reading `name` keeps working|
+|`lab`|the lab this bench came from|
+|`lab_title`|that lab's title|
+|`lab_status`|that lab's status, read from the row|
+|`will_build`|`true` when `lab_status` is not `Ready`|
+|`eta_minutes`|`eta_minutes` from the `Lab Template` row, or `0`|
+
+`will_build` is that status read alone. It does not ask Docker whether the image
+is on the host. It is opening copy for the launch dialog, and the job decides
+what actually happens.
 
 ## History
 
@@ -204,7 +262,7 @@ not from now.
 
 |Endpoint|Arguments|Returns|Checks|
 |--|--|--|--|
-|`run_diagnostics`|—|eleven read-only environment checks|`require_admin`|
+|`run_diagnostics`|—|twelve read-only environment checks|`require_admin`|
 |`preflight_runtime`|`runtime`|whether that runtime can actually start a container|`require_admin`|
 
 `run_diagnostics` reads. `preflight_runtime` creates a container, which is why
@@ -284,22 +342,33 @@ Two more waitlist functions are admin-only and not guest-reachable.
 
 ## The whole list, counted
 
-Fifty `@frappe.whitelist()` functions. Every one is in a table above.
+**Count the code, not this page.** Run the command before you quote a number
+anywhere:
+
+```bash
+grep -rn "@frappe.whitelist" --include=*.py benchpress/ | wc -l
+```
+
+Per file:
+
+```bash
+grep -rc "@frappe.whitelist" --include=*.py benchpress/ | grep -v ':0$' | sort -t: -k2 -rn
+```
+
+What those two commands returned when this page was last checked:
 
 |Location|Count|
 |--|--|
-|`benchpress/api.py`|35|
+|`benchpress/api.py`|37|
 |`benchpress/benchpress/doctype/database_server/database_server.py`|5|
 |`benchpress/benchpress/doctype/bench_instance/bench_instance.py`|4|
 |`benchpress/waitlist.py`|3|
 |`benchpress/benchpress/doctype/credit_account/credit_account.py`|2|
 |`benchpress/signup.py`|1|
+|**Total**|**52**|
 
-Recount after a change:
-
-```bash
-grep -rn "@frappe.whitelist" --include=*.py benchpress/ | wc -l
-```
+Every one of those 52 has a row in a table above. That is the claim to keep
+true when you add an endpoint.
 
 ## Adding an endpoint
 
@@ -309,6 +378,8 @@ grep -rn "@frappe.whitelist" --include=*.py benchpress/ | wc -l
    `@frappe.whitelist()`.
 4. Query with `frappe.qb`. A raw `frappe.db.sql` string is a lint failure.
 5. Add the endpoint to the table on this page.
+6. Re-run the two commands in [The whole list, counted](#the-whole-list-counted)
+   and paste what they return over that table.
 
 The decorator order matters. `@frappe.whitelist()` goes on top, and
 `@requires_admission(...)` below it, so the gate runs inside the published

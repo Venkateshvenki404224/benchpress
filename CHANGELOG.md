@@ -12,7 +12,9 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
 >
 > This changelog was introduced partway through development, so it does not
 > restate the project's full early history — for changes before the first entry
-> below, see the git log and GitHub release notes.
+> below, read the git log. From v0.1.0 on, every release also has a
+> [GitHub Release](https://github.com/Venkateshvenki404224/benchpress/releases)
+> carrying the entries under its heading here.
 
 **Maintaining this changelog**
 
@@ -26,10 +28,80 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
   commit `vX.Y.Z`, and open a fresh empty `## [Unreleased]` above it. Bump the
   version per Semantic Versioning: MAJOR for breaking changes, MINOR for
   backwards-compatible features, PATCH for fixes.
+- The version lives in [`benchpress/__init__.py`](benchpress/__init__.py) as
+  `__version__`, and [`package.json`](package.json) mirrors it. Bump both in the
+  release commit. `frontend/package.json` is a private workspace and stays at
+  `0.0.0`; nothing reads it.
+- Publish the GitHub Release for the new tag with the entries under its heading
+  here, so the two never disagree.
 
 ## [Unreleased]
 
-Nothing yet.
+### Added
+
+- One click builds and deploys a bench. `launch_template` and `launch_lab` claim
+  the instance and hand the whole run — the image build, then the deploy — to a
+  single background job. Deploying from a template used to take two calls from
+  the browser — create the lab, then deploy it — and a tab closed between them
+  lost the deploy. A lab with no image needed a separate admin build before the
+  deploy would run at all. A template someone has already built is reused, so the
+  next person rides the image the first one paid for, and a second click no
+  longer queues a second build of the same tag or charges for it. The build log
+  and the deploy log stream into one dialog, and the outcome is announced from
+  the app shell.
+  ([#262](https://github.com/Venkateshvenki404224/benchpress/pull/262))
+- Documentation is built from one MDX source for three readers: rendered pages, a
+  bundled `AGENTS.md` for an agent reading a clone, and `llms.txt` for one
+  fetching over HTTP. Forty pages ship — twelve user, sixteen operator, eleven
+  reference, and an index. The loose Markdown guides they replace are deleted and
+  every link into them is repointed. CI regenerates both outputs and fails when a
+  generated file is stale or hand-edited. The README stops repeating those pages
+  and becomes a map into the three tracks.
+  ([#261](https://github.com/Venkateshvenki404224/benchpress/pull/261))
+- The site serves its own discovery files verbatim: `/llms.txt`,
+  `/llms-full.txt`, `/robots.txt`, `/sitemap.xml`, and the `/.well-known/` tree.
+  Frappe compiles every file under `www/` as Jinja and converts Markdown to HTML,
+  which broke the Docker examples in `llms-full.txt` and the sha256 digests in
+  `.well-known/agent-skills/index.json`. A path that resolves outside the docs
+  directory is refused.
+  ([#262](https://github.com/Venkateshvenki404224/benchpress/pull/262))
+
+### Changed
+
+- `version-16` is the trunk. It is the GitHub default branch and carries every
+  commit since the v0.1.0 tag; `main` and `develop` have not moved since that
+  tag. This supersedes the branch roles stated in 0.1.0 below. Pin an install
+  with `--branch v0.1.0`.
+- The shared cache container runs `valkey/valkey:8-alpine` in place of
+  `redis:7-alpine`. The service name, command and memory settings are unchanged.
+  **Requires recreating the shared services — see the upgrade notes.**
+  ([#262](https://github.com/Venkateshvenki404224/benchpress/pull/262))
+- A deploy re-picks a bench bridge whenever the bench has no container, rather
+  than only when it is in `Draft`. Retrying a bench left in `Error` used to keep
+  it pinned to the bridge it was first placed on.
+  ([#262](https://github.com/Venkateshvenki404224/benchpress/pull/262))
+
+### Fixed
+
+- A shared database server row in `Error` no longer breaks every deploy. The
+  lookup keyed on a status whitelist, so an `Error` row read as no server at all
+  and the insert that followed hit the unique index on `container_name` — the
+  deploy failed with a duplicate-key error naming neither MariaDB nor a status.
+  The lookup now keys on the container name and accepts any status, and recovery
+  does the least that works: a stopped server is started, an `Error` server that
+  still answers a health check has its status flipped back rather than its
+  container rebuilt under every running bench, and anything else is set up again.
+  ([#262](https://github.com/Venkateshvenki404224/benchpress/pull/262))
+
+### Upgrade notes
+
+1. **Recreate the shared services** so the cache image change takes effect:
+   `cd benchpress/config && docker compose up -d redis`. This briefly interrupts
+   every running bench's connection to the cache. Name the service: a bare
+   `up -d` also creates the `docker-events` listener, and a second listener
+   records every incident twice.
+2. **No `bench migrate` is needed.** This release changes no DocType schema and
+   adds no patch.
 
 ## [0.1.0] - 2026-08-28
 

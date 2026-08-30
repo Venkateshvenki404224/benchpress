@@ -3,7 +3,7 @@ title: Architecture
 description: The moving parts of BenchPress — the control plane, the bench
   containers, the shared infrastructure, and which Python module owns each
   concern.
-lastModified: "2026-08-28T22:10:21+05:30"
+lastModified: "2026-08-30T08:05:07-04:00"
 lastAuthor: Venkatesh
 ---
 # Architecture
@@ -70,7 +70,7 @@ One concern for each module. The table is the whole `benchpress/` package.
 |`permissions.py`|the role helpers and the six query conditions|
 |`overview.py`, `labs.py`, `lab_detail.py`, `run_history.py`|one screen each, assembled in a fixed number of queries|
 |`waitlist.py`, `signup.py`|the two doors open to a guest|
-|`diagnostics.py`|eleven read-only environment checks|
+|`diagnostics.py`|twelve read-only environment checks|
 |`notifications.py`|one desk alert and one email to a document owner|
 |`indexes.py`|composite indexes the DocType JSON cannot declare|
 |`request_cache.py`|a value memoised for one request, never in a module global|

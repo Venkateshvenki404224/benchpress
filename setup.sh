@@ -9,8 +9,9 @@
 # Example:
 #   bash apps/benchpress/setup.sh sponge.localhost
 #
-# --strict: exit non-zero if Docker userns-remap is absent or unverifiable
-# (production hosts); default is warn-and-continue (dev hosts).
+# --strict: exit non-zero if the container-root privilege boundary is absent or
+# unverifiable (production hosts); default is warn-and-continue (dev hosts).
+# The boundary is a registered sysbox-runc runtime, or Docker userns-remap.
 #
 # VPN note: tunnels, peers and IP allocation are owned by the vpn_management
 # app (wg-agent + VPN Peer / Network Pool DocTypes). This script only prepares
@@ -103,20 +104,33 @@ fi
 
 echo ""
 
-# --- Step 2: Docker user-namespace remap (container-root != host-root) ---
+# --- Step 2: Privilege boundary (container-root != host-root) ---
+#
+# Two configurations close it, and either one is enough. sysbox-runc gives each
+# container its own user namespace, so it needs no daemon-wide setting; that is
+# why it is checked first and why it is the recommended option. The runtime name
+# is the one benchpress/docker_manager.py registers in CONTAINER_RUNTIMES and
+# benchpress/diagnostics.py looks for in `docker info` — read it the same way.
 
-info "Step 2/4: Docker userns-remap"
+info "Step 2/4: Privilege boundary"
 if ! docker info &>/dev/null; then
-    MSG="Cannot verify userns-remap — docker socket not accessible (re-login, then re-run)"
+    MSG="Cannot verify the privilege boundary — docker socket not accessible (re-login, then re-run)"
     [ "$STRICT" -eq 1 ] && error "$MSG" || warn "$MSG"
+elif docker info --format '{{range $name, $runtime := .Runtimes}}{{println $name}}{{end}}' | grep -qx 'sysbox-runc'; then
+    success "sysbox-runc is registered with Docker — a bench on the sysbox runtime has its own user namespace"
+    if [ "$(docker info --format '{{.DefaultRuntime}}')" != "sysbox-runc" ]; then
+        warn "Registered, not default: a Bench Instance left on the 'runc' runtime still gets host root."
+        warn "The Runtime field has no default, so set it to 'sysbox' on every lab that matters."
+    fi
 elif docker info --format '{{join .SecurityOptions ","}}' | grep -qE 'name=(userns|rootless)'; then
     success "Docker userns-remap (or rootless) is enabled — container root is unprivileged on the host"
 else
-    warn "Docker userns-remap is NOT enabled — in-container root maps to HOST root"
-    warn "Lab users get container root; without remap that is one kernel bug from host root."
-    warn "Enable it: add {\"userns-remap\": \"default\"} to /etc/docker/daemon.json, restart docker."
+    warn "No privilege boundary — in-container root maps to HOST root"
+    warn "Lab users get container root; without sysbox or remap that is one kernel bug from host root."
+    warn "Install sysbox: sudo apps/benchpress/scripts/enable-sysbox.sh (upstream: https://github.com/nestybox/sysbox)"
+    warn "Or enable remap: add {\"userns-remap\": \"default\"} to /etc/docker/daemon.json, restart docker."
     warn "Details and migration caveats: apps/benchpress/docs/operator/wireguard-setup.mdx, section 'Container root is not host root'"
-    [ "$STRICT" -eq 1 ] && error "--strict: refusing to continue without userns-remap"
+    [ "$STRICT" -eq 1 ] && error "--strict: refusing to continue without sysbox-runc or userns-remap"
 fi
 
 echo ""

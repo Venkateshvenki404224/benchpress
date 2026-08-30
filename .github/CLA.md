@@ -85,18 +85,44 @@ inaccurate.
 
 ## How to sign
 
-Signing is automated. Open a pull request; the CLA Assistant bot comments with a
-link, and you sign in-thread with your GitHub account. One signature covers all
-of your future contributions.
+Sign in the pull request thread. Post this comment on your pull request:
+
+```
+I have read the CLA Document and I hereby sign the CLA.
+```
+
+The comment must come from the GitHub account that authored the commits. One
+signature covers every contribution you make afterwards, so you do this once.
 
 If you are contributing on behalf of a company, have someone authorised to bind
-the company sign instead.
+the company post it instead.
 
 ## Why a CLA and not a DCO
 
-A Developer Certificate of Origin certifies provenance but grants no
-sublicensing right. Under a DCO, every file an outside contributor touches would
-become permanently un-relicensable — which would foreclose offering commercial
-licence exceptions for the project, and would make any future licence change
-impossible. The grant above is the narrowest thing that keeps those options open
-while leaving your copyright with you.
+Read this before you sign. It is the part that costs you something.
+
+A Developer Certificate of Origin certifies provenance and nothing else. It
+grants no sublicensing right. Under a DCO, every file an outside contributor
+touched would be permanently locked to AGPL-3.0, and two doors would close:
+
+- **Commercial exceptions.** Some companies cannot accept AGPL-3.0 at all.
+  Selling them an exception means shipping the same code under different terms,
+  and that needs a sublicensing right from every copyright holder in the file.
+- **A future licence change.** Relicensing under a DCO means finding and getting
+  written agreement from every past contributor. In practice that is not
+  possible, so the licence is frozen for good.
+
+**What that means for you.** Section 2 lets the Project Owner distribute your
+contribution under terms other than AGPL-3.0 — including a proprietary
+commercial licence — without asking you again. You do not get a veto and you do
+not share in what such a licence earns. That is a real asymmetry, and it is the
+whole cost of the agreement.
+
+**What you keep.** The copyright. This is a licence grant, not an assignment, so
+your contribution stays yours: use it, publish it elsewhere, sell it, relicense
+it, nothing here restricts you. The grant is also non-exclusive, so the Project
+Owner's rights take nothing away from your own.
+
+If that trade is not one you want to make, do not sign. Open an issue describing
+the bug or the change instead. That is a real contribution, it needs no CLA, and
+it is welcome.

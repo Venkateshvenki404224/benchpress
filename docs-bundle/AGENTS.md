@@ -39,7 +39,7 @@ is done.
 ## Operator Track
 
 - [Operator track](./docs/operator/index.md): Run BenchPress on your own box — install, the VPN plane, settings, the shared database, images, upgrades, safety and diagnostics.
-- [Prerequisites](./docs/operator/prerequisites.md): What a BenchPress host needs before you install — supported platforms, versions, Docker socket access, IP forwarding, sysbox, and the measured CPU sizing.
+- [Prerequisites](./docs/operator/prerequisites.md): What a BenchPress host needs before you install — the four preconditions, supported platforms, versions, Docker socket access, and the measured CPU and disk sizing.
 - [Install](./docs/operator/install.md): Install BenchPress into a Frappe v16 bench — get-app, setup.sh, the frontend build, the base domain, and the first screen.
 - [WireGuard and the VPN plane](./docs/operator/wireguard-setup.md): How the vpn_management app owns the tunnel, what BenchPress consumes from it, the measured server and pool values, and why userns-remap matters.
 - [Settings reference](./docs/operator/settings-reference.md): Every field on BenchPress Settings and Credit Settings, with the value measured on a live host, where each one is edited, and what changing it costs.
@@ -49,8 +49,8 @@ is done.
 - [The image cache](./docs/operator/image-cache.md): One image per lab, tagged benchpress/<lab_id>:lab — what it costs on disk, how the weekly prewarm and sweep work, and what is safe to prune.
 - [Users and roles](./docs/operator/users-and-roles.md): The two BenchPress roles, what each one may read and write, which screens are admin-only, and how ownership rather than a role decides who sees a bench.
 - [Upgrading](./docs/operator/upgrading.md): Move a BenchPress install to a newer release — the backup gate, the five steps, the scripted path, rollback, and why lab images are a separate opt-in.
-- [Production safety](./docs/operator/production-safety.md): What BenchPress is and is not ready to carry — the alpha verdict, the container privilege boundary, what is backed up, and the endpoint-by-endpoint release checklist.
-- [Diagnostics](./docs/operator/diagnostics.md): The eleven read-only checks that ask Docker, MariaDB, Redis and the kernel what is true — how to run them, what each failure means, and the four things they do not cover.
+- [Production safety](./docs/operator/production-safety.md): What BenchPress is and is not ready to carry — the alpha verdict, the container privilege boundary, what is backed up, and the release checklist that covers 25 of 52 whitelisted callables.
+- [Diagnostics](./docs/operator/diagnostics.md): The twelve read-only checks that ask Docker, MariaDB, Redis and the kernel what is true — how to run them, what each failure means, and the four things they do not cover.
 - [Credits and billing](./docs/operator/credits-and-billing.md): Optional and off by default — the metering half of BenchPress, covering leases, balances, the ledger, admin adjustments, and the optional Razorpay handoff.
 - [Admission and limits](./docs/operator/admission-and-limits.md): Optional and off by default — concurrency caps, size ceilings, device and build quotas, how a slot is claimed as a row, and the acceptance run that proves access still works.
 - [Self-serve signup](./docs/operator/hosted-signup.md): Optional and off by default — retire the waitlist and let people sign themselves up, with GitHub and Google as the primary paths and the abuse controls that make a free grant safe.
@@ -60,7 +60,7 @@ is done.
 - [Reference track](./docs/reference/index.md): The data model, the whitelisted API, the eleven deploy steps, the reconcilers, the address plan and the configuration split — for a contributor or an integrator.
 - [Architecture](./docs/reference/architecture.md): The moving parts of BenchPress — the control plane, the bench containers, the shared infrastructure, and which Python module owns each concern.
 - [Data model](./docs/reference/data-model.md): All 20 BenchPress DocTypes with their fields, links, naming and the permission rule that scopes each one — plus why there is no Device DocType.
-- [API](./docs/reference/api.md): All 50 whitelisted BenchPress endpoints, with arguments, what each returns, and the permission check each one makes for itself.
+- [API](./docs/reference/api.md): Every whitelisted BenchPress endpoint, with arguments, what each returns, and the permission check each one makes for itself.
 - [Deploy pipeline](./docs/reference/deploy-pipeline.md): The eleven steps of a BenchPress deploy, in the order the code runs them, with the function behind each step and the log line it writes.
 - [Lifecycle and events](./docs/reference/lifecycle-and-events.md): The bench states and their transitions, the Docker event listener, Bench Event incidents, the stats collector, and the eleven scheduled jobs that correct the database.
 - [Networking](./docs/reference/networking.md): The BenchPress address plan — bench bridges, WireGuard tunnel addresses, the two container ports, Traefik route files and the wildcard certificate anchor.
@@ -141,7 +141,7 @@ so `enable_credits` is `0` and no page about billing applies to a plain install.
 
 ### Stand a host up
 
-- [Prerequisites](./docs/operator/prerequisites.md): What a BenchPress host needs before you install — supported platforms, versions, Docker socket access, IP forwarding, sysbox, and the measured CPU sizing.
+- [Prerequisites](./docs/operator/prerequisites.md): What a BenchPress host needs before you install — the four preconditions, supported platforms, versions, Docker socket access, and the measured CPU and disk sizing.
 - [Install](./docs/operator/install.md): Install BenchPress into a Frappe v16 bench — get-app, setup.sh, the frontend build, the base domain, and the first screen.
 - [WireGuard and the VPN plane](./docs/operator/wireguard-setup.md): How the vpn_management app owns the tunnel, what BenchPress consumes from it, the measured server and pool values, and why userns-remap matters.
 
@@ -160,8 +160,8 @@ so `enable_credits` is `0` and no page about billing applies to a plain install.
 ### Keep it safe
 
 - [Upgrading](./docs/operator/upgrading.md): Move a BenchPress install to a newer release — the backup gate, the five steps, the scripted path, rollback, and why lab images are a separate opt-in.
-- [Production safety](./docs/operator/production-safety.md): What BenchPress is and is not ready to carry — the alpha verdict, the container privilege boundary, what is backed up, and the endpoint-by-endpoint release checklist.
-- [Diagnostics](./docs/operator/diagnostics.md): The eleven read-only checks that ask Docker, MariaDB, Redis and the kernel what is true — how to run them, what each failure means, and the four things they do not cover.
+- [Production safety](./docs/operator/production-safety.md): What BenchPress is and is not ready to carry — the alpha verdict, the container privilege boundary, what is backed up, and the release checklist that covers 25 of 52 whitelisted callables.
+- [Diagnostics](./docs/operator/diagnostics.md): The twelve read-only checks that ask Docker, MariaDB, Redis and the kernel what is true — how to run them, what each failure means, and the four things they do not cover.
 
 ### Optional — running it for a team
 
@@ -179,7 +179,7 @@ so `enable_credits` is `0` and no page about billing applies to a plain install.
 
 - [Architecture](./docs/reference/architecture.md): The moving parts of BenchPress — the control plane, the bench containers, the shared infrastructure, and which Python module owns each concern.
 - [Data model](./docs/reference/data-model.md): All 20 BenchPress DocTypes with their fields, links, naming and the permission rule that scopes each one — plus why there is no Device DocType.
-- [API](./docs/reference/api.md): All 50 whitelisted BenchPress endpoints, with arguments, what each returns, and the permission check each one makes for itself.
+- [API](./docs/reference/api.md): Every whitelisted BenchPress endpoint, with arguments, what each returns, and the permission check each one makes for itself.
 
 ### What it does at runtime
 

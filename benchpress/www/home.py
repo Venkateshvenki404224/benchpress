@@ -1,16 +1,8 @@
 # Copyright (c) 2026, Venkatesh and contributors
 # For license information, please see license.txt
 
-"""Context for the public landing page.
-
-The pricing on this page is not written into the markup — it is read from `Credit Pack` and
-`Instance Size`, so an operator retunes a price in Desk and the page changes on the next request
-with no deploy. That single requirement is why the landing page is a Jinja `www` page and not a
-static file or a route in the Vue SPA (whose router redirects every guest to `/login`).
-
-The whole page costs two queries: one for the packs, one for the sizes. Everything else is either
-a Single served from cache or a module constant, and the price strings are formatted in Python
-rather than through `fmt_money`, which reads number-format defaults from the database.
+"""Context for the public landing page: a Jinja `www` page, because prices are read from Desk.
+With `enable_credits` off it costs no queries at all — the hosted half of the page is not rendered.
 """
 
 import os
@@ -21,6 +13,7 @@ from frappe.utils import cint, flt
 from benchpress.credits.config import (
 	SIGNUP_ROUTE,
 	active_packs,
+	credits_enabled,
 	default_size,
 	instance_sizes,
 	settings,
@@ -44,34 +37,52 @@ CACHE_BUST_PATHS = (
 
 no_cache = 1
 
+# What the hosted surfaces read when there are no hosted surfaces. `enable_credits` off means the
+# feature does not exist, so the page renders the self-hosted story and asks the database nothing.
+NO_COMMERCE = {
+	"sizes": [],
+	"default_size": None,
+	"packs": [],
+	"build_credits": 0,
+	"free_credits": 0,
+	"waitlist_open": False,
+	"start_route": SIGNUP_ROUTE,
+}
+
 
 def get_context(context):
 	context.no_cache = 1
 	context.title = "BenchPress — pick a template, press deploy"
-	context.sizes = rate_rows()
-	context.default_size = default_size()
-	context.packs = priced_packs()
-	context.build_credits = cint(settings().custom_build_credits)
-	context.free_credits = cint(settings().signup_grant_credits)
+	context.credits_enabled = credits_enabled()
 	context.repo_url = REPO_URL
 	context.license_label = LICENSE_LABEL
-	context.waitlist_open = waitlist_open()
-	context.start_route = start_route(context.waitlist_open)
 	context.phases = PHASES
 	context.active_phase = ACTIVE_PHASE
 	context.csrf_token = session_csrf_token()
 	context.asset_version = asset_version()
 	context.hero_media = hero_media(context.asset_version)
+	context.update(commercial_context() if context.credits_enabled else dict(NO_COMMERCE))
 	return context
 
 
-def start_route(is_waitlist_open: bool) -> str:
-	"""Where every "Start free" on the page points.
+def commercial_context() -> dict:
+	"""Prices, credits and the way in — read only when metering is on, which is the only
+	state in which anything on the page renders them."""
+	is_waitlist_open = waitlist_open()
+	return {
+		"sizes": rate_rows(),
+		"default_size": default_size(),
+		"packs": priced_packs(),
+		"build_credits": cint(settings().custom_build_credits),
+		"free_credits": cint(settings().signup_grant_credits),
+		"waitlist_open": is_waitlist_open,
+		"start_route": start_route(is_waitlist_open),
+	}
 
-	One value, resolved once, because the page carries five of these buttons — header, hero, each
-	pack card, the open-source panel and the footer — and a switch that moved four of them would
-	be worse than one that moved none.
-	"""
+
+def start_route(is_waitlist_open: bool) -> str:
+	"""Where every "Start free" on the page points. One value, resolved once, because the page
+	carries several of these buttons and a switch that moved some of them would be worse."""
 	return "#waitlist" if is_waitlist_open else SIGNUP_ROUTE
 
 

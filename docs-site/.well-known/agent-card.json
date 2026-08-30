@@ -2,7 +2,7 @@
   "name": "BenchPress",
   "description": "Press a button. Get a Frappe bench.",
   "url": "https://docs.benchpress.cloud",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "documentationUrl": "https://docs.benchpress.cloud/docs",
   "capabilities": {
     "streaming": false,

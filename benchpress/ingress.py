@@ -11,6 +11,7 @@ rather than learning the path.
 import os
 import socket
 import ssl
+import time
 from pathlib import Path
 from typing import NamedTuple
 
@@ -87,6 +88,16 @@ DEFAULT_RATE_BURST = 60
 # exhaust the pool.
 INFLIGHT_CEILING = 24
 
+# Only `queue-long` (read-write) and `traefik` (read-only) mount the route directory —
+# docker-compose.prod.yml, and no other service — so `backend`, which serves the diagnostics screen
+# in a web request, cannot stat it and reads what a worker last saw instead. Same shape as the
+# heartbeat `docker_events` publishes for a listener the web process cannot see either.
+ROUTE_STATE_KEY = "benchpress:route_directory"
+# The reconcile pass (hooks.py, `*/5`) refreshes this, so three missed passes are what it takes to
+# stop believing it. It outlives that so a stale record can still name its own age.
+ROUTE_STATE_STALE_SECONDS = 15 * 60
+ROUTE_STATE_EXPIRY = ROUTE_STATE_STALE_SECONDS * 2
+
 
 class RateLimits(NamedTuple):
 	"""The per-tier request numbers a bench's routers carry. An `inflight` of 0 is no cap at all."""
@@ -108,12 +119,27 @@ class TraefikRouteDirectoryMissing(Exception):
 	"""
 
 
+def route_directory_fix() -> str:
+	"""Why routing cannot be written and what fixes it — one wording for the log and the screen."""
+	# Read at call time, never baked into a module constant, so a test that repoints
+	# TRAEFIK_DYNAMIC_DIR gets a message about the directory it repointed to. It names
+	# `queue-long` rather than "this container" because the diagnostics screen renders it from
+	# `backend`, where the directory is absent by design and says nothing about routing.
+	return (
+		f"{TRAEFIK_DYNAMIC_DIR} is not mounted in queue-long, the one worker that writes routes. "
+		"Only docker-compose.prod.yml mounts it, and only a checkout brought up with "
+		"./entry.py --domain <fqdn> loads that overlay — so a Base Domain saved without one "
+		"advertises a public URL that cannot route. Set the domain on the host, or set Base "
+		"Domain to localhost to advertise no public URL."
+	)
+
+
 def publish(
 	instance_id: str,
 	base_domain: str,
 	ide: bool | None = None,
 	limits: RateLimits | None = None,
-) -> None:
+) -> bool:
 	"""Write Traefik file-provider routes for this instance's site, and its IDE when it has one.
 
 	`tls: {}` turns TLS on and names no resolver, so these routers serve whatever
@@ -128,7 +154,17 @@ def publish(
 	`bench_doc.bench_name` and `BenchInstance.autoname` sets `name = bench_name`.
 	"""
 	if not base_domain or base_domain == "localhost":
-		return
+		return False
+
+	# Reported, not raised. `base_domain` is a required field, so the documented install fills
+	# it (docs/operator/install.mdx step 5) on a checkout whose queue-long has no route mount,
+	# and the raise inside `_atomic_write` then killed the deploy after the container was already
+	# built. The advice it carried — reach routing through `enqueue_route_sync` — was also
+	# already satisfied: this is queue-long. Creating the directory is not the alternative; a
+	# container without the mount cannot, `/etc` is root-owned and bench runs as uid 1000.
+	# `route_directory` in diagnostics.py is where the operator meets this state.
+	if not directory_mounted():
+		return False
 
 	# What `routable` already resolved for this bench, else the same read for one.
 	# Never the caller's own idea of the flag: the */5 pass writes this file without the
@@ -198,6 +234,9 @@ def publish(
 		TRAEFIK_DYNAMIC_DIR / f"{instance_id}.yml",
 		yaml.safe_dump({"http": {"routers": routers, "middlewares": middlewares, "services": services}}),
 	)
+	# True is "the route file is on disk", not "the file changed" — an unchanged route is
+	# published just as much as a rewritten one.
+	return True
 
 
 def _router(rule: str, service: str, middlewares: list[str], priority: int) -> dict:
@@ -313,9 +352,42 @@ def protected_present() -> int:
 	return sum(1 for name in PROTECTED_ROUTE_FILES if (TRAEFIK_DYNAMIC_DIR / name).exists())
 
 
+def protected_missing() -> list[str]:
+	"""Which protected files are absent, named — the two fail differently, so a count cannot say."""
+	# `dynamic.yml` absent means the directory is not the rendered bind source at all, and an
+	# absent anchor means no certificate. Named here rather than the path being handed out, for
+	# the same reason `published` is a call: one off-by-one on either name is an outage.
+	return sorted(name for name in PROTECTED_ROUTE_FILES if not (TRAEFIK_DYNAMIC_DIR / name).exists())
+
+
 def directory_mounted() -> bool:
 	"""Whether the route directory is mounted here — asked instead of the path being handed out."""
 	return TRAEFIK_DYNAMIC_DIR.is_dir()
+
+
+def record_directory_state() -> dict:
+	"""Publish what this worker sees of the route directory, for a reader that cannot stat it."""
+	# Not called per bench: `publish` runs once per routable bench in the convergence loop, and a
+	# record written there would be the same answer 300 times a pass. The two callers are the
+	# once-per-deploy and once-per-transition paths, and both record before their own mount gate —
+	# the state worth reporting is exactly the one that makes those gates close.
+	mounted = directory_mounted()
+	state = {
+		"ts": int(time.time()),
+		"mounted": mounted,
+		"missing": protected_missing() if mounted else sorted(PROTECTED_ROUTE_FILES),
+		"published": len(published()) if mounted else 0,
+	}
+	frappe.cache().set_value(ROUTE_STATE_KEY, state, expires_in_sec=ROUTE_STATE_EXPIRY)
+	return state
+
+
+def directory_state() -> dict | None:
+	"""What the last worker to reach routing saw, plus its `age`, or None when none has."""
+	state = frappe.cache().get_value(ROUTE_STATE_KEY)
+	if not state:
+		return None
+	return {**state, "age": int(time.time()) - cint(state.get("ts"))}
 
 
 def ensure_anchor(base_domain: str | None) -> bool:
@@ -325,6 +397,13 @@ def ensure_anchor(base_domain: str | None) -> bool:
 	the certificate renewing.
 	"""
 	if not base_domain or base_domain == "localhost":
+		return False
+
+	# Same gate as `publish`, and for the same reason: this runs at the first step of every
+	# deploy, so a raise here fails the run before any bench work starts. Recorded rather than
+	# only tested, because this is the one call every deploy makes and the reconcile pass makes
+	# every five minutes — it is what keeps the `route_directory` diagnostics row current.
+	if not record_directory_state()["mounted"]:
 		return False
 
 	wanted = yaml.safe_dump(_wildcard_anchor_config(base_domain))
@@ -343,6 +422,13 @@ def log_certificate_state(instance_id: str, base_domain: str | None, pipeline) -
 	re-prove the first one.
 	"""
 	if not base_domain or base_domain == "localhost":
+		return
+
+	# Ahead of the handshake, because it outranks it: with no route directory there is no
+	# Traefik to hand a certificate to, and `_certificate_error` would report the same host
+	# state as "could not reach Traefik" — true, and the wrong thing to go fix.
+	if not directory_mounted():
+		pipeline.log(f"WARNING: {route_directory_fix()}")
 		return
 
 	hostname = f"{instance_id}.{base_domain}"
@@ -393,6 +479,8 @@ def _atomic_write(path: Path, text: str) -> bool:
 	that is absent is a container that cannot reach Traefik, and creating it would turn
 	that into a file nobody reads.
 	"""
+	# `publish` and `ensure_anchor` both gate on `directory_mounted` and return instead, so this
+	# is now the invariant under a future writer that forgets to, not a path an operator meets.
 	if not path.parent.is_dir():
 		raise TraefikRouteDirectoryMissing(
 			f"{path.parent} is not mounted in this container. It is a bind mount of "
@@ -450,18 +538,25 @@ def _wildcard_anchor_config(base_domain: str) -> dict:
 
 
 def sync_instance_route(bench_name: str) -> str:
-	"""Make this bench's route file agree with its status; returns `written`, `deleted` or `skipped`.
+	"""Make this bench's route file agree with its status.
 
-	The one decision point for whether a bench should own a route at all, so a lifecycle
-	transition has one thing to remember rather than a write call in the start path and a
-	delete call in the stop path. A bench that no longer exists reads as no status, which
-	deletes — the same answer as `Stopped`, and the reason this does not raise.
-
-	Reach it through `enqueue_route_sync`, never directly from a web request.
+	Returns `written`, `deleted`, `skipped` (no public domain) or `unmounted` (no route directory).
 	"""
+	# The one decision point for whether a bench should own a route at all, so a lifecycle
+	# transition has one thing to remember rather than a write call in the start path and a
+	# delete call in the stop path. A bench that no longer exists reads as no status, which
+	# deletes — the same answer as `Stopped`, and the reason this does not raise.
+	#
+	# Reach it through `enqueue_route_sync`, never directly from a web request.
 	base_domain = frappe.get_cached_doc("BenchPress Settings").base_domain
 	if not base_domain or base_domain == "localhost":
 		return "skipped"
+
+	# Its own result, never folded into `skipped`: `skipped` is an operator who advertises no
+	# public URL, and this is one who advertises a URL the host cannot serve. A job that raised
+	# here failed on every start, stop and restart of every bench on such a host.
+	if not record_directory_state()["mounted"]:
+		return "unmounted"
 
 	if frappe.db.get_value("Bench Instance", bench_name, "status") == "Running":
 		publish(bench_name, base_domain)

@@ -1,0 +1,55 @@
+# pip-audit in linter.yml reports a vulnerable dependency but opens nothing.
+# This is the half that opens the pull request.
+#
+# Cadence follows frappe core (.github/dependabot.yml there): weekly, default
+# day. Core registers github-actions only and sets no groups, so the grouping
+# below is this repo's own: minor and patch updates arrive as one pull request
+# per ecosystem, majors stay separate because they need reading.
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      actions:
+        update-types:
+          - "minor"
+          - "patch"
+
+  # pyproject.toml. `docker` is the only runtime pin; frappe itself is supplied
+  # by bench and is deliberately not a dependency here.
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      python:
+        update-types:
+          - "minor"
+          - "patch"
+
+  # Root package.json — the docs pipeline (leadtype) and @playwright/test.
+  # Both package-lock.json and yarn.lock are committed here; dependabot
+  # updates whichever lockfiles it finds beside the manifest.
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      docs-tooling:
+        update-types:
+          - "minor"
+          - "patch"
+
+  # The SPA. Its own manifest and lockfile, and the only tree the Frontend job
+  # installs.
+  - package-ecosystem: "npm"
+    directory: "/frontend"
+    schedule:
+      interval: "weekly"
+    groups:
+      frontend:
+        update-types:
+          - "minor"
+          - "patch"
