@@ -106,9 +106,13 @@ def _converge_routes() -> dict:
 		# A dev checkout has no route directory and must stay byte-for-byte unaffected.
 		return {"anchored": False, "written": 0, "deleted": 0, "kept": 0}
 
-	if not ingress.directory_mounted():
-		# Only ever a by-hand run outside queue-long. None rather than 0, because the directory
-		# was never read and zero counts would read as a converged pass.
+	# Record before the gate, not after it. `ensure_anchor` below is the only other recurring
+	# caller of `record_directory_state`, so returning here without recording left the one host
+	# this reports on — a bench whose worker has no route mount — with no report at all, and the
+	# diagnostics row blaming a healthy scheduler instead of the missing mount.
+	if not ingress.record_directory_state()["mounted"]:
+		# None rather than 0, because the directory was never read and zero counts would read as
+		# a converged pass.
 		return {"anchored": None, "written": None, "deleted": None, "kept": None}
 
 	anchored = ingress.ensure_anchor(base_domain)

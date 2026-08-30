@@ -31,12 +31,17 @@ from benchpress.mariadb_manager import (
 from benchpress.vpn_adapter import DEFAULT_INTERFACE
 
 DRIFT_FIX = "Recreate the shared pair: docker compose up -d in benchpress/config"
-# What refreshes the route-directory report. Named in every row that has none to read, because a
-# row that says only "no report" leaves the reader with nothing to start it.
-ROUTE_STATE_FIX = "the scheduler and queue-long refresh it every reconcile pass, so check both"
+# What writes the route-directory report. Named in every row that has none to read, because a row
+# that says only "no report" leaves the reader with nothing to start it. Only the paths that reach
+# routing write it, and a reconcile pass on a host with no route mount is not one of them:
+# `reconcile._converge_routes` returns before `ingress.ensure_anchor`, the call that records.
+ROUTE_STATE_WRITERS = (
+	"every deploy and every bench start or stop records it, as does each reconcile pass that "
+	"finds the directory mounted"
+)
 ROUTE_STATE_UNREPORTED = (
-	"No worker has reported on the Traefik route directory yet. The first deploy records it, and "
-	f"so does every reconcile pass — until one does, no public URL is verified: {ROUTE_STATE_FIX}"
+	"No worker has reported on the Traefik route directory yet, so no public URL is verified: "
+	f"{ROUTE_STATE_WRITERS}"
 )
 # A row that says a listener is dead without naming what restarts it costs the reader a search.
 LISTENER_FIX = "start it with docker compose up -d docker-events"
@@ -361,7 +366,7 @@ def _check_route_directory() -> dict:
 				"route_directory",
 				False,
 				f"The route directory was last reported on {state['age']}s ago, past the "
-				f"{ingress.ROUTE_STATE_STALE_SECONDS}s it is given — {ROUTE_STATE_FIX}",
+				f"{ingress.ROUTE_STATE_STALE_SECONDS}s it is given — {ROUTE_STATE_WRITERS}",
 				severity="Warning",
 			)
 
@@ -391,12 +396,14 @@ def _check_route_directory() -> dict:
 			return check_row(
 				"route_directory",
 				True,
-				"Route directory mounted and rendered, no bench route published yet — the first "
-				f"deploy writes {ingress.WILDCARD_ANCHOR_FILE}",
+				"Route directory mounted and rendered, no bench route published yet — the next "
+				f"deploy or reconcile pass writes {ingress.WILDCARD_ANCHOR_FILE}",
 			)
-		# Warning, not Error: every deploy and every reconcile pass writes the anchor, so this is a
-		# state that heals itself. Still worth a row, because until it does each of those published
-		# hostnames answers on a certificate the browser refuses.
+		# Warning, not Error: this branch needs `mounted`, and on a mounted host every deploy and
+		# every reconcile pass writes the anchor, so the state heals itself. `ensure_anchor`
+		# records before it writes, so an anchor-missing report is normally one pass behind a
+		# directory that already has one. Still worth a row, because until it heals each of those
+		# published hostnames answers on a certificate the browser refuses.
 		return check_row(
 			"route_directory",
 			False,

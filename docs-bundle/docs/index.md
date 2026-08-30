@@ -2,7 +2,7 @@
 title: BenchPress documentation
 description: Start here. Three tracks — use a bench, run the server that hosts
   one, or read the data model and the API.
-lastModified: "2026-08-30T08:05:07-04:00"
+lastModified: "2026-08-30T17:48:34+05:30"
 lastAuthor: Venkatesh
 ---
 # BenchPress documentation

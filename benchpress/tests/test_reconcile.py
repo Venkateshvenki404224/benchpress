@@ -628,6 +628,23 @@ class TestConvergeRoutes(IntegrationTestCase):
 		# None, not 0: nothing was read, and zero counts are what a converged pass reports.
 		self.assertEqual(routes, {"anchored": None, "written": None, "deleted": None, "kept": None})
 
+	def test_the_unmounted_pass_records_what_it_saw(self):
+		"""The recurring pass is the only writer on a host that never deploys, so returning
+		without recording left the diagnostics row blaming the scheduler for a missing mount."""
+		frappe.cache().delete_value(ingress.ROUTE_STATE_KEY)
+		self.addCleanup(frappe.cache().delete_value, ingress.ROUTE_STATE_KEY)
+
+		with tempfile.TemporaryDirectory() as tmp:
+			with (
+				patch.object(ingress, "TRAEFIK_DYNAMIC_DIR", Path(tmp) / "dynamic"),
+				patch("frappe.get_cached_doc", return_value=frappe._dict(base_domain="benchpress.cloud")),
+			):
+				reconcile._converge_routes()
+
+		state = ingress.directory_state()
+		self.assertIsNotNone(state, "the pass returned without reporting what it saw")
+		self.assertFalse(state["mounted"])
+
 	def test_a_dev_checkout_is_left_byte_for_byte_alone(self):
 		"""No public domain means no route directory this pass understands, so it writes nothing
 		and reaps nothing."""

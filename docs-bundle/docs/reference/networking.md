@@ -3,7 +3,7 @@ title: Networking
 description: The BenchPress address plan — bench bridges, WireGuard tunnel
   addresses, the two container ports, Traefik route files and the wildcard
   certificate anchor.
-lastModified: "2026-08-30T08:05:07-04:00"
+lastModified: "2026-08-30T17:48:34+05:30"
 lastAuthor: Venkatesh
 ---
 # Networking

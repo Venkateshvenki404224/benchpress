@@ -377,8 +377,12 @@ def _deploy_bench(bench_name: str, size_name: str | None = None, deploy_log: str
 		bench.save(ignore_permissions=True)
 		frappe.db.commit()  # nosemgrep -- the address the route file is written from
 
-		bench.public_url = addressing.public_site_url(bench.name, settings.base_domain)
-		ingress.publish(bench.name, settings.base_domain)
+		# Only claim the public address once a route file backs it. `publish` returns whether it
+		# wrote one; discarding that persisted an https URL on every deploy, including on a worker
+		# with no route mount, where nothing can ever answer it. `launch` and the Lab screen both
+		# prefer `public_url` over the tunnel address, so a dead one suppresses a working one.
+		if ingress.publish(bench.name, settings.base_domain):
+			bench.public_url = addressing.public_site_url(bench.name, settings.base_domain)
 		ingress.log_certificate_state(bench.name, settings.base_domain, pipeline)
 
 		_setup_container_vpn(bench, container_id, pipeline)

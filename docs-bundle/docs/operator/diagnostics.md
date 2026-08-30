@@ -3,12 +3,12 @@ title: Diagnostics
 description: The twelve read-only checks that ask Docker, MariaDB, Redis and the
   kernel what is true — how to run them, what each failure means, and the four
   things they do not cover.
-lastModified: "2026-08-30T08:05:07-04:00"
+lastModified: "2026-08-30T08:51:56-04:00"
 lastAuthor: Venkatesh
 ---
 # Diagnostics
 
-Eleven checks that read the host rather than the configuration, and what to do
+Twelve checks that read the host rather than the configuration, and what to do
 about each one that fails.
 
 **Who this is for.** Whoever is holding a broken host and does not yet know
@@ -30,14 +30,14 @@ one you have already made worse.
    Each row is `{check, status, hint, severity}`. The hint names the fix.
 
 2. **Or read them in the app.** Open **Overview** as an admin and look at the
-   **Shared infrastructure** panel, which renders the same eleven rows.
+   **Shared infrastructure** panel, which renders the same twelve rows.
 
    ![The Shared infrastructure panel on the BenchPress Overview, listing the shared-infrastructure checks with a status badge each. Docker socket, Docker network, Bridge capacity, MariaDB, Redis, Container runtimes, Event listener and WireGuard read Active. Kernel ceilings and Clock skew read Error, and Golden images reads Warning.](../images/operator/diagnostics/01-shared-infrastructure.png)
 
    On this host eight rows read **Active**, `kernel_ceilings` and `clock_skew`
-   read **Error**, and `golden_images` reads **Warning**. A badge is the
-   check's severity, not a second verdict — see
-   [Severity](#severity-is-not-status).
+   read **Error**, and `golden_images` reads **Warning**. The capture predates
+   the `route_directory` row, so it shows eleven. A badge is the check's
+   severity, not a second verdict — see [Severity](#severity-is-not-status).
 
 3. **Fix the failing rows in the order the table below gives**, then run the
    checks again. Several rows fail together for one cause, and the first fix
@@ -57,12 +57,12 @@ one you have already made worse.
 |`container_runtimes`|Container runtimes|`sysbox-runc` is registered with Docker|Error|
 |`golden_images`|Golden images|how many built labs carry a golden dump|Warning|
 |`docker_events`|Event listener|the listener's heartbeat is newer than 60 seconds|Error|
-|`route_directory`|Route directory|a worker has reported the Traefik route directory mounted, with the control-plane route and the wildcard anchor rendered|Error, or Warning when the report is stale or the anchor is merely late|
+|`route_directory`|Route directory|a worker has reported the Traefik route directory mounted, with the control-plane route and the wildcard anchor rendered|Error, or Warning when the report is missing or stale, or the anchor is merely late|
 |`vpn_server`|WireGuard|`vpn_management` is installed, `wg0` exists, and it has a public key|Error|
 
 ## Severity is not status
 
-Two rows fail in ways that are not the same kind of problem, so they carry
+Three rows fail in ways that are not the same kind of problem, so they carry
 their own severity.
 
 * **`golden_images` is always a Warning.** A lab with no golden dump deploys
@@ -71,6 +71,10 @@ their own severity.
 * **Config drift on `mariadb` or `redis` is a Warning.** The cache still
   serves every bench, and it stays drifted until a human recreates the pair.
   A server that does not answer at all is an Error.
+* **`route_directory` is a Warning when it cannot tell.** A report that is
+  missing or older than 15 minutes says the host is unverified, not broken,
+  and a missing wildcard anchor is written by the next deploy or reconcile
+  pass. A directory that is not mounted, or is mounted and empty, is an Error.
 
 Everything else is an Error, because a bench cannot deploy through it.
 
@@ -192,6 +196,30 @@ which is why the heartbeat exists at all. Restart it:
 docker compose up -d docker-events
 ```
 
+### `route_directory` — the public URL has nothing behind it
+
+**Base Domain** is required, so every install advertises
+`https://<bench>.<domain>` for each bench. Only `docker-compose.prod.yml`
+mounts `/etc/traefik/dynamic`, and only a checkout brought up with
+`./entry.py --domain <fqdn>` loads that overlay — so on any other host no
+route is ever written and none of those URLs answer.
+
+The row reads a report a worker leaves in the cache, because this screen
+renders in `backend`, which never mounts that directory. What the hints mean:
+
+|The hint says|What is true|What to do|
+|--|--|--|
+|`/etc/traefik/dynamic is not mounted in queue-long`|The host runs without the production overlay|Bring the host up with `./entry.py --domain <fqdn>`, or set **Base Domain** to `localhost` to advertise no public URL|
+|`holds no dynamic.yml … never rendered`|Docker turned a bind source that does not exist into an empty directory, which passes every check that only asks whether the path is there|Render the Traefik config on the host: `./entry.py --domain <fqdn>`|
+|`no wildcard-anchor.yml holds *.<domain>`|Traefik holds no certificate for the bench zone, so every published hostname fails TLS|Nothing, normally: the next deploy or reconcile pass writes it. If it stays, read `queue-long`'s log|
+|`No worker has reported …`, or `last reported on <n>s ago`|Nothing that writes the report has run recently|Read the workers, then deploy or start a bench, which forces a report|
+
+**A host with no route mount reports nothing on its own.** The reconcile pass
+returns before the call that records, so on exactly the host this row exists
+for, the first report comes from a deploy or from starting a bench. Until one
+does, the row reads the missing-report Warning rather than the Error that
+names the mount.
+
 ### `vpn_server` — not configured
 
 Either `vpn_management` is not installed, or `wg0` does not exist, or it
@@ -246,7 +274,7 @@ bench --site <site> execute frappe.client.get_list \
 ## Verify
 
 A pass is not a claim that the host is healthy. It is a claim that these
-eleven questions have good answers. Confirm the rest by deploying a bench and
+twelve questions have good answers. Confirm the rest by deploying a bench and
 opening it, which exercises Docker, the bridge, the VPN, the database and the
 router in one action. See
 [Deploy from a template](/docs/user/deploy-from-template).
@@ -274,6 +302,7 @@ router in one action. See
 |Severities|`Error`, `Warning`|
 |Clock tolerance|2 seconds|
 |Heartbeat patience|60 seconds|
+|Route report patience|15 minutes|
 |Terminals per bench, for `kernel.pty.max`|8, plus 1,024 reserved|
 |PIDs per bench, for `kernel.pid_max`|500|
 |Conntrack per bench|256|
