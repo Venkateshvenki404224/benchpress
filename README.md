@@ -7,8 +7,8 @@
 
 **Press a button. Get a Frappe bench. Self-hosted, Docker-powered, VPN-secured.**
 
-[![CI](https://github.com/Venkateshvenki404224/benchpress/actions/workflows/ci.yml/badge.svg?branch=develop)](https://github.com/Venkateshvenki404224/benchpress/actions/workflows/ci.yml)
-[![Linters](https://github.com/Venkateshvenki404224/benchpress/actions/workflows/linter.yml/badge.svg)](https://github.com/Venkateshvenki404224/benchpress/actions/workflows/linter.yml)
+[![CI](https://github.com/Venkateshvenki404224/benchpress/actions/workflows/ci.yml/badge.svg?branch=version-16)](https://github.com/Venkateshvenki404224/benchpress/actions/workflows/ci.yml?query=branch%3Aversion-16)
+[![Linters](https://github.com/Venkateshvenki404224/benchpress/actions/workflows/linter.yml/badge.svg?branch=version-16)](https://github.com/Venkateshvenki404224/benchpress/actions/workflows/linter.yml?query=branch%3Aversion-16)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-green.svg)](license.txt)
 [![Frappe Framework](https://img.shields.io/badge/Built%20on-Frappe%20v16-blue)](https://frappeframework.com)
 [![FOSS Hack 2026 Winner](https://img.shields.io/badge/FOSS%20Hack%202026-Winner-FFB300)](https://fossunited.org/hack/fosshack26/p/f5fk2d9gqd)
@@ -48,10 +48,20 @@ BenchPress is itself a Frappe app. It installs into a bench you already run. A
 Vue 3 single-page app sits on the front. `frappe.qb` queries and background jobs
 sit on the back.
 
-> **Disposable sandboxes, not production hosting.** A lab is a throwaway
-> development environment, and its screens show credentials in plain text. Read
-> [Production safety](docs/operator/production-safety.mdx) before you point
-> anything important at it.
+> **BenchPress is alpha software. Do not run it on a host you cannot afford to
+> lose.**
+>
+> It takes host-level privilege. `setup.sh` adds your user to the `docker`
+> group, starts the shared MariaDB and Redis containers, and enables IP
+> forwarding under `/etc/sysctl.d`. A lab user holds root inside their bench,
+> and without a user namespace that is host root. A lab is a throwaway
+> development environment, and its screens show credentials in plain text.
+> Database backups are automatic; restore is manual. Quotas, rate limits and
+> audit trails are still in progress.
+>
+> Run it on a dedicated dev box, a VM, or a cloud instance you can rebuild. Not
+> on your daily-driver workstation, and not on a shared production server. Read
+> [Production safety](docs/operator/production-safety.mdx) first.
 
 ---
 
@@ -170,7 +180,7 @@ names all four and says who can reach each one.
 - **Lifecycle actions.** Start, stop, restart, redeploy and delete, each stating
   what it keeps and what it destroys.
 - **Stats and health.** CPU, memory and container health sampled for every
-  running bench, with eleven read-only host checks beside them.
+  running bench, with twelve read-only host checks beside them.
 - **Two roles.** BenchPress Admin and BenchPress User. Ownership, not the role,
   decides which benches a person sees.
 - **Optional metering.** Credits, leases, concurrency caps and self-serve signup
@@ -246,7 +256,7 @@ points at the flattened copy in `docs-bundle/`.
 | [Users and roles](docs/operator/users-and-roles.mdx) | The two roles, and why ownership rather than a role decides who sees a bench |
 | [Upgrading](docs/operator/upgrading.mdx) | The backup gate, the five steps, the scripted path and the rollback |
 | [Production safety](docs/operator/production-safety.mdx) | The alpha verdict, the privilege boundary, and the release checklist |
-| [Diagnostics](docs/operator/diagnostics.mdx) | The eleven read-only checks, and the four things they do not cover |
+| [Diagnostics](docs/operator/diagnostics.mdx) | The twelve read-only checks, and the four things they do not cover |
 | [Credits and billing](docs/operator/credits-and-billing.mdx) | Optional, off by default. Leases, balances, the ledger and the Razorpay handoff |
 | [Admission and limits](docs/operator/admission-and-limits.mdx) | Optional, off by default. Concurrency caps, size ceilings and quotas |
 | [Self-serve signup](docs/operator/hosted-signup.mdx) | Optional, off by default. Retire the waitlist |
@@ -258,7 +268,7 @@ points at the flattened copy in `docs-bundle/`.
 | [Reference track](docs/reference/index.mdx) | The counts every other reference page is held to |
 | [Architecture](docs/reference/architecture.mdx) | Every module in the package, and the concern it owns |
 | [Data model](docs/reference/data-model.mdx) | All 20 DocTypes, their fields, and the permission rule that scopes each one |
-| [API](docs/reference/api.mdx) | All 50 whitelisted endpoints, and the check each one makes for itself |
+| [API](docs/reference/api.mdx) | Every whitelisted endpoint, and the check each one makes for itself |
 | [Deploy pipeline](docs/reference/deploy-pipeline.mdx) | The eleven deploy steps, the function behind each, and the log line it writes |
 | [Lifecycle and events](docs/reference/lifecycle-and-events.mdx) | The bench states, the Docker event listener, and the eleven scheduled jobs |
 | [Networking](docs/reference/networking.mdx) | The four addresses, the bench bridges, and the Traefik route files |
@@ -283,15 +293,19 @@ points at the flattened copy in `docs-bundle/`.
 Contributions are welcome. [CONTRIBUTING.md](CONTRIBUTING.md) is the full guide.
 It covers setup, the commands CI runs, and the dependency policy.
 
+`version-16` is the trunk. It is the default branch on GitHub and it carries the
+`v0.1.0` tag. Branch from it and merge back into it. `main` and `develop` are
+legacy branches left at the 0.1.0 release point and are not updated.
+
 1. Fork the repository.
-2. Create a feature branch from `develop`.
+2. Create a work branch from `version-16`.
 3. Follow the Frappe coding conventions in the code you touch.
 4. Run the tests: `bench --site your-site.localhost run-tests --app benchpress`.
 5. Run every linter: `uvx pre-commit@4.3.0 run --all-files`.
 6. Commit with Conventional Commits, such as `feat(lab): add batch deploy`.
-7. Open a pull request against `develop`.
-8. Sign the [Contributor License Agreement](.github/CLA.md) when the bot asks.
-   You sign once, and it covers everything you contribute afterwards.
+7. Open a pull request against `version-16`.
+8. Sign the [Contributor License Agreement](.github/CLA.md) on your first pull
+   request. You sign once, and it covers everything you contribute afterwards.
 
 Report a security issue through [SECURITY.md](SECURITY.md), never a public issue.
 

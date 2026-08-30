@@ -2,10 +2,14 @@
 
 ## Supported Versions
 
+`version-16` is the trunk. It is the default branch on GitHub and carries the
+`v0.1.0` tag.
+
 | Version | Supported |
 |---------|-----------|
-| `develop` (latest) | Yes |
-| Older branches | No |
+| `version-16` (trunk) | Yes |
+| `v0.1.0` tag | No. A fix lands on `version-16`; there are no backports |
+| `main`, `develop` | No. Both are legacy branches, left at the 0.1.0 release commit and not updated |
 
 ## Reporting a Vulnerability
 
@@ -46,8 +50,20 @@ require an attacker to already hold administrator credentials on the host.
 
 ## A note on what BenchPress is
 
-BenchPress provisions **disposable development sandboxes**. Each Lab is a
-throwaway Frappe bench, reachable over WireGuard, with credentials shown in the
-UI. It is not hardened for production workloads or untrusted tenants, and a
-finding that amounts to "a Lab owner can reach their own Lab's data" is expected
-behaviour rather than a vulnerability.
+**BenchPress is alpha software. Do not run it on a host you cannot afford to
+lose.**
+
+It provisions **disposable development sandboxes**. Each Lab is a throwaway
+Frappe bench, reachable over WireGuard, with credentials shown in the UI. It is
+not hardened for production workloads or untrusted tenants.
+
+Two consequences for a report:
+
+- A finding that amounts to "a Lab owner can reach their own Lab's data" is
+  expected behaviour, not a vulnerability.
+- A lab user holds root **inside** their bench. Without a user namespace,
+  in-container UID 0 is host UID 0. That is a documented deployment
+  precondition, not a bug: close it with sysbox, `userns-remap`, or a rootless
+  daemon, as [Production safety](docs/operator/production-safety.mdx) sets out.
+  A report that the boundary can be escaped **with** one of those in place is
+  in scope.
