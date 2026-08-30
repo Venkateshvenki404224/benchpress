@@ -840,6 +840,17 @@ class TestDeployStepMarkers(IntegrationTestCase):
 
 		self.assertEqual(self._bench_field(bench, "public_url"), f"https://{bench.name}.benchpress.cloud")
 
+	def test_public_url_stays_unset_when_no_route_was_written(self):
+		"""The worker deploying may hold no route mount, and then nothing can answer the public
+		name. `launch` and the Lab screen prefer it over the tunnel URL, so a dead one hides a live one."""
+		bench = self._bench()
+		self._set_base_domain("benchpress.cloud")
+
+		with patch.object(lifecycle.ingress, "publish", return_value=False):
+			self._run_deploy(bench)
+
+		self.assertFalse(self._bench_field(bench, "public_url"))
+
 	def test_public_url_stays_unset_with_localhost_base_domain(self):
 		bench = self._bench()
 		self._set_base_domain("localhost")
