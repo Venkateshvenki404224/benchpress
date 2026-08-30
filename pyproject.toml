@@ -11,7 +11,7 @@ license-files = ["license.txt"]
 dynamic = ["version"]
 dependencies = [
     # "frappe~=16.0.0" # Installed and managed by bench.
-    "docker>=7.0.0",
+    "docker>=7.2.0",
 ]
 
 [build-system]
