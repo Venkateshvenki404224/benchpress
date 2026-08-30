@@ -93,8 +93,10 @@ INFLIGHT_CEILING = 24
 # in a web request, cannot stat it and reads what a worker last saw instead. Same shape as the
 # heartbeat `docker_events` publishes for a listener the web process cannot see either.
 ROUTE_STATE_KEY = "benchpress:route_directory"
-# The reconcile pass (hooks.py, `*/5`) refreshes this, so three missed passes are what it takes to
-# stop believing it. It outlives that so a stale record can still name its own age.
+# Written by every deploy, every bench start or stop, and every reconcile pass (hooks.py, `*/5`)
+# that finds the directory mounted. The scheduler tick is four minutes, so a `*/5` entry fires
+# every four to eight and 15 minutes is two missed passes on a host that reconciles. The key
+# outlives that so a stale record can still name its own age.
 ROUTE_STATE_STALE_SECONDS = 15 * 60
 ROUTE_STATE_EXPIRY = ROUTE_STATE_STALE_SECONDS * 2
 
@@ -384,7 +386,9 @@ def record_directory_state() -> dict:
 
 def directory_state() -> dict | None:
 	"""What the last worker to reach routing saw, plus its `age`, or None when none has."""
-	state = frappe.cache().get_value(ROUTE_STATE_KEY)
+	# `expires=True`: core memoises a non-expiring read into `frappe.local.cache`, misses
+	# included, and this key has a TTL the memo would outlive in a long-lived process.
+	state = frappe.cache().get_value(ROUTE_STATE_KEY, expires=True)
 	if not state:
 		return None
 	return {**state, "age": int(time.time()) - cint(state.get("ts"))}
@@ -401,8 +405,10 @@ def ensure_anchor(base_domain: str | None) -> bool:
 
 	# Same gate as `publish`, and for the same reason: this runs at the first step of every
 	# deploy, so a raise here fails the run before any bench work starts. Recorded rather than
-	# only tested, because this is the one call every deploy makes and the reconcile pass makes
-	# every five minutes — it is what keeps the `route_directory` diagnostics row current.
+	# only tested, because this is the one call every deploy makes, and the one the reconcile
+	# pass makes on a host that mounts the directory — it is what keeps the `route_directory`
+	# diagnostics row current there. A host with no mount is reported by a deploy or a lifecycle
+	# transition only: `_converge_routes` returns before this call.
 	if not record_directory_state()["mounted"]:
 		return False
 

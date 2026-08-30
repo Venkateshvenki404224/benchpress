@@ -374,6 +374,13 @@ class TestDiagnostics(unittest.TestCase):
 		self.assertEqual([row["check"] for row in DIAGNOSTICS_ROWS], CHECK_ORDER)
 		self.assertIn(COUNT_WORDS[len(CHECK_ORDER)], inspect.getdoc(_infrastructure))
 
+	def test_every_check_has_a_screen_label(self):
+		"""`_infrastructure` falls back to the raw check key, so a label nobody adds ships as
+		snake_case on an operator's screen instead of failing here."""
+		from benchpress.overview import INFRASTRUCTURE_LABELS
+
+		self.assertEqual(sorted(INFRASTRUCTURE_LABELS), sorted(CHECK_ORDER))
+
 	def test_the_mariadb_row_always_reports_the_buffer_pool_hit_rate(self):
 		"""The 128M pool rests on one measurement, so the number stays in front of the operator."""
 		by_check, _rows = self._run()
@@ -438,7 +445,7 @@ class TestDiagnostics(unittest.TestCase):
 		self.assertEqual(row["hint"], ROUTE_STATE_UNREPORTED)
 
 	def test_a_stale_report_is_named_by_its_age_and_not_believed(self):
-		"""The reconcile pass refreshes it, so a report this old means the pass stopped running."""
+		"""Nothing that reaches routing has reported in 15 minutes, so the report is not evidence."""
 		age = ingress.ROUTE_STATE_STALE_SECONDS + 60
 		with patch.object(ingress, "ROUTE_STATE_KEY", TEST_ROUTE_STATE_KEY):
 			frappe.cache().set_value(
@@ -473,7 +480,7 @@ class TestDiagnostics(unittest.TestCase):
 		self.assertIn(f"*.{BASE_DOMAIN} anchored", row["hint"])
 
 	def test_an_install_that_has_never_deployed_is_not_a_failure(self):
-		"""The anchor is written by the first deploy, so its absence before one is normal."""
+		"""The next deploy or reconcile pass writes the anchor, so its absence before one is normal."""
 		by_check, _rows = self._run(route_files=(ingress.CONTROL_PLANE_ROUTE_FILE,))
 
 		row = by_check["route_directory"]

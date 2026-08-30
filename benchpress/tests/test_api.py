@@ -46,7 +46,7 @@ BUDGETS_MS = {
 	"get_deploy_history": 600,
 }
 
-# The eleven rows benchpress.diagnostics always returns; the real checks talk to
+# The twelve rows benchpress.diagnostics always returns; the real checks talk to
 # Docker and MariaDB, so the Overview timing test never runs them.
 DIAGNOSTICS_ROWS = [
 	{"check": "docker_socket", "status": "pass", "hint": "Docker daemon reachable"},
@@ -62,7 +62,7 @@ DIAGNOSTICS_ROWS = [
 	{
 		"check": "route_directory",
 		"status": "pass",
-		"hint": "2 bench routes published beside benchpress.yml, *.example.test anchored",
+		"hint": "2 bench routes published beside dynamic.yml, *.example.test anchored",
 	},
 	{"check": "vpn_server", "status": "pass", "hint": "WireGuard server 'wg0' configured"},
 ]
