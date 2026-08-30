@@ -3,7 +3,7 @@ title: Glossary
 description: What each BenchPress term means here — lab, bench, site, lease,
   admission, golden image, peer — including the words that mean something else
   elsewhere.
-lastModified: "2026-08-28T16:15:34Z"
+lastModified: "2026-08-28T22:10:21+05:30"
 lastAuthor: Venkatesh
 ---
 # Glossary

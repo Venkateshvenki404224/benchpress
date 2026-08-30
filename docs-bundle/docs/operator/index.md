@@ -2,7 +2,7 @@
 title: Operator track
 description: Run BenchPress on your own box — install, the VPN plane, settings,
   the shared database, images, upgrades, safety and diagnostics.
-lastModified: "2026-08-28T13:08:38Z"
+lastModified: "2026-08-28T22:10:21+05:30"
 lastAuthor: Venkatesh
 ---
 # Operator track

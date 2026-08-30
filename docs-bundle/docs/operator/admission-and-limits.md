@@ -3,7 +3,7 @@ title: Admission and limits
 description: Optional and off by default — concurrency caps, size ceilings,
   device and build quotas, how a slot is claimed as a row, and the acceptance
   run that proves access still works.
-lastModified: "2026-08-28T13:08:38Z"
+lastModified: "2026-08-28T22:10:21+05:30"
 lastAuthor: Venkatesh
 ---
 # Admission and limits

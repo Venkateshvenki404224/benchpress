@@ -2,7 +2,7 @@
 title: Use code-server
 description: Open the browser VS Code session on a bench, find its password,
   hand the session to a teammate, and restart it when it stops answering.
-lastModified: "2026-08-28T11:17:35Z"
+lastModified: "2026-08-28T22:10:21+05:30"
 lastAuthor: Venkatesh
 ---
 # Use code-server

@@ -3,7 +3,7 @@ title: Credits and billing
 description: Optional and off by default — the metering half of BenchPress,
   covering leases, balances, the ledger, admin adjustments, and the optional
   Razorpay handoff.
-lastModified: "2026-08-28T13:08:38Z"
+lastModified: "2026-08-28T22:10:21+05:30"
 lastAuthor: Venkatesh
 ---
 # Credits and billing

@@ -224,7 +224,7 @@ def _log_limits(pipeline, size, created) -> None:
 		pipeline.log(f"limit skipped — {knob} {reason}")
 
 
-def deploy_bench(bench_name: str, size: str | None = None) -> None:
+def deploy_bench(bench_name: str, size: str | None = None, deploy_log: str | None = None) -> None:
 	"""Deploy a bench, refusing to run concurrently with another deploy of the same bench.
 
 	`size` is the `Instance Size` the caller asked for; `None` falls through to the lab's own chain.
@@ -233,12 +233,44 @@ def deploy_bench(bench_name: str, size: str | None = None) -> None:
 
 	try:
 		with filelock(f"bench_deploy_{bench_name}", timeout=1):
-			_deploy_bench(bench_name, size)
+			_deploy_bench(bench_name, size, deploy_log)
 	except LockTimeoutError:
 		_log_deploy_skipped(bench_name)
 
 
-def _deploy_bench(bench_name: str, size_name: str | None = None) -> None:
+def open_deploy_log(bench_name: str) -> tuple[DeployLogWriter, str]:
+	"""The run's log row and the writer that streams it to the bench's owner."""
+	deploy_log = frappe.get_doc(
+		{
+			"doctype": "Deploy Log",
+			"bench": bench_name,
+			"message": "=== Deploy started ===\n",
+			"log_type": "info",
+			"timestamp": frappe.utils.now_datetime(),
+		}
+	)
+	deploy_log.insert(ignore_permissions=True)
+	frappe.db.commit()  # nosemgrep -- the SPA opens the log by name, so the row has to exist before the run continues
+	return _writer_for(deploy_log.name, bench_name), deploy_log.name
+
+
+def _writer_for(deploy_log_name: str, bench_name: str) -> DeployLogWriter:
+	"""The writer for one Deploy Log row, whoever opened it.
+
+	Scoped to the bench's owner: a deploy log is that user's, and nobody else's socket has any
+	business receiving it.
+	"""
+	owner = frappe.db.get_value("Bench Instance", bench_name, "owner")
+	return DeployLogWriter(
+		"Deploy Log",
+		deploy_log_name,
+		"bench_deploy_log",
+		{"bench": bench_name, "deploy_log": deploy_log_name},
+		owner,
+	)
+
+
+def _deploy_bench(bench_name: str, size_name: str | None = None, deploy_log: str | None = None) -> None:
 	"""Deploy pipeline — shared MariaDB, site created at runtime via press agent pattern."""
 	# Permanent, not a step on the way to a module-scope import: image building and site
 	# creation are the remainder `deploy_manager` keeps, and importing them at module scope
@@ -261,35 +293,22 @@ def _deploy_bench(bench_name: str, size_name: str | None = None) -> None:
 	bench = frappe.get_doc("Bench Instance", bench_name)
 	lab = frappe.get_doc("Lab", bench.lab)
 
-	deploy_log = frappe.get_doc(
-		{
-			"doctype": "Deploy Log",
-			"bench": bench_name,
-			"message": "=== Deploy started ===\n",
-			"log_type": "info",
-			"timestamp": frappe.utils.now_datetime(),
-		}
-	)
-	deploy_log.insert(ignore_permissions=True)
-	frappe.db.commit()  # nosemgrep -- the SPA opens the log by name, so the row has to exist before the run continues
-	deploy_log_name = deploy_log.name
-
-	# Scoped to the bench's owner: a deploy log is that user's, and nobody
-	# else's socket has any business receiving it.
-	append_log = DeployLogWriter(
-		"Deploy Log",
-		deploy_log_name,
-		"bench_deploy_log",
-		{"bench": bench_name, "deploy_log": deploy_log_name},
-		bench.owner,
-	)
+	# A launch opens the log before it builds, so the build and the deploy it feeds read as one
+	# run. Called with none — every path but the launch — this deploy opens its own.
+	if deploy_log:
+		append_log, deploy_log_name = _writer_for(deploy_log, bench_name), deploy_log
+	else:
+		append_log, deploy_log_name = open_deploy_log(bench_name)
 	pipeline = DeployPipeline(append_log)
 
 	created_container_id = None
 	try:
-		if bench.status == "Draft":
+		if not bench.container_id:
 			# Not the value `validate` defaulted: a bench can sit in Draft for days, and the
-			# bridge with room then is not the bridge with room now.
+			# bridge with room then is not the bridge with room now. Asked of the container
+			# rather than the status because a bench with no container has nothing pinned to a
+			# bridge, so re-picking is always safe — and a retry of a bench left in `Error`,
+			# which the status test skipped, stops being pinned to whatever bridge it had.
 			placement.record_bridge_network(bench, placement.pick_network())
 		bench.status = "Deploying"
 		bench.save(ignore_permissions=True)
@@ -458,9 +477,11 @@ def _deploy_bench(bench_name: str, size_name: str | None = None) -> None:
 		pipeline.step("complete", "success")
 		frappe.db.set_value("Deploy Log", deploy_log_name, "log_type", "success")
 		frappe.db.commit()  # nosemgrep -- the success marker, read by everything watching the run
+		# The lab's title, not `bench.bench_name`: that field is optional and the bench's own
+		# name is an md5, so a notice built from them can name nothing the user recognises.
 		notify_owner(
 			bench.owner,
-			f"Bench deployed: {bench.bench_name} ({bench.site_name})",
+			f"Lab deployed: {lab.title} ({bench.site_name})",
 			"Bench Instance",
 			bench.name,
 		)
@@ -477,7 +498,7 @@ def _deploy_bench(bench_name: str, size_name: str | None = None) -> None:
 			title=f"BenchPress deploy failed: {bench_name}",
 			message=frappe.get_traceback(),
 		)
-		notify_owner(bench.owner, f"Bench deploy failed: {bench.bench_name}", "Bench Instance", bench.name)
+		notify_owner(bench.owner, f"Lab deploy failed: {lab.title}", "Bench Instance", bench.name)
 
 
 def redeploy_bench(bench_name: str) -> None:

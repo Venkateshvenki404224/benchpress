@@ -2,7 +2,7 @@
 title: Open the bench site
 description: The Sites card, the three states of its Open button, and logging in
   to the Frappe site a deploy created.
-lastModified: "2026-08-28T11:17:35Z"
+lastModified: "2026-08-28T22:10:21+05:30"
 lastAuthor: Venkatesh
 ---
 # Open the bench site

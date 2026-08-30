@@ -134,7 +134,7 @@
 			</EmptyState>
 		</SectionCard>
 
-		<ErrorMessage class="mt-3" :message="createAction.error || deployAction.error" />
+		<ErrorMessage class="mt-3" :message="launchAction.error" />
 	</div>
 </template>
 
@@ -219,8 +219,7 @@ function clearFilters() {
 	versionFilter.value = ALL;
 }
 
-const createAction = createResource({ url: "benchpress.api.create_lab_from_template" });
-const deployAction = createResource({ url: "benchpress.api.create_bench" });
+const launchAction = createResource({ url: "benchpress.api.launch_template" });
 
 /** Every app a template installs; a bare bench is still Frappe. */
 function appsOf(template) {
@@ -243,24 +242,30 @@ function footnote(template) {
 	return `Already used — ${LAB_STATES[status] || status.toLowerCase() || "created"}`;
 }
 
-/**
- * The whole loop from one click: the lab is created from the template, its
- * bench is deployed, and the deploy dialog follows the run. `createResource`
- * resolves with the last successful payload even when a call fails, so each
- * step checks `error` before using its result.
- */
+// One click is one call: the server chains the build and the deploy into a
+// single job, so closing the tab cannot lose the second half.
 async function useTemplate(template) {
 	pendingKey.value = template.key;
 	try {
-		const lab = await createAction.submit({ template: template.key });
-		if (createAction.error || !lab?.name) return;
+		const run = await launchAction.submit({ template: template.key });
+		if (launchAction.error || !run?.bench) return;
 		labsResource.reload();
+		// The catalog carries the lab a template has already been used for, and
+		// that is what flips this card to "Go to lab" — without the reload the
+		// same template can be launched a second time.
+		templates.reload();
 
-		const bench = await deployAction.submit({ data: JSON.stringify({ lab: lab.name }) });
-		if (deployAction.error || !bench?.name) return;
-
-		toast.success(`Deploying ${lab.name}.`);
-		openDeployRun({ labId: lab.name, benchName: bench.name });
+		toast.success(
+			run.will_build
+				? `Building ${run.lab_title} — it deploys on its own when the image is ready.`
+				: `Deploying ${run.lab_title}.`
+		);
+		openDeployRun({
+			labId: run.lab,
+			labTitle: run.lab_title,
+			benchName: run.bench,
+			willBuild: run.will_build,
+		});
 	} finally {
 		pendingKey.value = "";
 	}

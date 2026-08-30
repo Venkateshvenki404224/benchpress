@@ -99,6 +99,7 @@ import { openSearch, searchShortcut } from "@/data/searchPalette";
 import { session } from "@/data/session";
 import { userContext } from "@/data/userContext";
 import { vpnStatus } from "@/data/vpnStatus";
+import { useSocket } from "@/socket";
 import {
 	Breadcrumbs,
 	FrappeUIProvider,
@@ -106,9 +107,10 @@ import {
 	SidebarHeader,
 	SidebarItem,
 	SidebarSection,
+	toast,
 	useTheme,
 } from "frappe-ui";
-import { computed, watch } from "vue";
+import { computed, onMounted, onUnmounted, watch } from "vue";
 import { useRoute } from "vue-router";
 
 import BellIcon from "~icons/lucide/bell";
@@ -132,6 +134,22 @@ const route = useRoute();
 // re-read on every navigation. Each read is one indexed lookup, never a ledger sum.
 watch(() => userContext.ready, primeCreditSummary, { immediate: true });
 watch(() => route.fullPath, refreshCreditSummary);
+
+// `notify_owner` writes a desk alert this SPA never renders, and the
+// notifications panel only polls when it is opened — so someone who clicked
+// "Run in background" and walked to another screen would hear nothing. The
+// event is already published to the bench's owner alone, so there is nothing
+// to filter. Nothing else toasts a deploy line: the dialog only appends, and
+// Lab detail reloads. Do not add a second toast anywhere.
+const socket = useSocket();
+
+function onDeployFinished(data) {
+	if (data.type === "success") toast.success("Your lab is deployed.");
+	else if (data.type === "error") toast.error("A deploy failed — open the lab to see why.");
+}
+
+onMounted(() => socket?.on("bench_deploy_log", onDeployFinished));
+onUnmounted(() => socket?.off("bench_deploy_log", onDeployFinished));
 
 function switchToDesk() {
 	window.location.href = "/app";

@@ -3,7 +3,7 @@ title: Leases and credits
 description: The countdown on a running bench, the renew dialog and its plans,
   the credit meter, the ledger, and where a purchase hands off to the payment
   gateway.
-lastModified: "2026-08-28T11:17:35Z"
+lastModified: "2026-08-28T22:10:21+05:30"
 lastAuthor: Venkatesh
 ---
 # Leases and credits

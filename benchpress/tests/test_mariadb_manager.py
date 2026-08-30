@@ -7,6 +7,7 @@ import io
 import os
 import tarfile
 import tempfile
+from contextlib import contextmanager
 from unittest.mock import MagicMock, patch
 
 import frappe
@@ -389,6 +390,168 @@ class TestMariadbManager(IntegrationTestCase):
 		self.assertIn(db_name, combined)
 		self.assertIn("DROP DATABASE", combined)
 		self.assertIn("DROP USER", combined)
+
+	# --- ensure_database_server -------------------------------------------------------------
+
+	@contextmanager
+	def _only_servers(self, *rows):
+		"""Make `tabDatabase Server` hold exactly `rows` for the body, then put it back."""
+		# `ensure_database_server` commits, and this site's one real server row has to survive a
+		# case that needs the table empty — so the whole thing runs inside a savepoint with
+		# `commit` neutered, rather than trusting the class rollback.
+		database = type(frappe.local.db)
+		frappe.db.savepoint("ensure_database_server_test")
+		try:
+			with patch.object(database, "commit"):
+				frappe.db.delete("Database Server")
+				yield [
+					frappe.get_doc({"doctype": "Database Server", **row}).insert(ignore_permissions=True)
+					for row in rows
+				]
+		finally:
+			try:
+				frappe.db.rollback(save_point="ensure_database_server_test")
+			except Exception:
+				# A statement that errored can take the savepoint with it, and a half-undone
+				# `delete` here would drop this site's real server row for good.
+				frappe.db.rollback()
+
+	@contextmanager
+	def _ensuring(self, healthy=True):
+		"""Run `ensure_database_server` with every container call mocked. Yields the three mocks."""
+		with (
+			patch("benchpress.mariadb_manager.setup_database_server") as setup,
+			patch("benchpress.mariadb_manager.start_database_server") as start,
+			patch("benchpress.mariadb_manager.check_mariadb_health", return_value=healthy) as health,
+		):
+			yield setup, start, health
+
+	def _server_count(self):
+		return frappe.db.count("Database Server")
+
+	def test_a_server_row_in_error_is_the_server_not_a_missing_one(self):
+		"""The live failure: `Error` fell outside the status filter, so the deploy tried to insert a
+		second row and died on the UNIQUE index over container_name."""
+		from benchpress.mariadb_manager import DEFAULT_CONTAINER_NAME, ensure_database_server
+
+		with self._only_servers(
+			{"container_name": DEFAULT_CONTAINER_NAME, "status": "Error", "error_message": "stale"}
+		) as (existing,):
+			with self._ensuring(healthy=True) as (setup, _start, _health):
+				name = ensure_database_server()
+
+			self.assertEqual(name, existing.name)
+			self.assertEqual(self._server_count(), 1)
+			setup.assert_not_called()
+			self.assertEqual(frappe.db.get_value("Database Server", name, "status"), "Active")
+			self.assertFalse(frappe.db.get_value("Database Server", name, "error_message"))
+
+	def test_an_error_row_that_answers_is_never_re_created_under_the_running_benches(self):
+		"""`setup_database_server` force-removes the container every live bench is connected to, so a
+		healthy server costs one status flip and nothing else."""
+		from benchpress.mariadb_manager import DEFAULT_CONTAINER_NAME, ensure_database_server
+
+		with self._only_servers({"container_name": DEFAULT_CONTAINER_NAME, "status": "Error"}):
+			with self._ensuring(healthy=True) as (setup, _start, health):
+				ensure_database_server()
+
+			setup.assert_not_called()
+			health.assert_called_once()
+
+	def test_an_error_row_that_does_not_answer_is_set_up_again(self):
+		from benchpress.mariadb_manager import DEFAULT_CONTAINER_NAME, ensure_database_server
+
+		with self._only_servers({"container_name": DEFAULT_CONTAINER_NAME, "status": "Error"}) as (existing,):
+			with self._ensuring(healthy=False) as (setup, _start, _health):
+				name = ensure_database_server()
+
+			setup.assert_called_once_with(existing.name)
+			self.assertEqual(name, existing.name)
+			self.assertEqual(self._server_count(), 1)
+
+	def test_a_stopped_row_is_started_not_set_up(self):
+		from benchpress.mariadb_manager import DEFAULT_CONTAINER_NAME, ensure_database_server
+
+		with self._only_servers({"container_name": DEFAULT_CONTAINER_NAME, "status": "Stopped"}) as (
+			existing,
+		):
+			with self._ensuring() as (setup, start, _health):
+				ensure_database_server()
+
+			start.assert_called_once_with(existing.name)
+			setup.assert_not_called()
+
+	def test_a_pending_row_is_set_up(self):
+		from benchpress.mariadb_manager import DEFAULT_CONTAINER_NAME, ensure_database_server
+
+		with self._only_servers({"container_name": DEFAULT_CONTAINER_NAME, "status": "Pending"}) as (
+			existing,
+		):
+			with self._ensuring() as (setup, _start, _health):
+				ensure_database_server()
+
+			setup.assert_called_once_with(existing.name)
+
+	def test_an_active_row_costs_no_container_round_trip(self):
+		"""The caller's own `wait_for_mariadb` is the proof; a health check here would sit in front
+		of every deploy."""
+		from benchpress.mariadb_manager import DEFAULT_CONTAINER_NAME, ensure_database_server
+
+		with self._only_servers({"container_name": DEFAULT_CONTAINER_NAME, "status": "Active"}) as (
+			existing,
+		):
+			with self._ensuring() as (setup, start, health):
+				name = ensure_database_server()
+
+			self.assertEqual(name, existing.name)
+			setup.assert_not_called()
+			start.assert_not_called()
+			health.assert_not_called()
+
+	def test_a_renamed_container_is_still_the_one_server(self):
+		"""A self-hoster who renamed it has one server, not a licence to insert a second."""
+		from benchpress.mariadb_manager import ensure_database_server
+
+		with self._only_servers({"container_name": "acme-mariadb", "status": "Error"}) as (existing,):
+			with self._ensuring(healthy=True) as (setup, _start, _health):
+				name = ensure_database_server()
+
+			self.assertEqual(name, existing.name)
+			self.assertEqual(self._server_count(), 1)
+			setup.assert_not_called()
+
+	def test_an_empty_table_gets_exactly_one_default_server(self):
+		from benchpress.mariadb_manager import DEFAULT_CONTAINER_NAME, ensure_database_server
+
+		with self._only_servers():
+			with self._ensuring() as (setup, _start, _health):
+				name = ensure_database_server()
+
+			self.assertEqual(self._server_count(), 1)
+			self.assertEqual(
+				frappe.db.get_value("Database Server", name, "container_name"), DEFAULT_CONTAINER_NAME
+			)
+			setup.assert_called_once_with(name)
+
+	def test_a_losing_racer_returns_the_winner_s_row_rather_than_an_integrity_error(self):
+		"""Two deploys reaching an empty table at once: raw, the loser's insert reached the deploy
+		log as an IntegrityError naming an index rather than a database."""
+		from benchpress.mariadb_manager import DEFAULT_CONTAINER_NAME, _create_default_server
+
+		with self._only_servers({"container_name": DEFAULT_CONTAINER_NAME, "status": "Active"}) as (winner,):
+			losing_doc = MagicMock()
+			losing_doc.insert.side_effect = frappe.DuplicateEntryError("Database Server", "x", None)
+			with (
+				patch("benchpress.mariadb_manager.frappe.get_doc", return_value=losing_doc),
+				patch.object(type(frappe.local.db), "rollback"),
+				self._ensuring() as (setup, start, _health),
+			):
+				name = _create_default_server()
+
+			self.assertEqual(name, winner.name)
+			self.assertEqual(self._server_count(), 1)
+			setup.assert_not_called()
+			start.assert_not_called()
 
 
 # What the server answers, batch mode's per-result-set header row included.

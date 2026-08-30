@@ -642,3 +642,62 @@ class TestTeardownFreesTheTunnelIP(TransitionFixtures, FakeDockerMixin, Integrat
 		self.assertIn("wg agent down", removals["vpn_peer"])
 		self.assertEqual(frappe.db.get_value(BENCH, bench.name, "vpn_peer"), peer["peer"])
 		self.assertEqual(frappe.db.get_value(BENCH, bench.name, "status"), "Draft")
+
+
+class TestDeployLogHandover(TransitionFixtures, IntegrationTestCase):
+	"""A launch opens the run's log before it builds, and the deploy has to write into that row."""
+
+	lab_id = "test-lab-lifecycle-log"
+
+	def _bench_for_deploy(self):
+		bench = _fresh_bench(self, self.lab.name)
+		self.addCleanup(frappe.db.commit)
+		self.addCleanup(lambda name=bench.name: frappe.db.delete("Deploy Log", {"bench": name}))
+		self.addCleanup(self._forget_error_logs, bench.name)
+		return bench
+
+	def _failed_deploy(self, bench_name, deploy_log=None):
+		"""A deploy that stops at the first step, so only the log handling is under test."""
+		with (
+			patch.object(lifecycle.placement, "pick_network", return_value="benchpress-0") as pick,
+			patch.object(lifecycle, "ensure_infrastructure", side_effect=Exception("mariadb down")),
+			patch.object(lifecycle, "notify_owner", autospec=True),
+		):
+			lifecycle._deploy_bench(bench_name, None, deploy_log)
+		return pick
+
+	def test_a_pre_opened_log_is_the_only_log_the_deploy_writes(self):
+		bench = self._bench_for_deploy()
+		_writer, deploy_log = lifecycle.open_deploy_log(bench.name)
+
+		self._failed_deploy(bench.name, deploy_log)
+
+		logs = frappe.get_all("Deploy Log", filters={"bench": bench.name}, fields=["name", "message"])
+		self.assertEqual([log.name for log in logs], [deploy_log])
+		self.assertIn("mariadb down", logs[0].message)
+
+	def test_a_deploy_given_no_log_still_opens_its_own(self):
+		"""The positive control: `create_bench` passes none, and that path must not change."""
+		bench = self._bench_for_deploy()
+
+		self._failed_deploy(bench.name)
+
+		logs = frappe.get_all("Deploy Log", filters={"bench": bench.name}, pluck="message")
+		self.assertEqual(len(logs), 1)
+		self.assertIn("=== Deploy started ===", logs[0])
+
+	def test_a_retry_of_an_errored_bench_re_picks_its_bridge(self):
+		"""The guard asks for a container, not for `Draft` — an `Error` retry is pinned to nothing."""
+		bench = self._bench_for_deploy()
+		frappe.db.set_value(
+			BENCH,
+			bench.name,
+			{"status": "Error", "container_id": None, "bridge_network": "benchpress-7"},
+			update_modified=False,
+		)
+		frappe.db.commit()
+
+		pick = self._failed_deploy(bench.name)
+
+		pick.assert_called_once()
+		self.assertEqual(frappe.db.get_value(BENCH, bench.name, "bridge_network"), "benchpress-0")

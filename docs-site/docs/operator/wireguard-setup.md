@@ -3,7 +3,7 @@ title: WireGuard and the VPN plane
 description: How the vpn_management app owns the tunnel, what BenchPress
   consumes from it, the measured server and pool values, and why userns-remap
   matters.
-lastModified: "2026-08-28T13:08:38Z"
+lastModified: "2026-08-28T22:10:21+05:30"
 lastAuthor: Venkatesh
 ---
 # WireGuard and the VPN plane

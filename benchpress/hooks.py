@@ -195,6 +195,10 @@ override_whitelisted_methods = {
 }
 
 # Website route rules
+# Runs ahead of frappe's TemplatePage, which would otherwise compile these
+# files as Jinja and convert the markdown ones to HTML.
+page_renderer = ["benchpress.docs_assets.DocsAssetRenderer"]
+
 website_route_rules = [
 	{"from_route": "/frontend/<path:app_path>", "to_route": "frontend"},
 ]

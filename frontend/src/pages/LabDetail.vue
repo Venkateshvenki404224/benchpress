@@ -180,7 +180,10 @@ const buildAction = createResource({
 	url: "benchpress.api.build_lab_image",
 	onError: () => (building.value = false),
 });
-const deployAction = createResource({ url: "benchpress.api.create_bench", onSuccess: refresh });
+// Deploy is also the retry path after a failed build — Templates flips a used
+// card to "Go to lab" — so it launches rather than deploying a lab that may
+// still have no image.
+const deployAction = createResource({ url: "benchpress.api.launch_lab", onSuccess: refresh });
 const benchAction = createResource({ url: "benchpress.api.bench_action", onSuccess: refresh });
 
 const bench = computed(() => lab.data?.bench ?? null);
@@ -258,9 +261,14 @@ watch(
 
 async function deployLab() {
 	endRun(liveDeployRun, liveDeployLog);
-	const bench = await deployAction.submit({ data: JSON.stringify({ lab: labId }) });
-	if (deployAction.error || !bench?.name) return;
-	openDeployRun({ labId, benchName: bench.name });
+	const run = await deployAction.submit({ data: JSON.stringify({ lab: labId }) });
+	if (deployAction.error || !run?.bench) return;
+	openDeployRun({
+		labId,
+		labTitle: run.lab_title,
+		benchName: run.bench,
+		willBuild: run.will_build,
+	});
 }
 
 function buildImage() {

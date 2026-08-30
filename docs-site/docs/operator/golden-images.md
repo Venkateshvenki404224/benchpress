@@ -3,7 +3,7 @@ title: Golden images
 description: A lab's finished site is baked into its own image as a database
   dump, so a deploy restores it instead of creating tables — the measured
   numbers, the two settings, and why a golden gets refused.
-lastModified: "2026-08-28T13:08:38Z"
+lastModified: "2026-08-28T22:10:21+05:30"
 lastAuthor: Venkatesh
 ---
 # Golden images
