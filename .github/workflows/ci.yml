@@ -264,14 +264,33 @@ jobs:
       - name: Generated indexes have no dead links
         run: npm run docs:links
 
-      # `git status --porcelain` rather than `git diff`: diff alone misses a
-      # generated file that was added but never committed.
+      # Two checks, because neither alone is enough. `git ls-files -o` catches a
+      # generated file that was added but never committed, which `git diff`
+      # cannot see. `git diff` catches edits and deletions.
+      #
+      # The -I rules exclude the three git-derived timestamps. leadtype sets
+      # `lastModified` from the commit date of the commit that last touched the
+      # source file, so a commit that changes a source and regenerates the
+      # output in one go can never be self-consistent: the date does not exist
+      # until the commit does. That fixed point turned every open pull request
+      # red twice on 2026-08-30 (#281, #283) for output that was otherwise
+      # correct. -I ignores a hunk only when every changed line in it matches,
+      # so a real content edit beside a timestamp still fails.
       - name: Generated docs are committed and current
         run: |
-          if [ -n "$(git status --porcelain -- docs-site docs-bundle)" ]; then
+          untracked="$(git ls-files --others --exclude-standard -- docs-site docs-bundle)"
+          if [ -n "$untracked" ]; then
+            echo "Generated files exist but were never committed:"
+            echo "$untracked"
+            echo "Run: npm run docs:build && git add docs-site docs-bundle"
+            exit 1
+          fi
+          if ! git diff --exit-code \
+                 -I '^lastModified:' \
+                 -I '^lastAuthor:' \
+                 -I '^[[:space:]]*<lastmod>' \
+                 -- docs-site docs-bundle; then
             echo "docs-site/ or docs-bundle/ is stale or hand-edited."
             echo "Run: npm run docs:build && git add docs-site docs-bundle"
-            git status --porcelain -- docs-site docs-bundle
-            git diff -- docs-site docs-bundle
             exit 1
           fi
