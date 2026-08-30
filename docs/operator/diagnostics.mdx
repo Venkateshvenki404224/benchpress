@@ -1,6 +1,6 @@
 ---
 title: Diagnostics
-description: The eleven read-only checks that ask Docker, MariaDB, Redis and the kernel what is true — how to run them, what each failure means, and the four things they do not cover.
+description: The twelve read-only checks that ask Docker, MariaDB, Redis and the kernel what is true — how to run them, what each failure means, and the four things they do not cover.
 ---
 
 # Diagnostics
@@ -29,7 +29,7 @@ one you have already made worse.
 2. **Or read them in the app.** Open **Overview** as an admin and look at the
    **Shared infrastructure** panel, which renders the same eleven rows.
 
-   ![The Shared infrastructure panel on the BenchPress Overview, listing eleven checks with a status badge each. Docker socket, Docker network, Bridge capacity, MariaDB, Redis, Container runtimes, Event listener and WireGuard read Active. Kernel ceilings and Clock skew read Error, and Golden images reads Warning.](../images/operator/diagnostics/01-shared-infrastructure.png)
+   ![The Shared infrastructure panel on the BenchPress Overview, listing the shared-infrastructure checks with a status badge each. Docker socket, Docker network, Bridge capacity, MariaDB, Redis, Container runtimes, Event listener and WireGuard read Active. Kernel ceilings and Clock skew read Error, and Golden images reads Warning.](../images/operator/diagnostics/01-shared-infrastructure.png)
 
    On this host eight rows read **Active**, `kernel_ceilings` and `clock_skew`
    read **Error**, and `golden_images` reads **Warning**. A badge is the
@@ -40,7 +40,7 @@ one you have already made worse.
    checks again. Several rows fail together for one cause, and the first fix
    often clears three.
 
-## The eleven checks
+## The twelve checks
 
 | Check | On screen | What it asks | Severity of a failure |
 |---|---|---|---|
@@ -54,6 +54,7 @@ one you have already made worse.
 | `container_runtimes` | Container runtimes | `sysbox-runc` is registered with Docker | Error |
 | `golden_images` | Golden images | how many built labs carry a golden dump | Warning |
 | `docker_events` | Event listener | the listener's heartbeat is newer than 60 seconds | Error |
+| `route_directory` | Route directory | a worker has reported the Traefik route directory mounted, with the control-plane route and the wildcard anchor rendered | Error, or Warning when the report is stale or the anchor is merely late |
 | `vpn_server` | WireGuard | `vpn_management` is installed, `wg0` exists, and it has a public key | Error |
 
 ## Severity is not status
