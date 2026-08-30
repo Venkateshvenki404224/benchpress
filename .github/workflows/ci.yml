@@ -3,7 +3,7 @@ name: CI
 on:
   push:
     branches:
-      - develop
+      - version-16
   pull_request:
   schedule:
     - cron: '0 0 * * *'
@@ -17,12 +17,12 @@ permissions:
   pull-requests: read
 
 concurrency:
-  group: develop-benchpress-${{ github.event.number || github.ref }}
+  group: ci-benchpress-${{ github.event.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
   # Job-level filtering instead of workflow-level paths-ignore: Server and
-  # Frontend are required checks on develop, and a workflow that never runs
+  # Frontend are required checks on version-16, and a workflow that never runs
   # leaves them pending forever, while a skipped job counts as passing.
   changes:
     runs-on: ubuntu-latest
@@ -37,10 +37,19 @@ jobs:
         with:
           predicate-quantifier: 'every'
           filters: |
+            # A docs-only pull request must not wake the 60-minute Server
+            # job. `!**/*.md` never stopped it: docs/ holds 40 .mdx and 57
+            # images, and docs-site/ ships .txt, .json and .xml beside its .md.
+            # Exclude the three docs trees whole — the Docs job is ungated and
+            # still lints and regenerates the docs trees.
             backend:
               - '**'
               - '!frontend/**'
+              - '!docs/**'
+              - '!docs-site/**'
+              - '!docs-bundle/**'
               - '!**/*.md'
+              - '!**/*.mdx'
             frontend:
               - '{frontend/**,.github/workflows/ci.yml}'
 
@@ -201,6 +210,13 @@ jobs:
       - name: Install
         working-directory: frontend
         run: yarn install --frozen-lockfile
+
+      # `yarn build` only proves the bundle compiles. The vitest suite matched
+      # by frontend/vitest.config.js (src/**/*.spec.js) is the only thing that
+      # runs the SPA's own logic, and until now nothing ran it.
+      - name: Unit tests
+        working-directory: frontend
+        run: yarn test:run
 
       - name: Build
         working-directory: frontend

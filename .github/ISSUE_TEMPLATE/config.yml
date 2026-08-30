@@ -1,0 +1,15 @@
+# bug_report.md is the only template, so a "how do I ...?" has nowhere to go
+# but the bug tracker. These links give the chooser somewhere else to send it.
+#
+# blank_issues_enabled stays true, unlike frappe core's config.yml. Core can
+# set it false because it also ships feature_request.md; this repo does not,
+# so false would leave an enhancement no route at all. Flip it once a feature
+# request template exists.
+blank_issues_enabled: true
+contact_links:
+  - name: Questions and discussion
+    url: https://github.com/Venkateshvenki404224/benchpress/discussions
+    about: Ask how to do something, or propose an idea before opening an issue.
+  - name: Documentation
+    url: https://docs.benchpress.cloud/docs
+    about: Install, deploy and configure BenchPress.
