@@ -14,10 +14,20 @@ Every address a bench answers on, and who can reach each one.
 one is addressed.
 
 **Before you start.** A bench has up to four addresses at once. They are not
-alternatives. Each one exists for a different caller, and three of the four are
-private.
+alternatives. Each one exists for a different caller, and two of the four are
+public.
 
 ## The four addresses
+
+**This section is the canonical statement of what a bench is reachable on.**
+The one sentence:
+
+> A bench answers on up to four addresses at once: two public HTTPS addresses
+> served by Traefik, which anyone on the internet can reach once `base_domain`
+> is set, and two tunnel addresses that only a device on the VPN can reach.
+
+The two `https://` addresses answer for anyone on the internet once
+`base_domain` is set, which is the documented install.
 
 `benchpress/addressing.py` builds all of them in one place, and the app renders
 what it returns rather than assembling a URL from a port it declared itself.
@@ -28,6 +38,19 @@ what it returns rather than assembling a URL from a port it declared itself.
 |Public IDE|`https://ide-<instance id>.<base domain>`|the internet, through Traefik|
 |Tunnel site|`http://<wg ip>:8000`|a device on the VPN|
 |Tunnel IDE|`http://<wg ip>:8080/`|a device on the VPN|
+
+`ingress.publish` writes routers on the `websecure` entry point: two for the
+site hostname, split so asset paths take their own rate limit, and one for the
+IDE hostname. `ingress.ensure_anchor` holds the wildcard certificate that
+terminates them. The IDE router is written only when the bench has an IDE, which
+is why the count is "up to four".
+
+Public means public. The only middlewares `publish` puts on a bench router are
+rate limits: a request cap on every router, and an in-flight cap on the site's
+render path when the instance size sets one. There is no authentication
+middleware at the edge. A browser anywhere resolves the name and gets the
+bench's own login page, and that login is the only thing between the internet
+and the site.
 
 The two ports are properties of the bench image, not settings. They are
 constants in `addressing.py`.
@@ -152,8 +175,12 @@ state.
 |Another bench on the same bridge|no|no|no|no|
 |A bench, reaching the shared MariaDB|—|—|—|the database only|
 
-No bench is on the public internet by port. The only public path is Traefik, and
-it terminates TLS on the wildcard.
+No bench is on the public internet by port. No bench container publishes a host
+port at all — the only public path is Traefik, and it terminates TLS on the
+wildcard.
+
+That is the whole of what the VPN gates. **SSH and the two `http://` tunnel
+addresses need the VPN. The two `https://` addresses do not.**
 
 ## Verify
 

@@ -70,7 +70,7 @@ One concern for each module. The table is the whole `benchpress/` package.
 |`permissions.py`|the role helpers and the six query conditions|
 |`overview.py`, `labs.py`, `lab_detail.py`, `run_history.py`|one screen each, assembled in a fixed number of queries|
 |`waitlist.py`, `signup.py`|the two doors open to a guest|
-|`diagnostics.py`|eleven read-only environment checks|
+|`diagnostics.py`|twelve read-only environment checks|
 |`notifications.py`|one desk alert and one email to a document owner|
 |`indexes.py`|composite indexes the DocType JSON cannot declare|
 |`request_cache.py`|a value memoised for one request, never in a module global|

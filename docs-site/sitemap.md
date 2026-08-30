@@ -39,7 +39,7 @@ Structured documentation sitemap for BenchPress.
 
 ### Stand a host up
 
-- [Prerequisites](/docs/operator/prerequisites): What a BenchPress host needs before you install — supported platforms, versions, Docker socket access, IP forwarding, sysbox, and the measured CPU sizing.
+- [Prerequisites](/docs/operator/prerequisites): What a BenchPress host needs before you install — the four preconditions, supported platforms, versions, Docker socket access, and the measured CPU and disk sizing.
 - [Install](/docs/operator/install): Install BenchPress into a Frappe v16 bench — get-app, setup.sh, the frontend build, the base domain, and the first screen.
 - [WireGuard and the VPN plane](/docs/operator/wireguard-setup): How the vpn_management app owns the tunnel, what BenchPress consumes from it, the measured server and pool values, and why userns-remap matters.
 
@@ -58,8 +58,8 @@ Structured documentation sitemap for BenchPress.
 ### Keep it safe
 
 - [Upgrading](/docs/operator/upgrading): Move a BenchPress install to a newer release — the backup gate, the five steps, the scripted path, rollback, and why lab images are a separate opt-in.
-- [Production safety](/docs/operator/production-safety): What BenchPress is and is not ready to carry — the alpha verdict, the container privilege boundary, what is backed up, and the endpoint-by-endpoint release checklist.
-- [Diagnostics](/docs/operator/diagnostics): The eleven read-only checks that ask Docker, MariaDB, Redis and the kernel what is true — how to run them, what each failure means, and the four things they do not cover.
+- [Production safety](/docs/operator/production-safety): What BenchPress is and is not ready to carry — the alpha verdict, the container privilege boundary, what is backed up, and the release checklist that covers 25 of 52 whitelisted callables.
+- [Diagnostics](/docs/operator/diagnostics): The twelve read-only checks that ask Docker, MariaDB, Redis and the kernel what is true — how to run them, what each failure means, and the four things they do not cover.
 
 ### Optional — running it for a team
 
@@ -77,7 +77,7 @@ Structured documentation sitemap for BenchPress.
 
 - [Architecture](/docs/reference/architecture): The moving parts of BenchPress — the control plane, the bench containers, the shared infrastructure, and which Python module owns each concern.
 - [Data model](/docs/reference/data-model): All 20 BenchPress DocTypes with their fields, links, naming and the permission rule that scopes each one — plus why there is no Device DocType.
-- [API](/docs/reference/api): All 50 whitelisted BenchPress endpoints, with arguments, what each returns, and the permission check each one makes for itself.
+- [API](/docs/reference/api): Every whitelisted BenchPress endpoint, with arguments, what each returns, and the permission check each one makes for itself.
 
 ### What it does at runtime
 

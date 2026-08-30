@@ -17,7 +17,7 @@
 - [Leases and credits](https://docs.benchpress.cloud/docs/user/leases-and-credits): The countdown on a running bench, the renew dialog and its plans, the credit meter, the ledger, and where a purchase hands off to the payment gateway.
 - [Troubleshooting](https://docs.benchpress.cloud/docs/user/troubleshooting): Every symptom a BenchPress user meets, its cause, and the page that fixes it — deploys, the VPN, SSH, code-server, logs and credits.
 - [Operator track](https://docs.benchpress.cloud/docs/operator): Run BenchPress on your own box — install, the VPN plane, settings, the shared database, images, upgrades, safety and diagnostics.
-- [Prerequisites](https://docs.benchpress.cloud/docs/operator/prerequisites): What a BenchPress host needs before you install — supported platforms, versions, Docker socket access, IP forwarding, sysbox, and the measured CPU sizing.
+- [Prerequisites](https://docs.benchpress.cloud/docs/operator/prerequisites): What a BenchPress host needs before you install — the four preconditions, supported platforms, versions, Docker socket access, and the measured CPU and disk sizing.
 - [Install](https://docs.benchpress.cloud/docs/operator/install): Install BenchPress into a Frappe v16 bench — get-app, setup.sh, the frontend build, the base domain, and the first screen.
 - [WireGuard and the VPN plane](https://docs.benchpress.cloud/docs/operator/wireguard-setup): How the vpn_management app owns the tunnel, what BenchPress consumes from it, the measured server and pool values, and why userns-remap matters.
 - [Settings reference](https://docs.benchpress.cloud/docs/operator/settings-reference): Every field on BenchPress Settings and Credit Settings, with the value measured on a live host, where each one is edited, and what changing it costs.
@@ -27,15 +27,15 @@
 - [Golden images](https://docs.benchpress.cloud/docs/operator/golden-images): A lab's finished site is baked into its own image as a database dump, so a deploy restores it instead of creating tables — the measured numbers, the two settings, and why a golden gets refused.
 - [The image cache](https://docs.benchpress.cloud/docs/operator/image-cache): One image per lab, tagged benchpress/<lab_id>:lab — what it costs on disk, how the weekly prewarm and sweep work, and what is safe to prune.
 - [Upgrading](https://docs.benchpress.cloud/docs/operator/upgrading): Move a BenchPress install to a newer release — the backup gate, the five steps, the scripted path, rollback, and why lab images are a separate opt-in.
-- [Production safety](https://docs.benchpress.cloud/docs/operator/production-safety): What BenchPress is and is not ready to carry — the alpha verdict, the container privilege boundary, what is backed up, and the endpoint-by-endpoint release checklist.
-- [Diagnostics](https://docs.benchpress.cloud/docs/operator/diagnostics): The eleven read-only checks that ask Docker, MariaDB, Redis and the kernel what is true — how to run them, what each failure means, and the four things they do not cover.
+- [Production safety](https://docs.benchpress.cloud/docs/operator/production-safety): What BenchPress is and is not ready to carry — the alpha verdict, the container privilege boundary, what is backed up, and the release checklist that covers 25 of 52 whitelisted callables.
+- [Diagnostics](https://docs.benchpress.cloud/docs/operator/diagnostics): The twelve read-only checks that ask Docker, MariaDB, Redis and the kernel what is true — how to run them, what each failure means, and the four things they do not cover.
 - [Credits and billing](https://docs.benchpress.cloud/docs/operator/credits-and-billing): Optional and off by default — the metering half of BenchPress, covering leases, balances, the ledger, admin adjustments, and the optional Razorpay handoff.
 - [Admission and limits](https://docs.benchpress.cloud/docs/operator/admission-and-limits): Optional and off by default — concurrency caps, size ceilings, device and build quotas, how a slot is claimed as a row, and the acceptance run that proves access still works.
 - [Self-serve signup](https://docs.benchpress.cloud/docs/operator/hosted-signup): Optional and off by default — retire the waitlist and let people sign themselves up, with GitHub and Google as the primary paths and the abuse controls that make a free grant safe.
 - [Reference track](https://docs.benchpress.cloud/docs/reference): The data model, the whitelisted API, the eleven deploy steps, the reconcilers, the address plan and the configuration split — for a contributor or an integrator.
 - [Architecture](https://docs.benchpress.cloud/docs/reference/architecture): The moving parts of BenchPress — the control plane, the bench containers, the shared infrastructure, and which Python module owns each concern.
 - [Data model](https://docs.benchpress.cloud/docs/reference/data-model): All 20 BenchPress DocTypes with their fields, links, naming and the permission rule that scopes each one — plus why there is no Device DocType.
-- [API](https://docs.benchpress.cloud/docs/reference/api): All 50 whitelisted BenchPress endpoints, with arguments, what each returns, and the permission check each one makes for itself.
+- [API](https://docs.benchpress.cloud/docs/reference/api): Every whitelisted BenchPress endpoint, with arguments, what each returns, and the permission check each one makes for itself.
 - [Deploy pipeline](https://docs.benchpress.cloud/docs/reference/deploy-pipeline): The eleven steps of a BenchPress deploy, in the order the code runs them, with the function behind each step and the log line it writes.
 - [Lifecycle and events](https://docs.benchpress.cloud/docs/reference/lifecycle-and-events): The bench states and their transitions, the Docker event listener, Bench Event incidents, the stats collector, and the eleven scheduled jobs that correct the database.
 - [Networking](https://docs.benchpress.cloud/docs/reference/networking): The BenchPress address plan — bench bridges, WireGuard tunnel addresses, the two container ports, Traefik route files and the wildcard certificate anchor.
@@ -1944,7 +1944,7 @@ elsewhere, and there is no second machine to keep in step.
 
 # Prerequisites
 URL: https://docs.benchpress.cloud/docs/operator/prerequisites
-What a BenchPress host needs before you install — supported platforms, versions, Docker socket access, IP forwarding, sysbox, and the measured CPU sizing.
+What a BenchPress host needs before you install — the four preconditions, supported platforms, versions, Docker socket access, and the measured CPU and disk sizing.
 
 What the machine must already have before [Install](/docs/operator/install)
 will work, and how much of it to buy.
@@ -1954,6 +1954,21 @@ will work, and how much of it to buy.
 **Before you start.** BenchPress installs into an existing Frappe bench and
 drives that host's Docker. It is not a standalone service, and it is Linux
 only — the setup script uses `apt` and `sysctl`.
+
+## The four preconditions
+
+Get these four before you read anything else on this page. Each one blocks the
+install or the first deploy, and none of them can be fixed from inside the app.
+
+|Precondition|Why it blocks|Set it in|
+|--|--|--|
+|`sysbox-runc` registered with Docker|`default_bench_runtime` is `sysbox`, so a deploy has no runtime without it. `runc` without `userns-remap` makes in-container root host root|[Step 5](#steps)|
+|`net.ipv4.ip_forward = 1`|The kernel drops tunnel traffic on its way to a bench, so a deploy fails on the network step|[Step 4](#steps)|
+|44556/UDP open, on `ufw` **and** on any cloud firewall|A WireGuard peer never handshakes, so nothing reaches a bench over the tunnel|[Step 7](#steps)|
+|A domain you control, for `base_domain`|`base_domain` is `reqd` on **BenchPress Settings**, so the settings form will not save without it. Sites are addressed as `<instance id>.<base domain>`|[Install, step 5](/docs/operator/install)|
+
+Size the host before you buy it as well. [Sizing](#sizing) holds the CPU floor
+and [Disk](#disk) the disk floor. Disk is the one that fails a default VPS.
 
 ## Steps
 
@@ -2072,7 +2087,7 @@ Three criteria, each with its own minimum:
 |Tier|Minimum CPU|Evidence at the minimum|
 |--|--:|--|
 |Boot and lifecycle|0.5|migration 13.22 s, login HTTP 200 in 192 ms, `/frontend` HTTP 200 in 27 ms|
-|Test suite|0.5|the 124-test suite passed in 11.59 s, with every endpoint timing budget met|
+|Test suite|0.5|the suite passed in 11.59 s, with every endpoint timing budget met. It held 124 tests that day. The suite has since grown by roughly an order of magnitude, so 11.59 s no longer describes a full run|
 |Concurrent reads|0.5|`get_labs` p95 127 ms, `get_benches` p95 48 ms, 0 of 60 requests failed|
 
 Concurrent reads at each candidate cap, 30 authenticated requests per endpoint
@@ -2095,10 +2110,50 @@ did not visibly degrade this workload, so the measurements do not support
 calling one core a minimum. Re-run the benchmark after the application grows,
 or when you change the host class.
 
-**RAM and disk are the real constraints, not CPU.** A lab image is 5.5 GB to
-19.7 GB, and one deploy costs roughly 0.2 GB to 1 GB more. See
-[The image cache](/docs/operator/image-cache) for what that grows into and how
-the sweep holds it down.
+**Of the two resources measured here, disk is the constraint, not CPU.** Size
+it before you buy the host. See [Disk](#disk).
+
+**RAM was not sized.** The benchmark capped CPU only, so the 7.8 GiB above
+describes the benchmark host and is not a floor. Watch `free -h` on your own
+host until someone measures it.
+
+## Disk
+
+**A 20 GB or 40 GB VPS root disk fails mid-build.** No setting in the app
+compensates for it, and the failure lands in the middle of an image build
+rather than at install.
+
+Measured on this host with `docker images` and `docker system df`, and listed
+per image in [The image cache](/docs/operator/image-cache):
+
+|Measurement|Value|
+|--|--:|
+|Smallest lab image|5.5 GB|
+|Largest lab image|19.7 GB|
+|Twelve lab images together|54.74 GB|
+|Reclaimable from that set|19.12 GB|
+
+Three costs sit on top of that image figure. A build holds the new image while
+its base layers are still on disk. Every bench has its own container layer and
+volumes — one deploy costs roughly 0.2 GB to 1 GB, measured in
+[The image cache](/docs/operator/image-cache). The shared MariaDB carries its
+data volume. The build headroom and the MariaDB volume are not measured.
+
+So provision against the catalog you will hold, not against one image:
+
+|The host will carry|Free disk to provision|Basis|
+|--|--:|--|
+|One lab image|100 GB|19.7 GB for the largest measured image, with room to rebuild it beside the copy in use|
+|A catalog the size of this host's|250 GB|54.74 GB measured for twelve images, plus the same rebuild headroom, plus bench volumes|
+
+Those two rows are recommendations derived from the measurements above. They
+are not themselves measured. Watch `df -h /` and `docker system df` on your own
+host, and raise them if either climbs.
+
+Building is also the slowest thing a fresh host does. Full builds on this host
+ran **4 to 26 minutes**, and the golden pass 5 to 11 — see
+[The image cache](/docs/operator/image-cache). The build job's own timeout is
+10,800 s, three hours, which is a ceiling and not an expected duration.
 
 ## Troubleshooting
 
@@ -2109,6 +2164,8 @@ the sweep holds it down.
 |Diagnostics reports `container_runtimes` as failed|`sysbox-runc` is not registered with Docker|Install sysbox, or set `default_bench_runtime` to `runc` and read [Production safety](/docs/operator/production-safety)|
 |Diagnostics reports `kernel_ceilings` as failed|The host ceilings are below what the fleet needs|`sudo scripts/tune-host.sh --benches <n>`, from the `benchpress_devops` checkout|
 |A peer never handshakes|UDP 44556 is closed|Step 7, and check the cloud firewall as well as `ufw`|
+|A build fails part-way with no space left|The host was sized for the OS, not for lab images|[Disk](#disk). Never run `docker image prune -a` on this host|
+|**BenchPress Settings** will not save|`base_domain` is required and empty|Point a domain you control at this host, then fill it in [Install, step 5](/docs/operator/install)|
 
 ## Reference
 
@@ -2120,6 +2177,9 @@ the sweep holds it down.
 |WireGuard port|44556/UDP|the `WireGuard Server` document in `vpn_management`|
 |Frappe version, host bench|v16|the bench itself|
 |CPU floor per bench|1 core|`Lab.cpu_cores`, an integer field|
+|Base domain|required, no default|`BenchPress Settings.base_domain`, `reqd`|
+|Free disk, one lab image|100 GB recommended|the host you buy|
+|Free disk, a full catalog|250 GB recommended|the host you buy|
 
 ## Related
 
@@ -2144,18 +2204,33 @@ Throughout, replace `<site>` with your real site name.
 
 ## Steps
 
-1. **Install the app into the bench.**
+1. **Install the apps into the bench.** There are two repositories, and you
+   clone both.
+
+   `benchpress` names `vpn_management` in `required_apps`, so
+   `install-app benchpress` installs `vpn_management` first — but only from a
+   copy already on the bench, listed in `sites/apps.txt`. Clone it yourself.
+   `bench get-app` resolves a bare
+   `required_apps` name under the `frappe` and `erpnext` GitHub accounts only,
+   and [vpn\_management](https://github.com/Venkateshvenki404224/vpn_management)
+   is under neither, so `--resolve-deps` does not find it either.
 
    ```bash
    cd /path/to/your/frappe-bench
+   bench get-app https://github.com/Venkateshvenki404224/vpn_management --branch version-16
    bench get-app https://github.com/Venkateshvenki404224/benchpress --branch version-16
    bench pip install docker
    bench --site <site> install-app benchpress
    bench --site <site> migrate
    ```
 
-   `benchpress` declares `vpn_management` as a required app, so Frappe
-   installs that first. It refuses to install without `vpn_endpoint_host` in
+   Skip the first `get-app` and `install-app` fails with
+   `frappe.exceptions.InvalidRemoteException`, raised with an empty message.
+   Frappe resolves the `required_apps` name the same way — against the `frappe`
+   and `erpnext` accounts — and gives up there, before it ever reports a
+   missing app.
+
+   `vpn_management` itself refuses to install without `vpn_endpoint_host` in
    `common_site_config.json` and without a reachable wg-agent socket. See
    [WireGuard and the VPN plane](/docs/operator/wireguard-setup).
 
@@ -2171,13 +2246,15 @@ Throughout, replace `<site>` with your real site name.
    |Step|What it does|Skipped when|
    |--|--|--|
    |1 of 4|Adds the bench user to the `docker` group|the user is already a member|
-   |2 of 4|Checks Docker `userns-remap` or rootless mode|never — it only warns|
+   |2 of 4|Checks the container-root privilege boundary: a registered `sysbox-runc` runtime, or Docker `userns-remap` (or rootless)|never — it warns, or exits under `--strict`|
    |3 of 4|Starts `benchpress-mariadb` and `benchpress-redis`, and creates the `benchpress` network and the data volume|the containers are already up|
    |4 of 4|Writes `net.ipv4.ip_forward = 1` under `/etc/sysctl.d`|forwarding is already on|
 
    Step 2 warns and continues by default. On a host that will carry anything
    you care about, run it as `bash apps/benchpress/setup.sh <site> --strict`
-   instead, which exits non-zero rather than warning. See
+   instead, which exits non-zero rather than warning. Either boundary
+   satisfies `--strict`. sysbox is checked first: it is the recommended one,
+   and a lab set to the `sysbox` runtime needs it registered anyway. See
    [Production safety](/docs/operator/production-safety).
 
 3. **Build the frontend.** The dashboard is a Vue single-page app and ships as
@@ -2222,7 +2299,7 @@ Throughout, replace `<site>` with your real site name.
 
    The first screen is the **Overview**: how many environments are running,
    stopped or broken, the average deploy time over the last seven days, and a
-   **Shared infrastructure** panel reporting eleven checks. Seven days is not
+   **Shared infrastructure** panel reporting twelve checks. Seven days is not
    a choice — deploy logs are cleared on that schedule, so no longer window
    has data behind it.
 
@@ -2270,11 +2347,11 @@ that image in seconds. See [The image cache](/docs/operator/image-cache).
 
 |Symptom|Cause|Fix|
 |--|--|--|
-|`install-app` fails naming `vpn_management`|The required app is missing or refuses to install|Install `vpn_management` first and set `vpn_endpoint_host`|
+|`install-app` fails with a bare `InvalidRemoteException`|The repository was never cloned into `apps/`|Run the first `get-app` in step 1, then re-run `install-app`|
 |The dashboard is blank or unstyled|The frontend was never built|Step 3, then `bench --site <site> clear-cache`|
 |Settings will not save|`base_domain` is empty, and it is required|Fill it. Sites are addressed under it|
 |Every deploy fails on a Docker call|The bench started before the group change took effect|Log out, log back in, restart the bench|
-|`setup.sh` warns about `userns-remap`|Container root maps to host root|See [Production safety](/docs/operator/production-safety) before running anything real|
+|`setup.sh` warns that there is no privilege boundary|Neither `sysbox-runc` nor `userns-remap` is present, so container root is host root|See [Production safety](/docs/operator/production-safety) before running anything real|
 |The Overview shows `Kernel ceilings Error`|Host-wide sysctl limits are below what a dense fleet needs|`sudo scripts/tune-host.sh`, from the `benchpress_devops` checkout|
 
 ## Reference
@@ -2282,6 +2359,8 @@ that image in seconds. See [The image cache](/docs/operator/image-cache).
 |Item|Value|
 |--|--|
 |App branch|`version-16`|
+|App repository|[Venkateshvenki404224/benchpress](https://github.com/Venkateshvenki404224/benchpress)|
+|Required app|[Venkateshvenki404224/vpn\_management](https://github.com/Venkateshvenki404224/vpn_management), branch `version-16`|
 |Setup script|`bash apps/benchpress/setup.sh <site> [--strict]`|
 |Shared containers|`benchpress-mariadb`, `benchpress-redis`|
 |Docker network|`benchpress`|
@@ -3802,7 +3881,7 @@ and never skip the step 0 gate.
 
 # Production safety
 URL: https://docs.benchpress.cloud/docs/operator/production-safety
-What BenchPress is and is not ready to carry — the alpha verdict, the container privilege boundary, what is backed up, and the endpoint-by-endpoint release checklist.
+What BenchPress is and is not ready to carry — the alpha verdict, the container privilege boundary, what is backed up, and the release checklist that covers 25 of 52 whitelisted callables.
 
 Whether BenchPress is safe to run on your host, and what has to be true first.
 
@@ -3832,6 +3911,10 @@ ERPNext environments. It is not built to host customer data. Concretely:
   up. See [Backup and restore](/docs/operator/backup-and-restore).
 * **Single-tenant assumption.** Quotas, rate limits and audit trails are still
   in progress. Run BenchPress for people you trust, on a host dedicated to it.
+* **The security review is partial.** It covers 25 of the app's 52 whitelisted
+  callables. The credit-purchase path and the per-bench credential endpoint are
+  among the 27 it never reached. See
+  [the release checklist](#the-release-checklist).
 
 Use it on a dedicated dev box, a VM, or a cloud instance you can rebuild. Not
 on your daily-driver workstation, and not on a shared production server.
@@ -3888,31 +3971,53 @@ All three must pass on a host carrying anything you would miss.
 
 ## The release checklist
 
-Last reviewed 2026-07-02, from the authorization suite, the contract and
-timing suite, a branch security review, and a sweep of every
-`ignore_permissions=True` and secret-handling path.
+Reviewed 2026-07-02, from the authorization suite, the contract and timing
+suite, a branch security review, and a sweep of every `ignore_permissions=True`
+and secret-handling path. Every row below was re-checked against the code on
+2026-08-30. Two findings had been fixed, one described an endpoint that never
+existed, and several guard descriptions were wrong.
 
-Read as: **Ready**, **Ready with a follow-up**, **Not ready**.
+**What the audit covered.** The app exposes **52** whitelisted callables. This
+checklist covers **25** of them: 16 endpoints and 9 controller methods. It also
+carried a row for a `create_site` endpoint, which does not exist in the code —
+that row is gone. **27 whitelisted callables have never been reviewed**, and
+that is the largest gap on this page. They are:
+
+|Never reviewed|Where|
+|--|--|
+|`buy_credits`, `get_purchase_options`, `get_credit_summary`, `get_credit_statement`, `get_lease_plans`, `renew_bench`|the credit and lease path, including the one that takes money|
+|`get_bench_credentials`|decrypts SSH, admin and code-server passwords for one bench|
+|`launch_template`, `launch_lab`, `build_lab_golden`, `prewarm_catalog`|the one-click deploy and golden-build path|
+|`sign_up`, `join`, `notify_of_signup`, `approve`|`signup.py` and `waitlist.py`, the only self-service entry points|
+|`Credit Account.post_adjustment`, `post_refund`|controller methods that move a balance|
+|`server_time`, `get_lab_form_options`, `get_device_types`, `get_build_history`, `get_deploy_history`, `get_overview`, `get_vpn_status`, `run_connection_test`, `run_diagnostics`, `preflight_runtime`|the rest|
+
+Treat an unreviewed endpoint as unreviewed, not as safe.
+
+Read the verdicts as: **Ready**, **Ready with a follow-up**, **Not ready**.
 
 ### Whitelisted endpoints
 
+`require_app_user` admits `System Manager`, `BenchPress Admin` and
+`BenchPress User`. `require_admin` admits the first two. Both are
+`frappe.only_for`, so neither is satisfied by login alone.
+
 |Endpoint|Guard|Verdict|Note|
 |--|--|--|--|
-|`get_labs`|login only|Ready|A shared admin-curated catalog. No per-user data|
-|`get_lab`|login only|Ready|One catalog row|
-|`get_lab_templates`|login only|Ready|A static list|
+|`get_labs`|`require_app_user`|Ready|A shared admin-curated catalog. No per-user data|
+|`get_lab`|`require_app_user`|Ready|One catalog row|
+|`get_lab_templates`|`require_app_user`|Ready|A static list|
 |`create_lab_from_template`|`require_admin`|Ready|Admin-only, proven by test|
 |`build_lab_image`|`require_admin`|Ready|Admin-only, proven by test|
-|`get_benches`|owner filter|Follow-up|Returns decrypted SSH, admin and code-server passwords in the list payload. Owner-scoped, but secrets belong in an on-demand call|
-|`create_bench`|login, own deterministic id|Ready|The id embeds the caller, so a user can only create their own|
+|`get_benches`|`require_app_user`, owner filter|Ready|No longer returns any password. The field list holds no secret, and a test asserts their absence. Retrieval moved to `get_bench_credentials`|
+|`create_bench`|`require_app_user`, own deterministic id|Ready|The id embeds the caller, so a user can only create their own|
 |`bench_action`|`require_bench_access`, delete admin-only|Ready|Start, stop and restart are owner-scoped. Delete is admin-gated|
 |`get_deploy_logs`|`require_bench_access`|Ready|Cross-user access denied by test|
-|`add_device`|login, peer owned by caller|Ready|Creates only the caller's peer|
-|`remove_device`|owner or admin|Ready|Ownership enforced before delete|
-|`list_devices`|owner filter|Ready|Bench peers excluded|
-|`get_device_wg_config`|owner or admin|Follow-up|The guard exists. The cross-user negative test does not|
-|`create_site`|`require_bench_access` **only when `bench` is set**|Follow-up|A bench-less call skips the guard and creates an orphan `Bench Site`|
-|`get_user_context`|login, own session|Ready|Returns only the caller's identity and roles|
+|`add_device`|`require_app_user`, peer owned by caller|Ready|Writes `owner_user` as the session user, so it creates only the caller's peer|
+|`remove_device`|`require_app_user`, then an owned-peer lookup|Ready|Ownership resolved before the delete|
+|`list_devices`|`require_app_user`, `owner_user` filter|Ready|Bench peers excluded|
+|`get_device_wg_config`|`require_app_user`, then an owned-peer lookup|Follow-up|The guard exists. The cross-user negative test still does not|
+|`get_user_context`|login only|Ready|No role check, deliberately: the SPA calls it on boot. Returns the caller's own identity, roles and credit summary, and nothing about another user|
 |`get_code_server_credentials`|`require_bench_access`|Ready|Decrypted only after the ownership check|
 |`restart_code_server`|`require_bench_access`|Ready|Cross-user denied by test|
 
@@ -3924,7 +4029,7 @@ Read as: **Ready**, **Ready with a follow-up**, **Not ready**.
 |`Bench Instance.enqueue_redeploy`|same|Ready||
 |`Bench Instance.enqueue_stop`|same|Ready||
 |`Bench Instance.enqueue_start`|same|Ready||
-|`Database Server.setup_mariadb`|read permission, admin-only doctype|Follow-up|A state-changing operation should check `write`, and it has no authorization test|
+|`Database Server.setup_mariadb`|`frappe.has_permission` with no `ptype`, so `read`|Follow-up|A state-changing operation should check `write`, and it has no authorization test. The doctype grants `read` only to `System Manager` and `BenchPress Admin`, both of which also hold `write`, so the gap is hardening rather than an open door|
 |`Database Server.start_mariadb`|same|Follow-up|As above|
 |`Database Server.stop_mariadb`|same|Follow-up|As above|
 |`Database Server.retry_setup`|same|Follow-up|As above|
@@ -3935,8 +4040,8 @@ Read as: **Ready**, **Ready with a follow-up**, **Not ready**.
 |Component|Verdict|Note|
 |--|--|--|
 |Permission model|Ready|Guest, wrong role and cross-user are all rejected. `only_for` raises for non-administrators|
-|Secret handling|Ready|Decryption only behind an owner or admin guard. The database root password is never logged|
-|`ignore_permissions=True`, 39 uses|Ready|Confined to enqueued and system flows. Ownership is tracked on `owner` and `owner_user`|
+|Secret handling|Ready|Both decryptions a whitelisted endpoint can reach sit behind `require_bench_access`. The database root password is never logged. One of the two, `get_bench_credentials`, was never in this audit — see the coverage list above|
+|`ignore_permissions=True`, 53 uses outside tests|Ready|Confined to enqueued and system flows. Ownership is tracked on `owner` and `owner_user`. The count was 39 at the 2026-07-02 review|
 |SQL construction|Ready|Identifiers are hashed and SQL is base64-wrapped before shelling. Not injectable|
 |Container isolation|**Not ready without a precondition**|Non-privileged, but a lab user holds in-container root. Ship only on a host with sysbox, userns-remap or a rootless daemon|
 
@@ -3944,15 +4049,16 @@ Read as: **Ready**, **Ready with a follow-up**, **Not ready**.
 
 1. **The container privilege boundary.** Ship only on a host that closes it.
    This is a deployment precondition, not an app default.
-2. **`create_site` with no bench.** Make `bench` mandatory, or guard the empty
-   case, so the endpoint cannot create an orphan `Bench Site` that bypasses
-   the access check.
-3. **`Database Server` state-changing methods.** Move them to a `write`
-   permission check and add authorization tests.
-4. **`get_benches` secret exposure.** Move SSH, admin and code-server password
-   retrieval out of the bulk list payload into an on-demand per-bench call.
-5. **`get_device_wg_config` test gap.** Add an explicit cross-user negative
+2. **The 27 unreviewed endpoints.** Review them, starting with `buy_credits`,
+   which takes money, and `get_bench_credentials`, which decrypts passwords.
+3. **`Database Server` state-changing methods.** They call
+   `frappe.has_permission` with no `ptype`, which checks `read`. Move them to
+   `write` and add authorization tests.
+4. **`get_device_wg_config` test gap.** Add an explicit cross-user negative
    test. The guard exists. The coverage does not.
+
+Two items from the 2026-07-02 list are closed. `get_benches` no longer returns
+any password. The `create_site` item described an endpoint that does not exist.
 
 ## Troubleshooting
 
@@ -3973,7 +4079,10 @@ Read as: **Ready**, **Ready with a follow-up**, **Not ready**.
 |Default runtime|`sysbox`|
 |Backed up|the shared MariaDB, nightly, 7 dumps|
 |Not backed up|bench Docker volumes|
-|Checklist last reviewed|2026-07-02|
+|Checklist reviewed|2026-07-02, re-verified against the code 2026-08-30|
+|Whitelisted callables|52|
+|Covered by this checklist|25|
+|Never reviewed|27|
 
 ## Related
 
@@ -3984,7 +4093,7 @@ Read as: **Ready**, **Ready with a follow-up**, **Not ready**.
 
 # Diagnostics
 URL: https://docs.benchpress.cloud/docs/operator/diagnostics
-The eleven read-only checks that ask Docker, MariaDB, Redis and the kernel what is true — how to run them, what each failure means, and the four things they do not cover.
+The twelve read-only checks that ask Docker, MariaDB, Redis and the kernel what is true — how to run them, what each failure means, and the four things they do not cover.
 
 Eleven checks that read the host rather than the configuration, and what to do
 about each one that fails.
@@ -4010,7 +4119,7 @@ one you have already made worse.
 2. **Or read them in the app.** Open **Overview** as an admin and look at the
    **Shared infrastructure** panel, which renders the same eleven rows.
 
-   ![The Shared infrastructure panel on the BenchPress Overview, listing eleven checks with a status badge each. Docker socket, Docker network, Bridge capacity, MariaDB, Redis, Container runtimes, Event listener and WireGuard read Active. Kernel ceilings and Clock skew read Error, and Golden images reads Warning.](../images/operator/diagnostics/01-shared-infrastructure.png)
+   ![The Shared infrastructure panel on the BenchPress Overview, listing the shared-infrastructure checks with a status badge each. Docker socket, Docker network, Bridge capacity, MariaDB, Redis, Container runtimes, Event listener and WireGuard read Active. Kernel ceilings and Clock skew read Error, and Golden images reads Warning.](../images/operator/diagnostics/01-shared-infrastructure.png)
 
    On this host eight rows read **Active**, `kernel_ceilings` and `clock_skew`
    read **Error**, and `golden_images` reads **Warning**. A badge is the
@@ -4021,7 +4130,7 @@ one you have already made worse.
    checks again. Several rows fail together for one cause, and the first fix
    often clears three.
 
-## The eleven checks
+## The twelve checks
 
 |Check|On screen|What it asks|Severity of a failure|
 |--|--|--|--|
@@ -4035,6 +4144,7 @@ one you have already made worse.
 |`container_runtimes`|Container runtimes|`sysbox-runc` is registered with Docker|Error|
 |`golden_images`|Golden images|how many built labs carry a golden dump|Warning|
 |`docker_events`|Event listener|the listener's heartbeat is newer than 60 seconds|Error|
+|`route_directory`|Route directory|a worker has reported the Traefik route directory mounted, with the control-plane route and the wildcard anchor rendered|Error, or Warning when the report is stale or the anchor is merely late|
 |`vpn_server`|WireGuard|`vpn_management` is installed, `wg0` exists, and it has a public key|Error|
 
 ## Severity is not status
@@ -5012,7 +5122,7 @@ One concern for each module. The table is the whole `benchpress/` package.
 |`permissions.py`|the role helpers and the six query conditions|
 |`overview.py`, `labs.py`, `lab_detail.py`, `run_history.py`|one screen each, assembled in a fixed number of queries|
 |`waitlist.py`, `signup.py`|the two doors open to a guest|
-|`diagnostics.py`|eleven read-only environment checks|
+|`diagnostics.py`|twelve read-only environment checks|
 |`notifications.py`|one desk alert and one email to a document owner|
 |`indexes.py`|composite indexes the DocType JSON cannot declare|
 |`request_cache.py`|a value memoised for one request, never in a module global|
@@ -5438,7 +5548,7 @@ This is the only DocType a guest can cause to be written. See
 
 # API
 URL: https://docs.benchpress.cloud/docs/reference/api
-All 50 whitelisted BenchPress endpoints, with arguments, what each returns, and the permission check each one makes for itself.
+Every whitelisted BenchPress endpoint, with arguments, what each returns, and the permission check each one makes for itself.
 
 Every function this app publishes over HTTP, and what each one checks before it
 does anything.
@@ -5462,9 +5572,12 @@ curl -s https://<host>/api/method/benchpress.api.get_labs \
 Arguments go as query parameters on a `GET` or as form fields on a `POST`.
 Frappe decides the method from the function, not from a route table.
 
-Thirty-five of the fifty are in `benchpress.api`. Four more are module functions
-elsewhere. The remaining eleven are document methods, called through
-`run_doc_method` rather than by path. All three kinds are marked below.
+Endpoints come in three kinds. Most are module functions in `benchpress.api`. A
+few more are module functions elsewhere, in `benchpress.waitlist` and
+`benchpress.signup`. The rest are document methods on controllers, called
+through `run_doc_method` rather than by path. All three kinds are marked below.
+[The whole list, counted](#the-whole-list-counted) has the breakdown and the
+command that derives it.
 
 ## How an endpoint is guarded
 
@@ -5540,6 +5653,61 @@ MD5 of the two, so a second call redeploys rather than making a second bench.
 
 `server_time` exists so a countdown in the browser corrects against the server
 clock instead of the laptop's.
+
+## Launch
+
+`create_bench` deploys a lab whose image already exists. The two launch
+endpoints do not require one. They build the image first, when there is no
+image, and deploy from it in the same job.
+
+|Endpoint|Arguments|Returns|Checks|
+|--|--|--|--|
+|`launch_template`|`template`, `instance_size`, `site_name`|the launch response below|`require_app_user`, then `is_active` on the `Lab Template` row, then `requires_admission` inside `_launch`|
+|`launch_lab`|`data` (JSON, with at least `lab`)|the launch response below|`require_app_user`, then `requires_admission` inside `_launch`|
+
+Both live in `benchpress/api.py`. Both call the private
+`_launch`, which claims the instance and enqueues
+`benchpress.launch.run_launch` on `queue-long` under the deduplicated job id
+`launch:<bench name>`. The job timeout is the image build timeout plus the
+deploy timeout, because one job does both.
+
+**The admission gate is on `_launch`, not on the published function.** This
+looks like a missing decorator and is not. `requires_admission` binds its cost
+and cap arguments by name and needs a lab that exists, which is only true after
+`launch_template` has resolved a template to one. `launch_template` resolves or
+creates that lab first, so a caller the gate then refuses can leave a new `Lab`
+row behind. The gate still runs before any work is queued, which is the property
+that matters.
+
+`launch_template` checks `is_active` on the `Lab Template` itself.
+`lab_templates.get_template` checks only that the key exists, so without this
+check a user could materialise a template an admin had retired.
+
+`launch_template` reuses a lab before it makes one. It takes the newest lab
+built from that template whose recipe still matches the template's own, and
+creates a lab only when there is no match. A second developer launching the same
+template rides the image the first launch paid for. A lab an admin has edited
+away from the template is skipped, because deploying it would install apps the
+template never named.
+
+Both endpoints claim the bench through the same path `create_bench` uses, so the
+same pair of caller and lab is the same bench. A second launch redeploys.
+
+The launch response carries seven keys:
+
+|Key|Is|
+|--|--|
+|`name`|the bench id|
+|`bench`|the same string as `name`, so a caller still reading `name` keeps working|
+|`lab`|the lab this bench came from|
+|`lab_title`|that lab's title|
+|`lab_status`|that lab's status, read from the row|
+|`will_build`|`true` when `lab_status` is not `Ready`|
+|`eta_minutes`|`eta_minutes` from the `Lab Template` row, or `0`|
+
+`will_build` is that status read alone. It does not ask Docker whether the image
+is on the host. It is opening copy for the launch dialog, and the job decides
+what actually happens.
 
 ## History
 
@@ -5637,7 +5805,7 @@ not from now.
 
 |Endpoint|Arguments|Returns|Checks|
 |--|--|--|--|
-|`run_diagnostics`|—|eleven read-only environment checks|`require_admin`|
+|`run_diagnostics`|—|twelve read-only environment checks|`require_admin`|
 |`preflight_runtime`|`runtime`|whether that runtime can actually start a container|`require_admin`|
 
 `run_diagnostics` reads. `preflight_runtime` creates a container, which is why
@@ -5717,22 +5885,33 @@ Two more waitlist functions are admin-only and not guest-reachable.
 
 ## The whole list, counted
 
-Fifty `@frappe.whitelist()` functions. Every one is in a table above.
+**Count the code, not this page.** Run the command before you quote a number
+anywhere:
+
+```bash
+grep -rn "@frappe.whitelist" --include=*.py benchpress/ | wc -l
+```
+
+Per file:
+
+```bash
+grep -rc "@frappe.whitelist" --include=*.py benchpress/ | grep -v ':0$' | sort -t: -k2 -rn
+```
+
+What those two commands returned when this page was last checked:
 
 |Location|Count|
 |--|--|
-|`benchpress/api.py`|35|
+|`benchpress/api.py`|37|
 |`benchpress/benchpress/doctype/database_server/database_server.py`|5|
 |`benchpress/benchpress/doctype/bench_instance/bench_instance.py`|4|
 |`benchpress/waitlist.py`|3|
 |`benchpress/benchpress/doctype/credit_account/credit_account.py`|2|
 |`benchpress/signup.py`|1|
+|**Total**|**52**|
 
-Recount after a change:
-
-```bash
-grep -rn "@frappe.whitelist" --include=*.py benchpress/ | wc -l
-```
+Every one of those 52 has a row in a table above. That is the claim to keep
+true when you add an endpoint.
 
 ## Adding an endpoint
 
@@ -5742,6 +5921,8 @@ grep -rn "@frappe.whitelist" --include=*.py benchpress/ | wc -l
    `@frappe.whitelist()`.
 4. Query with `frappe.qb`. A raw `frappe.db.sql` string is a lint failure.
 5. Add the endpoint to the table on this page.
+6. Re-run the two commands in [The whole list, counted](#the-whole-list-counted)
+   and paste what they return over that table.
 
 The decorator order matters. `@frappe.whitelist()` goes on top, and
 `@requires_admission(...)` below it, so the gate runs inside the published
@@ -6242,10 +6423,20 @@ Every address a bench answers on, and who can reach each one.
 one is addressed.
 
 **Before you start.** A bench has up to four addresses at once. They are not
-alternatives. Each one exists for a different caller, and three of the four are
-private.
+alternatives. Each one exists for a different caller, and two of the four are
+public.
 
 ## The four addresses
+
+**This section is the canonical statement of what a bench is reachable on.**
+The one sentence:
+
+> A bench answers on up to four addresses at once: two public HTTPS addresses
+> served by Traefik, which anyone on the internet can reach once `base_domain`
+> is set, and two tunnel addresses that only a device on the VPN can reach.
+
+The two `https://` addresses answer for anyone on the internet once
+`base_domain` is set, which is the documented install.
 
 `benchpress/addressing.py` builds all of them in one place, and the app renders
 what it returns rather than assembling a URL from a port it declared itself.
@@ -6256,6 +6447,19 @@ what it returns rather than assembling a URL from a port it declared itself.
 |Public IDE|`https://ide-<instance id>.<base domain>`|the internet, through Traefik|
 |Tunnel site|`http://<wg ip>:8000`|a device on the VPN|
 |Tunnel IDE|`http://<wg ip>:8080/`|a device on the VPN|
+
+`ingress.publish` writes routers on the `websecure` entry point: two for the
+site hostname, split so asset paths take their own rate limit, and one for the
+IDE hostname. `ingress.ensure_anchor` holds the wildcard certificate that
+terminates them. The IDE router is written only when the bench has an IDE, which
+is why the count is "up to four".
+
+Public means public. The only middlewares `publish` puts on a bench router are
+rate limits: a request cap on every router, and an in-flight cap on the site's
+render path when the instance size sets one. There is no authentication
+middleware at the edge. A browser anywhere resolves the name and gets the
+bench's own login page, and that login is the only thing between the internet
+and the site.
 
 The two ports are properties of the bench image, not settings. They are
 constants in `addressing.py`.
@@ -6380,8 +6584,12 @@ state.
 |Another bench on the same bridge|no|no|no|no|
 |A bench, reaching the shared MariaDB|—|—|—|the database only|
 
-No bench is on the public internet by port. The only public path is Traefik, and
-it terminates TLS on the wildcard.
+No bench is on the public internet by port. No bench container publishes a host
+port at all — the only public path is Traefik, and it terminates TLS on the
+wildcard.
+
+That is the whole of what the VPN gates. **SSH and the two `http://` tunnel
+addresses need the VPN. The two `https://` addresses do not.**
 
 ## Verify
 
@@ -7154,8 +7362,12 @@ cached image, creates a site, and puts the container on a WireGuard network.
 You get a site address, an SSH login and a browser VS Code session. When the
 work is done, you destroy the environment. Spin up, use, tear down.
 
-No bench is on the public internet. Every site, SSH port and IDE session is
-reachable only from a device that joined the VPN.
+A bench answers on up to four addresses at once: two public HTTPS addresses
+served by Traefik, which anyone on the internet can reach once `base_domain` is
+set, and two tunnel addresses that only a device on the VPN can reach.
+`base_domain` is a required setting, so a bench is not VPN-only on the
+documented install. [Networking](/docs/reference/networking) states the address
+plan in full.
 
 ## Reference
 
@@ -7179,3 +7391,4 @@ the page is still complete.
 ## Related
 
 * [Quick tour](/docs/user/quick-tour) — the five screens, and what the dashboard reports.
+* [Networking](/docs/reference/networking) — the four addresses a bench answers on, and who can reach each one.

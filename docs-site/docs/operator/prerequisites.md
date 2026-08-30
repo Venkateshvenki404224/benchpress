@@ -1,8 +1,8 @@
 ---
 title: Prerequisites
-description: What a BenchPress host needs before you install — supported
-  platforms, versions, Docker socket access, IP forwarding, sysbox, and the
-  measured CPU sizing.
+description: What a BenchPress host needs before you install — the four
+  preconditions, supported platforms, versions, Docker socket access, and the
+  measured CPU and disk sizing.
 lastModified: "2026-08-28T22:10:21+05:30"
 lastAuthor: Venkatesh
 ---
@@ -16,6 +16,21 @@ will work, and how much of it to buy.
 **Before you start.** BenchPress installs into an existing Frappe bench and
 drives that host's Docker. It is not a standalone service, and it is Linux
 only — the setup script uses `apt` and `sysctl`.
+
+## The four preconditions
+
+Get these four before you read anything else on this page. Each one blocks the
+install or the first deploy, and none of them can be fixed from inside the app.
+
+|Precondition|Why it blocks|Set it in|
+|--|--|--|
+|`sysbox-runc` registered with Docker|`default_bench_runtime` is `sysbox`, so a deploy has no runtime without it. `runc` without `userns-remap` makes in-container root host root|[Step 5](#steps)|
+|`net.ipv4.ip_forward = 1`|The kernel drops tunnel traffic on its way to a bench, so a deploy fails on the network step|[Step 4](#steps)|
+|44556/UDP open, on `ufw` **and** on any cloud firewall|A WireGuard peer never handshakes, so nothing reaches a bench over the tunnel|[Step 7](#steps)|
+|A domain you control, for `base_domain`|`base_domain` is `reqd` on **BenchPress Settings**, so the settings form will not save without it. Sites are addressed as `<instance id>.<base domain>`|[Install, step 5](/docs/operator/install)|
+
+Size the host before you buy it as well. [Sizing](#sizing) holds the CPU floor
+and [Disk](#disk) the disk floor. Disk is the one that fails a default VPS.
 
 ## Steps
 
@@ -134,7 +149,7 @@ Three criteria, each with its own minimum:
 |Tier|Minimum CPU|Evidence at the minimum|
 |--|--:|--|
 |Boot and lifecycle|0.5|migration 13.22 s, login HTTP 200 in 192 ms, `/frontend` HTTP 200 in 27 ms|
-|Test suite|0.5|the 124-test suite passed in 11.59 s, with every endpoint timing budget met|
+|Test suite|0.5|the suite passed in 11.59 s, with every endpoint timing budget met. It held 124 tests that day. The suite has since grown by roughly an order of magnitude, so 11.59 s no longer describes a full run|
 |Concurrent reads|0.5|`get_labs` p95 127 ms, `get_benches` p95 48 ms, 0 of 60 requests failed|
 
 Concurrent reads at each candidate cap, 30 authenticated requests per endpoint
@@ -157,10 +172,50 @@ did not visibly degrade this workload, so the measurements do not support
 calling one core a minimum. Re-run the benchmark after the application grows,
 or when you change the host class.
 
-**RAM and disk are the real constraints, not CPU.** A lab image is 5.5 GB to
-19.7 GB, and one deploy costs roughly 0.2 GB to 1 GB more. See
-[The image cache](/docs/operator/image-cache) for what that grows into and how
-the sweep holds it down.
+**Of the two resources measured here, disk is the constraint, not CPU.** Size
+it before you buy the host. See [Disk](#disk).
+
+**RAM was not sized.** The benchmark capped CPU only, so the 7.8 GiB above
+describes the benchmark host and is not a floor. Watch `free -h` on your own
+host until someone measures it.
+
+## Disk
+
+**A 20 GB or 40 GB VPS root disk fails mid-build.** No setting in the app
+compensates for it, and the failure lands in the middle of an image build
+rather than at install.
+
+Measured on this host with `docker images` and `docker system df`, and listed
+per image in [The image cache](/docs/operator/image-cache):
+
+|Measurement|Value|
+|--|--:|
+|Smallest lab image|5.5 GB|
+|Largest lab image|19.7 GB|
+|Twelve lab images together|54.74 GB|
+|Reclaimable from that set|19.12 GB|
+
+Three costs sit on top of that image figure. A build holds the new image while
+its base layers are still on disk. Every bench has its own container layer and
+volumes — one deploy costs roughly 0.2 GB to 1 GB, measured in
+[The image cache](/docs/operator/image-cache). The shared MariaDB carries its
+data volume. The build headroom and the MariaDB volume are not measured.
+
+So provision against the catalog you will hold, not against one image:
+
+|The host will carry|Free disk to provision|Basis|
+|--|--:|--|
+|One lab image|100 GB|19.7 GB for the largest measured image, with room to rebuild it beside the copy in use|
+|A catalog the size of this host's|250 GB|54.74 GB measured for twelve images, plus the same rebuild headroom, plus bench volumes|
+
+Those two rows are recommendations derived from the measurements above. They
+are not themselves measured. Watch `df -h /` and `docker system df` on your own
+host, and raise them if either climbs.
+
+Building is also the slowest thing a fresh host does. Full builds on this host
+ran **4 to 26 minutes**, and the golden pass 5 to 11 — see
+[The image cache](/docs/operator/image-cache). The build job's own timeout is
+10,800 s, three hours, which is a ceiling and not an expected duration.
 
 ## Troubleshooting
 
@@ -171,6 +226,8 @@ the sweep holds it down.
 |Diagnostics reports `container_runtimes` as failed|`sysbox-runc` is not registered with Docker|Install sysbox, or set `default_bench_runtime` to `runc` and read [Production safety](/docs/operator/production-safety)|
 |Diagnostics reports `kernel_ceilings` as failed|The host ceilings are below what the fleet needs|`sudo scripts/tune-host.sh --benches <n>`, from the `benchpress_devops` checkout|
 |A peer never handshakes|UDP 44556 is closed|Step 7, and check the cloud firewall as well as `ufw`|
+|A build fails part-way with no space left|The host was sized for the OS, not for lab images|[Disk](#disk). Never run `docker image prune -a` on this host|
+|**BenchPress Settings** will not save|`base_domain` is required and empty|Point a domain you control at this host, then fill it in [Install, step 5](/docs/operator/install)|
 
 ## Reference
 
@@ -182,6 +239,9 @@ the sweep holds it down.
 |WireGuard port|44556/UDP|the `WireGuard Server` document in `vpn_management`|
 |Frappe version, host bench|v16|the bench itself|
 |CPU floor per bench|1 core|`Lab.cpu_cores`, an integer field|
+|Base domain|required, no default|`BenchPress Settings.base_domain`, `reqd`|
+|Free disk, one lab image|100 GB recommended|the host you buy|
+|Free disk, a full catalog|250 GB recommended|the host you buy|
 
 ## Related
 
