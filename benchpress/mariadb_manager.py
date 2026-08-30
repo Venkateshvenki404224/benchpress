@@ -27,6 +27,11 @@ SERVER_ACTIVE = "Active"
 SERVER_STOPPED = "Stopped"
 SERVER_ERROR = "Error"
 
+# The shared server's container name is the column the UNIQUE index protects, so it is what a
+# lookup must key on. Also spelled in `DatabaseServer.before_insert` and as the field's default —
+# this is the copy `ensure_database_server` reads.
+DEFAULT_CONTAINER_NAME = "benchpress-mariadb"
+
 # What config/docker-compose.yml declares as command flags, in the units the servers report
 # back. A live value that disagrees means the container predates the flags, or the daemon
 # refused one, or somebody ran SET GLOBAL.
@@ -199,31 +204,88 @@ def ensure_database_server() -> str:
 	"""Get or create the default Database Server. Returns doc name.
 	Idempotent — safe to call multiple times.
 	"""
-	servers = frappe.get_all(
+	server = _existing_server()
+	if not server:
+		return _create_default_server()
+	_recover(server)
+	return server.name
+
+
+def _existing_server():
+	"""The shared server row, whatever status it is in."""
+	# Keyed on the name the UNIQUE index protects, not on a status whitelist: looking a row up by
+	# status and inserting by container name is what let a row in `Error` read as "no server" and
+	# turned a stopped database into a duplicate-key deploy failure that named neither MariaDB nor
+	# a status.
+	row = frappe.db.get_value(
 		"Database Server",
-		filters={"status": ["in", [SERVER_ACTIVE, SERVER_PENDING, SERVER_STOPPED]]},
+		{"container_name": DEFAULT_CONTAINER_NAME},
+		["name", "status"],
+		as_dict=True,
+	)
+	if row:
+		return row
+
+	# A self-hoster who renamed the container still has exactly one server.
+	rows = frappe.get_all(
+		"Database Server",
 		fields=["name", "status"],
 		order_by="creation asc",
 		limit=1,
 	)
+	return rows[0] if rows else None
 
-	if servers:
-		server = servers[0]
-		if server.status == SERVER_STOPPED:
-			start_database_server(server.name)
-		elif server.status == SERVER_PENDING:
-			setup_database_server(server.name)
-		return server.name
 
-	# No server exists — create one with defaults
+def _recover(server) -> None:
+	"""Bring the shared server back to Active, doing the least that will work."""
+	if server.status == SERVER_ACTIVE:
+		# The caller's own `wait_for_mariadb` is the proof; re-proving it here would put a
+		# container round trip in front of every deploy.
+		return
+
+	if server.status == SERVER_STOPPED:
+		start_database_server(server.name)
+		return
+
+	if server.status == SERVER_ERROR and check_mariadb_health(server.name):
+		# A stale verdict, not a stopped database. `setup_database_server` would force-remove and
+		# re-create the container every running bench is talking to, to repair a flag that is
+		# already wrong — so a healthy server costs one status flip and nothing else.
+		frappe.db.set_value("Database Server", server.name, {"status": SERVER_ACTIVE, "error_message": ""})
+		frappe.db.commit()
+		return
+
+	# Pending, or Error and genuinely not answering. Idempotent, and exactly what
+	# `DatabaseServer.retry_setup` does. It re-raises after `set_error`, so a server that cannot be
+	# recovered fails the deploy with MariaDB's own message.
+	setup_database_server(server.name)
+
+
+def _create_default_server() -> str:
+	"""Insert the one shared server this install has never had, and set it up."""
+	# Reached only when the table is empty — `_existing_server` returns a row of ANY status — so
+	# the UNIQUE index on container_name is now unreachable from here by a single caller.
 	doc = frappe.get_doc(
 		{
 			"doctype": "Database Server",
-			"container_name": "benchpress-mariadb",
+			"container_name": DEFAULT_CONTAINER_NAME,
 			"mariadb_version": "10.6",
 		}
 	)
-	doc.insert(ignore_permissions=True)
+	try:
+		doc.insert(ignore_permissions=True)
+	except Exception:
+		# Two deploys reaching an empty table at once. The loser trips the UNIQUE index, and raw
+		# that reaches the deploy log as an IntegrityError naming a key rather than a database.
+		# The winner's row is the answer, so take it — the rollback is what makes it visible,
+		# because a failed insert leaves this transaction reading its own pre-insert snapshot.
+		frappe.db.rollback()
+		server = _existing_server()
+		if not server:
+			raise
+		_recover(server)
+		return server.name
+
 	frappe.db.commit()
 
 	setup_database_server(doc.name)
