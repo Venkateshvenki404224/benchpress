@@ -3,7 +3,7 @@ title: Prerequisites
 description: What a BenchPress host needs before you install — the four
   preconditions, supported platforms, versions, Docker socket access, and the
   measured CPU and disk sizing.
-lastModified: "2026-08-28T22:10:21+05:30"
+lastModified: "2026-08-30T08:05:07-04:00"
 lastAuthor: Venkatesh
 ---
 # Prerequisites

@@ -3,7 +3,7 @@ title: Production safety
 description: What BenchPress is and is not ready to carry — the alpha verdict,
   the container privilege boundary, what is backed up, and the release checklist
   that covers 25 of 52 whitelisted callables.
-lastModified: "2026-08-28T22:10:21+05:30"
+lastModified: "2026-08-30T08:05:07-04:00"
 lastAuthor: Venkatesh
 ---
 # Production safety
