@@ -587,7 +587,10 @@ class TestApi(IntegrationTestCase):
 		with patch("frappe.enqueue") as enqueue:
 			result, elapsed_ms = _timed(lambda: api.build_lab_image(self.lab.name))
 		enqueue.assert_called_once()
-		self.assertEqual(result, {"name": self.lab.name, "status": "Building"})
+		# `queued` tells the caller whether this click actually started a build or rode a
+		# deduplicated one already in flight.
+		self.assertEqual(result, {"name": self.lab.name, "status": "Building", "queued": True})
+		self.assertEqual(enqueue.call_args.kwargs["job_id"], f"build_lab:{self.lab.name}")
 		self.assert_within_budget("build_lab_image", elapsed_ms)
 
 	def test_prewarm_catalog_contract_and_timing(self):
@@ -847,3 +850,153 @@ class TestApi(IntegrationTestCase):
 		start_container.assert_called_once_with(bench.container_id)
 		self.assertEqual(bench.status, "Running")
 		self.assert_within_budget("enqueue_start", elapsed_ms)
+
+
+LAUNCH_TEMPLATE = "api-launch-template"
+RETIRED_TEMPLATE = "api-launch-retired"
+
+
+def _ensure_template(key, **extra):
+	if frappe.db.exists("Lab Template", key):
+		frappe.delete_doc("Lab Template", key, force=True, ignore_permissions=True)
+	return frappe.get_doc(
+		{
+			"doctype": "Lab Template",
+			"key": key,
+			"title": f"Launch {key}",
+			"description": "A template the launch tests own.",
+			"frappe_version": "version-15",
+			"memory_limit": "2g",
+			"cpu_cores": 2,
+			"eta_minutes": 4,
+			"is_active": 1,
+			"apps": [_lab_app()],
+			**extra,
+		}
+	).insert(ignore_permissions=True)
+
+
+class TestLaunch(IntegrationTestCase):
+	"""One click: the lab, the instance and the one job that builds and deploys it."""
+
+	@classmethod
+	def setUpClass(cls):
+		super().setUpClass()
+		frappe.set_user("Administrator")
+		cls.template = _ensure_template(LAUNCH_TEMPLATE)
+		cls.retired = _ensure_template(RETIRED_TEMPLATE, is_active=0)
+		cls.plain_lab = _ensure_lab("api-launch-plain-lab", apps=[_lab_app()])
+		frappe.db.commit()
+
+	@classmethod
+	def tearDownClass(cls):
+		frappe.set_user("Administrator")
+		cls._sweep_labs()
+		for lab in (cls.plain_lab.name,):
+			bench_name = get_instance_id("Administrator", lab)
+			if frappe.db.exists("Bench Instance", bench_name):
+				_drop_bench(bench_name)
+			frappe.delete_doc("Lab", lab, force=True, ignore_permissions=True)
+		for template in (cls.template.name, cls.retired.name):
+			frappe.delete_doc("Lab Template", template, force=True, ignore_permissions=True)
+		frappe.db.commit()
+		super().tearDownClass()
+
+	@classmethod
+	def _sweep_labs(cls):
+		"""Every lab a launch minted from the fixture template, and the instances behind them."""
+		for name in frappe.get_all(
+			"Lab", filters={"template": ("in", [LAUNCH_TEMPLATE, RETIRED_TEMPLATE])}, pluck="name"
+		):
+			for bench in frappe.get_all("Bench Instance", filters={"lab": name}, pluck="name"):
+				_drop_bench(bench)
+			frappe.delete_doc("Lab", name, force=True, ignore_permissions=True)
+		frappe.db.commit()
+
+	def setUp(self):
+		frappe.set_user("Administrator")
+		self.addCleanup(self._sweep_labs)
+
+	def _launched(self, **kwargs):
+		with patch("frappe.enqueue") as enqueue:
+			result = api.launch_template(LAUNCH_TEMPLATE, **kwargs)
+		return result, enqueue
+
+	def test_launch_template_hands_the_whole_run_to_one_job_on_the_worker_with_the_socket(self):
+		result, enqueue = self._launched()
+
+		enqueue.assert_called_once()
+		self.assertEqual(enqueue.call_args.args[0], "benchpress.launch.run_launch")
+		self.assertEqual(enqueue.call_args.kwargs["queue"], "long")
+		self.assertTrue(enqueue.call_args.kwargs["deduplicate"])
+		self.assertEqual(result["bench"], result["name"])
+		self.assertEqual(result["eta_minutes"], 4)
+		self.assertTrue(result["will_build"])
+
+	def test_a_second_click_re_enters_the_same_instance_and_the_same_job(self):
+		"""Idempotence is the whole point: two clicks must not build twice or deploy twice."""
+		first, _enqueue = self._launched()
+		second, enqueue = self._launched()
+
+		self.assertEqual(second["bench"], first["bench"])
+		self.assertEqual(enqueue.call_args.kwargs["job_id"], f"launch:{first['bench']}")
+
+	def test_a_retired_template_cannot_be_launched(self):
+		with self.assertRaises(frappe.ValidationError):
+			api.launch_template(RETIRED_TEMPLATE)
+
+	def test_a_second_launcher_rides_the_lab_the_first_one_already_made(self):
+		first, _ = self._launched()
+
+		second, _ = self._launched()
+
+		self.assertEqual(second["lab"], first["lab"])
+		self.assertFalse(frappe.db.exists("Lab", f"{LAUNCH_TEMPLATE}-2"))
+
+	def test_a_lab_edited_away_from_its_template_is_not_reused(self):
+		"""Deploying it would install apps the card never promised."""
+		first, _ = self._launched()
+		lab = frappe.get_doc("Lab", first["lab"])
+		lab.apps[0].branch = "version-14"
+		lab.save(ignore_permissions=True)
+
+		second, _ = self._launched()
+
+		self.assertNotEqual(second["lab"], first["lab"])
+
+	def test_a_refused_launch_leaves_no_lab_and_no_instance_behind(self):
+		"""The request transaction is what unwinds it, so nothing before the gate may commit."""
+		mark = "launch_refusal"
+		frappe.db.savepoint(mark)
+		with patch("benchpress.credits.admission.claim", side_effect=frappe.ValidationError("no room")):
+			with self.assertRaises(frappe.ValidationError):
+				api.launch_template(LAUNCH_TEMPLATE)
+		frappe.db.rollback(save_point=mark)
+
+		self.assertEqual(frappe.get_all("Lab", filters={"template": LAUNCH_TEMPLATE}, pluck="name"), [])
+		self.assertFalse(
+			frappe.db.exists("Bench Instance", get_instance_id("Administrator", LAUNCH_TEMPLATE))
+		)
+
+	def test_launch_lab_answers_in_the_same_seven_keys(self):
+		data = frappe.as_json({"lab": self.plain_lab.name})
+		with patch("frappe.enqueue") as enqueue:
+			result = api.launch_lab(data)
+		self.addCleanup(_drop_bench, result["name"])
+
+		self.assertEqual(enqueue.call_args.args[0], "benchpress.launch.run_launch")
+		self.assertEqual(result["name"], result["bench"])
+		self.assertEqual(result["lab"], self.plain_lab.name)
+		# A lab with no originating template has no published estimate to offer.
+		self.assertEqual(result["eta_minutes"], 0)
+
+	def test_create_bench_still_enqueues_the_deploy_on_its_own(self):
+		"""The old endpoint is untouched, so nothing outside the SPA had to change."""
+		data = frappe.as_json({"lab": self.plain_lab.name})
+		with patch("frappe.enqueue") as enqueue:
+			result = api.create_bench(data)
+		self.addCleanup(_drop_bench, result["name"])
+
+		self.assertEqual(enqueue.call_args.args[0], "benchpress.lifecycle.deploy_bench")
+		self.assertEqual(set(result), {"name", "status"})
+		self.assertEqual(result["status"], "Deploying")

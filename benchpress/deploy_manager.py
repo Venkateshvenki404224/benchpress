@@ -316,8 +316,8 @@ def _prepare_lab_image(lab, pipeline, user: str) -> None:
 	"""
 	from benchpress.golden import image_has_golden
 
-	tag, hit = image_cache.resolve(lab)
-	if not hit or lab.status != "Ready" or lab.image_tag != tag:
+	tag, _hit = image_cache.resolve(lab)
+	if not image_cache.is_ready(lab):
 		frappe.throw(_("No built image for lab '{0}'. Build it first from the Lab record.").format(lab.title))
 	pipeline.log(f"Using built image {tag}")
 	if not image_has_golden(tag):
@@ -334,6 +334,13 @@ def _build_lab_with_logs(lab, log_fn) -> None:
 	frappe.db.commit()
 
 	image_tag = build_lab_image(lab, log_fn=log_fn)
+
+	# The tag set is memoised on `frappe.local` for the life of the job
+	# (`image_cache.cached_tags`). Build and deploy used to be separate jobs with
+	# separate locals; chained into one, `_prepare_lab_image` would read the
+	# pre-build set seconds from now and throw "No built image" about the image
+	# this line just produced.
+	image_cache.clear_cached_tags()
 
 	lab.reload()
 	lab.image_tag = image_tag
@@ -441,8 +448,16 @@ def build_lab(lab_name: str) -> None:
 		image_tag = _run_build(lab, lab.owner)
 	except Exception:
 		# The admin asked for this build, so the catalog is the right place to record that it broke.
-		frappe.db.set_value("Lab", lab_name, "status", "Error")
-		frappe.db.commit()  # nosemgrep -- the run is over; its verdict must survive the failure
-		_notify_owner(lab.owner, f"Lab build failed: {lab.title}", "Lab", lab_name)
+		record_build_failure(lab_name, lab.owner)
 		return
 	_notify_owner(lab.owner, f"Lab build complete: {lab.title} ({image_tag})", "Lab", lab_name)
+
+
+def record_build_failure(lab_name: str, user: str) -> None:
+	"""Mark the catalog entry broken and tell whoever asked for the build."""
+	# `user` rather than the lab's owner: a launch builds a shared lab on somebody else's behalf,
+	# and the person waiting on the build is the one who has to hear that it broke.
+	frappe.db.set_value("Lab", lab_name, "status", "Error")
+	frappe.db.commit()  # nosemgrep -- the run is over; its verdict must survive the failure
+	title = frappe.db.get_value("Lab", lab_name, "title") or lab_name
+	_notify_owner(user, f"Lab build failed: {title}", "Lab", lab_name)

@@ -74,6 +74,37 @@ describe("a run still in flight", () => {
 	});
 });
 
+describe("a launch that builds before it deploys", () => {
+	// One job opens the Deploy Log, emits the image marker, builds, and only
+	// then runs the pipeline — so step 2 is announced before step 1 is.
+	const LAUNCH_BUILD = [
+		"=== Deploy started ===",
+		marker("image", 0.0),
+		marker("infrastructure", 0.0),
+	].join("\n");
+
+	it("still reads forward when the image marker arrives before step one", () => {
+		const run = deriveRun(LAUNCH_BUILD);
+		const steps = new Map(run.steps.map((step) => [step.key, step]));
+
+		expect(steps.get("infrastructure").state).toBe(DONE);
+		expect(steps.get("image").state).toBe(ACTIVE);
+		for (const step of DEPLOY_STEPS.slice(2)) {
+			expect(steps.get(step.key).state).toBe(PENDING);
+		}
+		expect(run.state).toBe("running");
+	});
+
+	it("reads a build that broke as a failed run, in the words the job used", () => {
+		const run = deriveRun(
+			`${LAUNCH_BUILD}\n=== Deploy failed: the lab image could not be built: boom ===`
+		);
+
+		expect(run.state).toBe("failed");
+		expect(run.failure).toBe("the lab image could not be built: boom");
+	});
+});
+
 describe("a run that finished", () => {
 	const log = DEPLOY_STEPS.map((step, index) => marker(step.key, index * 20)).join("\n");
 

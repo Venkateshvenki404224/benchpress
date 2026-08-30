@@ -266,7 +266,7 @@ const labIdMessage = computed(() => (submitted.value ? labIdError(form.lab_id) :
 const cpuMessage = computed(() => (submitted.value ? cpuCoresError(form.cpu_cores) : ""));
 
 const insertLab = createResource({ url: "frappe.client.insert" });
-const deployAction = createResource({ url: "benchpress.api.create_bench" });
+const deployAction = createResource({ url: "benchpress.api.launch_lab" });
 
 const saveError = computed(() => insertLab.error || deployAction.error || "");
 
@@ -360,13 +360,18 @@ async function saveAndBuild() {
 		const lab = await saveLab();
 		if (!lab) return;
 
-		const bench = await deployAction.submit({ data: JSON.stringify({ lab: lab.name }) });
-		if (deployAction.error || !bench?.name) {
+		const run = await deployAction.submit({ data: JSON.stringify({ lab: lab.name }) });
+		if (deployAction.error || !run?.bench) {
 			toast.error(deployFailure(deployAction.error));
 			router.push({ name: "LabDetail", params: { labId: lab.name } });
 			return;
 		}
-		openDeployRun({ labId: lab.name, benchName: bench.name });
+		openDeployRun({
+			labId: lab.name,
+			labTitle: run.lab_title,
+			benchName: run.bench,
+			willBuild: run.will_build,
+		});
 		router.push({ name: "LabDetail", params: { labId: lab.name } });
 	} finally {
 		building.value = false;

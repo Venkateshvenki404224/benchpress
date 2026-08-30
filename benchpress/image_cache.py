@@ -55,6 +55,12 @@ def resolve(lab_doc) -> tuple[str, bool]:
 	return tag, tag in cached_tags()
 
 
+def is_ready(lab_doc) -> bool:
+	"""True when this lab's image is on the host and its row still points at it."""
+	tag, hit = resolve(lab_doc)
+	return bool(hit) and lab_doc.status == "Ready" and lab_doc.image_tag == tag
+
+
 def cached_tags() -> set[str]:
 	"""Every cached image tag on this host. One Docker round trip per request, then O(1) lookups."""
 	return local_cache(TAGS_ATTRIBUTE, list_cached_tags)

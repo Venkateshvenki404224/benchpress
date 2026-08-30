@@ -472,7 +472,13 @@ def available_lab_id(base: str) -> str:
 	frappe.throw(_("Too many labs already use the id '{0}'.").format(base))
 
 
-def create_lab_from_template(template_key: str, lab_id: str | None = None, title: str | None = None) -> str:
+def create_lab_from_template(
+	template_key: str,
+	lab_id: str | None = None,
+	title: str | None = None,
+	*,
+	ignore_permissions: bool = False,
+) -> str:
 	"""Build a Lab document from a template and return its name."""
 	template = get_template(template_key)
 	lab = frappe.get_doc(
@@ -489,7 +495,9 @@ def create_lab_from_template(template_key: str, lab_id: str | None = None, title
 			"apps": [dict(app) for app in template["apps"]],
 		}
 	)
-	lab.insert()
+	# `Lab` grants `create` to admins alone, so a BenchPress User launching a template could not
+	# materialise one. The recipe is the template's own either way — the caller authors nothing.
+	lab.insert(ignore_permissions=ignore_permissions)
 	return lab.name
 
 

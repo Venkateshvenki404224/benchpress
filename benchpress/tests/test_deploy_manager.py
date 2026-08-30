@@ -1307,3 +1307,43 @@ class TestRecordPrimarySite(FakeDockerMixin, IntegrationTestCase):
 		dropped = {call.args[1] for call in mock_drop.call_args_list}
 		self.assertEqual(dropped, {bench.site_name})
 		self.assertNotIn(f"{bench.site_name}.example.com", dropped)
+
+
+class TestBuildRefreshesTheImageMemo(IntegrationTestCase):
+	"""A launch builds and deploys in one job, so the memo the build invalidated must not survive it."""
+
+	@classmethod
+	def setUpClass(cls):
+		super().setUpClass()
+		frappe.set_user("Administrator")
+		cls.lab = _make_lab("test-lab-memo")
+		frappe.db.commit()
+
+	@classmethod
+	def tearDownClass(cls):
+		frappe.set_user("Administrator")
+		frappe.db.delete("Build Log", {"lab": cls.lab.name})
+		cls.lab.delete(ignore_permissions=True)
+		frappe.db.commit()
+		super().tearDownClass()
+
+	def test_a_finished_build_is_visible_to_the_next_lookup_in_the_same_job(self):
+		"""Chained, `_prepare_lab_image` runs seconds later in this process and must see the image."""
+		from benchpress import image_cache
+
+		lab = frappe.get_doc("Lab", self.lab.name)
+		tag = image_cache.cache_tag(lab)
+		# The set as this job already read it: Docker was asked before the build, so the image
+		# the build is about to produce is not in the answer that is memoised now.
+		setattr(frappe.local, image_cache.TAGS_ATTRIBUTE, set())
+		self.addCleanup(image_cache.clear_cached_tags)
+
+		with (
+			patch.object(deploy_manager, "build_lab_image", autospec=True, return_value=tag),
+			patch.object(deploy_manager, "_add_golden", autospec=True),
+			patch.object(deploy_manager.metering, "on_image_built", autospec=True),
+			patch.object(image_cache, "list_cached_tags", autospec=True, return_value={tag}),
+		):
+			deploy_manager._build_lab_with_logs(lab, None)
+
+			self.assertTrue(image_cache.is_ready(lab))

@@ -6,7 +6,16 @@ from frappe import _
 from frappe.query_builder import DocType
 from frappe.query_builder.functions import Count
 
-from benchpress import addressing, image_cache, lab_detail, lab_templates, labs, lifecycle, site_names
+from benchpress import (
+	addressing,
+	image_cache,
+	lab_detail,
+	lab_templates,
+	labs,
+	launch,
+	lifecycle,
+	site_names,
+)
 from benchpress.benchpress.doctype.bench_instance.bench_instance import DEPLOY_JOB_TIMEOUT
 
 # Every field the renew path decides from, read once under the row lock.
@@ -88,13 +97,17 @@ def create_lab_from_template(template: str, lab_id: str | None = None, title: st
 @requires_admission(cost=build_charge, caps=(cap_builds_per_day,), payer=lab_owner)
 def build_lab_image(lab_name: str) -> dict:
 	require_admin()
-	frappe.enqueue(
+	# Deduplicated: without a job id two clicks queued two 40-minute builds of one tag, and
+	# charged for both.
+	job = frappe.enqueue(
 		"benchpress.deploy_manager.build_lab",
 		lab_name=lab_name,
 		queue="long",
 		timeout=10800,
+		job_id=f"build_lab:{lab_name}",
+		deduplicate=True,
 	)
-	return {"name": lab_name, "status": "Building"}
+	return {"name": lab_name, "status": "Building", "queued": bool(job)}
 
 
 @frappe.whitelist()
@@ -102,8 +115,7 @@ def build_lab_golden(lab_name: str) -> dict:
 	"""Queue the golden build for one lab, appending it to the image the lab already has."""
 	require_admin()
 	lab = frappe.get_doc("Lab", lab_name)
-	tag, hit = image_cache.resolve(lab)
-	if lab.status != "Ready" or not hit or lab.image_tag != tag:
+	if not image_cache.is_ready(lab):
 		frappe.throw(_("No built image for lab '{0}'. Build it first from the Lab record.").format(lab.title))
 	frappe.enqueue(
 		"benchpress.golden.build_golden_job",
@@ -191,9 +203,26 @@ def _counts_by_bench(doctype: str, column: str, bench_names: list[str]) -> dict[
 @requires_admission(cost=deploy_lease_cost, caps=(cap_size_tier,))
 def create_bench(data: str) -> dict:
 	require_app_user()
-	from benchpress.benchpress.doctype.bench_instance import get_instance_id
-
 	data = frappe.parse_json(data)
+	doc = _claim_instance(data)
+
+	frappe.enqueue(
+		"benchpress.lifecycle.deploy_bench",
+		bench_name=doc.name,
+		size=data.get("instance_size"),
+		queue="long",
+		timeout=DEPLOY_JOB_TIMEOUT,
+		job_id=f"deploy_bench:{doc.name}",
+		deduplicate=True,
+		enqueue_after_commit=True,
+	)
+
+	return {"name": doc.name, "status": "Deploying"}
+
+
+def _claim_instance(data: dict):
+	"""The instance this deploy is about, under the id that makes a second click free."""
+	from benchpress.benchpress.doctype.bench_instance import get_instance_id
 
 	lab_name = data.get("lab")
 	if not lab_name:
@@ -220,19 +249,109 @@ def create_bench(data: str) -> dict:
 			doc = _redeploy_instance(instance_id, site_name)
 
 	site_names.claim(doc)
+	return doc
 
+
+@frappe.whitelist()
+def launch_template(template: str, instance_size: str | None = None, site_name: str | None = None) -> dict:
+	"""One click: the lab this template describes, and a bench being built and deployed from it."""
+	require_app_user()
+	# `lab_templates.get_template` checks existence only, so without this a user
+	# could materialise a template an admin retired.
+	if not frappe.db.get_value("Lab Template", template, "is_active"):
+		frappe.throw(_("Unknown lab template '{0}'.").format(template or ""))
+	lab_name = _lab_for_template(template)
+	return _launch(frappe.as_json({"lab": lab_name, "instance_size": instance_size, "site_name": site_name}))
+
+
+@frappe.whitelist()
+def launch_lab(data: str) -> dict:
+	"""`create_bench` for a lab that may not be built yet: the build is part of the run."""
+	require_app_user()
+	return _launch(data)
+
+
+@requires_admission(cost=deploy_lease_cost, caps=(cap_size_tier,))
+def _launch(data: str) -> dict:
+	"""Claim the instance and hand the whole run — build then deploy — to one job.
+
+	Not whitelisted: `requires_admission` binds by argument name and needs a lab that exists,
+	which is only true once `launch_template` has resolved one.
+	"""
+	payload = frappe.parse_json(data)
+	doc = _claim_instance(payload)
 	frappe.enqueue(
-		"benchpress.lifecycle.deploy_bench",
+		"benchpress.launch.run_launch",
 		bench_name=doc.name,
-		size=size,
+		size=payload.get("instance_size"),
 		queue="long",
-		timeout=DEPLOY_JOB_TIMEOUT,
-		job_id=f"deploy_bench:{doc.name}",
+		timeout=launch.LAUNCH_JOB_TIMEOUT,
+		job_id=f"launch:{doc.name}",
 		deduplicate=True,
 		enqueue_after_commit=True,
 	)
+	return _launch_response(doc)
 
-	return {"name": doc.name, "status": "Deploying"}
+
+def _launch_response(doc) -> dict:
+	"""What the launch dialog opens on, before a single log line has arrived."""
+	# `Lab.status` is read from the row rather than the document `_claim_instance` cached, and
+	# `will_build` is that read alone: asking Docker whether the image is really on the host
+	# would put a socket round trip in front of every deploy request, which is exactly what
+	# `cap_builds_per_day` refuses to do. The job decides; this is opening copy.
+	lab = frappe.db.get_value("Lab", doc.lab, ["title", "status", "template"], as_dict=True)
+	template = frappe.db.get_value("Lab Template", lab.template, "eta_minutes") if lab.template else 0
+	return {
+		# `name` and `bench` are the same string: the response is a superset of `create_bench`'s,
+		# so a caller still reading `name` keeps working.
+		"name": doc.name,
+		"bench": doc.name,
+		"lab": doc.lab,
+		"lab_title": lab.title,
+		"lab_status": lab.status,
+		"will_build": lab.status != "Ready",
+		"eta_minutes": frappe.utils.cint(template),
+	}
+
+
+def _lab_for_template(template_key: str) -> str:
+	"""The lab this template already built, or a fresh one."""
+	# Reuse is what makes the second developer's click instant: they ride the
+	# image the first click paid for, which is `image_cache`'s stated design —
+	# a lab's tag is its `lab_id`, and the first lab from a template takes the
+	# template's own key.
+	existing = _matching_lab(template_key)
+	if existing:
+		return existing
+	try:
+		return lab_templates.create_lab_from_template(template_key, ignore_permissions=True)
+	except frappe.DuplicateEntryError:
+		# `available_lab_id` reads with `frappe.db.exists`, which takes no lock,
+		# so two first clicks both pick `crm` and one loses. Same race
+		# `_claim_instance` already handles this way.
+		frappe.clear_last_message()
+		found = _matching_lab(template_key)
+		if not found:
+			raise
+		return found
+
+
+def _matching_lab(template_key: str) -> str | None:
+	"""The newest lab from this template whose recipe is still the template's own."""
+	# `frappe.get_all`, not `get_list`: the lab is shared, and a launcher who
+	# does not own it must still find it. A lab an admin edited away from the
+	# template is skipped — deploying it would install apps the card never
+	# promised. `Lab.reset_status_if_spec_changed` is why an edited lab is not
+	# merely stale but wrong.
+	wanted = image_cache.build_spec(image_cache.template_spec(lab_templates.get_template(template_key)))
+	# `limit=5` bounds the scan; a template with six diverged labs is a catalog problem, not a
+	# query to walk.
+	for name in frappe.get_all(
+		"Lab", filters={"template": template_key}, pluck="name", order_by="creation desc", limit=5
+	):
+		if image_cache.build_spec(frappe.get_cached_doc("Lab", name)) == wanted:
+			return name
+	return None
 
 
 def _redeploy_instance(instance_id: str, site_name: str | None):
