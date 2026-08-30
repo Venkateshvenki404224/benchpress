@@ -81,7 +81,7 @@ jobs:
 
     steps:
       - name: Clone
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Find tests
         run: |
@@ -189,7 +189,7 @@ jobs:
 
     steps:
       - name: Clone
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Setup Node
         uses: actions/setup-node@v6
@@ -232,7 +232,7 @@ jobs:
       # that last touched it. A shallow clone has no such commit, so the
       # generated files would differ from the committed ones and drift.
       - name: Clone
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
