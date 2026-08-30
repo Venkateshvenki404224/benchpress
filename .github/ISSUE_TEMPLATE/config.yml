@@ -11,5 +11,5 @@ contact_links:
     url: https://github.com/Venkateshvenki404224/benchpress/discussions
     about: Ask how to do something, or propose an idea before opening an issue.
   - name: Documentation
-    url: https://docs.benchpress.cloud/docs
+    url: https://benchpress.cloud/docs
     about: Install, deploy and configure BenchPress.

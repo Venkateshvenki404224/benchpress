@@ -25,7 +25,7 @@ export default defineDocsConfig({
           "is done.",
           "",
           "- Self-hosted. One box, Docker, no external control plane.",
-          "- Every bench reachable only over WireGuard.",
+          "- No bench port is published on the host; benches answer on WireGuard, plus an HTTPS name when a base domain is set.",
           "- Built on the Frappe framework, with a Vue 3 single-page app on the front.",
         ].join("\n"),
       },
