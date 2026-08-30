@@ -3,7 +3,7 @@ title: Diagnostics
 description: The twelve read-only checks that ask Docker, MariaDB, Redis and the
   kernel what is true — how to run them, what each failure means, and the four
   things they do not cover.
-lastModified: "2026-08-30T17:48:34+05:30"
+lastModified: "2026-08-30T08:51:56-04:00"
 lastAuthor: Venkatesh
 ---
 # Diagnostics
