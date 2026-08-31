@@ -89,13 +89,18 @@ def notify_of_signup() -> dict:
 def announce_signup(entry) -> None:
 	route = "/login" if entry.status == APPROVED else config.SIGNUP_ROUTE
 	link = get_url(route)
-	frappe.sendmail(
-		recipients=[entry.name],
-		subject=_("Hosted BenchPress is open — your slot is ready"),
-		message=_(
-			"<p>Hi {0},</p><p>You asked for hosted BenchPress access a while back. It no longer needs an invite — anyone can start, and the free credits are waiting on your account.</p><p><a href='{1}'>{1}</a></p><p>Self-hosting is still free and unmetered; the repo is linked from the site.</p>"
-		).format(entry.full_name or entry.name.split("@")[0], link),
-	)
+	try:
+		frappe.sendmail(
+			recipients=[entry.name],
+			subject=_("Hosted BenchPress is open — your slot is ready"),
+			message=_(
+				"<p>Hi {0},</p><p>You asked for hosted BenchPress access a while back. It no longer needs an invite — anyone can start, and the free credits are waiting on your account.</p><p><a href='{1}'>{1}</a></p><p>Self-hosting is still free and unmetered; the repo is linked from the site.</p>"
+			).format(entry.full_name or entry.name.split("@")[0], link),
+		)
+	except Exception:
+		# Not stamped, so the next run offers this entry again rather than recording a silent miss.
+		frappe.log_error(title="BenchPress invite failed", message=frappe.get_traceback())
+		return
 	frappe.db.set_value(DOCTYPE, entry.name, "invite_sent_on", now_datetime(), update_modified=False)
 
 

@@ -157,15 +157,19 @@ def _send(template_name, recipients, context, doctype, name, reply_to=None) -> N
 	if not recipients:
 		return
 	body = _render(template_name, context)
-	frappe.sendmail(
-		recipients=recipients,
-		subject=body["subject"],
-		message=body["message"],
-		reference_doctype=doctype,
-		reference_name=name,
-		reply_to=reply_to,
-		delayed=True,
-	)
+	# Never raises: a site with no outgoing account must still accept the signup or the message.
+	try:
+		frappe.sendmail(
+			recipients=recipients,
+			subject=body["subject"],
+			message=body["message"],
+			reference_doctype=doctype,
+			reference_name=name,
+			reply_to=reply_to,
+			delayed=True,
+		)
+	except Exception:
+		frappe.log_error(title=f"BenchPress mail failed: {template_name}", message=frappe.get_traceback())
 
 
 def _render(template_name: str, context: dict) -> dict:

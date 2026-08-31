@@ -63,6 +63,16 @@ class TestEmails(IntegrationTestCase):
 		self.assertEqual(self.mailer.call_count, 1, "expected exactly one email")
 		return self.mailer.call_args.kwargs
 
+	def test_a_site_with_no_outgoing_account_still_completes_the_operation(self):
+		"""CI has no Email Account, and `frappe.in_test` forces the queue to send at once."""
+		self.mailer.side_effect = frappe.OutgoingEmailError("Email Account not setup")
+
+		with patch.object(frappe, "log_error") as logged:
+			emails.send_access_request_received(_entry())
+
+		self.assertEqual(self.mailer.call_count, 1)
+		self.assertTrue(logged.called, "the failure must be logged, not swallowed silently")
+
 	# recipients and subjects
 
 	def test_the_requester_gets_the_acknowledgement(self):
