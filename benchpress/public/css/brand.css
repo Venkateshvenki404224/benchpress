@@ -1,0 +1,603 @@
+/* BenchPress brand palette — "Cobalt": tokens, fonts, keyframes and breakpoints for the public
+ * pages. Theming is `<div class="bp" data-mode="dark|light">`; `data-ondark` re-pins the tokens of
+ * a subtree that stays dark in both modes. */
+
+/* -- Faces ------------------------------------------------------------------------------- */
+
+@font-face {
+	font-family: "Poppins";
+	font-style: normal;
+	font-weight: 400;
+	font-display: swap;
+	src: url("/assets/benchpress/fonts/Poppins-400-latin.woff2") format("woff2");
+	unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308,
+		U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+	font-family: "Poppins";
+	font-style: normal;
+	font-weight: 400;
+	font-display: swap;
+	src: url("/assets/benchpress/fonts/Poppins-400-latin-ext.woff2") format("woff2");
+	unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308,
+		U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113,
+		U+2C60-2C7F, U+A720-A7FF;
+}
+
+@font-face {
+	font-family: "Poppins";
+	font-style: normal;
+	font-weight: 500;
+	font-display: swap;
+	src: url("/assets/benchpress/fonts/Poppins-500-latin.woff2") format("woff2");
+	unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308,
+		U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+	font-family: "Poppins";
+	font-style: normal;
+	font-weight: 500;
+	font-display: swap;
+	src: url("/assets/benchpress/fonts/Poppins-500-latin-ext.woff2") format("woff2");
+	unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308,
+		U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113,
+		U+2C60-2C7F, U+A720-A7FF;
+}
+
+@font-face {
+	font-family: "Poppins";
+	font-style: normal;
+	font-weight: 600;
+	font-display: swap;
+	src: url("/assets/benchpress/fonts/Poppins-600-latin.woff2") format("woff2");
+	unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308,
+		U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+	font-family: "Poppins";
+	font-style: normal;
+	font-weight: 600;
+	font-display: swap;
+	src: url("/assets/benchpress/fonts/Poppins-600-latin-ext.woff2") format("woff2");
+	unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308,
+		U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113,
+		U+2C60-2C7F, U+A720-A7FF;
+}
+
+@font-face {
+	font-family: "Poppins";
+	font-style: normal;
+	font-weight: 700;
+	font-display: swap;
+	src: url("/assets/benchpress/fonts/Poppins-700-latin.woff2") format("woff2");
+	unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308,
+		U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+	font-family: "Poppins";
+	font-style: normal;
+	font-weight: 700;
+	font-display: swap;
+	src: url("/assets/benchpress/fonts/Poppins-700-latin-ext.woff2") format("woff2");
+	unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308,
+		U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113,
+		U+2C60-2C7F, U+A720-A7FF;
+}
+
+@font-face {
+	font-family: "Poppins";
+	font-style: normal;
+	font-weight: 800;
+	font-display: swap;
+	src: url("/assets/benchpress/fonts/Poppins-800-latin.woff2") format("woff2");
+	unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308,
+		U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+	font-family: "Poppins";
+	font-style: normal;
+	font-weight: 800;
+	font-display: swap;
+	src: url("/assets/benchpress/fonts/Poppins-800-latin-ext.woff2") format("woff2");
+	unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308,
+		U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113,
+		U+2C60-2C7F, U+A720-A7FF;
+}
+
+/* The rupee sign is not in Poppins' latin subset — Google files U+20B9 under devanagari. */
+@font-face {
+	font-family: "Poppins";
+	font-style: normal;
+	font-weight: 800;
+	font-display: swap;
+	src: url("/assets/benchpress/fonts/Poppins-800-devanagari.woff2") format("woff2");
+	unicode-range: U+20A8, U+20B9;
+}
+
+@font-face {
+	font-family: "Inter";
+	font-style: normal;
+	font-weight: 100 900;
+	font-display: swap;
+	src: url("/assets/benchpress/fonts/Inter-var-latin.woff2") format("woff2");
+	unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308,
+		U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+	font-family: "Inter";
+	font-style: normal;
+	font-weight: 100 900;
+	font-display: swap;
+	src: url("/assets/benchpress/fonts/Inter-var-latin-ext.woff2") format("woff2");
+	unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308,
+		U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113,
+		U+2C60-2C7F, U+A720-A7FF;
+}
+
+/* -- Root: type, motion, marketing tokens, and the light page palette -------------------- */
+
+:root {
+	/* Type stacks */
+
+	--font-display: "Poppins", "Inter", system-ui, sans-serif;
+	--font-sans: "Inter", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+	--font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+	/* Motion */
+
+	--ease-out: cubic-bezier(0, 0, 0.2, 1);
+	--duration-fast: 120ms;
+	--duration-base: 150ms;
+	--duration-slow: 180ms;
+	--transition-control: background var(--duration-base) var(--ease-out),
+		border-color var(--duration-base) var(--ease-out), color var(--duration-base) var(--ease-out);
+
+	/* Marketing tokens, Cobalt values. These supersede the design system's `marketing.css`,
+	 * which ships the Espresso product blue; do not restore a value from it. */
+
+	--m-ink: #0a1024;
+	--m-blue: #1f5cf5;
+	--m-blue-hover: #0f3fcb;
+	--m-accent-soft: #e8eeff;
+	--m-panel: #f2f6ff;
+	--m-cta-band: #e8eeff;
+	--m-line: #e0e8fa;
+	--m-line-strong: #c9d6f4;
+	--m-thead: #eff4ff;
+	--m-zebra: #f6f9ff;
+	--m-muted: #4e5a7c;
+	--m-eyebrow-dark: #7fa8ff;
+	--m-code-cyan: #9fc3ff;
+	--m-green: #22c55e;
+
+	/* Landing-only surfaces, referenced outside any `[data-mode]` subtree. */
+	--bp-panel: #080e20;
+	--bp-accent: #4e8bfb;
+
+	/* Marketing geometry */
+
+	--m-h1: 56px;
+	--m-h2: 36px;
+	--m-body: 16px;
+	--m-shell: 1200px;
+	--m-shell-pad: 32px;
+	--m-section-pad: 80px;
+	--m-header-height: 68px;
+	--m-radius-button: 8px;
+	--m-radius-card: 12px;
+	--m-radius-pane: 14px;
+	--m-radius-film: 16px;
+	--m-button-height: 38px;
+	--m-button-height-lg: 48px;
+
+	/* Mode-independent page tokens */
+
+	--brand: #1f5cf5;
+	--onbrand: #ffffff;
+	--codefg: #9fc3ff;
+
+	/* Light page palette. The dark block below overrides every one of these. */
+
+	--bg0: #f6f8ff;
+	--bg1: #ffffff;
+	--bg-alt: #f1f5ff; /* Text on this band is `--m-ink`, not `--fg`. */
+	--card: #ffffff;
+	--cardb: #dfe7fa;
+	--fg: #0a1024;
+	--fg2: #4e5a7c;
+	--fg3: #8b94ae;
+	--hair: #e3eafb;
+	--panel: #0a1024; /* Dark in both modes; pair with `data-ondark`. */
+	--code: #0a1024;
+	--accent: #1f5cf5;
+	--brand2: #0f3fcb;
+	--tint: #e8eeff;
+	--input: #ffffff;
+	--grid: rgba(31, 92, 245, 0.1);
+	--glow: rgba(31, 92, 245, 0.14);
+	--dock: rgba(255, 255, 255, 0.9);
+	--cta-fg: #ffffff;
+	--cta-bg: #1f5cf5;
+	--lime: #2fb714;
+}
+
+/* -- Mode blocks ------------------------------------------------------------------------- */
+
+[data-mode="dark"] {
+	--bg0: #06091a;
+	--bg1: #0a1024;
+	--bg-alt: #ffffff; /* The alternating band stays light in dark mode, by design. */
+	--card: rgba(78, 139, 251, 0.07);
+	--cardb: rgba(78, 139, 251, 0.22);
+	--fg: #ffffff;
+	--fg2: rgba(255, 255, 255, 0.7);
+	--fg3: rgba(255, 255, 255, 0.45);
+	--hair: rgba(255, 255, 255, 0.12);
+	--panel: #080e20;
+	--code: #080e20;
+	--accent: #4e8bfb;
+	--brand2: #4e8bfb;
+	--tint: rgba(31, 92, 245, 0.18);
+	--input: rgba(255, 255, 255, 0.05);
+	--grid: rgba(120, 160, 255, 0.1);
+	--glow: rgba(31, 92, 245, 0.45);
+	--dock: rgba(10, 16, 36, 0.84);
+	--cta-fg: #0a1024;
+	--cta-bg: #ffffff;
+	--lime: #4cdd2e;
+}
+
+[data-mode="light"] {
+	--bg0: #f6f8ff;
+	--bg1: #ffffff;
+	--bg-alt: #f1f5ff;
+	--card: #ffffff;
+	--cardb: #dfe7fa;
+	--fg: #0a1024;
+	--fg2: #4e5a7c;
+	--fg3: #8b94ae;
+	--hair: #e3eafb;
+	--panel: #0a1024;
+	--code: #0a1024;
+	--accent: #1f5cf5;
+	--brand2: #0f3fcb;
+	--tint: #e8eeff;
+	--input: #ffffff;
+	--grid: rgba(31, 92, 245, 0.1);
+	--glow: rgba(31, 92, 245, 0.14);
+	--dock: rgba(255, 255, 255, 0.9);
+	--cta-fg: #ffffff;
+	--cta-bg: #1f5cf5;
+	--lime: #2fb714;
+}
+
+/* -- On-dark islands --------------------------------------------------------------------- */
+
+[data-ondark] {
+	--fg: #ffffff;
+	--fg2: rgba(255, 255, 255, 0.72);
+	--fg3: rgba(255, 255, 255, 0.45);
+	--hair: rgba(255, 255, 255, 0.14);
+	--card: rgba(255, 255, 255, 0.06);
+	--cardb: rgba(255, 255, 255, 0.16);
+	color: #ffffff;
+}
+
+/* -- Espresso: the product palette, for the console mock only ---------------------------- */
+
+:root {
+	--gray-1: #f9f9f9;
+	--gray-2: #f4f4f4;
+	--gray-3: #ededed;
+	--gray-4: #e2e2e2;
+	--gray-5: #d3d3d3;
+	--ink-9: #171717;
+	--ink-8: #383838;
+	--ink-7: #525252;
+	--ink-6: #666666;
+	--ink-5: #808080;
+	--ink-4: #999999;
+	--ink-3: #b3b3b3;
+	--ink-white: #ffffff;
+	--solid-9: #171717;
+	--solid-9-hover: #2f2f2f;
+	--green-1: #e7f5ee;
+	--green-3: #30a66d;
+	--green-ink: #167c4a;
+	--blue-1: #eff6fe;
+	--blue-3: #2490ef;
+	--blue-3-hover: #1579d0;
+	--amber-1: #fef6e7;
+	--amber-2: #e5a544;
+	--amber-ink: #9a6700;
+	--red-1: #fdf0ef;
+	--red-4: #e03636;
+	--red-ink: #c7291f;
+	--red-line: #f7e0de;
+	--red-log: #8c2a22;
+}
+
+/* -- Base layer -------------------------------------------------------------------------- */
+
+/* `html` carries the ground under the `.bp` wrapper so an overscroll never flashes the wrong
+ * colour. Where `:has()` is unsupported it stays dark, which is also the default mode. */
+html {
+	background: #06091a;
+	scroll-behavior: smooth;
+}
+
+html:has(.bp[data-mode="light"]) {
+	background: var(--bg0);
+}
+
+body {
+	margin: 0;
+	background: transparent;
+	-webkit-font-smoothing: antialiased;
+}
+
+.bp {
+	box-sizing: border-box;
+	min-height: 100vh;
+	background: var(--bg0);
+	color: var(--fg);
+	font-family: var(--font-display);
+	font-size: var(--m-body);
+}
+
+.bp *,
+.bp *::before,
+.bp *::after {
+	box-sizing: inherit;
+}
+
+/* `:where()` so the rule weighs nothing and any component class beats it without `!important`. */
+:where(.bp a) {
+	color: var(--brand);
+	text-decoration: none;
+	transition: color var(--duration-base) var(--ease-out);
+}
+
+:where(.bp a):hover {
+	color: var(--brand2);
+}
+
+/* Frappe's `website.bundle.css` sets `h1,h2,h3,h4,h5,h6 { color: #171717 }` on bare element
+ * selectors, which renders a marketing heading near-invisible on the navy ground. */
+.bp :where(h1, h2, h3, h4, h5, h6) {
+	color: var(--fg);
+}
+
+/* Frappe's `login.bundle.css` styles bare form controls, so these are scoped and explicit. */
+.bp input,
+.bp textarea,
+.bp select,
+.bp button {
+	font-family: inherit;
+}
+
+.bp input::placeholder,
+.bp textarea::placeholder {
+	color: var(--fg3);
+}
+
+/* Scoped to sections, not every `[id]`, because `login.js` focus-scrolls to ids of its own. */
+.bp section[id] {
+	scroll-margin-top: var(--m-header-height);
+}
+
+/* -- Keyframes --------------------------------------------------------------------------- */
+
+@keyframes bp-pulse {
+	0%,
+	100% {
+		opacity: 1;
+	}
+	50% {
+		opacity: 0.3;
+	}
+}
+
+@keyframes bp-line {
+	from {
+		opacity: 0;
+		transform: translateY(6px);
+	}
+	to {
+		opacity: 1;
+		transform: none;
+	}
+}
+
+@keyframes bp-rise {
+	from {
+		opacity: 0;
+		transform: translateY(14px);
+	}
+	to {
+		opacity: 1;
+		transform: none;
+	}
+}
+
+@keyframes bp-caret {
+	50% {
+		opacity: 0;
+	}
+}
+
+@keyframes bp-float {
+	0%,
+	100% {
+		transform: translateY(0);
+	}
+	50% {
+		transform: translateY(-7px);
+	}
+}
+
+/* The marquee list is doubled in the template, so -50% loops seamlessly. */
+@keyframes bp-marquee {
+	from {
+		transform: translateX(0);
+	}
+	to {
+		transform: translateX(-50%);
+	}
+}
+
+@keyframes bp-bar {
+	0% {
+		width: 12%;
+	}
+	100% {
+		width: 64%;
+	}
+}
+
+@keyframes flow-down {
+	to {
+		background-position: 0 22px;
+	}
+}
+
+/* -- Breakpoints ------------------------------------------------------------------------
+ *   data-r~="pad"   element that owns a page gutter
+ *   data-r="sec"    top-level section
+ *   data-r~="hero"  hero, which clears the floating dock
+ *   data-r="nav"    the dock's link row
+ *   data-r~="split" two-column grid
+ *   data-r="bento"  five-card feature grid
+ *   data-r="quote"  testimonial card
+ *   data-r="tabs" / "tabs2"  tab strip
+ *   data-r="float"  floating badge
+ * --------------------------------------------------------------------------------------- */
+
+@media (max-width: 900px) {
+	.bp [data-r~="pad"] {
+		padding-left: 18px !important;
+		padding-right: 18px !important;
+	}
+	.bp section[data-r="sec"] {
+		padding-top: 56px !important;
+		padding-bottom: 56px !important;
+	}
+	.bp [data-r~="hero"] {
+		padding-top: 100px !important;
+	}
+	.bp [data-r="nav"] {
+		display: none !important;
+	}
+	.bp [data-r~="split"] {
+		grid-template-columns: 1fr !important;
+		gap: 32px !important;
+	}
+	.bp [data-r="bento"] {
+		grid-template-columns: 1fr !important;
+	}
+	.bp [data-r="bento"] > * {
+		grid-column: auto !important;
+	}
+	.bp [data-r="quote"] {
+		width: min(78vw, 320px) !important;
+	}
+	.bp [data-r="tabs"],
+	.bp [data-r="tabs2"] {
+		width: 100% !important;
+		box-sizing: border-box !important;
+	}
+	.bp [data-r="float"] {
+		position: static !important;
+		margin-top: 14px !important;
+	}
+	.bp h1 {
+		font-size: 34px !important;
+		line-height: 1.06 !important;
+	}
+	.bp h2 {
+		font-size: 26px !important;
+	}
+	.bp h3 {
+		font-size: 24px !important;
+	}
+}
+
+@media (max-width: 560px) {
+	.bp [data-r~="pad"] {
+		padding-left: 14px !important;
+		padding-right: 14px !important;
+	}
+}
+
+/* -- Reduced motion ---------------------------------------------------------------------- */
+
+/* The keyframes are redefined rather than the animations cancelled, because the `animation`
+ * shorthand belongs to the page stylesheets. */
+@media (prefers-reduced-motion: reduce) {
+	:root {
+		--duration-fast: 0.01ms;
+		--duration-base: 0.01ms;
+		--duration-slow: 0.01ms;
+	}
+
+	html {
+		scroll-behavior: auto;
+	}
+
+	@keyframes bp-pulse {
+		from,
+		to {
+			opacity: 1;
+		}
+	}
+	@keyframes bp-line {
+		from,
+		to {
+			opacity: 1;
+			transform: none;
+		}
+	}
+	@keyframes bp-rise {
+		from,
+		to {
+			opacity: 1;
+			transform: none;
+		}
+	}
+	@keyframes bp-caret {
+		from,
+		to {
+			opacity: 1;
+		}
+	}
+	@keyframes bp-float {
+		from,
+		to {
+			transform: none;
+		}
+	}
+	@keyframes bp-marquee {
+		from,
+		to {
+			transform: none;
+		}
+	}
+	@keyframes bp-bar {
+		from,
+		to {
+			width: 64%;
+		}
+	}
+	@keyframes flow-down {
+		from,
+		to {
+			background-position: 0 0;
+		}
+	}
+}

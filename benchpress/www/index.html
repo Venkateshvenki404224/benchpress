@@ -1,0 +1,756 @@
+{% extends "templates/web.html" %}
+
+{#- lucide 0.451.0 path data; sizing is CSS, never a width/height attribute. -#}
+{%- macro svg(body, klass) -%}
+<svg class="{{ klass | e }}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">{{ body }}</svg>
+{%- endmacro -%}
+
+{%- macro arrow_right(klass="") -%}{{ svg('<path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>', klass) }}{%- endmacro -%}
+{%- macro check(klass="") -%}{{ svg('<path d="M20 6 9 17l-5-5"/>', klass) }}{%- endmacro -%}
+{%- macro clock(klass="") -%}{{ svg('<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>', klass) }}{%- endmacro -%}
+{%- macro copy(klass="") -%}{{ svg('<rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>', klass) }}{%- endmacro -%}
+{%- macro cpu(klass="") -%}{{ svg('<rect width="16" height="16" x="4" y="4" rx="2"/><rect width="6" height="6" x="9" y="9" rx="1"/><path d="M15 2v2"/><path d="M15 20v2"/><path d="M2 15h2"/><path d="M2 9h2"/><path d="M20 15h2"/><path d="M20 9h2"/><path d="M9 2v2"/><path d="M9 20v2"/>', klass) }}{%- endmacro -%}
+{%- macro credit_card(klass="") -%}{{ svg('<rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/>', klass) }}{%- endmacro -%}
+{%- macro eye(klass="") -%}{{ svg('<path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/>', klass) }}{%- endmacro -%}
+{%- macro eye_off(klass="") -%}{{ svg('<path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" x2="22" y1="2" y2="22"/>', klass) }}{%- endmacro -%}
+{%- macro file_text(klass="") -%}{{ svg('<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/>', klass) }}{%- endmacro -%}
+{%- macro github(klass="") -%}{{ svg('<path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/>', klass) }}{%- endmacro -%}
+{%- macro hammer(klass="") -%}{{ svg('<path d="m15 12-8.5 8.5a2.12 2.12 0 1 1-3-3L12 9"/><path d="M17.64 15 22 10.64"/><path d="m20.91 11.7-1.25-1.25c-.6-.6-.93-1.4-.93-2.25v-.86L16.01 4.6a5.56 5.56 0 0 0-3.94-1.64H9l.92.82A6.18 6.18 0 0 1 12 8.4v1.56l2 2h2.47l2.26 1.91"/>', klass) }}{%- endmacro -%}
+{%- macro laptop(klass="") -%}{{ svg('<path d="M20 16V7a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v9m16 0H4m16 0 1.28 2.55a1 1 0 0 1-.9 1.45H3.62a1 1 0 0 1-.9-1.45L4 16"/>', klass) }}{%- endmacro -%}
+{%- macro layout_template(klass="") -%}{{ svg('<rect width="18" height="7" x="3" y="3" rx="1"/><rect width="9" height="7" x="3" y="14" rx="1"/><rect width="5" height="7" x="16" y="14" rx="1"/>', klass) }}{%- endmacro -%}
+{%- macro list_icon(klass="") -%}{{ svg('<path d="M3 12h.01"/><path d="M3 18h.01"/><path d="M3 6h.01"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M8 6h13"/>', klass) }}{%- endmacro -%}
+{%- macro lock(klass="") -%}{{ svg('<rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>', klass) }}{%- endmacro -%}
+{%- macro mail(klass="") -%}{{ svg('<rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>', klass) }}{%- endmacro -%}
+{%- macro monitor(klass="") -%}{{ svg('<rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" x2="16" y1="21" y2="21"/><line x1="12" x2="12" y1="17" y2="21"/>', klass) }}{%- endmacro -%}
+{%- macro plus(klass="") -%}{{ svg('<path d="M5 12h14"/><path d="M12 5v14"/>', klass) }}{%- endmacro -%}
+{%- macro robot(klass="") -%}{{ svg('<path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/>', klass) }}{%- endmacro -%}
+{%- macro server(klass="") -%}{{ svg('<rect width="20" height="8" x="2" y="2" rx="2" ry="2"/><rect width="20" height="8" x="2" y="14" rx="2" ry="2"/><line x1="6" x2="6.01" y1="6" y2="6"/><line x1="6" x2="6.01" y1="18" y2="18"/>', klass) }}{%- endmacro -%}
+{%- macro shield(klass="") -%}{{ svg('<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/>', klass) }}{%- endmacro -%}
+{%- macro shield_alert(klass="") -%}{{ svg('<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="M12 8v4"/><path d="M12 16h.01"/>', klass) }}{%- endmacro -%}
+{%- macro terminal(klass="") -%}{{ svg('<polyline points="4 17 10 11 4 5"/><line x1="12" x2="20" y1="19" y2="19"/>', klass) }}{%- endmacro -%}
+{%- macro timer(klass="") -%}{{ svg('<line x1="10" x2="14" y1="2" y2="2"/><line x1="12" x2="15" y1="14" y2="11"/><circle cx="12" cy="14" r="8"/>', klass) }}{%- endmacro -%}
+{%- macro trash(klass="") -%}{{ svg('<path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/>', klass) }}{%- endmacro -%}
+{%- macro triangle_alert(klass="") -%}{{ svg('<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>', klass) }}{%- endmacro -%}
+{%- macro users(klass="") -%}{{ svg('<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>', klass) }}{%- endmacro -%}
+{%- macro dot_icon(klass="") -%}{{ svg('<circle cx="12" cy="12" r="9"/>', klass) }}{%- endmacro -%}
+
+{%- macro icon_by_name(name, klass="") -%}
+{%- if name == "terminal" -%}{{ terminal(klass) }}
+{%- elif name == "shield" -%}{{ shield(klass) }}
+{%- elif name == "credit-card" -%}{{ credit_card(klass) }}
+{%- elif name == "layout-template" -%}{{ layout_template(klass) }}
+{%- elif name == "trash-2" -%}{{ trash(klass) }}
+{%- elif name == "eye-off" -%}{{ eye_off(klass) }}
+{%- elif name == "eye" -%}{{ eye(klass) }}
+{%- elif name == "timer" -%}{{ timer(klass) }}
+{%- elif name == "clock" -%}{{ clock(klass) }}
+{%- elif name == "users" -%}{{ users(klass) }}
+{%- elif name == "bot" -%}{{ robot(klass) }}
+{%- elif name == "lock" -%}{{ lock(klass) }}
+{%- elif name == "server" -%}{{ server(klass) }}
+{%- elif name == "hammer" -%}{{ hammer(klass) }}
+{%- elif name == "laptop" -%}{{ laptop(klass) }}
+{%- elif name == "monitor" -%}{{ monitor(klass) }}
+{%- elif name == "file-text" -%}{{ file_text(klass) }}
+{%- elif name == "list" -%}{{ list_icon(klass) }}
+{%- elif name == "mail" -%}{{ mail(klass) }}
+{%- elif name == "github" -%}{{ github(klass) }}
+{%- else -%}{{ dot_icon(klass) }}
+{%- endif -%}
+{%- endmacro -%}
+
+{%- macro section_head(eyebrow, title, body, tone="") -%}
+<div class="bp-head">
+	<div class="bp-head__main">
+		{%- if eyebrow %}<p class="bp-eyebrow{{ tone }}">{{ eyebrow | e }}</p>{% endif %}
+		{%- if title %}<h2 class="bp-h2">{{ title | e }}</h2>{% endif %}
+	</div>
+	{%- if body %}<p class="bp-head__body">{{ body | e }}</p>{% endif %}
+</div>
+{%- endmacro -%}
+
+{% block title %}{{ (meta_title or title) | e }}{% endblock %}
+
+{#- The framework's chrome, blanked. These are the real block names; anything else is a no-op. -#}
+{% block navbar %}{% endblock %}
+{% block footer %}{% endblock %}
+{% block breadcrumbs %}{% endblock %}
+{% block page_sidebar %}{% endblock %}
+{% block page_footer %}{% endblock %}
+
+{% block head_include %}
+{% include "templates/includes/site_head.html" %}
+<link rel="stylesheet" href="/assets/benchpress/css/landing.css?v={{ asset_version | e }}">
+{% endblock %}
+
+{% block page_content %}
+<div class="bp" data-mode="{{ mode_default | e }}">
+{% include "templates/includes/public_header.html" %}
+
+<main id="bp-content">
+
+<section class="bp-hero" id="top" data-r="sec">
+	<div class="bp-hero__dots" aria-hidden="true"></div>
+	<div class="bp-hero__glow bp-hero__glow--top" aria-hidden="true"></div>
+	<div class="bp-hero__glow bp-hero__glow--left" aria-hidden="true"></div>
+
+	<div class="bp-shell bp-hero__inner" data-r="pad hero">
+		<div class="bp-hero__split" data-r="split">
+			<div class="bp-hero__copy">
+				{%- if settings.hero_badge_text or settings.hero_badge_version %}
+				<p class="bp-badge">
+					<span class="bp-badge__dot" aria-hidden="true"></span>
+					{{ settings.hero_badge_text | default("", true) | e }}
+					{%- if settings.hero_badge_version %}
+					<span class="bp-badge__version">{{ settings.hero_badge_version | e }}</span>
+					{%- endif %}
+				</p>
+				{%- endif %}
+
+				{%- set headline = settings.hero_headline | default("", true) -%}
+				{%- set accent = settings.hero_headline_accent | default("", true) -%}
+				<h1 class="bp-h1">
+					{%- if accent and accent in headline -%}
+						{%- set parts = headline.split(accent, 1) -%}
+						{{ parts[0] | e }}<span class="bp-hero__accent">{{ accent | e }}</span>{{ parts[1] | e }}
+					{%- else -%}
+						{{ headline | e }}
+					{%- endif -%}
+				</h1>
+
+				{%- if settings.hero_subhead %}
+				<p class="bp-hero__lede">{{ settings.hero_subhead | e }}</p>
+				{%- endif %}
+
+				<div class="bp-hero__actions">
+					{%- if credits_enabled %}
+					<a class="bp-btn bp-btn--lg bp-btn--primary" href="{{ signup_route | e }}">
+						{{ settings.hero_cta_primary_label | default("", true) | e }}{{ arrow_right("bp-btn__icon") }}
+					</a>
+					{%- endif %}
+					<a class="bp-btn bp-btn--lg {{ 'bp-btn--ghost' if credits_enabled else 'bp-btn--primary' }}" href="{{ settings.hero_cta_secondary_url | default('#paths', true) | e }}">
+						{{ github("bp-btn__icon") }}{{ settings.hero_cta_secondary_label | default("", true) | e }}
+					</a>
+				</div>
+
+				{%- if credits_enabled and settings.hero_assurances %}
+				<ul class="bp-assurances">
+					{%- for row in settings.hero_assurances %}
+					<li>{{ row.label | e }}</li>
+					{%- endfor %}
+				</ul>
+				{%- endif %}
+			</div>
+
+			<div class="bp-hero__media">
+				<div class="bp-film" data-ondark>
+					<div class="bp-film__bar">
+						<span class="bp-film__lights" aria-hidden="true"><i></i><i></i><i></i></span>
+						<span class="bp-film__name">deploy · erpnext-demo</span>
+						<span class="bp-film__step"><i class="bp-pulse-dot" aria-hidden="true"></i>step 7 of 11</span>
+					</div>
+
+					{%- if hero_media.video %}
+					<video class="bp-film__video" autoplay muted loop playsinline preload="metadata"
+					       {% if hero_media.poster %}poster="{{ hero_media.poster | e }}"{% endif %}>
+						<source src="{{ hero_media.video | e }}" type="video/mp4">
+					</video>
+					{%- elif hero_media.poster %}
+					<img class="bp-film__video" src="{{ hero_media.poster | e }}" alt="A BenchPress deploy running, step seven of eleven." width="640" height="360">
+					{%- else %}
+					<div class="bp-term">
+						<p class="bp-term__line" style="--bp-delay:0s"><span class="bp-term__time">00:00</span><span class="bp-term__mark">✓</span><span class="bp-term__text">Reserved a container slot</span></p>
+						<p class="bp-term__line" style="--bp-delay:0.35s"><span class="bp-term__time">00:04</span><span class="bp-term__mark">✓</span><span class="bp-term__text">Pulled bp/erpnext-v15:cached</span></p>
+						<p class="bp-term__line" style="--bp-delay:0.7s"><span class="bp-term__time">00:22</span><span class="bp-term__mark">✓</span><span class="bp-term__text">Container up · mariadb, redis, code-server</span></p>
+						<p class="bp-term__line" style="--bp-delay:1.05s"><span class="bp-term__time">00:49</span><span class="bp-term__mark">✓</span><span class="bp-term__text">Created site erpnext-demo.bp.local</span></p>
+						<p class="bp-term__line" style="--bp-delay:1.4s"><span class="bp-term__time">01:16</span><span class="bp-term__mark">•</span><span class="bp-term__text bp-term__text--live">Installing erpnext · migrating</span></p>
+						<p class="bp-term__line"><span class="bp-term__time"></span><span class="bp-term__mark bp-term__mark--dim">$</span><span class="bp-term__cmd">bench build --production<i class="bp-caret" aria-hidden="true"></i></span></p>
+					</div>
+					{%- endif %}
+
+					<div class="bp-film__progress" aria-hidden="true"><span></span></div>
+
+					<div class="bp-film__meta">
+						<span class="bp-chip bp-chip--mono">{{ lock("bp-chip__icon") }}10.13.13.24</span>
+						<span class="bp-chip bp-chip--mono">{{ terminal("bp-chip__icon") }}code-server :8443</span>
+						<span class="bp-film__note">0 credits charged so far</span>
+					</div>
+				</div>
+
+				<p class="bp-float" data-r="float">{{ check("bp-float__icon") }}<span>Site live in 1m 52s</span></p>
+			</div>
+		</div>
+
+		{%- if settings.template_cards %}
+		<div class="bp-tmpl">
+			<div class="bp-tmpl__row">
+				<p class="bp-tmpl__label">{{ settings.templates_eyebrow | default("Templates", true) | e }}</p>
+				<div class="bp-tmpl__viewport">
+					{#- Doubled here, not in the seed, so `bp-marquee` loops seamlessly. -#}
+					<div class="bp-tmpl__track">
+						{%- for copy in [1, 2] %}{% for card in settings.template_cards %}
+						<span class="bp-tmpl__card"{% if copy == 2 %} aria-hidden="true"{% endif %}>
+							{%- if card.icon %}<img class="bp-tmpl__icon" src="{{ card.icon | e }}" alt="" width="16" height="16" loading="lazy">{% endif %}
+							<span class="bp-tmpl__name">{{ card.app_name | e }}</span>
+							{%- if card.build_time %}<span class="bp-tmpl__time">{{ card.build_time | e }}</span>{% endif %}
+						</span>
+						{%- endfor %}{% endfor %}
+					</div>
+				</div>
+			</div>
+			<p class="bp-tmpl__trademark">{{ footer_trademark | e }}</p>
+		</div>
+		{%- endif %}
+	</div>
+</section>
+
+<section class="bp-paths" id="paths" data-r="sec">
+	<div class="bp-shell" data-r="pad">
+		<div class="bp-paths__grid" data-r="split">
+			{%- if credits_enabled %}
+			<div class="bp-path-frame">
+				<div class="bp-lightcard bp-path bp-path--hosted">
+					<div class="bp-path__eyebrows">
+						{%- if settings.paths_hosted_eyebrow %}<span class="bp-eyebrow bp-eyebrow--light">{{ settings.paths_hosted_eyebrow | e }}</span>{% endif %}
+						{%- if settings.paths_hosted_badge %}<span class="bp-tag">{{ settings.paths_hosted_badge | e }}</span>{% endif %}
+					</div>
+					<h3 class="bp-h3">{{ settings.paths_hosted_title | default("", true) | e }}</h3>
+					<p class="bp-path__body">{{ settings.paths_hosted_body | default("", true) | e }}</p>
+
+					{%- if hosted_points %}
+					<ul class="bp-points">
+						{%- for row in hosted_points %}
+						<li class="bp-point">{{ check("bp-point__icon") }}<span>{{ row.point | e }}</span></li>
+						{%- endfor %}
+					</ul>
+					{%- endif %}
+
+					<div class="bp-path__actions">
+						<a class="bp-btn bp-btn--lg bp-btn--primary" href="{{ signup_route | e }}">
+							{{ settings.paths_hosted_cta_label | default("", true) | e }}{{ arrow_right("bp-btn__icon") }}
+						</a>
+						{%- if settings.paths_hosted_cta2_label %}
+						<a class="bp-btn bp-btn--lg bp-btn--outline" href="{{ settings.paths_hosted_cta2_url | default('/contact', true) | e }}">{{ settings.paths_hosted_cta2_label | e }}</a>
+						{%- endif %}
+					</div>
+				</div>
+			</div>
+			{%- endif %}
+
+			<div class="bp-card bp-path bp-path--self">
+				{%- if settings.paths_self_eyebrow %}<span class="bp-eyebrow">{{ settings.paths_self_eyebrow | e }}</span>{% endif %}
+				<h3 class="bp-h3">{{ settings.paths_self_title | default("", true) | e }}</h3>
+				<p class="bp-path__body">{{ settings.paths_self_body | default("", true) | e }}</p>
+
+				{%- if settings.paths_self_terminal %}
+				<pre class="bp-code" data-ondark>{{ settings.paths_self_terminal | e }}</pre>
+				{%- endif %}
+
+				{%- if self_points %}
+				<ul class="bp-chips">
+					{%- for row in self_points %}
+					<li class="bp-chip">{{ row.point | e }}</li>
+					{%- endfor %}
+				</ul>
+				{%- endif %}
+
+				<div class="bp-path__actions">
+					{%- if settings.paths_self_cta_label %}
+					<a class="bp-btn bp-btn--lg bp-btn--ghost" href="{{ settings.paths_self_cta_url | default(repo_url, true) | e }}">{{ github("bp-btn__icon") }}{{ settings.paths_self_cta_label | e }}</a>
+					{%- endif %}
+					{%- if settings.paths_self_cta2_label %}
+					<a class="bp-btn bp-btn--lg bp-btn--quiet" href="{{ settings.paths_self_cta2_url | default('#services', true) | e }}">{{ hammer("bp-btn__icon") }}{{ settings.paths_self_cta2_label | e }}</a>
+					{%- endif %}
+				</div>
+			</div>
+		</div>
+
+		{%- if settings.paths_footnote %}
+		<p class="bp-footnote">{{ settings.paths_footnote | e }}</p>
+		{%- endif %}
+	</div>
+</section>
+
+{%- if settings.feature_cards %}
+<section class="bp-bento-sec" data-r="sec">
+	<div class="bp-shell" data-r="pad">
+		{{ section_head(settings.bento_eyebrow, settings.bento_title, settings.bento_body) }}
+
+		<div class="bp-bento" data-r="bento">
+			{%- for card in settings.feature_cards %}
+			{#- The illustration is keyed to the card's position, so an added card gets none. -#}
+			<article class="bp-bento__card{{ ' bp-bento__card--wide' if card.span == 'Wide' else '' }}">
+				<div class="bp-bento__head">
+					<span class="bp-bento__badge">{{ icon_by_name(card.icon, "bp-bento__icon") }}</span>
+					<b class="bp-bento__title">{{ card.title | e }}</b>
+				</div>
+				{%- if card.body %}<p class="bp-bento__body">{{ card.body | e }}</p>{% endif %}
+
+				{%- if loop.index == 1 %}
+				<div class="bp-bento__film" data-ondark>
+					<div class="bp-bento__filmbar"><span class="bp-bento__filename">hooks.py</span><span>·</span><span>apps/erpnext/erpnext</span></div>
+					<pre class="bp-bento__code">app_name = "erpnext"
+doc_events = {
+    "Sales Invoice": {"on_submit": "erpnext.hooks.notify"},
+}</pre>
+				</div>
+				{%- elif loop.index == 2 %}
+				<ul class="bp-mesh">
+					<li class="bp-mesh__row"><i class="bp-mesh__dot bp-mesh__dot--ok" aria-hidden="true"></i><span class="bp-mesh__ip">10.13.13.2</span><span class="bp-mesh__label">your laptop</span></li>
+					<li class="bp-mesh__row"><i class="bp-mesh__dot bp-mesh__dot--live" aria-hidden="true"></i><span class="bp-mesh__ip">10.13.13.24</span><span class="bp-mesh__label">erpnext-demo</span></li>
+					<li class="bp-mesh__row"><i class="bp-mesh__dot bp-mesh__dot--warn" aria-hidden="true"></i><span class="bp-mesh__ip">10.13.13.31</span><span class="bp-mesh__label">crm-sandbox</span></li>
+				</ul>
+				{%- elif loop.index == 3 %}
+				<p class="bp-stat"><span class="bp-stat__value">0</span><span class="bp-stat__label">credits for a run that fails</span></p>
+				{%- elif loop.index == 4 %}
+				<ul class="bp-chips bp-chips--mono">
+					<li class="bp-chip bp-chip--pin">frappe@version-16</li>
+					<li class="bp-chip bp-chip--pin">erpnext@version-15</li>
+					<li class="bp-chip bp-chip--pin">hrms@develop</li>
+				</ul>
+				{%- endif %}
+			</article>
+			{%- endfor %}
+		</div>
+	</div>
+</section>
+{%- endif %}
+
+<section class="bp-pipe" id="how" data-r="sec">
+	<div class="bp-shell" data-r="pad">
+		{{ section_head(settings.pipeline_eyebrow, settings.pipeline_title, settings.pipeline_body) }}
+
+		{%- if phases %}
+		<div class="bp-tabs" data-r="tabs" data-bp-phase-tabs>
+			{%- for phase in phases %}
+			<button type="button" class="bp-tab{{ ' is-selected' if phase.phase_key == default_phase else '' }}"
+			        data-bp-phase="{{ phase.phase_key | e }}"
+			        data-bp-nodes="{{ phase.nodes | join(',') | e }}"
+			        data-bp-chips="{{ phase.chips | join(',') | e }}"
+			        aria-pressed="{{ 'true' if phase.phase_key == default_phase else 'false' }}">
+				{%- if phase.step_range %}<span class="bp-tab__range">{{ phase.step_range | e }}</span>{% endif %}{{ phase.label | e }}
+			</button>
+			{%- endfor %}
+		</div>
+
+		<div class="bp-pipe__split" data-r="split">
+			<div class="bp-card bp-plane">
+				<div class="bp-plane__head">
+					<span class="bp-eyebrow bp-eyebrow--dim">Architecture</span>
+					{%- for phase in phases %}
+					<span class="bp-plane__caption" data-bp-phase-panel="{{ phase.phase_key | e }}"{% if phase.phase_key != default_phase %} hidden{% endif %}>{{ phase.label | e }} · steps {{ phase.step_range | default("", true) | e }}</span>
+					{%- endfor %}
+				</div>
+
+				{%- set current = (phases | selectattr("phase_key", "equalto", default_phase) | first) or phases[0] %}
+				<div class="bp-plane__stack">
+					<div class="bp-node{{ ' is-on' if 'device' in current.nodes else '' }}" data-bp-node="device">
+						<p class="bp-node__title">{{ laptop("bp-node__icon") }}<span>Your device</span><span class="bp-node__meta">10.13.13.2</span></p>
+						<p class="bp-node__body">Browser, WireGuard client and VS Code in a tab. The only way in.</p>
+					</div>
+					<span class="bp-flow" aria-hidden="true"></span>
+
+					<div class="bp-node{{ ' is-on' if 'control' in current.nodes else '' }}" data-bp-node="control">
+						<p class="bp-node__title">{{ cpu("bp-node__icon") }}<span>BenchPress control plane</span><span class="bp-node__meta">Frappe app</span></p>
+						<div class="bp-node__chips">
+							<span class="bp-planechip{{ ' is-on' if 'api' in current.chips else '' }}" data-bp-chip="api">REST / API keys</span>
+							<span class="bp-planechip{{ ' is-on' if 'queue' in current.chips else '' }}" data-bp-chip="queue">Deploy queue</span>
+							<span class="bp-planechip{{ ' is-on' if 'ledger' in current.chips else '' }}" data-bp-chip="ledger">Credit ledger</span>
+						</div>
+					</div>
+					<span class="bp-flow" aria-hidden="true"></span>
+
+					<div class="bp-node{{ ' is-on' if 'host' in current.nodes else '' }}" data-bp-node="host">
+						<p class="bp-node__title">{{ server("bp-node__icon") }}<span>The host · Docker daemon</span><span class="bp-node__meta">/var/run/docker.sock</span></p>
+						<div class="bp-node__grid">
+							<div class="bp-subcard">
+								<p class="bp-subcard__title">bench container</p>
+								<p class="bp-subcard__lines"><span>frappe + apps</span><span>gunicorn · socketio</span><span>code-server :8443</span></p>
+							</div>
+							<div class="bp-subcard">
+								<p class="bp-subcard__title">shared services</p>
+								<p class="bp-subcard__lines"><span>mariadb :3306</span><span>redis cache · queue</span><span>volume /sites</span></p>
+							</div>
+						</div>
+					</div>
+					<span class="bp-flow" aria-hidden="true"></span>
+
+					<div class="bp-node{{ ' is-on' if 'mesh' in current.nodes else '' }}" data-bp-node="mesh">
+						<p class="bp-node__title">{{ shield("bp-node__icon") }}<span>WireGuard mesh</span><span class="bp-node__meta">10.13.13.0/24</span></p>
+						<p class="bp-node__body">Every site answers on a mesh address. Nothing is published to the internet.</p>
+					</div>
+				</div>
+			</div>
+
+			{%- for phase in phases %}
+			<div class="bp-card bp-phase" data-bp-phase-panel="{{ phase.phase_key | e }}"{% if phase.phase_key != default_phase %} hidden{% endif %}>
+				<p class="bp-phase__title">{{ phase.label | e }} · steps {{ phase.step_range | default("", true) | e }}</p>
+				{%- if phase.summary %}<p class="bp-phase__summary">{{ phase.summary | e }}</p>{% endif %}
+
+				{%- if phase.steps %}
+				<ol class="bp-steps">
+					{%- for step in phase.steps %}
+					<li class="bp-step">
+						<span class="bp-step__n">{{ step.step_number | e }}</span>
+						<span class="bp-step__body">
+							<b class="bp-step__title">{{ step.title | e }}</b>
+							{%- if step.detail %}<span class="bp-step__detail">{{ step.detail | e }}</span>{% endif %}
+							{%- if step.command %}<span class="bp-step__cmd">{{ step.command | e }}</span>{% endif %}
+						</span>
+					</li>
+					{%- endfor %}
+				</ol>
+				{%- endif %}
+
+				{%- if phase.timing %}
+				<p class="bp-phase__timing">{{ clock("bp-phase__icon") }}{{ phase.timing | e }}</p>
+				{%- endif %}
+			</div>
+			{%- endfor %}
+		</div>
+		{%- endif %}
+
+		{%- if settings.pipeline_failure_title or settings.pipeline_failure_body %}
+		<p class="bp-note">
+			{{ triangle_alert("bp-note__icon") }}
+			<strong>{{ settings.pipeline_failure_title | default("", true) | e }}</strong>
+			<span>{{ settings.pipeline_failure_body | default("", true) | e }}</span>
+		</p>
+		{%- endif %}
+	</div>
+</section>
+
+<section class="bp-console" id="console" data-r="sec">
+	<div class="bp-shell" data-r="pad">
+		{{ section_head(settings.console_eyebrow, settings.console_title, settings.console_body, " bp-eyebrow--light") }}
+
+		{#- The console mock keeps the Espresso palette; it is a picture of the product. -#}
+		<div class="bp-ctabs" data-bp-console-tabs>
+			<button type="button" class="bp-ctab is-selected" data-bp-console-tab="instances" aria-pressed="true">{{ list_icon("bp-ctab__icon") }}Instances</button>
+			<button type="button" class="bp-ctab" data-bp-console-tab="deploy" aria-pressed="false">{{ file_text("bp-ctab__icon") }}Deploy history</button>
+			<button type="button" class="bp-ctab" data-bp-console-tab="devices" aria-pressed="false">{{ laptop("bp-ctab__icon") }}Devices</button>
+		</div>
+
+		<div class="bp-mock">
+			<div data-bp-console-panel="instances">
+				<div class="bp-mock__bar">
+					<span class="bp-mock__title">Instances</span>
+					<span class="bp-mock__meta">6 instances · 4 running, 1 stopped</span>
+					<span class="bp-mock__action bp-mock__action--solid">{{ plus("bp-mock__icon") }}New lab</span>
+				</div>
+				<div class="bp-mock__scroll">
+					<div class="bp-mock__table">
+						<div class="bp-mock__thead">
+							<span>Lab</span><span>Bench</span><span>Container</span><span>Uptime</span><span></span>
+						</div>
+						<div class="bp-mock__row">
+							<span class="bp-mock__lab"><img src="/assets/benchpress/images/app-icons/erpnext.svg" alt="" width="22" height="22" loading="lazy"><span><b>erpnext-demo</b><span>ERPNext v15 · Small · you</span></span></span>
+							<span class="bp-pill bp-pill--info"><i class="bp-pill__dot"></i>Deploying…</span>
+							<span class="bp-pill bp-pill--info"><i class="bp-pill__dot"></i>Starting</span>
+							<span class="bp-mock__uptime">—</span>
+							<span class="bp-mock__link bp-mock__link--dim">Deploying…</span>
+						</div>
+						<div class="bp-mock__row">
+							<span class="bp-mock__lab"><img src="/assets/benchpress/images/app-icons/hrms.svg" alt="" width="22" height="22" loading="lazy"><span><b>hr-v16</b><span>Frappe HR · Medium · priya</span></span></span>
+							<span class="bp-pill bp-pill--ok"><i class="bp-pill__dot"></i>Running</span>
+							<span class="bp-pill bp-pill--ok"><i class="bp-pill__dot"></i>Healthy</span>
+							<span class="bp-mock__uptime">6d 04h</span>
+							<span class="bp-mock__link">Open site</span>
+						</div>
+						<div class="bp-mock__row">
+							<span class="bp-mock__lab"><img src="/assets/benchpress/images/app-icons/crm.svg" alt="" width="22" height="22" loading="lazy"><span><b>crm-sandbox</b><span>Frappe CRM · Small · ravi</span></span></span>
+							<span class="bp-pill bp-pill--ok"><i class="bp-pill__dot"></i>Running</span>
+							<span class="bp-pill bp-pill--warn"><i class="bp-pill__dot"></i>Unreachable</span>
+							<span class="bp-mock__uptime">2d 11h</span>
+							<span class="bp-mock__link bp-mock__link--dim">VPN off</span>
+						</div>
+						<div class="bp-mock__row">
+							<span class="bp-mock__lab"><img src="/assets/benchpress/images/app-icons/helpdesk.svg" alt="" width="22" height="22" loading="lazy"><span><b>helpdesk-client-a</b><span>Helpdesk · Small · agency</span></span></span>
+							<span class="bp-pill bp-pill--ok"><i class="bp-pill__dot"></i>Running</span>
+							<span class="bp-pill bp-pill--ok"><i class="bp-pill__dot"></i>Healthy</span>
+							<span class="bp-mock__uptime">17h 22m</span>
+							<span class="bp-mock__link">Open site</span>
+						</div>
+						<div class="bp-mock__row">
+							<span class="bp-mock__lab"><img src="/assets/benchpress/images/app-icons/lms.svg" alt="" width="22" height="22" loading="lazy"><span><b>lms-intern-3</b><span>Frappe Learning · Small · intern</span></span></span>
+							<span class="bp-pill bp-pill--idle"><i class="bp-pill__dot"></i>Stopped</span>
+							<span class="bp-pill bp-pill--idle"><i class="bp-pill__dot"></i>Stopped</span>
+							<span class="bp-mock__uptime">—</span>
+							<span class="bp-mock__link">Start</span>
+						</div>
+					</div>
+				</div>
+				<p class="bp-mock__foot">{{ shield_alert("bp-mock__icon bp-mock__icon--warn") }}crm-sandbox is Unreachable — its owner's device is not connected to the mesh.</p>
+			</div>
+
+			<div data-bp-console-panel="deploy" hidden>
+				<div class="bp-mock__bar">
+					<span class="bp-mock__title">Deploy history · erpnext-demo</span>
+					<span class="bp-mock__meta">9 runs, last 7 days</span>
+					<span class="bp-mock__action">1,342 credits left</span>
+				</div>
+				<div class="bp-mock__deploy">
+					<div class="bp-mock__steps">
+						<p class="bp-dstep"><span class="bp-dstep__badge bp-dstep__badge--done">✓</span><span class="bp-dstep__body"><b>Reserve a container slot</b><span>POST /api/method/benchpress.deploy</span></span><span class="bp-dstep__time">0.4s</span></p>
+						<p class="bp-dstep"><span class="bp-dstep__badge bp-dstep__badge--done">✓</span><span class="bp-dstep__body"><b>Pull the lab image</b><span>docker pull bp/erpnext-v15:cached</span></span><span class="bp-dstep__time">11s</span></p>
+						<p class="bp-dstep"><span class="bp-dstep__badge bp-dstep__badge--done">✓</span><span class="bp-dstep__body"><b>Start the container and services</b><span>docker run -v bp_sites:/home/frappe/…</span></span><span class="bp-dstep__time">18s</span></p>
+						<p class="bp-dstep"><span class="bp-dstep__badge bp-dstep__badge--done">✓</span><span class="bp-dstep__body"><b>Create the site</b><span>bench new-site erpnext-demo.bp.local</span></span><span class="bp-dstep__time">27s</span></p>
+						<p class="bp-dstep"><span class="bp-dstep__badge bp-dstep__badge--active">•</span><span class="bp-dstep__body"><b>Install apps and migrate</b><span>bench --site erpnext-demo.bp.local install-app erpnext</span></span><span class="bp-dstep__time">1m 45s</span></p>
+						<p class="bp-dstep bp-dstep--todo"><span class="bp-dstep__badge"></span><span class="bp-dstep__body"><b>Build assets</b><span>bench build --production</span></span><span class="bp-dstep__time">—</span></p>
+						<p class="bp-dstep bp-dstep--todo"><span class="bp-dstep__badge"></span><span class="bp-dstep__body"><b>Attach the WireGuard route</b><span>wg set wg0 peer &lt;pubkey&gt;</span></span><span class="bp-dstep__time">—</span></p>
+					</div>
+					<div class="bp-mock__side">
+						<div class="bp-fail">
+							<p class="bp-fail__title">{{ triangle_alert("bp-fail__icon") }}Failed at step 2 — Preparing the lab image</p>
+							<p class="bp-fail__log">no branch version-16 on github.com/frappe/hrms<br>build discarded · 0 credits charged</p>
+							<p class="bp-fail__actions"><span class="bp-mock__action bp-mock__action--solid">Edit apps and rebuild</span><span class="bp-mock__action bp-mock__action--quiet">View raw log</span></p>
+						</div>
+						<pre class="bp-rawlog" data-ondark>Installing app erpnext...
+Updating DocTypes for erpnext : [==============] 100%
+Updating customizations for Address
+$ bench build --production
+Built js/erpnext.bundle.js in 12.4s</pre>
+					</div>
+				</div>
+			</div>
+
+			<div data-bp-console-panel="devices" hidden>
+				<div class="bp-mock__bar">
+					<span class="bp-mock__title">Devices</span>
+					<span class="bp-mock__meta">WireGuard · 3 registered</span>
+					<span class="bp-mock__action bp-mock__action--solid">Add device</span>
+				</div>
+				<div class="bp-mock__device">{{ laptop("bp-mock__icon") }}<span class="bp-mock__devbody"><b>Priya · MacBook Pro</b><span>10.13.13.2 · handshake 12s ago</span></span><span class="bp-pill bp-pill--ok"><i class="bp-pill__dot"></i>Connected</span><span class="bp-mock__link">Revoke</span></div>
+				<div class="bp-mock__device">{{ monitor("bp-mock__icon") }}<span class="bp-mock__devbody"><b>Ravi · Windows desktop</b><span>10.13.13.7 · handshake 40s ago</span></span><span class="bp-pill bp-pill--ok"><i class="bp-pill__dot"></i>Connected</span><span class="bp-mock__link">Revoke</span></div>
+				<div class="bp-mock__device">{{ laptop("bp-mock__icon") }}<span class="bp-mock__devbody"><b>intern-3 · loaner</b><span>config downloaded, never connected</span></span><span class="bp-pill bp-pill--warn"><i class="bp-pill__dot"></i>Not connected</span><span class="bp-mock__link">Revoke</span></div>
+				<p class="bp-mock__foot">Each device gets its own key. Revoking one leaves the others connected.</p>
+			</div>
+		</div>
+
+		{%- if settings.console_callouts %}
+		<div class="bp-callouts">
+			{%- for callout in settings.console_callouts %}
+			<div class="bp-callout">
+				{{ icon_by_name(callout.icon, "bp-callout__icon") }}
+				<b class="bp-callout__title">{{ callout.title | e }}</b>
+				{%- if callout.body %}<span class="bp-callout__body">{{ callout.body | e }}</span>{% endif %}
+			</div>
+			{%- endfor %}
+		</div>
+		{%- endif %}
+	</div>
+</section>
+
+{%- if show_agents %}
+<section class="bp-agents" id="agents" data-r="sec">
+	<div class="bp-agents__dots" aria-hidden="true"></div>
+	<div class="bp-shell bp-agents__split" data-r="pad split">
+		<div>
+			{%- if settings.agents_eyebrow %}<p class="bp-eyebrow">{{ settings.agents_eyebrow | e }}</p>{% endif %}
+			<h2 class="bp-h2">{{ settings.agents_title | default("", true) | e }}</h2>
+			{%- if settings.agents_body %}<p class="bp-agents__body">{{ settings.agents_body | e }}</p>{% endif %}
+
+			{%- if settings.agent_points %}
+			<ul class="bp-agents__points">
+				{%- for row in settings.agent_points %}
+				<li class="bp-agents__point">{{ icon_by_name(row.icon, "bp-agents__icon") }}<span>{{ row.text | e }}</span></li>
+				{%- endfor %}
+			</ul>
+			{%- endif %}
+		</div>
+
+		{%- if settings.agent_api_examples %}
+		<div class="bp-film bp-api" data-ondark>
+			<div class="bp-api__bar" data-bp-api-tabs>
+				{%- for example in settings.agent_api_examples %}
+				<button type="button" class="bp-api__tab{{ ' is-selected' if loop.first else '' }}" data-bp-api-tab="{{ loop.index0 }}" aria-pressed="{{ 'true' if loop.first else 'false' }}">{{ example.tab_label | e }}</button>
+				{%- endfor %}
+				<button type="button" class="bp-api__copy" data-bp-copy>{{ copy("bp-api__copyicon") }}<span data-bp-copy-label aria-live="polite">copy</span></button>
+			</div>
+			{%- for example in settings.agent_api_examples %}
+			<pre class="bp-api__code" data-bp-api-panel="{{ loop.index0 }}"{% if not loop.first %} hidden{% endif %}>{{ example.code | e }}</pre>
+			{%- endfor %}
+			<p class="bp-api__foot">
+				{%- if settings.agents_badge %}<span class="bp-api__badge">{{ settings.agents_badge | e }}</span>{% endif %}
+				<span>{{ settings.agents_footnote | default("", true) | e }}</span>
+			</p>
+		</div>
+		{%- endif %}
+	</div>
+</section>
+{%- endif %}
+
+{%- if settings.comparison_rows %}
+<section class="bp-compare" data-r="sec">
+	<div class="bp-shell" data-r="pad">
+		<div class="bp-compare__head">
+			{%- if settings.compare_eyebrow %}<p class="bp-eyebrow bp-eyebrow--light">{{ settings.compare_eyebrow | e }}</p>{% endif %}
+			<h2 class="bp-h2">{{ settings.compare_title | default("", true) | e }}</h2>
+		</div>
+
+		<div class="bp-compare__grid">
+			<div class="bp-compare__col">
+				<p class="bp-compare__colhead">{{ terminal("bp-compare__icon") }}<b>{{ settings.compare_col_manual | default("Manual bench", true) | e }}</b></p>
+				{%- for row in settings.comparison_rows %}
+				<div class="bp-compare__row">
+					<span class="bp-compare__aspect">{{ row.aspect | e }}</span>
+					<span class="bp-compare__value">{{ row.manual | default("", true) | e }}</span>
+				</div>
+				{%- endfor %}
+			</div>
+
+			<div class="bp-compare__col bp-compare__col--bp">
+				<p class="bp-compare__colhead bp-compare__colhead--bp">
+					<img src="/assets/benchpress/images/logo/mark.png?v={{ asset_version | e }}" alt="" width="16" height="16">
+					<b>{{ settings.compare_col_bp | default("BenchPress", true) | e }}</b>
+					{%- if settings.compare_col_bp_badge %}<span class="bp-compare__badge">{{ settings.compare_col_bp_badge | e }}</span>{% endif %}
+				</p>
+				{%- for row in settings.comparison_rows %}
+				<div class="bp-compare__row">
+					<span class="bp-compare__aspect bp-compare__aspect--bp">{{ row.aspect | e }}</span>
+					<span class="bp-compare__value bp-compare__value--bp">{{ row.benchpress | default("", true) | e }}</span>
+				</div>
+				{%- endfor %}
+			</div>
+		</div>
+	</div>
+</section>
+{%- endif %}
+
+<section class="bp-services" id="services" data-r="sec">
+	<div class="bp-shell" data-r="pad">
+		{{ section_head(settings.services_eyebrow, settings.services_title, settings.services_body, " bp-eyebrow--light") }}
+
+		{%- if settings.service_cards %}
+		<div class="bp-services__grid">
+			{%- for card in settings.service_cards %}
+			<article class="bp-service">
+				<p class="bp-service__top">{{ icon_by_name(card.icon, "bp-service__icon") }}<span class="bp-service__number">{{ card.number | default("", true) | e }}</span></p>
+				<b class="bp-service__title">{{ card.title | e }}</b>
+				{%- if card.body %}<span class="bp-service__body">{{ card.body | e }}</span>{% endif %}
+				{%- if card.meta %}<span class="bp-service__meta">{{ card.meta | e }}</span>{% endif %}
+			</article>
+			{%- endfor %}
+		</div>
+		{%- endif %}
+
+		{%- if settings.services_cta_title or settings.services_cta_body %}
+		<div class="bp-services__cta">
+			<p class="bp-services__pitch"><b>{{ settings.services_cta_title | default("", true) | e }}</b> {{ settings.services_cta_body | default("", true) | e }}</p>
+			{%- if settings.services_cta_label %}
+			<a class="bp-btn bp-btn--lg bp-btn--primary" href="{{ settings.services_cta_url | default('/contact', true) | e }}">{{ settings.services_cta_label | e }}{{ arrow_right("bp-btn__icon") }}</a>
+			{%- endif %}
+		</div>
+		{%- endif %}
+	</div>
+</section>
+
+{%- if show_about %}
+<section class="bp-about" id="about" data-r="sec">
+	<div class="bp-shell" data-r="pad">
+		<div class="bp-about__panel">
+			<div class="bp-about__copy">
+				{%- if settings.about_eyebrow %}<p class="bp-eyebrow bp-eyebrow--light">{{ settings.about_eyebrow | e }}</p>{% endif %}
+				<h2 class="bp-h2">{{ settings.about_title | default("", true) | e }}</h2>
+				{%- if settings.about_body %}<p class="bp-about__body">{{ settings.about_body | e }}</p>{% endif %}
+				{%- if settings.about_link_label %}
+				<a class="bp-btn bp-btn--lg bp-btn--primary bp-about__link" href="{{ settings.about_link_url | default('/about', true) | e }}">{{ settings.about_link_label | e }}{{ arrow_right("bp-btn__icon") }}</a>
+				{%- endif %}
+			</div>
+
+			{%- if about_stats %}
+			<dl class="bp-about__stats">
+				{%- for stat in about_stats %}
+				<div class="bp-about__stat">
+					<dt class="bp-about__value">{{ stat.value | e }}</dt>
+					<dd class="bp-about__label">{{ stat.label | e }}</dd>
+				</div>
+				{%- endfor %}
+			</dl>
+			{%- endif %}
+		</div>
+	</div>
+</section>
+{%- endif %}
+
+{%- if show_testimonials and settings.testimonials %}
+<section class="bp-quotes" data-r="sec">
+	<div class="bp-shell bp-quotes__head" data-r="pad">
+		{%- if settings.testimonials_eyebrow %}<p class="bp-eyebrow bp-eyebrow--light">{{ settings.testimonials_eyebrow | e }}</p>{% endif %}
+		{%- if show_testimonial_disclaimer and settings.testimonials_disclaimer %}
+		<p class="bp-quotes__disclaimer">{{ settings.testimonials_disclaimer | e }}</p>
+		{%- endif %}
+	</div>
+
+	<div class="bp-quotes__viewport">
+		{#- Doubled, exactly as the marquee above; the second pass is decoration. -#}
+		<div class="bp-quotes__track">
+			{%- for copy in [1, 2] %}{% for quote in settings.testimonials %}
+			<figure class="bp-quote" data-r="quote"{% if copy == 2 %} aria-hidden="true"{% endif %}>
+				<blockquote class="bp-quote__text">{{ quote.quote | e }}</blockquote>
+				<figcaption class="bp-quote__by">
+					<span class="bp-quote__avatar" aria-hidden="true"></span>
+					<span><b>{{ quote.person_name | default("", true) | e }}</b><span>{{ quote.person_role | default("", true) | e }}</span></span>
+				</figcaption>
+			</figure>
+			{%- endfor %}{% endfor %}
+		</div>
+	</div>
+
+	{%- if settings.logo_strip %}
+	<ul class="bp-shell bp-logos" data-r="pad">
+		{%- for logo in settings.logo_strip %}
+		<li><img src="{{ logo.logo | e }}" alt="{{ logo.alt_text | default('', true) | e }}" loading="lazy"></li>
+		{%- endfor %}
+	</ul>
+	{%- endif %}
+</section>
+{%- endif %}
+
+{%- if settings.faq_items %}
+<section class="bp-faq" data-r="sec">
+	<div class="bp-shell bp-faq__shell" data-r="pad">
+		<h2 class="bp-h2 bp-faq__title">{{ settings.faq_title | default("Questions", true) | e }}</h2>
+
+		<div class="bp-faq__cols" data-r="split">
+			{%- for column in [0, 1] %}
+			<div class="bp-faq__col">
+				{%- for item in settings.faq_items %}{% if loop.index0 % 2 == column %}
+				<details class="bp-faq__item"{% if item.default_open %} open{% endif %}>
+					<summary class="bp-faq__q">{{ item.question | e }}<span class="bp-faq__mark" aria-hidden="true"></span></summary>
+					<div class="bp-faq__a">{{ item.answer | e }}</div>
+				</details>
+				{%- endif %}{% endfor %}
+			</div>
+			{%- endfor %}
+		</div>
+	</div>
+</section>
+{%- endif %}
+
+<section class="bp-final" id="start" data-r="sec">
+	<div class="bp-final__dots" aria-hidden="true"></div>
+	<div class="bp-final__glow" aria-hidden="true"></div>
+	<div class="bp-final__inner" data-r="pad">
+		<h2 class="bp-final__title">{{ settings.cta_title | default("", true) | e }}</h2>
+		<div class="bp-final__actions">
+			{%- if credits_enabled %}
+			<a class="bp-btn bp-btn--xl bp-btn--invert" href="{{ signup_route | e }}">{{ settings.cta_primary_label | default("", true) | e }}{{ arrow_right("bp-btn__icon") }}</a>
+			{%- endif %}
+			<a class="bp-btn bp-btn--xl {{ 'bp-btn--ghost' if credits_enabled else 'bp-btn--invert' }}" href="{{ settings.cta_secondary_url | default(repo_url, true) | e }}">{{ github("bp-btn__icon") }}{{ settings.cta_secondary_label | default("", true) | e }}</a>
+		</div>
+		{%- if credits_enabled and settings.cta_footnote %}
+		<p class="bp-final__foot">{{ settings.cta_footnote | e }}</p>
+		{%- endif %}
+	</div>
+</section>
+
+</main>
+
+{% include "templates/includes/public_footer.html" %}
+</div>
+{% endblock %}
+
+{% block script %}
+<script defer src="/assets/benchpress/js/landing.js?v={{ asset_version | e }}"></script>
+{% endblock %}

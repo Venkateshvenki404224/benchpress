@@ -1,0 +1,232 @@
+{% extends "templates/web.html" %}
+
+{#- lucide 0.451.0 path data; sizing is CSS, never a width/height attribute. -#}
+{%- macro svg(body, klass) -%}
+<svg class="{{ klass | e }}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">{{ body }}</svg>
+{%- endmacro -%}
+
+{%- macro arrow_right(klass="") -%}{{ svg('<path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>', klass) }}{%- endmacro -%}
+{%- macro book_open(klass="") -%}{{ svg('<path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/>', klass) }}{%- endmacro -%}
+{%- macro github(klass="") -%}{{ svg('<path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/>', klass) }}{%- endmacro -%}
+{%- macro lock(klass="") -%}{{ svg('<rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>', klass) }}{%- endmacro -%}
+{%- macro mail_check(klass="") -%}{{ svg('<path d="M22 13V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v12c0 1.1.9 2 2 2h8"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/><path d="m16 19 2 2 4-4"/>', klass) }}{%- endmacro -%}
+{%- macro user_check(klass="") -%}{{ svg('<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><polyline points="16 11 18 13 22 9"/>', klass) }}{%- endmacro -%}
+{%- macro dot_icon(klass="") -%}{{ svg('<circle cx="12" cy="12" r="9"/>', klass) }}{%- endmacro -%}
+
+{%- macro icon_by_name(name, klass="") -%}
+{%- if name == "github" -%}{{ github(klass) }}
+{%- elif name == "book-open" -%}{{ book_open(klass) }}
+{%- elif name == "mail-check" -%}{{ mail_check(klass) }}
+{%- elif name == "lock" -%}{{ lock(klass) }}
+{%- elif name == "user-check" -%}{{ user_check(klass) }}
+{%- else -%}{{ dot_icon(klass) }}
+{%- endif -%}
+{%- endmacro -%}
+
+{%- macro text_field(id, name, label, placeholder, autocomplete, value, kind="text", limit=140) -%}
+<div class="bp-field">
+	<label class="bp-field__label" for="{{ id | e }}">{{ label | e }}</label>
+	<input class="bp-field__input" type="{{ kind | e }}" id="{{ id | e }}" name="{{ name | e }}"
+		placeholder="{{ placeholder | e }}" autocomplete="{{ autocomplete | e }}" maxlength="{{ limit }}"
+		value="{{ value | default('', true) | e }}" required aria-describedby="{{ id | e }}-error">
+	<p class="bp-field__error" id="{{ id | e }}-error" data-bp-error hidden></p>
+</div>
+{%- endmacro -%}
+
+{% block title %}{{ (meta_title or title) | e }}{% endblock %}
+
+{#- The framework's chrome, blanked. These are the real block names; anything else is a no-op. -#}
+{% block navbar %}{% endblock %}
+{% block footer %}{% endblock %}
+{% block breadcrumbs %}{% endblock %}
+{% block page_sidebar %}{% endblock %}
+{% block page_footer %}{% endblock %}
+
+{% block head_include %}
+{% include "templates/includes/site_head.html" %}
+<link rel="stylesheet" href="/assets/benchpress/css/signup.css?v={{ asset_version | e }}">
+{% endblock %}
+
+{% block page_content %}
+<div class="bp" data-mode="{{ mode_default | e }}">
+{% include "templates/includes/public_header.html" %}
+
+<main id="bp-content">
+
+<section class="bp-request" id="request" data-r="sec">
+	<div class="bp-request__dots" aria-hidden="true"></div>
+
+	<div class="bp-shell bp-request__grid" data-r="pad split">
+
+		<div class="bp-intro">
+			{%- if settings.badge_text %}
+			<p class="bp-badge">{{ user_check("bp-badge__icon") }}{{ settings.badge_text | e }}</p>
+			{%- endif %}
+			<h1 class="bp-intro__title">{{ settings.title | default("", true) | e }}</h1>
+			{%- if settings.intro_body %}
+			<p class="bp-intro__body">{{ settings.intro_body | e }}</p>
+			{%- endif %}
+
+			{%- if steps %}
+			<ol class="bp-steps">
+				{%- for step in steps %}
+				<li class="bp-step">
+					<span class="bp-step__number">{{ step.step_number | default(loop.index, true) | e }}</span>
+					<span class="bp-step__text">
+						<b class="bp-step__title">{{ step.title | e }}</b>
+						<span class="bp-step__body">{{ step.body | default("", true) | e }}</span>
+					</span>
+				</li>
+				{%- endfor %}
+			</ol>
+			{%- endif %}
+
+			{#- Text Editor field: renders raw. -#}
+			{%- if settings.selfhost_note %}
+			<div class="bp-note">{{ settings.selfhost_note }}</div>
+			{%- endif %}
+		</div>
+
+		<div class="bp-card">
+
+			<form class="bp-form" method="post" action="{{ signup_route | e }}" data-bp-signup-form{% if submitted %} hidden{% endif %}>
+				{%- if csrf_token %}
+				<input type="hidden" name="csrf_token" value="{{ csrf_token | e }}">
+				{%- endif %}
+				<input type="hidden" name="source" value="Signup Page">
+
+				<div class="bp-form__head">
+					<h2 class="bp-form__title">{{ settings.form_title | default("Access request", true) | e }}</h2>
+					{%- if settings.form_subtitle %}
+					<p class="bp-form__subtitle">{{ settings.form_subtitle | e }}</p>
+					{%- endif %}
+				</div>
+
+				<p class="bp-form__alert" id="bp-signup-alert" role="alert" data-bp-form-alert{% if not form_error %} hidden{% endif %}>{{ form_error | e }}</p>
+
+				<div class="bp-form__body">
+
+					<div class="bp-pair">
+						{{ text_field("bp-signup-name", "full_name", "Full name", "Priya Raman", "name", form_values.full_name) }}
+						{{ text_field("bp-signup-email", "email", "Work email", "priya@company.com", "email", form_values.email, kind="email") }}
+					</div>
+
+					<div class="bp-pair">
+						{{ text_field("bp-signup-company", "company", "Company or team", "Northwind Systems", "organization", form_values.company) }}
+
+						<div class="bp-field">
+							<label class="bp-field__label" for="bp-signup-team-size">People who need environments</label>
+							<select class="bp-field__input bp-field__input--select" id="bp-signup-team-size" name="team_size"
+								required aria-describedby="bp-signup-team-size-error">
+								{%- set chosen_size = form_values.team_size or team_size.default %}
+								{%- for option in team_size.options %}
+								<option value="{{ option | e }}"{% if option == chosen_size %} selected{% endif %}>{{ option | e }}</option>
+								{%- endfor %}
+							</select>
+							<p class="bp-field__error" id="bp-signup-team-size-error" data-bp-error hidden></p>
+						</div>
+					</div>
+
+					{%- set chosen_intent = form_values.intent or intent.default %}
+					<div class="bp-field">
+						<span class="bp-field__label" id="bp-signup-intent-label">What are you here for?</span>
+						<div class="bp-chips" role="group" aria-labelledby="bp-signup-intent-label" data-bp-chips>
+							{%- for option in intent.options %}
+							<button type="button" class="bp-chip{% if option == chosen_intent %} is-selected{% endif %}"
+								data-bp-chip="{{ option | e }}" aria-pressed="{{ 'true' if option == chosen_intent else 'false' }}">{{ option | e }}</button>
+							{%- endfor %}
+						</div>
+						<input type="hidden" name="intent" value="{{ chosen_intent | e }}" data-bp-chip-value>
+					</div>
+
+					{{ text_field("bp-signup-apps", "expected_apps", "Apps you expect to run", "ERPNext v15, Frappe HR, two custom apps", "off", form_values.expected_apps) }}
+
+					<div class="bp-field">
+						<label class="bp-field__label" for="bp-signup-notes">
+							Anything we should know <span class="bp-field__optional">— optional</span>
+						</label>
+						<textarea class="bp-field__input bp-field__input--area" id="bp-signup-notes" name="use_case" rows="3"
+							maxlength="1000" placeholder="We onboard two interns a month and lose a morning each time."
+							aria-describedby="bp-signup-notes-error">{{ form_values.use_case | default("", true) | e }}</textarea>
+						<p class="bp-field__error" id="bp-signup-notes-error" data-bp-error hidden></p>
+					</div>
+
+					<div class="bp-field bp-field--check">
+						<label class="bp-consent" for="bp-signup-consent">
+							<input class="bp-consent__box" type="checkbox" id="bp-signup-consent" name="consented" value="1"
+								{% if form_values.consented %}checked{% endif %} required aria-describedby="bp-signup-consent-error">
+							<span>I understand access is granted manually and my request may be declined.</span>
+						</label>
+						<p class="bp-field__error" id="bp-signup-consent-error" data-bp-error hidden></p>
+					</div>
+
+					<div class="bp-form__actions">
+						<button type="submit" class="bp-btn bp-btn--lg bp-btn--primary" data-bp-submit>
+							{{ settings.form_submit_label | default("Send request", true) | e }}{{ arrow_right("bp-btn__icon") }}
+						</button>
+					</div>
+
+					{%- if settings.form_privacy_note %}
+					<p class="bp-form__note">{{ lock("bp-form__note-icon") }}{{ settings.form_privacy_note | e }}</p>
+					{%- endif %}
+
+					<p class="bp-form__login">
+						{{ settings.form_login_prompt | default("Already approved?", true) | e }}
+						<a href="{{ login_route | e }}">Log in</a>
+					</p>
+				</div>
+			</form>
+
+			<div class="bp-receipt" data-bp-receipt{% if not submitted %} hidden{% endif %}>
+				<span class="bp-receipt__mark">{{ mail_check("bp-receipt__mark-icon") }}</span>
+				<h2 class="bp-receipt__title" tabindex="-1" data-bp-receipt-title>{{ settings.pending_title | default("Request received — pending review", true) | e }}</h2>
+				{%- if settings.pending_body %}
+				<p class="bp-receipt__body">{{ settings.pending_body | e }}</p>
+				{%- endif %}
+
+				<dl class="bp-receipt__meta">
+					<div class="bp-receipt__row">
+						<dt>request</dt>
+						<dd data-bp-reference>{{ reference | e }}</dd>
+					</div>
+					<div class="bp-receipt__row">
+						<dt>status</dt>
+						<dd>pending manual review</dd>
+					</div>
+					<div class="bp-receipt__row">
+						<dt>next</dt>
+						<dd>email to <span data-bp-receipt-email>{{ submitted_email | e }}</span></dd>
+					</div>
+				</dl>
+
+				{%- if pending_links %}
+				<ul class="bp-waits">
+					{%- for link in pending_links %}
+					<li class="bp-wait">
+						{{ icon_by_name(link.icon, "bp-wait__icon") }}
+						{%- if link.url %}
+						<a href="{{ link.url | e }}">{{ link.text | e }}</a>
+						{%- else %}
+						<span>{{ link.text | e }}</span>
+						{%- endif %}
+					</li>
+					{%- endfor %}
+				</ul>
+				{%- endif %}
+
+				<a class="bp-btn bp-btn--ghost bp-receipt__back" href="{{ signup_route | e }}">{{ settings.pending_back_label | default("Back to the form", true) | e }}</a>
+			</div>
+
+		</div>
+	</div>
+</section>
+
+</main>
+
+{% include "templates/includes/public_footer.html" %}
+</div>
+{% endblock %}
+
+{% block script %}
+<script defer src="/assets/benchpress/js/signup.js?v={{ asset_version | e }}"></script>
+{% endblock %}

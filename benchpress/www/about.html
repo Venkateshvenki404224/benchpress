@@ -1,0 +1,247 @@
+{% extends "templates/web.html" %}
+
+{#- lucide 0.451.0 path data; sizing is CSS, never a width/height attribute. -#}
+{%- macro svg(body, klass) -%}
+<svg class="{{ klass | e }}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">{{ body }}</svg>
+{%- endmacro -%}
+
+{%- macro arrow_right(klass="") -%}{{ svg('<path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>', klass) }}{%- endmacro -%}
+{%- macro check(klass="") -%}{{ svg('<path d="M20 6 9 17l-5-5"/>', klass) }}{%- endmacro -%}
+{%- macro clock(klass="") -%}{{ svg('<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>', klass) }}{%- endmacro -%}
+{%- macro credit_card(klass="") -%}{{ svg('<rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/>', klass) }}{%- endmacro -%}
+{%- macro eye(klass="") -%}{{ svg('<path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/>', klass) }}{%- endmacro -%}
+{%- macro github(klass="") -%}{{ svg('<path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/>', klass) }}{%- endmacro -%}
+{%- macro lock(klass="") -%}{{ svg('<rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>', klass) }}{%- endmacro -%}
+{%- macro server(klass="") -%}{{ svg('<rect width="20" height="8" x="2" y="2" rx="2" ry="2"/><rect width="20" height="8" x="2" y="14" rx="2" ry="2"/><line x1="6" x2="6.01" y1="6" y2="6"/><line x1="6" x2="6.01" y1="18" y2="18"/>', klass) }}{%- endmacro -%}
+{%- macro shield(klass="") -%}{{ svg('<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/>', klass) }}{%- endmacro -%}
+{%- macro terminal(klass="") -%}{{ svg('<polyline points="4 17 10 11 4 5"/><line x1="12" x2="20" y1="19" y2="19"/>', klass) }}{%- endmacro -%}
+{%- macro users(klass="") -%}{{ svg('<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>', klass) }}{%- endmacro -%}
+{%- macro cross(klass="") -%}{{ svg('<path d="M18 6 6 18"/><path d="m6 6 12 12"/>', klass) }}{%- endmacro -%}
+{%- macro dot_icon(klass="") -%}{{ svg('<circle cx="12" cy="12" r="9"/>', klass) }}{%- endmacro -%}
+
+{%- macro icon_by_name(name, klass="") -%}
+{%- if name == "eye" -%}{{ eye(klass) }}
+{%- elif name == "shield" -%}{{ shield(klass) }}
+{%- elif name == "credit-card" -%}{{ credit_card(klass) }}
+{%- elif name == "github" -%}{{ github(klass) }}
+{%- elif name == "terminal" -%}{{ terminal(klass) }}
+{%- elif name == "lock" -%}{{ lock(klass) }}
+{%- elif name == "server" -%}{{ server(klass) }}
+{%- elif name == "users" -%}{{ users(klass) }}
+{%- elif name == "clock" -%}{{ clock(klass) }}
+{%- else -%}{{ dot_icon(klass) }}
+{%- endif -%}
+{%- endmacro -%}
+
+{%- macro day_column(heading, entries, variant, version) -%}
+<div class="bp-day bp-day--{{ variant | e }}">
+	{%- if heading %}
+	<h3 class="bp-day__title">
+		{%- if variant == "with" -%}
+		<img class="bp-day__mark bp-day__mark--logo" src="/assets/benchpress/images/logo/mark.png?v={{ version | e }}" alt="" width="18" height="18">
+		{%- else -%}
+		{{ clock("bp-day__mark") }}
+		{%- endif -%}
+		{{ heading | e }}
+	</h3>
+	{%- endif %}
+	<ol class="bp-day__list">
+		{%- for entry in entries %}
+		<li class="bp-day__row">
+			<span class="bp-day__time">{{ entry.time_label | default("", true) | e }}</span>
+			<span class="bp-day__text">{{ entry.text | default("", true) | e }}</span>
+		</li>
+		{%- endfor %}
+	</ol>
+</div>
+{%- endmacro -%}
+
+{% block title %}{{ (meta_title or title) | e }}{% endblock %}
+
+{#- The framework's chrome, blanked. These are the real block names; anything else is a no-op. -#}
+{% block navbar %}{% endblock %}
+{% block footer %}{% endblock %}
+{% block breadcrumbs %}{% endblock %}
+{% block page_sidebar %}{% endblock %}
+{% block page_footer %}{% endblock %}
+
+{% block head_include %}
+{% include "templates/includes/site_head.html" %}
+<link rel="stylesheet" href="/assets/benchpress/css/pages.css?v={{ asset_version | e }}">
+{% endblock %}
+
+{% block page_content %}
+<div class="bp" data-mode="{{ mode_default | e }}">
+{% include "templates/includes/public_header.html" %}
+
+<main id="bp-content" class="bp-page bp-page--about">
+
+<section class="bp-hero" id="about" data-r="sec">
+	<div class="bp-hero__dots" aria-hidden="true"></div>
+	<div class="bp-shell bp-hero__inner" data-r="pad">
+		{%- if settings.eyebrow %}
+		<p class="bp-eyebrow">{{ settings.eyebrow | e }}</p>
+		{%- endif %}
+		{%- if settings.title %}
+		<h1 class="bp-hero__title">{{ settings.title | e }}</h1>
+		{%- endif %}
+		{#- Text Editor field: renders raw. -#}
+		{%- if settings.lede %}
+		<div class="bp-prose bp-hero__lede">{{ settings.lede }}</div>
+		{%- endif %}
+	</div>
+</section>
+
+{%- if settings.situation_eyebrow or settings.situation_body %}
+<section class="bp-section" id="situation" data-r="sec">
+	<div class="bp-shell" data-r="pad">
+		<div class="bp-panel">
+			{%- if settings.situation_eyebrow %}
+			<h2 class="bp-eyebrow bp-panel__eyebrow">{{ settings.situation_eyebrow | e }}</h2>
+			{%- endif %}
+			{#- Text Editor field: renders raw. -#}
+			{%- if settings.situation_body %}
+			<div class="bp-prose">{{ settings.situation_body }}</div>
+			{%- endif %}
+		</div>
+	</div>
+</section>
+{%- endif %}
+
+{%- if days_without or days_with %}
+<section class="bp-section bp-section--tight" id="two-days">
+	<div class="bp-shell" data-r="pad">
+		<div class="bp-days" data-r="split">
+			{%- if days_without %}
+			{{ day_column(settings.days_without_title, days_without, "without", asset_version) }}
+			{%- endif %}
+			{%- if days_with %}
+			{{ day_column(settings.days_with_title, days_with, "with", asset_version) }}
+			{%- endif %}
+		</div>
+		{#- Text Editor field: renders raw. -#}
+		{%- if settings.days_closing %}
+		<div class="bp-prose bp-days__closing">{{ settings.days_closing }}</div>
+		{%- endif %}
+	</div>
+</section>
+{%- endif %}
+
+{%- if settings.contrast_title or contrast_rows %}
+<section class="bp-section" id="what-it-is" data-r="sec">
+	<div class="bp-shell" data-r="pad">
+		<h2 class="bp-h2">{{ settings.contrast_title | default("", true) | e }}</h2>
+		{#- Text Editor field: renders raw. -#}
+		{%- if settings.contrast_lede %}
+		<div class="bp-prose bp-section__lede">{{ settings.contrast_lede }}</div>
+		{%- endif %}
+
+		{%- if contrast_rows %}
+		<ul class="bp-contrast">
+			{%- for row in contrast_rows %}
+			<li class="bp-contrast__row">
+				<p class="bp-contrast__cell bp-contrast__cell--not">
+					{{ cross("bp-contrast__icon") }}<span>{{ row.not_text | default("", true) | e }}</span>
+				</p>
+				<p class="bp-contrast__cell bp-contrast__cell--is">
+					{{ check("bp-contrast__icon") }}<span>{{ row.is_text | default("", true) | e }}</span>
+				</p>
+			</li>
+			{%- endfor %}
+		</ul>
+		{%- endif %}
+
+		{#- Text Editor field: renders raw. -#}
+		{%- if settings.contrast_closing %}
+		<div class="bp-prose bp-section__closing">{{ settings.contrast_closing }}</div>
+		{%- endif %}
+	</div>
+</section>
+{%- endif %}
+
+{%- if stats %}
+<section class="bp-section bp-section--tight" id="numbers">
+	<div class="bp-shell" data-r="pad">
+		<ul class="bp-stats">
+			{%- for stat in stats %}
+			<li class="bp-stat">
+				<b class="bp-stat__value">{{ stat.value | default("", true) | e }}</b>
+				<span class="bp-stat__label">{{ stat.label | default("", true) | e }}</span>
+			</li>
+			{%- endfor %}
+		</ul>
+	</div>
+</section>
+{%- endif %}
+
+{%- if principles %}
+<section class="bp-section" id="principles" data-r="sec">
+	<div class="bp-shell" data-r="pad">
+		<h2 class="bp-h2">{{ settings.principles_title | default("", true) | e }}</h2>
+		<ul class="bp-cards">
+			{%- for principle in principles %}
+			<li class="bp-card">
+				{{ icon_by_name(principle.icon, "bp-card__icon") }}
+				<h3 class="bp-card__title">{{ principle.title | default("", true) | e }}</h3>
+				{%- if principle.body %}
+				<p class="bp-card__body">{{ principle.body | e }}</p>
+				{%- endif %}
+			</li>
+			{%- endfor %}
+		</ul>
+	</div>
+</section>
+{%- endif %}
+
+{%- if timeline %}
+<section class="bp-section" id="history" data-r="sec">
+	<div class="bp-shell" data-r="pad">
+		<h2 class="bp-h2">{{ settings.timeline_title | default("", true) | e }}</h2>
+		<ol class="bp-timeline">
+			{%- for entry in timeline %}
+			<li class="bp-timeline__row">
+				<span class="bp-timeline__period">{{ entry.period | default("", true) | e }}</span>
+				<div class="bp-timeline__body">
+					<h3 class="bp-timeline__title">{{ entry.title | default("", true) | e }}</h3>
+					{%- if entry.body %}
+					<span class="bp-timeline__text">{{ entry.body | e }}</span>
+					{%- endif %}
+				</div>
+			</li>
+			{%- endfor %}
+		</ol>
+	</div>
+</section>
+{%- endif %}
+
+{%- if settings.cta_title or settings.cta_label or settings.trademark %}
+<section class="bp-section bp-section--last" id="hosted" data-r="sec">
+	<div class="bp-shell" data-r="pad">
+		{%- if settings.cta_title or settings.cta_label %}
+		<div class="bp-cta-panel">
+			<div class="bp-cta-panel__text">
+				{%- if settings.cta_title %}
+				<h2 class="bp-cta-panel__title">{{ settings.cta_title | e }}</h2>
+				{%- endif %}
+				{%- if settings.cta_body %}
+				<p class="bp-cta-panel__body">{{ settings.cta_body | e }}</p>
+				{%- endif %}
+			</div>
+			{%- if settings.cta_label %}
+			<a class="bp-btn bp-btn--lg bp-btn--primary" href="{{ cta_url | e }}">{{ settings.cta_label | e }}{{ arrow_right("bp-btn__icon") }}</a>
+			{%- endif %}
+		</div>
+		{%- endif %}
+
+		{%- if settings.trademark %}
+		<p class="bp-trademark">{{ settings.trademark | e }}</p>
+		{%- endif %}
+	</div>
+</section>
+{%- endif %}
+
+</main>
+
+{% include "templates/includes/public_footer.html" %}
+</div>
+{% endblock %}

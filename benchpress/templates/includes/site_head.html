@@ -1,0 +1,192 @@
+{#-
+  Shared <head> for the five public pages, included from `{% block head_include %}`.
+
+  Context, all optional: asset_version, meta_title, meta_description, og_image, page_url.
+
+  Jinja autoescape is off in Frappe, so every interpolation is piped through `| e`.
+-#}
+{%- set v = asset_version or "0" -%}
+{%- set head_title = meta_title or title or "BenchPress" -%}
+{%- set head_description = meta_description or "Isolated Frappe environments, deployed in one click and kept on your private network." -%}
+{%- set head_image = og_image or "/assets/benchpress/images/logo/mark.png" -%}
+
+<meta name="description" content="{{ head_description | e }}">
+<meta name="color-scheme" content="dark light">
+
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="BenchPress">
+<meta property="og:title" content="{{ head_title | e }}">
+<meta property="og:description" content="{{ head_description | e }}">
+<meta property="og:image" content="{{ head_image | e }}">
+{%- if page_url or path %}
+<meta property="og:url" content="{{ (page_url or ('/' ~ path)) | e }}">
+{%- endif %}
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="{{ head_title | e }}">
+<meta name="twitter:description" content="{{ head_description | e }}">
+<meta name="twitter:image" content="{{ head_image | e }}">
+
+<link rel="icon" type="image/svg+xml" href="/assets/benchpress/images/logo/favicon.svg?v={{ v | e }}">
+<link rel="icon" type="image/png" sizes="32x32" href="/assets/benchpress/images/logo/favicon-32.png?v={{ v | e }}">
+<link rel="icon" type="image/png" sizes="96x96" href="/assets/benchpress/images/logo/favicon-96x96.png?v={{ v | e }}">
+<link rel="apple-touch-icon" href="/assets/benchpress/images/logo/apple-touch-icon.png?v={{ v | e }}">
+<link rel="manifest" href="/assets/benchpress/manifest.json?v={{ v | e }}">
+
+{#-
+  No `?v=` on these hrefs, so they match the @font-face `src` in brand.css exactly and the browser
+  reuses one fetch. `crossorigin` is required even same-origin.
+-#}
+<link rel="preload" as="font" type="font/woff2" crossorigin href="/assets/benchpress/fonts/Poppins-800-latin.woff2">
+<link rel="preload" as="font" type="font/woff2" crossorigin href="/assets/benchpress/fonts/Poppins-600-latin.woff2">
+<link rel="preload" as="font" type="font/woff2" crossorigin href="/assets/benchpress/fonts/Poppins-400-latin.woff2">
+
+<link rel="stylesheet" href="/assets/benchpress/css/brand.css?v={{ v | e }}">
+
+{#- Chrome-only CSS. Every colour is a brand.css token; this block carries no hex. -#}
+<style>
+.bp-sr{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+.bp-skip{position:absolute;left:-9999px;top:0;z-index:100}
+.bp-skip:focus{left:16px;top:16px;padding:10px 18px;border-radius:999px;background:var(--brand);color:var(--onbrand);font-size:14px;font-weight:600;text-decoration:none}
+.bp-header :focus-visible,.bp-footer :focus-visible,.bp-skip:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+
+/* `!important` because this axis has to beat whatever `display` the element's own rule wants. */
+.bp-when-light{display:none!important}
+.bp[data-mode="light"] .bp-when-light{display:block!important}
+.bp[data-mode="light"] .bp-when-dark{display:none!important}
+
+.bp-header[data-variant="dock"]{position:fixed;top:18px;left:0;right:0;z-index:60;display:flex;justify-content:center;padding:0 20px;pointer-events:none}
+.bp-header[data-variant="dock"] .bp-header__inner{position:relative;pointer-events:auto;display:flex;align-items:center;gap:8px;max-width:100%;padding:8px 10px 8px 16px;border-radius:999px;background:var(--dock);backdrop-filter:blur(14px) saturate(160%);-webkit-backdrop-filter:blur(14px) saturate(160%);border:1px solid var(--cardb);box-shadow:0 12px 34px var(--glow)}
+.bp-header[data-variant="dock"] .bp-brand{margin-right:8px}
+.bp-header[data-variant="bar"]{position:sticky;top:0;z-index:50;background:var(--bg0);border-bottom:1px solid var(--hair)}
+.bp-header[data-variant="bar"] .bp-header__inner{position:relative;max-width:1200px;margin:0 auto;padding:14px 28px;display:flex;align-items:center;gap:16px}
+.bp-header[data-variant="bar"] .bp-header__actions{margin-left:auto}
+
+.bp-brand{display:flex;align-items:center;flex:none;text-decoration:none}
+.bp-brand img{display:block;height:30px;width:auto}
+.bp-header[data-variant="bar"] .bp-brand img{height:26px}
+.bp-header__rule{flex:none;width:1px;height:20px;background:var(--hair)}
+.bp-header__actions{display:flex;align-items:center;gap:8px}
+
+.bp-nav{display:flex;align-items:center;gap:2px}
+.bp-navlink{padding:7px 12px;border-radius:999px;font-size:13.5px;font-weight:500;line-height:1.2;color:var(--fg2);text-decoration:none}
+.bp-navlink:hover{background:var(--cardb);color:var(--fg)}
+button.bp-navlink{border:0;background:none;font:inherit;line-height:1.2;cursor:pointer}
+.bp-navlink--auth{color:var(--fg)}
+.bp-nav__gap{flex:none;width:1px;height:18px;margin:0 6px;background:var(--hair)}
+.bp-nav__signout{margin:0;display:flex}
+.bp-nav .bp-toggle{margin-left:8px}
+
+.bp-toggle,.bp-menu{display:inline-flex;align-items:center;justify-content:center;gap:8px;flex:none;width:36px;height:36px;padding:0;border-radius:999px;border:1px solid var(--cardb);background:var(--card);color:var(--fg);font:inherit;font-size:13px;font-weight:600;cursor:pointer}
+.bp-toggle svg,.bp-menu svg{display:block;width:15px;height:15px;color:var(--accent)}
+.bp-toggle__label{display:none}
+@media (min-width:1025px){.bp-header[data-variant="dock"] .bp-toggle__label{display:none!important}}
+.bp-header[data-variant="bar"] .bp-toggle{width:auto;height:38px;padding:0 14px}
+.bp-header[data-variant="bar"] .bp-toggle__label{display:inline}
+.bp-menu{display:none;color:var(--fg)}
+.bp-menu svg{color:currentColor;width:16px;height:16px}
+
+.bp-cta{display:inline-flex;align-items:center;gap:7px;flex:none;height:36px;padding:0 16px;border-radius:999px;background:var(--brand);color:var(--onbrand);font-size:13.5px;font-weight:600;white-space:nowrap;text-decoration:none}
+.bp-cta:hover{background:var(--accent);color:var(--onbrand)}
+.bp-cta svg{display:block;width:14px;height:14px}
+.bp-cta__label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+.bp-footer{background:var(--bg0);border-top:1px solid var(--cardb)}
+.bp-footer__inner{max-width:1240px;margin:0 auto;padding:60px 32px 40px}
+.bp-footer__grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:40px}
+.bp-footer__brand img{display:block;height:36px;width:auto}
+.bp-footer__tagline{margin:14px 0 0;max-width:280px;font-size:13.5px;line-height:1.6;color:var(--fg3)}
+.bp-footer__col{display:flex;flex-direction:column;align-items:flex-start;gap:10px;font-size:13.5px}
+.bp-footer__heading{margin:0;font-size:11px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--fg3)}
+.bp-footer__link{color:var(--fg2);text-decoration:none}
+.bp-footer__link:hover{color:var(--fg)}
+.bp-footer__legal{margin-top:40px;padding-top:20px;border-top:1px solid var(--cardb);display:flex;justify-content:space-between;gap:24px;flex-wrap:wrap;font-size:12.5px;line-height:1.6;color:var(--fg3)}
+.bp-footer__legal p{margin:0;max-width:62ch}
+.bp-footer[data-variant="compact"] .bp-footer__inner{max-width:1200px;padding:30px 28px;display:flex;align-items:center;gap:20px;flex-wrap:wrap;font-size:12.5px;line-height:1.6;color:var(--fg3)}
+.bp-footer[data-variant="compact"] .bp-footer__brand img{height:20px;opacity:.85}
+.bp-footer[data-variant="compact"] p{margin:0}
+.bp-footer[data-variant="compact"] .bp-footer__short{margin-left:auto}
+
+@media (max-width:1024px){
+	.bp-menu{display:inline-flex}
+	.bp-header[data-variant="dock"]{top:12px;padding:0 14px}
+	.bp-header[data-variant="dock"] .bp-header__inner{width:100%;justify-content:space-between}
+	.bp-header__rule{display:none}
+	.bp-header[data-variant="bar"] .bp-header__inner{padding:12px 18px}
+	.bp-header[data-variant="bar"] .bp-toggle{width:40px;height:40px;padding:0}
+	.bp-header[data-variant="bar"] .bp-toggle__label{display:none}
+	/* A flex item's floor is its content, so without this the row overflows instead of shrinking. */
+	.bp-header__inner,.bp-header__actions,.bp-brand{min-width:0}
+	.bp-toggle,.bp-menu{width:40px;height:40px}
+	.bp-cta{height:40px;min-width:0;flex:0 1 auto}
+	.bp-nav{display:none;position:absolute;top:calc(100% + 10px);left:0;right:0;flex-direction:column;align-items:stretch;gap:4px;padding:10px;border-radius:18px;background:var(--bg1);border:1px solid var(--cardb);box-shadow:0 18px 40px var(--glow)}
+	.bp-header[data-open="true"] .bp-nav{display:flex}
+	.bp-navlink{padding:11px 14px;font-size:15px}
+	.bp-nav__gap{width:auto;height:1px;margin:6px 0;align-self:stretch}
+	.bp-nav__signout{display:block}
+	.bp-nav__signout .bp-navlink{width:100%;text-align:left}
+	.bp-header[data-variant] .bp-nav .bp-toggle{width:100%;height:auto;margin-left:0;justify-content:flex-start;gap:10px;padding:11px 14px;border:0;border-radius:12px;background:none;font-size:15px;font-weight:500;color:var(--fg2)}
+	.bp-header[data-variant] .bp-nav .bp-toggle:hover{background:var(--cardb);color:var(--fg)}
+	.bp-header[data-variant] .bp-nav .bp-toggle svg{width:16px;height:16px}
+	.bp-header[data-variant] .bp-nav .bp-toggle__label{display:inline}
+}
+@media (max-width:900px){
+	.bp-footer__inner,.bp-footer[data-variant="compact"] .bp-footer__inner{padding-left:18px;padding-right:18px}
+	.bp-footer[data-variant="compact"] .bp-footer__short{margin-left:0}
+}
+@media (max-width:560px){
+	.bp-footer__inner,.bp-footer[data-variant="compact"] .bp-footer__inner{padding-left:14px;padding-right:14px}
+	.bp-header[data-variant="bar"] .bp-header__inner{gap:10px;padding:10px 14px}
+	.bp-header[data-variant="dock"] .bp-header__inner{gap:6px;padding:6px 8px 6px 12px}
+	.bp-header[data-variant] .bp-brand{margin-right:0}
+	.bp-header[data-variant] .bp-brand img{height:24px;width:auto}
+	.bp-header__actions{gap:6px}
+	.bp-toggle,.bp-menu{width:36px;height:36px}
+	.bp-header[data-variant="bar"] .bp-toggle{width:36px;height:36px}
+	.bp-cta{height:36px;padding:0 12px;font-size:12.5px}
+}
+
+@media (max-width:380px){
+	.bp-header[data-variant="bar"] .bp-header__inner{gap:8px;padding:10px 12px}
+	.bp-header[data-variant="dock"]{padding:0 10px}
+	.bp-header[data-variant="dock"] .bp-header__inner{padding:6px 6px 6px 10px}
+	.bp-header[data-variant] .bp-brand img{height:22px}
+	.bp-cta{padding:0 10px}
+	.bp-cta svg{display:none}
+}
+
+/* Phone type floor and hit areas. Desktop sizes are untouched. */
+@media (max-width:560px){
+	.bp-footer__legal,.bp-footer[data-variant="compact"] .bp-footer__inner{font-size:13px}
+	.bp-footer__heading{font-size:12px}
+	.bp-footer__col{font-size:14px}
+	/* Vertical padding only, so the column's left edge stays aligned. */
+	.bp-footer__link{display:inline-block;padding:4px 0}
+	.bp-footer__col{gap:6px}
+	.bp-brand{padding:4px 0}
+}
+</style>
+
+{#-
+  Applies the stored theme while the document is still parsing. `.bp` does not exist yet when this
+  runs, so the observer catches the moment the page template inserts it, then stops.
+-#}
+<script>
+(function () {
+	var saved = null;
+	try {
+		saved = localStorage.getItem("bp-mode");
+	} catch (error) {
+		saved = null;
+	}
+	if (saved !== "dark" && saved !== "light") return;
+
+	var observer = new MutationObserver(function () {
+		var root = document.querySelector(".bp");
+		if (!root) return;
+		root.setAttribute("data-mode", saved);
+		observer.disconnect();
+	});
+	observer.observe(document.documentElement, { childList: true, subtree: true });
+})();
+</script>
+<script defer src="/assets/benchpress/js/site.js?v={{ v | e }}"></script>

@@ -1,0 +1,319 @@
+{#-
+  Shadows `frappe/www/login.html`. The framework class and id names below are a contract with
+  `frappe/templates/includes/login/login.js`; check `docs/public-site-spec.md` §4.3 before
+  renaming one. `.page-card-actions` is left out deliberately — `login.bundle.css` hangs its
+  whole button skin off it.
+-#}
+{% extends "templates/web.html" %}
+
+{#- lucide 0.451.0 path data; sizing is CSS, never a width/height attribute. -#}
+{%- macro svg(body, klass) -%}
+<svg class="{{ klass | e }}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">{{ body }}</svg>
+{%- endmacro -%}
+
+{%- macro arrow_right(klass="") -%}{{ svg('<path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>', klass) }}{%- endmacro -%}
+{%- macro circle_alert(klass="") -%}{{ svg('<circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/>', klass) }}{%- endmacro -%}
+{%- macro eye(klass="") -%}{{ svg('<path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/>', klass) }}{%- endmacro -%}
+{%- macro eye_off(klass="") -%}{{ svg('<path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" x2="22" y1="2" y2="22"/>', klass) }}{%- endmacro -%}
+{%- macro github(klass="") -%}{{ svg('<path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/>', klass) }}{%- endmacro -%}
+{%- macro mail(klass="") -%}{{ svg('<rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>', klass) }}{%- endmacro -%}
+{%- macro triangle_alert(klass="") -%}{{ svg('<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>', klass) }}{%- endmacro -%}
+
+{#- Hidden stub. `login.reset_sections` calls `removeClass()` with no argument on the indicator,
+    so the wrapper is what hides it. -#}
+{%- macro indicator_stub(text) -%}
+<span class="bp-login__status" aria-hidden="true"><span class="indicator" data-text="{{ text | e }}">{{ text | e }}</span></span>
+{%- endmacro -%}
+
+{%- macro card_head(heading, body) -%}
+<div class="bp-card__head">
+	<h1 class="bp-card__title">{{ heading | e }}</h1>
+	{%- if body %}
+	<p class="bp-card__body">{{ body | e }}</p>
+	{%- endif %}
+</div>
+{%- endmacro -%}
+
+{#- Rendered twice, duplicating `#login_email` and `#login_password`, exactly as the framework
+    does: `login.js` reaches both sections through those ids. Not named `login_body` — that is a
+    context key on this page, and a macro of the same name shadows it. -#}
+{%- macro email_login_body() -%}
+{%- if not disable_user_pass_login or (ldap_settings and ldap_settings.enabled) %}
+<div class="page-card-body">
+	<div class="login-error-banner" role="alert">
+		{{ triangle_alert("bp-banner__icon") }}
+		<span></span>
+	</div>
+
+	<div class="form-group">
+		<label class="form-label" for="login_email">{{ (login_label or _("Email")) | e }}</label>
+		<input type="text" id="login_email" class="bp-input" placeholder="priya@company.com"
+			required autofocus autocomplete="username">
+		<p class="field-error"></p>
+	</div>
+
+	<div class="form-group">
+		<label class="form-label bp-label--row" for="login_password">
+			<span>{{ _("Password") }}</span>
+			{%- if not disable_user_pass_login %}
+			<a class="bp-login__forgot" href="#forgot">{{ _("Forgot?") }}</a>
+			{%- endif %}
+		</label>
+		<div class="bp-field">
+			<input type="password" id="login_password" class="bp-input bp-input--padded"
+				placeholder="••••••••••" autocomplete="current-password" required>
+			{#- Not `.toggle-password`: that handler swaps a `<use href>` in an SVG sprite, and these icons
+			    are inlined paths. -#}
+			<button type="button" class="bp-field__reveal" data-bp-reveal="login_password"
+				aria-pressed="false" aria-label="{{ _('Show password') }}" title="{{ _('Show password') }}">
+				{{ eye("bp-field__icon bp-field__icon--show") }}
+				{{ eye_off("bp-field__icon bp-field__icon--hide") }}
+			</button>
+		</div>
+		<p class="field-error"></p>
+	</div>
+
+	{#- Not a control: Frappe writes the `sid` expiry from one site-wide `System Settings` value. -#}
+	<div class="bp-check">
+		<label class="bp-check__row">
+			<input type="checkbox" class="bp-check__box" checked disabled aria-disabled="true">
+			<span>{{ login_remember_label | e }}</span>
+		</label>
+		<p class="bp-check__note">{{ _("Always on. A session on this device stays open until it expires or you log out.") }}</p>
+	</div>
+</div>
+{%- endif %}
+
+<div class="bp-form__actions">
+	{%- if not disable_user_pass_login %}
+	{#- No `.btn-primary` here: `login.set_status` calls `.text()` on that class, which would
+	    replace the label and the arrow. -#}
+	<button class="bp-btn bp-btn--primary bp-btn--lg btn-login" type="submit">
+		<span>{{ login_submit_label | e }}</span>{{ arrow_right("bp-btn__icon") }}
+	</button>
+	{%- endif %}
+
+	{%- if ldap_settings and ldap_settings.enabled %}
+	{#- No `type` attribute, exactly as the framework ships it; it defaults to `submit`. -#}
+	<button class="bp-btn bp-btn--ghost bp-btn--lg btn-login btn-ldap-login">{{ _("Login with LDAP") }}</button>
+	{%- endif %}
+
+	{%- if login_with_email_link %}
+	<a href="#login-with-email-link" class="bp-btn bp-btn--ghost bp-btn--lg btn-login-option btn-login-with-email-link">
+		{{ mail("bp-btn__icon") }}<span>{{ _("Login with Email Link") }}</span>
+	</a>
+	{%- endif %}
+
+	{%- if social_login %}
+	<div class="bp-oauth">
+		{%- for provider in provider_logins %}
+		{#- `icon` is HTML the framework built server-side, so it renders raw. -#}
+		<a href="{{ provider.auth_url | e }}" class="bp-btn bp-btn--ghost bp-btn--lg btn-login-option btn-{{ provider.name | e }}">
+			{%- if provider.icon %}{{ provider.icon }}{% endif %}
+			<span>{{ _("Login with {0}").format(provider.provider_name | e) }}</span>
+		</a>
+		{%- endfor %}
+	</div>
+	{%- endif %}
+</div>
+{%- endmacro -%}
+
+{%- macro login_card() -%}
+<div class="login-content page-card bp-card">
+	{{ indicator_stub(_("Sign In")) }}
+	{{ card_head(login_title, login_body) }}
+
+	{%- if not disable_user_pass_login %}
+	{#- Deliberately unwired and `disabled`. Real GitHub sign-in arrives as an enabled
+	  `Social Login Key` and renders from `provider_logins` below; delete this block then.
+	  `data-bp-unwired="github"` is the hook to grep for. -#}
+	<button type="button" class="bp-btn bp-btn--ghost bp-btn--lg bp-oauth__stub"
+		data-bp-unwired="github" disabled aria-disabled="true"
+		title="{{ _('GitHub sign-in is not available yet') }}"
+		aria-label="{{ login_oauth_label | e }} — {{ _('not available yet') }}">
+		{{ github("bp-btn__icon") }}
+		<span>{{ login_oauth_label | e }}</span>
+		<span class="bp-tag">{{ _("Soon") }}</span>
+	</button>
+
+	<div class="bp-divider" aria-hidden="true"><span>{{ login_divider_label | e }}</span></div>
+	{%- endif %}
+
+	<form class="form-signin form-login" role="form" novalidate>
+		{{ email_login_body() }}
+	</form>
+
+	{#- Text Editor field: renders raw. `login.py` re-points its `#signup` anchor on an
+	    invite-only site. -#}
+	<div class="bp-prompt">{{ signup_prompt }}</div>
+</div>
+{%- endmacro -%}
+
+{% block title %}{{ login_title | e }} · BenchPress{% endblock %}
+
+{#- The framework bundle first: `.hide`, `.invalid`, `.field-error`, `.indicator` and the
+  injected two-factor markup all get their behaviour from it. -#}
+{% block head_include %}
+{{ include_style('login.bundle.css') }}
+{% include "templates/includes/site_head.html" %}
+<link rel="stylesheet" href="/assets/benchpress/css/login.css?v={{ asset_version | e }}">
+{% endblock %}
+
+{#- The framework's chrome, blanked. These are the real block names; anything else is a no-op. -#}
+{% block navbar %}{% endblock %}
+{% block footer %}{% endblock %}
+{% block breadcrumbs %}{% endblock %}
+{% block header %}{% endblock %}
+{% block page_sidebar %}{% endblock %}
+{% block page_footer %}{% endblock %}
+
+{% block page_content %}
+<div class="bp bp-login" data-mode="{{ mode_default | e }}">
+	{% include "templates/includes/site_header.html" %}
+
+	<main id="bp-content">
+		<noscript>
+			<div class="bp-noscript">
+				<h2>{{ _("Javascript is disabled on your browser") }}</h2>
+				<p>{{ _("You need to enable JavaScript for your app to work.") }}
+					<a href="https://enable-javascript.com/">enable-javascript.com</a></p>
+			</div>
+		</noscript>
+
+		{#- A `div`, not a `section`: `login.js` reaches the visible card through
+		  `$("section:visible …")`, so the five `.for-*` sections must be the only ones here. -#}
+		<div class="bp-login__section">
+			<div class="bp-login__dots" aria-hidden="true"></div>
+
+			<div class="bp-login__grid" data-r="split pad">
+				<div class="bp-login__forms">
+					<section class="for-login">
+						{{ login_card() }}
+					</section>
+
+					{%- if social_login %}
+					<section class="for-email-login">
+						{{ login_card() }}
+					</section>
+					{%- endif %}
+
+					<section class="for-signup{{ ' signup-disabled' if disable_signup else '' }}">
+						<div class="login-content page-card bp-card">
+							{%- if not disable_signup %}
+							{{ indicator_stub(_("Sign Up")) }}
+							{{ card_head(_("Sign Up"), _("Let's setup your account.")) }}
+							{#- Pre-rendered by the framework, so it is emitted verbatim. -#}
+							{{ signup_form_template }}
+							{%- else %}
+							{#- `reset_sections` skips `.signup-disabled`, so this indicator keeps what it is given. -#}
+							<span class="indicator gray">{{ _("Signup Disabled") }}</span>
+							{{ card_head(_("Sign Up"), _("Signups have been disabled for this website.")) }}
+							<div class="bp-form__actions">
+								<a class="bp-btn bp-btn--primary bp-btn--lg" href="/">{{ _("Home") }}</a>
+							</div>
+							{%- endif %}
+						</div>
+					</section>
+
+					<section class="for-forgot">
+						<div class="login-content page-card bp-card">
+							{{ indicator_stub(_("Forgot Password")) }}
+							{{ card_head(_("Forgot password?"), _("Enter your email and we will send you a reset link.")) }}
+							<form class="form-signin form-forgot hide" role="form" novalidate>
+								<div class="page-card-body">
+									<div class="login-error-banner" role="alert">
+										{{ triangle_alert("bp-banner__icon") }}
+										<span></span>
+									</div>
+									<div class="form-group">
+										<label class="form-label" for="forgot_email">{{ _("Email") }}</label>
+										<input type="email" id="forgot_email" class="bp-input"
+											placeholder="priya@company.com" required autocomplete="username">
+										<p class="field-error"></p>
+									</div>
+								</div>
+								<div class="bp-form__actions">
+									{#- `.btn-primary` is wanted here: `login.set_status` writes into it, and the label is
+									    plain text. -#}
+									<button class="bp-btn bp-btn--primary bp-btn--lg btn-primary btn-signup btn-forgot"
+										type="submit" disabled>{{ _("Send Link") }}</button>
+								</div>
+							</form>
+							<div class="bp-prompt"><a href="#login">{{ _("Back to sign in") }}</a></div>
+						</div>
+					</section>
+
+					<section class="for-login-with-email-link">
+						<div class="login-content page-card bp-card">
+							{{ indicator_stub(_("Sign In")) }}
+							{{ card_head(_("Sign in with a link"), _("We will email you a link that signs you in.")) }}
+							<form class="form-signin form-login-with-email-link hide" role="form" novalidate>
+								<div class="page-card-body">
+									<div class="login-error-banner" role="alert">
+										{{ triangle_alert("bp-banner__icon") }}
+										<span></span>
+									</div>
+									<div class="login-success-banner">
+										{{ circle_alert("bp-banner__icon") }}
+										<span>{{ _("Please check your email.") }}</span>
+									</div>
+									<div class="form-group">
+										<label class="form-label" for="login_with_email_link_email">{{ _("Email") }}</label>
+										<input type="email" id="login_with_email_link_email" class="bp-input"
+											placeholder="priya@company.com" required autocomplete="username">
+										<p class="field-error"></p>
+									</div>
+								</div>
+								<div class="bp-form__actions">
+									<p class="resend-link">
+										{{ _("Didn't receive the link?") }}
+										<a href="#" class="btn-resend-link">{{ _("Resend") }}</a>
+									</p>
+									<button class="bp-btn bp-btn--primary bp-btn--lg btn-primary btn-login btn-login-with-email-link"
+										type="submit">{{ _("Send login link") }}</button>
+									<a href="#login" class="bp-btn bp-btn--ghost bp-btn--lg btn-login-option">{{ _("Login with password") }}</a>
+								</div>
+							</form>
+						</div>
+					</section>
+				</div>
+
+				<aside class="bp-login__panel">
+					<p class="bp-eyebrow">{{ login_panel_eyebrow | e }}</p>
+					<h2 class="bp-login__panel-title">{{ login_panel_title | e }}</h2>
+
+					<div class="bp-film" aria-hidden="true">
+						<div class="bp-film__bar">
+							<span class="bp-film__dots"><i></i><i></i><i></i></span>
+							session · benchpress
+						</div>
+						<div class="bp-film__body">
+							<p class="bp-film__line" style="--bp-delay: 0s">
+								<span class="bp-film__mark">✓</span><span>session opened · priya@northwind</span>
+							</p>
+							<p class="bp-film__line" style="--bp-delay: 0.3s">
+								<span class="bp-film__mark">✓</span><span>4 instances running · 1,342 credits</span>
+							</p>
+							<p class="bp-film__line" style="--bp-delay: 0.6s">
+								<span class="bp-film__mark">✓</span><span>wireguard peer up · 10.13.13.2</span>
+							</p>
+							<p class="bp-film__line bp-film__line--prompt">
+								<span class="bp-film__sigil">$</span><span>bench --site erpnext-demo console<i class="bp-film__caret"></i></span>
+							</p>
+						</div>
+					</div>
+				</aside>
+			</div>
+		</div>
+	</main>
+
+	{% include "templates/includes/site_footer.html" %}
+</div>
+{% endblock %}
+
+{#- No `defer`: `login.js` calls `login.route()` synchronously as this block parses, so anything
+  it needs must load ahead of it. It is included, never linked, so its `_()` calls render. -#}
+{% block script %}
+<script src="/assets/benchpress/js/login.js?v={{ asset_version | e }}"></script>
+<script>{% include "templates/includes/login/login.js" %}</script>
+{% endblock %}

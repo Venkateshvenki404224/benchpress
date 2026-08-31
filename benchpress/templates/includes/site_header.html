@@ -1,0 +1,63 @@
+{#-
+  Shared header for the five public pages, included first inside the `.bp` wrapper. Styling and
+  the mobile disclosure live in `site_head.html` and `public/js/site.js`. The theme toggle sits in
+  `.bp-nav` so the disclosure carries it on mobile, where the row has no space for it.
+
+  Context: nav_items, signup_route, is_landing, asset_version, and the session keys
+  is_signed_in / login_route / console_route / logout_method / csrf_token.
+
+  Jinja autoescape is off in Frappe, so every interpolation is piped through `| e`.
+-#}
+{%- set v = asset_version or "0" -%}
+{%- set links = (nav_items | rejectattr("is_cta") | list) if nav_items else [] -%}
+{%- set cta = (nav_items | selectattr("is_cta") | first) if nav_items else None -%}
+{%- set cta_label = (cta.label if cta else "") or "Start free" -%}
+{%- set cta_url = (cta.anchor if cta else None) or signup_route or "/signup" -%}
+
+<a class="bp-skip" href="#bp-content">Skip to content</a>
+
+<header class="bp-header" data-variant="{{ 'dock' if is_landing else 'bar' }}" data-open="false" data-bp-header>
+	<div class="bp-header__inner">
+		<a class="bp-brand" href="{{ '/#top' if is_landing else '/' }}" aria-label="BenchPress — home">
+			<img class="bp-when-dark" src="/assets/benchpress/images/logo/wordmark-on-dark.png?v={{ v | e }}" alt="BenchPress" width="116" height="30">
+			<img class="bp-when-light" src="/assets/benchpress/images/logo/wordmark-on-light.png?v={{ v | e }}" alt="" width="116" height="30">
+		</a>
+
+		<span class="bp-header__rule" aria-hidden="true"></span>
+		<nav class="bp-nav" id="bp-nav" aria-label="Primary">
+			{%- for item in links %}
+			<a class="bp-navlink" href="{{ item.anchor | e }}">{{ item.label | e }}</a>
+			{%- endfor %}
+
+			<span class="bp-nav__gap" aria-hidden="true"></span>
+			{%- if is_signed_in %}
+			<a class="bp-navlink bp-navlink--auth" href="{{ console_route | e }}">Dashboard</a>
+			{#- Both of Frappe's logout endpoints are POST-only, so this is a form. -#}
+			<form class="bp-nav__signout" method="POST" action="/api/method/{{ logout_method | e }}" data-bp-signout>
+				{%- if csrf_token %}<input type="hidden" name="csrf_token" value="{{ csrf_token | e }}">{% endif %}
+				<button type="submit" class="bp-navlink bp-navlink--auth">Log out</button>
+			</form>
+			{%- else %}
+			<a class="bp-navlink bp-navlink--auth" href="{{ login_route | e }}">Log in</a>
+			{%- endif %}
+
+			{#- The toggle is named for the state it holds, not the action, so `aria-pressed` reads
+			  straight; the visible word is the action, and is hidden from assistive tech. -#}
+			<button type="button" class="bp-toggle" data-bp-mode-toggle aria-label="Light theme" aria-pressed="false" title="Switch theme">
+				<svg class="bp-when-dark" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2"></path><path d="M12 20v2"></path><path d="m4.93 4.93 1.41 1.41"></path><path d="m17.66 17.66 1.41 1.41"></path><path d="M2 12h2"></path><path d="M20 12h2"></path><path d="m6.34 17.66-1.41 1.41"></path><path d="m19.07 4.93-1.41 1.41"></path></svg>
+				<svg class="bp-when-light" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"></path></svg>
+				<span class="bp-toggle__label bp-when-dark" aria-hidden="true">Light</span>
+				<span class="bp-toggle__label bp-when-light" aria-hidden="true">Dark</span>
+			</button>
+		</nav>
+
+		<div class="bp-header__actions">
+			<a class="bp-cta" href="{{ cta_url | e }}"><span class="bp-cta__label">{{ cta_label | e }}</span><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M5 12h14"></path><path d="m12 5 7 7-7 7"></path></svg></a>
+
+			<button type="button" class="bp-menu" data-bp-nav-toggle aria-controls="bp-nav" aria-expanded="false">
+				<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 6h16"></path><path d="M4 12h16"></path><path d="M4 18h16"></path></svg>
+				<span class="bp-sr">Menu</span>
+			</button>
+		</div>
+	</div>
+</header>
