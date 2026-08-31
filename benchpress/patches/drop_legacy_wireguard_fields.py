@@ -17,7 +17,7 @@ SETTINGS_FIELDS = [
 
 
 def execute():
-	"""Drop the WireGuard schema Benchpress no longer owns (phase 4).
+	"""Drop the WireGuard schema BenchPress no longer owns (phase 4).
 
 	delete_fields drops the Bench Instance columns and clears the
 	BenchPress Settings values from tabSingles.

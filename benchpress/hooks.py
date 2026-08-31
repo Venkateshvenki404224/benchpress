@@ -11,7 +11,38 @@ app_home = "/desk/benchpress"
 required_apps = ["vpn_management"]
 
 # Fixtures
-fixtures = [{"dt": "Role", "filters": [["role_name", "in", ["BenchPress Admin", "BenchPress User"]]]}]
+#
+# Every entry is filtered to rows this app owns. An unfiltered `dt` exports the site's whole table
+# and re-imports it into the next site, which is how one deployment's operator data ends up in
+# another's.
+#
+# The `Email Template` entry makes the six public-site mails version-controlled: the wording ships
+# with the app instead of living only in one site's database. The cost is real and worth naming —
+# `sync_fixtures` imports with `force=True` on *every* `bench migrate`, so a body edited in Desk is
+# overwritten on the next migrate. The workflow is therefore: edit in Desk, then
+# `bench --site <site> export-fixtures --app benchpress` and commit the result. That is also why
+# the page Singles are seeded (`benchpress/public_site/seed.py`) rather than fixtured — page copy
+# is meant to be an operator's to keep.
+fixtures = [
+	{"dt": "Role", "filters": [["role_name", "in", ["BenchPress Admin", "BenchPress User"]]]},
+	{
+		"dt": "Email Template",
+		"filters": [
+			[
+				"name",
+				"in",
+				[
+					"BenchPress Access Request Received",
+					"BenchPress Access Request Filed",
+					"BenchPress Access Approved",
+					"BenchPress Access Declined",
+					"BenchPress Contact Message Received",
+					"BenchPress Contact Message Filed",
+				],
+			]
+		],
+	},
+]
 
 # Apps screen entry
 add_to_apps_screen = [
@@ -56,6 +87,7 @@ doctype_list_js = {
 	"Bench Site": "public/js/list_view/bench_site_list.js",
 	"Database Server": "public/js/list_view/database_server_list.js",
 	"Waitlist Entry": "public/js/list_view/waitlist_entry_list.js",
+	"Contact Message": "public/js/list_view/contact_message_list.js",
 }
 
 # doctype_tree_js = {"doctype" : "public/js/doctype_tree.js"}
@@ -198,6 +230,28 @@ override_whitelisted_methods = {
 # Runs ahead of frappe's TemplatePage, which would otherwise compile these
 # files as Jinja and convert the markdown ones to HTML.
 page_renderer = ["benchpress.docs_assets.DocsAssetRenderer"]
+
+# The public pages are deliberately absent. `/`, `/landing`, `/signup`, `/about` and `/contact`
+# resolve from `benchpress/www/` by filename, and `/login` shadows `frappe/www/login.html` because
+# `TemplatePage.set_template_path` searches `reversed(get_installed_apps())`. A route rule for
+# `/login` would bypass `frappe/www/login.py` and take the signed-in redirect, the `redirect-to`
+# sanitisation and the OAuth paths with it — do not add one.
+#
+# `/` needs one thing more than a file: `frappe.website.utils.get_home_page` falls back to `login`
+# for a guest when nothing names a home page, so `Website Settings.home_page` has to say `index`.
+# `benchpress.public_site.seed.claim_home_page` writes it once, when it is empty. Not the
+# `home_page` hook: that outranks Website Settings and would take the choice away from Desk.
+#
+# That same field is what `frappe.auth` hands back as the post-login destination, so naming the
+# landing page in it also lands every admin on the marketing page instead of the Desk. The hook
+# below returns `None` for a guest, and for a signed-in visitor only while the stored value is
+# still the landing page — so a home page an operator picks in Desk is never swallowed by a hook
+# that runs ahead of it. See `benchpress/public_site/home.py` — the hook name is Frappe's and is
+# misleading: the method is called for every user, not only a Website User.
+#
+# `/landing` exists because neither `/` nor `/index` names the landing page for a signed-in
+# operator: `path_resolver.resolve_path` sends both through `get_home_page`. See `www/landing.py`.
+get_website_user_home_page = "benchpress.public_site.home.home_page_for"
 
 website_route_rules = [
 	{"from_route": "/frontend/<path:app_path>", "to_route": "frontend"},

@@ -1,9 +1,9 @@
 # Copyright (c) 2026, Venkatesh and contributors
 # For license information, please see license.txt
 
-"""The single integration seam between Benchpress and the vpn_management app.
+"""The single integration seam between BenchPress and the vpn_management app.
 
-Benchpress generates the container keypair locally and registers only the
+BenchPress generates the container keypair locally and registers only the
 public key as a VPN Peer — the insert claims the tunnel IP atomically from the
 server's pool. The interface is converged synchronously because deploys run on
 queue-long, which mounts the wg-agent socket. The container's private key is

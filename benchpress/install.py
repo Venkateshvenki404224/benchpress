@@ -9,6 +9,7 @@ import frappe
 from benchpress.credits.seed import seed_defaults
 from benchpress.indexes import ensure_indexes
 from benchpress.lab_templates import seed_lab_templates
+from benchpress.public_site.seed import seed_public_site
 from benchpress.vpn_access import grant_vpn_access
 
 
@@ -30,6 +31,11 @@ def after_install():
 
 	# Same reason again: seed_lab_templates would never fire on a fresh install.
 	seed_lab_templates()
+
+	# The five public pages and the six transactional emails. Runs last of the seeders because it
+	# reads `Credit Settings` through the page controllers it imports. Idempotent, and it never
+	# overwrites an operator's copy — see benchpress/public_site/seed.py.
+	seed_public_site()
 	ensure_indexes()
 
 	# setup.sh requires host-level access (docker group, sysctl, sudoers).
