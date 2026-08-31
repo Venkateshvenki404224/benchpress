@@ -47,9 +47,96 @@ the back.
 - **Frontend:** Vue 3 SPA in `frontend/` (frappe-ui, vue-router, Tailwind).
 - **Doctypes:** `Lab`, `Bench Instance`, `Bench Site`, `Bench App`, `Database
   Server`, `Credit Account` / `Credit Ledger Entry` / `Credit Pack`, `Deploy Log`,
-  `Build Log` — under `benchpress/benchpress/doctype/`.
+  `Build Log` — under `benchpress/benchpress/doctype/`. The public site adds
+  `Landing Page Settings`, `Signup Page Settings`, `About Page Settings`,
+  `Contact Page Settings` (four Singles that hold page copy), `Waitlist Entry`
+  and `Contact Message`.
 - **Depends on** `vpn_management` (`required_apps` in `hooks.py`) for the WireGuard
   side.
+
+## Public site
+
+Five pages under `benchpress/www/`, on six routes. Each one resolves by
+filename. None of them has a `website_route_rules` entry, and none may be
+given one.
+
+| Route | Template | Controller | Copy lives in |
+|---|---|---|---|
+| `/` | `www/index.html` | `www/index.py` | `Landing Page Settings` |
+| `/landing` | `www/landing.html` (extends `index.html`) | `www/landing.py` | `Landing Page Settings` |
+| `/signup` | `www/signup.html` | `www/signup.py` | `Signup Page Settings` |
+| `/login` | `www/login.html` | `www/login.py` | `Signup Page Settings` (the nine `login_*` fields) |
+| `/about` | `www/about.html` | `www/about.py` | `About Page Settings` |
+| `/contact` | `www/contact.html` | `www/contact.py` | `Contact Page Settings` |
+
+Seven facts that are easy to break:
+
+- `www/login.html` deliberately shadows `frappe/www/login.html`, because
+  `TemplatePage.set_template_path` searches `reversed(get_installed_apps())`.
+  `www/login.py` calls Frappe's own `get_context` first and only decorates the
+  result. Keep the context keys and the DOM contract (spec §4.3) in step with the
+  framework on every Frappe upgrade. Re-read `frappe/www/login.py`,
+  `frappe/templates/includes/login/login.js`, `frappe/templates/signup.html` and
+  `frappe/public/scss/login.bundle.scss` when the framework version moves.
+- `/` needs `Website Settings.home_page` to say `index`.
+  `frappe.website.utils.get_home_page` falls back to `login` for a guest when
+  nothing names a home page, so an empty value serves the login form at `/`.
+  `benchpress.public_site.seed.claim_home_page` writes the value once, only when
+  it is empty. That field is *also* Frappe's post-login destination for every
+  user, so `benchpress.public_site.home` answers ahead of it — via the
+  `get_website_user_home_page` hook, which despite the name runs for everyone —
+  and keeps a signed-in visitor out of the marketing page. It answers *only*
+  while the stored value is still `index`: hooks are read before Website
+  Settings, so an unconditional answer would make a stock Desk setting
+  guests-only.
+- `/landing` is the landing page's second route, and the only one a signed-in
+  operator can reach. `path_resolver.resolve_path` maps an empty path to `index`
+  and then maps `index` through `get_home_page`, which answers `desk` for a
+  System User — so `/` and `/index` both leave the marketing page unpreviewable
+  from a logged-in session. `www/landing.html` is one `{% extends %}` of
+  `www/index.html` and `www/landing.py` delegates to `index.get_context`, so the
+  two routes cannot drift. It carries `sitemap = 0`; `/` stays canonical.
+- The header and footer are one include, and `site_content.chrome_content` is the
+  only thing that resolves the header CTA, `signup_route`, the session state the
+  header renders (`is_signed_in`, `login_route`, `console_route`) and the page's
+  `csrf_token`. All five pages must offer the same door: never re-resolve any of
+  them in a page controller. Sign-out is a form, not a link — both of Frappe's
+  logout endpoints are POST-only.
+- Section order lives in the template. Desk owns the copy inside a section,
+  whether an optional section renders, and the rows in a repeater.
+- Every page renders from a seed constant when its Single is empty. The seed is
+  also what `benchpress.public_site.seed.seed_public_site` writes into Desk, so
+  each string has one home. The seeder never overwrites an operator's edit.
+- The six `Email Template` rows are the exception. They are a `fixtures` entry,
+  and `sync_fixtures` imports with `force=True` on every `bench migrate`, so a
+  body edited in Desk is overwritten on the next migrate. After an edit, run
+  `bench --site frontend export-fixtures --app benchpress` and commit the result.
+
+The contract the five pages were built against is
+[docs/public-site-spec.md](docs/public-site-spec.md).
+
+## Cobalt is the palette of record
+
+Every token lives in `benchpress/public/css/brand.css`. A new marketing surface
+uses those tokens and never a raw hex value.
+
+- `:root` holds the mode-independent marketing tokens (`--m-ink`, `--m-blue`,
+  `--m-panel` and the rest). `.bp[data-mode="dark"]` and `.bp[data-mode="light"]`
+  hold the page palette (`--bg0`, `--card`, `--fg`, `--accent`, `--brand`).
+- A surface that stays dark in both modes carries `data-ondark`, which re-pins
+  the text tokens for its descendants. Never hard-code white text. Add the
+  attribute.
+- The Espresso ramp (`--gray-*`, `--ink-*`, `--green-*`, `--red-*`) is fenced to
+  the console mock on the landing page. That block is a picture of the product.
+  Do not mix the two palettes anywhere else.
+- `handoff 2/_ds/*/tokens/marketing.css` is superseded. It ships
+  `--m-blue: #2490EF`, the Espresso product blue, which every page in the handoff
+  overrides with the Cobalt navy `#1F5CF5`. Do not import it, and do not "fix" a
+  Cobalt value back to it.
+- Cobalt names no error color. `/signup` declares a page-scoped `--bp-danger`
+  set, and `/login` falls back to Frappe's own red tokens. Promoting one
+  mode-varying `--danger` triplet into `brand.css` would let both stop inventing
+  one.
 
 ## Everyday commands
 
@@ -101,6 +188,23 @@ cd e2e && npx playwright test  # has its own config — running from the app roo
 - **Reviewing a diff or PR** → `quality-code-review`.
 - **Docs, commit messages, PR descriptions, the README** → `technical-writing`.
 - **New or changed doctype forms/list views** → `ui-design`.
+
+## Agent skills
+
+### Issue tracker
+
+GitHub Issues on `Venkateshvenki404224/benchpress`, via the `gh` CLI.
+See `.agents/issue-tracker.md`.
+
+### Triage labels
+
+The five default roles, each label string equal to its name.
+See `.agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: one `CONTEXT.md` and `docs/adr/` at the repo root.
+See `.agents/domain.md`.
 
 ## graphify
 
