@@ -1,30 +1,14 @@
 {#-
   Shared <head> for the five public pages, included from `{% block head_include %}`.
 
-  Context, all optional: asset_version, meta_title, meta_description, og_image, page_url.
+  Context, all optional: asset_version. The link preview comes from `context.metatags`, which the
+  framework renders in its own block; nothing here may emit an og: or twitter: tag.
 
   Jinja autoescape is off in Frappe, so every interpolation is piped through `| e`.
 -#}
 {%- set v = asset_version or "0" -%}
-{%- set head_title = meta_title or title or "BenchPress" -%}
-{%- set head_description = meta_description or "Isolated Frappe environments, deployed in one click and kept on your private network." -%}
-{%- set head_image = og_image or "/assets/benchpress/images/logo/mark.png" -%}
 
-<meta name="description" content="{{ head_description | e }}">
 <meta name="color-scheme" content="dark light">
-
-<meta property="og:type" content="website">
-<meta property="og:site_name" content="BenchPress">
-<meta property="og:title" content="{{ head_title | e }}">
-<meta property="og:description" content="{{ head_description | e }}">
-<meta property="og:image" content="{{ head_image | e }}">
-{%- if page_url or path %}
-<meta property="og:url" content="{{ (page_url or ('/' ~ path)) | e }}">
-{%- endif %}
-<meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="{{ head_title | e }}">
-<meta name="twitter:description" content="{{ head_description | e }}">
-<meta name="twitter:image" content="{{ head_image | e }}">
 
 <link rel="icon" type="image/svg+xml" href="/assets/benchpress/images/logo/favicon.svg?v={{ v | e }}">
 <link rel="icon" type="image/png" sizes="32x32" href="/assets/benchpress/images/logo/favicon-32.png?v={{ v | e }}">

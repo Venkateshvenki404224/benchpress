@@ -35,6 +35,11 @@ WITH_COLUMN = "With BenchPress"
 # Steps point at their phase by string, so neither table may be seeded without the other.
 PIPELINE_TABLES = ("pipeline_phases", "pipeline_steps")
 
+SITE_NAME = "BenchPress"
+OG_TYPE = "website"
+
+DEFAULT_OG_IMAGE = "/assets/benchpress/images/logo/mark.png"
+
 
 def landing_content() -> dict:
 	"""Everything `www/index.html` renders, assembled once per request."""
@@ -65,6 +70,17 @@ def chrome_content(is_landing: bool = False) -> dict:
 		"console_route": CONSOLE_ROUTE,
 		"logout_method": LOGOUT_METHOD,
 		"csrf_token": session_csrf_token(),
+	}
+
+
+def preview_tags(title: str, description: str, image: str = "") -> dict:
+	"""`context.metatags`; the framework derives the og: and twitter: pairs and absolutises the image."""
+	return {
+		"og:type": OG_TYPE,
+		"og:site_name": SITE_NAME,
+		"title": title,
+		"description": description,
+		"image": image or DEFAULT_OG_IMAGE,
 	}
 
 

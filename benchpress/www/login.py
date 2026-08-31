@@ -9,7 +9,7 @@ import frappe
 from frappe.utils import cint
 from frappe.www.login import get_context as frappe_login_context
 
-from benchpress.benchpress.site_content import chrome_content
+from benchpress.benchpress.site_content import chrome_content, preview_tags
 
 no_cache = True
 
@@ -99,6 +99,7 @@ def page_context(copy: dict) -> dict:
 			"show_sidebar": 0,
 			"meta_title": copy["login_title"],
 			"meta_description": copy["login_body"],
+			"metatags": preview_tags(copy["login_title"], copy["login_body"]),
 		}
 	)
 	return content

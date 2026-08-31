@@ -5,7 +5,12 @@ import os
 
 import frappe
 
-from benchpress.benchpress.site_content import about_content, chrome_content, landing_content
+from benchpress.benchpress.site_content import (
+	about_content,
+	chrome_content,
+	landing_content,
+	preview_tags,
+)
 from benchpress.credits.config import credits_enabled, waitlist_open
 
 REPO_URL = "https://github.com/Venkateshvenki404224/benchpress"
@@ -47,6 +52,7 @@ def get_context(context):
 	context.about_stats = about_content()["settings"].stats if context.show_about else []
 
 	context.title = context.meta_title or DEFAULT_TITLE
+	context.metatags = preview_tags(context.title, context.meta_description, context.og_image)
 	context.repo_url = REPO_URL
 	context.asset_version = asset_version()
 	context.hero_media = hero_media(context.asset_version)

@@ -7,7 +7,7 @@ import frappe
 from frappe.utils import cstr, strip_html
 
 from benchpress import contact
-from benchpress.benchpress.site_content import chrome_content, merged
+from benchpress.benchpress.site_content import chrome_content, merged, preview_tags
 
 DOCTYPE = "Contact Page Settings"
 
@@ -56,6 +56,7 @@ def get_context(context):
 	context.meta_description = settings.meta_description or settings.intro_body
 	context.og_image = settings.og_image
 	context.title = context.meta_title
+	context.metatags = preview_tags(context.title, context.meta_description, context.og_image)
 	context.asset_version = asset_version()
 	return context
 

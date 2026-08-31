@@ -5,7 +5,7 @@ import os
 
 import frappe
 
-from benchpress.benchpress.site_content import about_content, chrome_content
+from benchpress.benchpress.site_content import about_content, chrome_content, preview_tags
 
 DEFAULT_TITLE = "About BenchPress"
 
@@ -33,6 +33,7 @@ def get_context(context):
 
 	context.meta_title = context.meta_title or DEFAULT_TITLE
 	context.title = context.meta_title
+	context.metatags = preview_tags(context.title, context.meta_description, context.og_image)
 	context.asset_version = asset_version()
 	return context
 
