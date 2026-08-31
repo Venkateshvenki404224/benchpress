@@ -5,7 +5,7 @@ apps it integrates with, and the web fonts it vendors. Hand-maintained, because 
 judgement rather than metadata.
 
 The redistributed Python and npm dependency trees are a separate, generated list —
-[THIRD-PARTY-NOTICES.md](../THIRD-PARTY-NOTICES.md).
+[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
 
 ## Bundled fonts
 

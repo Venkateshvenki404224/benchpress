@@ -142,7 +142,7 @@ Command 4 is not:
 | Vulnerable Dependency Check | `linter.yml` | `pip-audit` over the Python dependencies |
 | Server | `ci.yml` | `run-tests --app benchpress` on a fresh bench, then a page-load check on `/frontend` |
 | Frontend | `ci.yml` | `yarn install --frozen-lockfile`, `yarn test:run`, `yarn build` |
-| Docs | `ci.yml` | `docs:build`, `docs:lint`, `docs:score`, and a check that `docs-site/` and `docs-bundle/` are committed and current |
+| Docs | `ci.yml` | `docs:build`, `docs:lint`, `docs:score`, `docs:links`, and a check that `docs-site/` and `docs-bundle/` are committed and current |
 
 The Playwright suite is **local only**. It needs a running site with
 administrator credentials, which no CI job provisions. Run it yourself against
@@ -150,9 +150,9 @@ your bench before you push anything that touches a page or a route.
 
 `Server` and `Frontend` are path-filtered on pull requests. A change under
 `frontend/` alone skips `Server`, and so does a docs-only change: the `Server`
-filter excludes `docs/`, `docs-site/`, `docs-bundle/` and every `.md` and
-`.mdx`. A change that touches neither `frontend/` nor `.github/workflows/ci.yml`
-skips `Frontend`. A skipped job counts as passing.
+filter excludes `docs/`, `docs-site/`, `docs-bundle/`, `internal/` and every
+`.md` and `.mdx`. A change that touches neither `frontend/` nor
+`.github/workflows/ci.yml` skips `Frontend`. A skipped job counts as passing.
 
 ## Key Rules
 

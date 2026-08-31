@@ -146,6 +146,7 @@ def default_body(template_name: str) -> str:
 	"""The shipped body for one template, read from `templates/emails/`."""
 	_subject, filename = DEFAULTS[template_name]
 	path = frappe.get_app_path("benchpress", "templates", "emails", filename)
+	# nosemgrep -- the filename comes from DEFAULTS, never from a request
 	with open(path, encoding="utf-8") as body:
 		return body.read()
 
@@ -173,7 +174,9 @@ def _render(template_name: str, context: dict) -> dict:
 		return frappe.get_cached_doc("Email Template", template_name).get_formatted_email(context)
 	subject, filename = DEFAULTS[template_name]
 	return {
+		# nosemgrep -- the subject is a DEFAULTS literal
 		"subject": frappe.render_template(subject, context),
+		# nosemgrep -- the path is built from DEFAULTS, never from a request
 		"message": frappe.render_template(f"{TEMPLATE_DIR}/{filename}", context),
 	}
 

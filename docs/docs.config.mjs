@@ -1,15 +1,36 @@
+import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
+import path from "node:path";
 import { defineDocsConfig } from "leadtype";
 
 // leadtype defaults the agent card to 1.0.0, which advertised a version this app has never
 // shipped. Read the real one instead, so the card cannot drift from the package again.
 const { version } = createRequire(import.meta.url)("../package.json");
 
+const MARKDOWN_LINK = /\]\((\/[^)\s]+)\.md\)/g;
+
+// leadtype links a section index at `<section>.md` but writes it at
+// `<section>/index.md`. Point the link at the file.
+const sectionIndexLinks = {
+  name: "section-index-links",
+  beforeLlmsTxt(artifact, context) {
+    const outDir = artifact.outputPath.slice(0, -context.relativePath.length);
+    const content = artifact.content.replace(MARKDOWN_LINK, (link, urlPath) =>
+      existsSync(path.join(outDir, `${urlPath}.md`)) ||
+      !existsSync(path.join(outDir, urlPath, "index.md"))
+        ? link
+        : `](${urlPath}/index.md)`
+    );
+    return { ...artifact, content };
+  },
+};
+
 export default defineDocsConfig({
   product: {
     name: "BenchPress",
     tagline: "Press a button. Get a Frappe bench.",
   },
+  transformers: [sectionIndexLinks],
   agents: {
     agentCard: { version },
   },
@@ -139,18 +160,6 @@ export default defineDocsConfig({
           "so `enable_credits` is `0` and no page about billing applies to a plain install.",
         ].join("\n"),
       },
-    ],
-  },
-  // Authored pages are .mdx. Every .md under docs/ is a legacy guide that keeps
-  // working until the page replacing it lands, so lint skips them. Setting
-  // `ignore` replaces leadtype's defaults, so they are restated here.
-  lint: {
-    ignore: [
-      "**/node_modules/**",
-      "**/shared/**",
-      "**/_shared/**",
-      "**/_partials/**",
-      "**/*.md",
     ],
   },
   // A navigation entry naming a page that does not exist is a config-link

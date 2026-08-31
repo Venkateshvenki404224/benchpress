@@ -200,8 +200,3 @@ so `enable_credits` is `0` and no page about billing applies to a plain install.
 ## Other
 
 - [BenchPress documentation](./docs/index.md): Start here. Three tracks — use a bench, run the server that hosts one, or read the data model and the API.
-- [Integration Notices](./docs/integration-notices.md): Reference page for integration notices.
-- [DESIGN BRIEF](./docs/internal/DESIGN_BRIEF.md): Reference page for design brief.
-- [SCREENSHOT CHECKLIST](./docs/internal/SCREENSHOT-CHECKLIST.md): Reference page for screenshot checklist.
-- [DESIGN BRIEF](./docs/internal/design_handoff_benchpress_ui/DESIGN_BRIEF.md): Reference page for design brief.
-- [Design Handoff Benchpress Ui](./docs/internal/design_handoff_benchpress_ui/README.md): Reference page for design handoff benchpress ui.

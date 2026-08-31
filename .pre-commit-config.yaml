@@ -44,7 +44,7 @@ repos:
                 .*boilerplate.*|
                 benchpress/templates/includes/.*|
                 benchpress/public/js/lib/.*|
-                docs/internal/design_handoff_benchpress_ui/.*
+                internal/design_handoff_benchpress_ui/.*
             )$
 
 
@@ -64,7 +64,7 @@ repos:
                 .*boilerplate.*|
                 benchpress/templates/includes/.*|
                 benchpress/public/js/lib/.*|
-                docs/internal/design_handoff_benchpress_ui/.*
+                internal/design_handoff_benchpress_ui/.*
             )$
 
 ci:

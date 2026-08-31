@@ -159,11 +159,11 @@ while it is invisible and then fails in CI.
 
 ## The documentation pipeline
 
-Four commands build and gate these pages. Read the exit code, never the last
+Five commands build and gate these pages. Read the exit code, never the last
 line of output.
 
 ```bash
-npm run docs:build && npm run docs:lint && npm run docs:score; echo "exit=$?"
+npm run docs:build && npm run docs:lint && npm run docs:score && npm run docs:links; echo "exit=$?"
 ```
 
 | Command | Does |
@@ -173,9 +173,10 @@ npm run docs:build && npm run docs:lint && npm run docs:score; echo "exit=$?"
 | `npm run docs:build` | both of the above |
 | `npm run docs:lint` | `leadtype lint docs --max-warnings 0` |
 | `npm run docs:score` | `leadtype score --src docs --out docs-site --min 100` |
+| `npm run docs:links` | every `.md` link in `docs-site/` and `docs-bundle/` resolves to a generated file |
 
-Two traps are already handled by the scripts, and both cost a debugging session
-to find.
+Three traps are already handled by the scripts, and each cost a debugging
+session to find.
 
 1. **Lint the source folder positionally.** `leadtype lint --src .` walks the
    whole project root, finds the generated `AGENTS.md`, `SKILL.md` and
@@ -183,6 +184,10 @@ to find.
    Generated files are not pages.
 2. **The config is `docs.config.mjs`, not `.ts`.** A TypeScript config needs the
    optional peer dependency `jiti`. Do not convert it.
+3. **Only `.mdx` belongs under `docs/`.** leadtype lists every `.md` it finds
+   there in `llms.txt` but converts only `.mdx`, so a working note left in
+   `docs/` is published as a link to a page that was never written. Internal
+   notes live in `internal/`, and `npm run docs:links` fails on the dead link.
 
 Never hand-edit anything under `docs-site/` or `docs-bundle/`. They are
 generated, and a gate regenerates and fails on any difference.
@@ -192,7 +197,7 @@ generated, and a gate regenerates and fails on any difference.
 Confirm the whole pipeline is clean:
 
 ```bash
-npm run docs:build && npm run docs:lint && npm run docs:score; echo "exit=$?"
+npm run docs:build && npm run docs:lint && npm run docs:score && npm run docs:links; echo "exit=$?"
 ```
 
 `exit=0` is the only passing result.
@@ -205,6 +210,7 @@ npm run docs:build && npm run docs:lint && npm run docs:score; echo "exit=$?"
 | `bench execute` rejects its arguments | `--args` was used | Use `--kwargs` with a dict |
 | Lint fails on files you did not write | `lint --src .` scanned generated output | Run `npm run docs:lint`, which lints `docs` positionally |
 | Lint passes locally and fails in CI | The new file is untracked | `git add -A` first |
+| `docs:links` reports a dead link | A `.md` note under `docs/` is listed but never converted | Move it to `internal/`, then `npm run docs:build` |
 | The docs config is not loaded | It was renamed to `.ts` | Rename it back to `.mjs` |
 | Playwright finds no tests | It was run from the app root | Run it from `e2e/` |
 | A frontend change is not visible | Assets are built, not served from source | `bench build --app benchpress`, then restart |

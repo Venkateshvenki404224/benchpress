@@ -150,7 +150,18 @@ cd frontend && yarn dev        # SPA hot-reload
 cd frontend && yarn test:run   # frontend unit tests
 
 cd e2e && npx playwright test  # has its own config — running from the app root resolves nothing
+
+npm run docs:build && npm run docs:lint && npm run docs:score && npm run docs:links
 ```
+
+## Documentation source
+
+`docs/**/*.mdx` is the source; `docs-site/` and `docs-bundle/` are generated and
+must never be hand-edited. Only page source belongs under `docs/`: leadtype
+lists every `.md` it finds there in `llms.txt` but converts only `.mdx`, so a
+working note left in `docs/` is published as a link to a page that was never
+written. Internal notes live in `internal/`, and `npm run docs:links` fails on
+the dead link either way.
 
 ## Commits & CI (must pass before every push)
 
