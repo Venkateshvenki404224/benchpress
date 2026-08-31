@@ -111,6 +111,24 @@ def create_test_users():
 	frappe.db.commit()  # nosemgrep
 
 
+def before_tests() -> None:
+	"""Give the test site an outgoing account: the queue resolves one even in test mode."""
+	if frappe.db.exists("Email Account", {"default_outgoing": 1}):
+		return
+	frappe.get_doc(
+		{
+			"doctype": "Email Account",
+			"email_account_name": "BenchPress Tests",
+			"email_id": "tests@benchpress.invalid",
+			"smtp_server": "localhost",
+			"enable_outgoing": 1,
+			"default_outgoing": 1,
+			"no_smtp_authentication": 1,
+		}
+	).insert(ignore_permissions=True)
+	frappe.db.commit()  # nosemgrep -- the test runner reads this from a new connection
+
+
 def _print_manual_instructions(site: str) -> None:
 	print("\nRun the setup script manually to configure Docker and permissions:")
 	print(f"\n  bash apps/benchpress/setup.sh {site}\n")
