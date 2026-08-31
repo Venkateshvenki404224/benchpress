@@ -113,7 +113,7 @@ Seven facts that are easy to break:
   `bench --site frontend export-fixtures --app benchpress` and commit the result.
 
 The contract the five pages were built against is
-[docs/public-site-spec.md](docs/public-site-spec.md).
+[internal/public-site-spec.md](internal/public-site-spec.md).
 
 ## Cobalt is the palette of record
 
