@@ -1,0 +1,278 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "creation": "2026-08-30 09:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "request_tab",
+  "intro_section",
+  "badge_text",
+  "title",
+  "intro_body",
+  "steps_section",
+  "signup_steps",
+  "selfhost_note",
+  "form_section",
+  "form_title",
+  "form_subtitle",
+  "form_privacy_note",
+  "column_break_form",
+  "form_submit_label",
+  "form_login_prompt",
+  "pending_section",
+  "pending_title",
+  "pending_body",
+  "pending_links",
+  "pending_back_label",
+  "login_tab",
+  "login_form_section",
+  "login_title",
+  "login_body",
+  "login_oauth_label",
+  "login_divider_label",
+  "column_break_login",
+  "login_remember_label",
+  "login_submit_label",
+  "login_signup_prompt",
+  "login_panel_section",
+  "login_panel_eyebrow",
+  "login_panel_title",
+  "seo_tab",
+  "meta_title",
+  "meta_description",
+  "og_image"
+ ],
+ "fields": [
+  {
+   "fieldname": "request_tab",
+   "fieldtype": "Tab Break",
+   "label": "Request Page"
+  },
+  {
+   "fieldname": "intro_section",
+   "fieldtype": "Section Break",
+   "label": "Intro"
+  },
+  {
+   "fieldname": "badge_text",
+   "fieldtype": "Data",
+   "label": "Badge Text"
+  },
+  {
+   "fieldname": "title",
+   "fieldtype": "Small Text",
+   "label": "Title"
+  },
+  {
+   "fieldname": "intro_body",
+   "fieldtype": "Small Text",
+   "label": "Intro Body"
+  },
+  {
+   "description": "How the request is handled, in order. Shown beside the form.",
+   "fieldname": "steps_section",
+   "fieldtype": "Section Break",
+   "label": "Steps"
+  },
+  {
+   "fieldname": "signup_steps",
+   "fieldtype": "Table",
+   "label": "Signup Steps",
+   "options": "Signup Step"
+  },
+  {
+   "description": "Rendered as HTML. Shown under the steps.",
+   "fieldname": "selfhost_note",
+   "fieldtype": "Text Editor",
+   "label": "Self-host Note"
+  },
+  {
+   "fieldname": "form_section",
+   "fieldtype": "Section Break",
+   "label": "Form"
+  },
+  {
+   "fieldname": "form_title",
+   "fieldtype": "Data",
+   "label": "Form Title"
+  },
+  {
+   "fieldname": "form_subtitle",
+   "fieldtype": "Small Text",
+   "label": "Form Subtitle"
+  },
+  {
+   "fieldname": "form_privacy_note",
+   "fieldtype": "Small Text",
+   "label": "Privacy Note"
+  },
+  {
+   "fieldname": "column_break_form",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "form_submit_label",
+   "fieldtype": "Data",
+   "label": "Submit Label"
+  },
+  {
+   "description": "Sits beside the link to /login for somebody who already has an account.",
+   "fieldname": "form_login_prompt",
+   "fieldtype": "Data",
+   "label": "Login Prompt"
+  },
+  {
+   "description": "Shown in place of the form once a request is filed.",
+   "fieldname": "pending_section",
+   "fieldtype": "Section Break",
+   "label": "Receipt"
+  },
+  {
+   "fieldname": "pending_title",
+   "fieldtype": "Data",
+   "label": "Pending Title"
+  },
+  {
+   "fieldname": "pending_body",
+   "fieldtype": "Small Text",
+   "label": "Pending Body"
+  },
+  {
+   "fieldname": "pending_links",
+   "fieldtype": "Table",
+   "label": "Pending Links",
+   "options": "Signup Pending Link"
+  },
+  {
+   "fieldname": "pending_back_label",
+   "fieldtype": "Data",
+   "label": "Back Label"
+  },
+  {
+   "description": "/login takes its copy from here.",
+   "fieldname": "login_tab",
+   "fieldtype": "Tab Break",
+   "label": "Login Page"
+  },
+  {
+   "fieldname": "login_form_section",
+   "fieldtype": "Section Break",
+   "label": "Form"
+  },
+  {
+   "fieldname": "login_title",
+   "fieldtype": "Data",
+   "label": "Login Title"
+  },
+  {
+   "fieldname": "login_body",
+   "fieldtype": "Small Text",
+   "label": "Login Body"
+  },
+  {
+   "fieldname": "login_oauth_label",
+   "fieldtype": "Data",
+   "label": "OAuth Button Label"
+  },
+  {
+   "fieldname": "login_divider_label",
+   "fieldtype": "Data",
+   "label": "Divider Label"
+  },
+  {
+   "fieldname": "column_break_login",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "login_remember_label",
+   "fieldtype": "Data",
+   "label": "Remember Me Label"
+  },
+  {
+   "fieldname": "login_submit_label",
+   "fieldtype": "Data",
+   "label": "Submit Label"
+  },
+  {
+   "description": "Rendered as HTML. An anchor with href=\"#signup\" is re-pointed at /signup when the site is invite-only.",
+   "fieldname": "login_signup_prompt",
+   "fieldtype": "Text Editor",
+   "label": "Signup Prompt"
+  },
+  {
+   "description": "The panel beside the login form.",
+   "fieldname": "login_panel_section",
+   "fieldtype": "Section Break",
+   "label": "After Login Panel"
+  },
+  {
+   "fieldname": "login_panel_eyebrow",
+   "fieldtype": "Data",
+   "label": "Panel Eyebrow"
+  },
+  {
+   "fieldname": "login_panel_title",
+   "fieldtype": "Small Text",
+   "label": "Panel Title"
+  },
+  {
+   "fieldname": "seo_tab",
+   "fieldtype": "Tab Break",
+   "label": "SEO"
+  },
+  {
+   "fieldname": "meta_title",
+   "fieldtype": "Data",
+   "label": "Meta Title"
+  },
+  {
+   "fieldname": "meta_description",
+   "fieldtype": "Small Text",
+   "label": "Meta Description"
+  },
+  {
+   "fieldname": "og_image",
+   "fieldtype": "Attach Image",
+   "label": "OG Image"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 0,
+ "issingle": 1,
+ "links": [],
+ "modified": "2026-08-30 09:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Benchpress",
+ "name": "Signup Page Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "BenchPress Admin",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

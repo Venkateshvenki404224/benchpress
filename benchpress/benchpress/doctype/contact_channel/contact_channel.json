@@ -1,0 +1,64 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2026-08-30 09:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "icon",
+  "title",
+  "body",
+  "meta_label",
+  "url"
+ ],
+ "fields": [
+  {
+   "description": "Lucide icon key, e.g. mail, github, calendar.",
+   "fieldname": "icon",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Icon"
+  },
+  {
+   "fieldname": "title",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Title",
+   "reqd": 1
+  },
+  {
+   "fieldname": "body",
+   "fieldtype": "Small Text",
+   "label": "Body"
+  },
+  {
+   "description": "The address or handle shown under the body.",
+   "fieldname": "meta_label",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Meta"
+  },
+  {
+   "description": "Where the card links. Leave empty for a channel that is not clickable yet.",
+   "fieldname": "url",
+   "fieldtype": "Data",
+   "label": "URL"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 0,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-08-30 09:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Benchpress",
+ "name": "Contact Channel",
+ "owner": "Administrator",
+ "permissions": [],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": []
+}
