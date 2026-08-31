@@ -60,28 +60,30 @@ form that fails after the framework bundle was removed. Any issue that changes w
 page looks like or how it behaves must be checked in a real browser before you commit.
 Use the `agent-browser` skill.
 
-**Test site:** `$BP_TEST_URL`, defaulting to `https://b3873df7.benchpress.cloud`.
-It runs the branch under development and serves all six public routes.
+**Where to test, in order of preference:**
 
-**Administrator sign-in:** user `Administrator`, password `$BP_TEST_PASSWORD`,
-defaulting to `admin`. Use this for anything behind a login: the Desk forms, the
-signed-in header state, the sign-out control, the post-login destination, and
-`/landing`, which is the only marketing route a signed-in operator can reach.
+1. **The local stack, `http://localhost:8080`** — the port comes from `PORT` in
+   `/home/ubuntu/benchpress_devops/.env`. It runs this branch against real, migrated
+   schema. Sign in as `Administrator` with the `ADMIN_PASSWORD` value from that same
+   file. **Use this for anything that writes**: submitting a form, signing in, signing
+   out, creating a user, editing in Desk.
+2. **The deployed branch instance, `$BP_TEST_URL`**, defaulting to
+   `https://b3873df7.benchpress.cloud`. Disposable, runs the branch, signs in as
+   `Administrator` with `$BP_TEST_PASSWORD`, defaulting to `admin`. Use it when you
+   need to see a change against deployed data.
+3. **Production, `https://benchpress.cloud`** — **read-only, always**. Look at it to
+   compare a layout against what is live. Never submit a form there, never attempt to
+   sign in, never create or edit a record.
 
 **A non-administrator user:** passwords are stored hashed, so there is no way to read
-an existing user's password. Create one with a password you choose instead, against
-the local stack from `/home/ubuntu/benchpress_devops`:
+an existing user's password. Create one with a password you choose instead, on the
+local stack, from `/home/ubuntu/benchpress_devops`:
 
     docker compose exec -T backend bench --site frontend add-system-manager \
       tester@example.com --password <chosen>
 
 For a website user rather than a desk user, create the user and set its type in
 `bench --site frontend console`. Delete any user you created before you finish.
-
-**The local stack** is at `http://localhost:${PORT}` from the repo-root `.env`, with
-`Administrator` and the `ADMIN_PASSWORD` value from that same file. Prefer the local
-stack when your change is not yet deployed, and the test site when you need to see the
-change against real data.
 
 **What to check, every time a page changes:**
 
