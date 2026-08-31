@@ -144,6 +144,10 @@ class TestApiAuthorization(IntegrationTestCase):
 
 	def setUp(self):
 		frappe.set_user("Administrator")
+		# The guest waitlist and contact endpoints send real mail. `frappe.in_test` makes the queue
+		# resolve an outgoing account at once, which raises on a site that has none configured.
+		patch("frappe.sendmail").start()
+		self.addCleanup(patch.stopall)
 
 	def tearDown(self):
 		frappe.set_user("Administrator")
