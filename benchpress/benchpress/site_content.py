@@ -226,16 +226,17 @@ def phase_key(row) -> str:
 
 
 def seed_single(doctype: str, seed: dict) -> None:
-	"""Fill a Single that has never been saved, and any child table still empty."""
+	"""Fill every empty field on a Single, and any child table still empty."""
 	doc = frappe.get_doc(doctype)
-	never_saved = not frappe.db.get_singles_dict(doctype)
 	# Read before appending: a table this run fills must not look operator-filled to the next one.
 	filled = {name for name, value in seed.items() if isinstance(value, list) and doc.get(name)}
 	changed = False
 	for fieldname, value in seed.items():
 		if isinstance(value, list):
 			changed = seed_table(doc, fieldname, value, filled) or changed
-		elif never_saved:
+		# Emptiness decides, not whether the Single was ever saved: Frappe writes its own
+		# bookkeeping row, and a mandatory field left empty then fails validation on save.
+		elif doc.get(fieldname) in (None, ""):
 			doc.set(fieldname, value)
 			changed = True
 	if changed:

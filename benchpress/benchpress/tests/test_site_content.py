@@ -92,6 +92,20 @@ class TestSiteContent(IntegrationTestCase):
 		empty_single(LANDING_DOCTYPE)
 		self.assertTrue(landing_content()["show_testimonial_disclaimer"])
 
+	def test_the_seeder_fills_mandatory_copy_over_a_bookkeeping_only_single(self):
+		"""A fresh install failed here: Frappe's own row made the Single look already seeded."""
+		empty_single(LANDING_DOCTYPE)
+		frappe.db.set_single_value(LANDING_DOCTYPE, "og_image", "")
+		frappe.clear_document_cache(LANDING_DOCTYPE, LANDING_DOCTYPE)
+		self.assertTrue(frappe.db.get_singles_dict(LANDING_DOCTYPE))
+
+		seed_page_content()
+
+		self.assertEqual(
+			frappe.db.get_single_value(LANDING_DOCTYPE, "hero_headline"),
+			LANDING_SEED["hero_headline"],
+		)
+
 	# ------------------------------------------------------------------ shaping
 
 	def test_steps_group_under_their_phase_in_step_order(self):
