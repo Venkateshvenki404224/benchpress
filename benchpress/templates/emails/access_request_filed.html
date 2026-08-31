@@ -1,0 +1,94 @@
+<!--
+	BenchPress Access Request Filed — the admin notice.
+
+	Carries every submitted field verbatim so the decision needs no click; the Desk link is for
+	acting on it, not for reading it.
+-->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#F6F8FF;">
+	<tr>
+		<td align="center" style="padding:24px 12px;font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+			<table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:600px;background-color:#FFFFFF;border:1px solid #DFE7FA;border-radius:14px;">
+
+				<tr>
+					<td style="padding:20px 28px;background-color:#0A1024;border-radius:13px 13px 0 0;">
+						<table role="presentation" cellpadding="0" cellspacing="0" border="0">
+							<tr>
+								<td width="10" bgcolor="#4E8BFB" style="width:10px;height:10px;border-radius:3px;font-size:0;line-height:10px;">&nbsp;</td>
+								<td style="padding-left:12px;font-family:'Poppins','Segoe UI',Helvetica,Arial,sans-serif;font-size:17px;font-weight:800;letter-spacing:0.04em;color:#FFFFFF;">BENCHPRESS</td>
+							</tr>
+						</table>
+					</td>
+				</tr>
+
+				<tr>
+					<td style="padding:30px 28px 0;">
+						<div style="font-size:12px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:#1F5CF5;">New access request</div>
+						<h1 style="margin:10px 0 0;font-family:'Poppins','Segoe UI',Helvetica,Arial,sans-serif;font-size:24px;line-height:32px;font-weight:800;color:#0A1024;">{{ full_name | e }}</h1>
+						<p style="margin:8px 0 0;font-size:14px;line-height:22px;color:#4E5A7C;">{{ company | e }} &middot; filed {{ submitted_on | e }}</p>
+					</td>
+				</tr>
+
+				<tr>
+					<td style="padding:22px 28px 0;">
+						<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-top:1px solid #E3EAFB;">
+							<tr>
+								<td width="150" style="padding:9px 0;border-bottom:1px solid #E3EAFB;font-size:13px;line-height:20px;color:#8B94AE;">Reference</td>
+								<td style="padding:9px 0;border-bottom:1px solid #E3EAFB;font-family:'SFMono-Regular',Consolas,Menlo,monospace;font-size:14px;line-height:20px;color:#1F5CF5;">{{ reference | e }}</td>
+							</tr>
+							<tr>
+								<td width="150" style="padding:9px 0;border-bottom:1px solid #E3EAFB;font-size:13px;line-height:20px;color:#8B94AE;">Email</td>
+								<td style="padding:9px 0;border-bottom:1px solid #E3EAFB;font-size:14px;line-height:20px;color:#0A1024;"><a href="mailto:{{ email | e }}" style="color:#1F5CF5;text-decoration:underline;">{{ email | e }}</a></td>
+							</tr>
+							<tr>
+								<td width="150" style="padding:9px 0;border-bottom:1px solid #E3EAFB;font-size:13px;line-height:20px;color:#8B94AE;">Company</td>
+								<td style="padding:9px 0;border-bottom:1px solid #E3EAFB;font-size:14px;line-height:20px;color:#0A1024;">{{ company | e }}</td>
+							</tr>
+							<tr>
+								<td width="150" style="padding:9px 0;border-bottom:1px solid #E3EAFB;font-size:13px;line-height:20px;color:#8B94AE;">Team size</td>
+								<td style="padding:9px 0;border-bottom:1px solid #E3EAFB;font-size:14px;line-height:20px;color:#0A1024;">{{ team_size | e or "&mdash;" }}</td>
+							</tr>
+							<tr>
+								<td width="150" style="padding:9px 0;border-bottom:1px solid #E3EAFB;font-size:13px;line-height:20px;color:#8B94AE;">Here for</td>
+								<td style="padding:9px 0;border-bottom:1px solid #E3EAFB;font-size:14px;line-height:20px;color:#0A1024;">{{ intent | e or "&mdash;" }}</td>
+							</tr>
+							<tr>
+								<td width="150" style="padding:9px 0;border-bottom:1px solid #E3EAFB;font-size:13px;line-height:20px;color:#8B94AE;">Apps expected</td>
+								<td style="padding:9px 0;border-bottom:1px solid #E3EAFB;font-size:14px;line-height:20px;color:#0A1024;">{{ expected_apps | e or "&mdash;" }}</td>
+							</tr>
+							<tr>
+								<td width="150" valign="top" style="padding:9px 0;border-bottom:1px solid #E3EAFB;font-size:13px;line-height:20px;color:#8B94AE;">Use case</td>
+								<td style="padding:9px 0;border-bottom:1px solid #E3EAFB;font-size:14px;line-height:20px;color:#0A1024;">{{ use_case or "&mdash;" }}</td>
+							</tr>
+						</table>
+					</td>
+				</tr>
+
+				<tr>
+					<td style="padding:26px 28px 0;">
+						<table role="presentation" cellpadding="0" cellspacing="0" border="0">
+							<tr>
+								<td bgcolor="#1F5CF5" style="border-radius:10px;">
+									<a href="{{ desk_url | e }}" style="display:inline-block;padding:13px 22px;font-family:'Poppins','Segoe UI',Helvetica,Arial,sans-serif;font-size:15px;font-weight:700;color:#FFFFFF;text-decoration:none;">Open in Desk</a>
+								</td>
+							</tr>
+						</table>
+						<p style="margin:12px 0 0;font-family:'SFMono-Regular',Consolas,Menlo,monospace;font-size:12px;line-height:19px;color:#8B94AE;"><a href="{{ desk_url | e }}" style="color:#8B94AE;text-decoration:none;">{{ desk_url | e }}</a></p>
+						<p style="margin:10px 0 0;font-size:13px;line-height:20px;color:#8B94AE;">Approve or decline from the list view; both actions mail the requester.</p>
+					</td>
+				</tr>
+
+				<tr>
+					<td style="padding:24px 28px 0;">
+						<div style="height:1px;background-color:#E3EAFB;line-height:1px;font-size:0;">&nbsp;</div>
+					</td>
+				</tr>
+				<tr>
+					<td style="padding:16px 28px 26px;">
+						<p style="margin:0;font-size:12px;line-height:19px;color:#8B94AE;">Sent by <a href="{{ site_url | e }}" style="color:#4E5A7C;text-decoration:underline;">BenchPress</a> to everyone holding an admin role on this site.</p>
+					</td>
+				</tr>
+
+			</table>
+		</td>
+	</tr>
+</table>

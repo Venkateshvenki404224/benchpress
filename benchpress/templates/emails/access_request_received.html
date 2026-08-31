@@ -1,0 +1,129 @@
+<!--
+	BenchPress Access Request Received — acknowledgement to the requester.
+
+	Table layout, literal Cobalt hex, no <style> block and no custom properties: Outlook drops
+	all three. This file is both the shipped fallback body and the seed for the Desk-editable
+	`Email Template` row of the same name, so the two never drift.
+-->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#F6F8FF;">
+	<tr>
+		<td align="center" style="padding:24px 12px;font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+			<table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:600px;background-color:#FFFFFF;border:1px solid #DFE7FA;border-radius:14px;">
+
+				<tr>
+					<td style="padding:20px 28px;background-color:#0A1024;border-radius:13px 13px 0 0;">
+						<table role="presentation" cellpadding="0" cellspacing="0" border="0">
+							<tr>
+								<td width="10" bgcolor="#4E8BFB" style="width:10px;height:10px;border-radius:3px;font-size:0;line-height:10px;">&nbsp;</td>
+								<td style="padding-left:12px;font-family:'Poppins','Segoe UI',Helvetica,Arial,sans-serif;font-size:17px;font-weight:800;letter-spacing:0.04em;color:#FFFFFF;">BENCHPRESS</td>
+							</tr>
+						</table>
+					</td>
+				</tr>
+
+				<tr>
+					<td style="padding:30px 28px 0;">
+						<div style="font-size:12px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:#1F5CF5;">Access request</div>
+						<h1 style="margin:10px 0 0;font-family:'Poppins','Segoe UI',Helvetica,Arial,sans-serif;font-size:24px;line-height:32px;font-weight:800;color:#0A1024;">We have your request, {{ full_name | e }}.</h1>
+						<p style="margin:14px 0 0;font-size:15px;line-height:24px;color:#4E5A7C;">A person reads every access request — not a queue robot. Expect an answer within one business day, and a plain one either way.</p>
+					</td>
+				</tr>
+
+				<tr>
+					<td style="padding:22px 28px 0;">
+						<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#E8EEFF;border-radius:10px;">
+							<tr>
+								<td style="padding:14px 18px;">
+									<div style="font-size:11px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:#4E5A7C;">Your reference</div>
+									<div style="padding-top:5px;font-family:'SFMono-Regular',Consolas,Menlo,monospace;font-size:17px;font-weight:700;color:#1F5CF5;">{{ reference | e }}</div>
+								</td>
+							</tr>
+						</table>
+						<p style="margin:10px 0 0;font-size:13px;line-height:20px;color:#8B94AE;">Quote it if you write to us. It is a handle, not a password — it unlocks nothing on its own.</p>
+					</td>
+				</tr>
+
+				<tr>
+					<td style="padding:24px 28px 0;">
+						<div style="font-size:12px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:#0A1024;">What you told us</div>
+						<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:10px;border-top:1px solid #E3EAFB;">
+							<tr>
+								<td width="150" style="padding:9px 0;border-bottom:1px solid #E3EAFB;font-size:13px;line-height:20px;color:#8B94AE;">Email</td>
+								<td style="padding:9px 0;border-bottom:1px solid #E3EAFB;font-size:14px;line-height:20px;color:#0A1024;">{{ email | e }}</td>
+							</tr>
+							{% if company %}
+							<tr>
+								<td width="150" style="padding:9px 0;border-bottom:1px solid #E3EAFB;font-size:13px;line-height:20px;color:#8B94AE;">Company</td>
+								<td style="padding:9px 0;border-bottom:1px solid #E3EAFB;font-size:14px;line-height:20px;color:#0A1024;">{{ company | e }}</td>
+							</tr>
+							{% endif %}
+							{% if team_size %}
+							<tr>
+								<td width="150" style="padding:9px 0;border-bottom:1px solid #E3EAFB;font-size:13px;line-height:20px;color:#8B94AE;">Team size</td>
+								<td style="padding:9px 0;border-bottom:1px solid #E3EAFB;font-size:14px;line-height:20px;color:#0A1024;">{{ team_size | e }}</td>
+							</tr>
+							{% endif %}
+							{% if intent %}
+							<tr>
+								<td width="150" style="padding:9px 0;border-bottom:1px solid #E3EAFB;font-size:13px;line-height:20px;color:#8B94AE;">Here for</td>
+								<td style="padding:9px 0;border-bottom:1px solid #E3EAFB;font-size:14px;line-height:20px;color:#0A1024;">{{ intent | e }}</td>
+							</tr>
+							{% endif %}
+							{% if expected_apps %}
+							<tr>
+								<td width="150" style="padding:9px 0;border-bottom:1px solid #E3EAFB;font-size:13px;line-height:20px;color:#8B94AE;">Apps</td>
+								<td style="padding:9px 0;border-bottom:1px solid #E3EAFB;font-size:14px;line-height:20px;color:#0A1024;">{{ expected_apps | e }}</td>
+							</tr>
+							{% endif %}
+							{% if use_case %}
+							<tr>
+								<td width="150" valign="top" style="padding:9px 0;border-bottom:1px solid #E3EAFB;font-size:13px;line-height:20px;color:#8B94AE;">Use case</td>
+								<td style="padding:9px 0;border-bottom:1px solid #E3EAFB;font-size:14px;line-height:20px;color:#0A1024;">{{ use_case }}</td>
+							</tr>
+							{% endif %}
+						</table>
+					</td>
+				</tr>
+
+				<tr>
+					<td style="padding:26px 28px 0;">
+						<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#0A1024;border-radius:12px;">
+							<tr>
+								<td style="padding:20px 22px;">
+									<div style="font-family:'Poppins','Segoe UI',Helvetica,Arial,sans-serif;font-size:16px;line-height:24px;font-weight:700;color:#FFFFFF;">Do not wait on us if you have a server.</div>
+									<p style="margin:8px 0 0;font-size:14px;line-height:22px;color:#9FC3FF;">Self-hosting is the same code with no account, no approval and no ceiling on labs. Clone the repo and run <span style="font-family:'SFMono-Regular',Consolas,Menlo,monospace;">./setup.sh</span>.</p>
+									<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin-top:16px;">
+										<tr>
+											<td bgcolor="#1F5CF5" style="border-radius:10px;">
+												<a href="{{ repo_url | e }}" style="display:inline-block;padding:12px 20px;font-family:'Poppins','Segoe UI',Helvetica,Arial,sans-serif;font-size:14px;font-weight:700;color:#FFFFFF;text-decoration:none;">Self-host it instead</a>
+											</td>
+										</tr>
+									</table>
+									<p style="margin:12px 0 0;font-family:'SFMono-Regular',Consolas,Menlo,monospace;font-size:12px;line-height:19px;color:#9FC3FF;"><a href="{{ repo_url | e }}" style="color:#9FC3FF;text-decoration:none;">{{ repo_url | e }}</a></p>
+								</td>
+							</tr>
+						</table>
+					</td>
+				</tr>
+
+				<tr>
+					<td style="padding:22px 28px 0;">
+						<p style="margin:0;font-size:14px;line-height:22px;color:#4E5A7C;">Reading while you wait: <a href="{{ docs_url | e }}" style="color:#1F5CF5;text-decoration:underline;">{{ docs_url | e }}</a></p>
+					</td>
+				</tr>
+
+				<tr>
+					<td style="padding:24px 28px 0;">
+						<div style="height:1px;background-color:#E3EAFB;line-height:1px;font-size:0;">&nbsp;</div>
+					</td>
+				</tr>
+				<tr>
+					<td style="padding:16px 28px 26px;">
+						<p style="margin:0;font-size:12px;line-height:19px;color:#8B94AE;">Sent by <a href="{{ site_url | e }}" style="color:#4E5A7C;text-decoration:underline;">BenchPress</a> because someone asked for hosted access with this address. Frappe and ERPNext are trademarks of Frappe Technologies Pvt. Ltd. BenchPress is an independent project, not affiliated with Frappe Technologies.</p>
+					</td>
+				</tr>
+
+			</table>
+		</td>
+	</tr>
+</table>
