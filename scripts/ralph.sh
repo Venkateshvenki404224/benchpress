@@ -26,6 +26,11 @@ cd "$REPO_ROOT"
 
 # nohup/cron shells do not source a profile, and every tool below lives here.
 export PATH="$HOME/.local/bin:$PATH"
+
+# Browser checks run against this. Override either to point somewhere else or to
+# rotate the password without a commit.
+export BP_TEST_URL=${BP_TEST_URL:-https://b3873df7.benchpress.cloud}
+export BP_TEST_PASSWORD=${BP_TEST_PASSWORD:-admin}
 for tool in claude gh jq docker uvx; do
   command -v "$tool" >/dev/null || { echo "ralph: $tool not found on PATH"; exit 1; }
 done

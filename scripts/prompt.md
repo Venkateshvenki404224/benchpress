@@ -53,6 +53,47 @@ called, or on an internal context key name.
 Asset file sizes are deliberately not tested. Assert the absence of the framework
 bundle at seam one instead.
 
+## Testing in a browser
+
+Rendering tests cannot see a broken layout, a header that overflows on a phone, or a
+form that fails after the framework bundle was removed. Any issue that changes what a
+page looks like or how it behaves must be checked in a real browser before you commit.
+Use the `agent-browser` skill.
+
+**Test site:** `$BP_TEST_URL`, defaulting to `https://b3873df7.benchpress.cloud`.
+It runs the branch under development and serves all six public routes.
+
+**Administrator sign-in:** user `Administrator`, password `$BP_TEST_PASSWORD`,
+defaulting to `admin`. Use this for anything behind a login: the Desk forms, the
+signed-in header state, the sign-out control, the post-login destination, and
+`/landing`, which is the only marketing route a signed-in operator can reach.
+
+**A non-administrator user:** passwords are stored hashed, so there is no way to read
+an existing user's password. Create one with a password you choose instead, against
+the local stack from `/home/ubuntu/benchpress_devops`:
+
+    docker compose exec -T backend bench --site frontend add-system-manager \
+      tester@example.com --password <chosen>
+
+For a website user rather than a desk user, create the user and set its type in
+`bench --site frontend console`. Delete any user you created before you finish.
+
+**The local stack** is at `http://localhost:${PORT}` from the repo-root `.env`, with
+`Administrator` and the `ADMIN_PASSWORD` value from that same file. Prefer the local
+stack when your change is not yet deployed, and the test site when you need to see the
+change against real data.
+
+**What to check, every time a page changes:**
+
+- The route renders with no console error.
+- The header and the footer are identical to the other public routes.
+- Nothing overflows horizontally at 320, 390 and 768 pixels wide, and at desktop
+  width. 320 is the floor the existing browser test uses.
+- Both light and dark mode.
+- Any form on the page submits successfully and shows its result.
+
+Never report a front-end change as finished on the strength of a passing test alone.
+
 ## The repository
 
 - Bench commands run inside the parent compose stack, not a standalone bench. From
