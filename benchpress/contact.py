@@ -5,12 +5,12 @@
 
 import frappe
 from frappe import _
-from frappe.rate_limiter import rate_limit
 from frappe.utils import cstr, now_datetime
 
 from benchpress.benchpress.doctype.contact_message.contact_message import ANSWERED
 from benchpress.benchpress.doctype.waitlist_entry.waitlist_entry import normalise_email
 from benchpress.permissions import require_admin
+from benchpress.throttle import public_form
 
 DOCTYPE = "Contact Message"
 SETTINGS = "Contact Page Settings"
@@ -22,7 +22,7 @@ MAIL_ERROR_TITLE = "BenchPress contact mail failed"
 # Guest-writable by design; answers identically for every caller and is rate limited per IP and
 # address.
 @frappe.whitelist(allow_guest=True, methods=["POST"])  # nosemgrep -- reviewed, see the note above
-@rate_limit(key="email", limit=MESSAGES_PER_HOUR, seconds=60 * 60, ip_based=True)
+@public_form(limit=MESSAGES_PER_HOUR)
 def submit(name: str, email: str, message: str, topic: str | None = None) -> dict:
 	"""Record one contact message. Always answers the same way."""
 	settings = page_settings()

@@ -23,7 +23,7 @@ commit would make every retuned setting in it durable on the site.
 """
 
 import json
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import frappe
 from frappe.tests import IntegrationTestCase
@@ -32,6 +32,7 @@ from frappe.utils import now_datetime
 from benchpress import signup, waitlist
 from benchpress.credits import account, admission, guard, onboarding
 from benchpress.credits.onboarding import ACCESS_ROLE
+from benchpress.tests.guest_request import as_request
 
 ACCOUNT = "Credit Account"
 LEDGER = "Credit Ledger Entry"
@@ -111,6 +112,8 @@ class TestSelfServeSignup(IntegrationTestCase):
 		self.open_signup()
 		self.wipe_people()
 		self.addCleanup(self.wipe_people)
+		frappe.cache.delete_keys("rl:")
+		self.addCleanup(frappe.cache.delete_keys, "rl:")
 		self.addCleanup(frappe.set_user, "Administrator")
 
 	def tearDown(self):
@@ -320,7 +323,7 @@ class TestSelfServeSignup(IntegrationTestCase):
 			signup.sign_up(BLOCKED_EMAIL, "Nobody")
 
 	def test_the_fourth_signup_in_an_hour_is_rate_limited(self):
-		with _as_request(EMAIL):
+		with as_request():
 			for _attempt in range(signup.SIGNUPS_PER_HOUR):
 				signup.sign_up(EMAIL, "Test Person")
 			with self.assertRaises(frappe.RateLimitExceededError):
@@ -427,27 +430,3 @@ class TestSelfServeSignup(IntegrationTestCase):
 
 		with self.assertRaises(frappe.PermissionError):
 			waitlist.notify_of_signup()
-
-
-class _as_request:
-	"""Make the rate limiter apply — it is a no-op outside an HTTP request.
-
-	The decorator keys on the request IP and the `email` form field, so a direct function call
-	would sail past it and the limit would never be exercised.
-	"""
-
-	def __init__(self, email):
-		self.email = email
-
-	def __enter__(self):
-		frappe.cache.delete_keys("rl:")
-		frappe.local.request = MagicMock(method="POST")
-		frappe.local.request_ip = "127.0.0.1"
-		frappe.local.form_dict = frappe._dict(cmd="benchpress.signup.sign_up", email=self.email)
-		return self
-
-	def __exit__(self, *exception):
-		frappe.cache.delete_keys("rl:")
-		frappe.local.request = None
-		frappe.local.form_dict = frappe._dict()
-		return False

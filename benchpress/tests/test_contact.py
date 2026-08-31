@@ -13,6 +13,7 @@ from benchpress.benchpress.doctype.contact_message.contact_message import (
 	NAME_LIMIT,
 	TOPIC_LIMIT,
 )
+from benchpress.tests.guest_request import as_request
 
 EMAIL = "contact-test@example.com"
 OTHER_EMAIL = "contact-other@example.com"
@@ -31,6 +32,8 @@ class TestContact(IntegrationTestCase):
 		self.settings = self.use_settings()
 		self.emails = self.use_mailer()
 		_delete_messages(EMAIL, OTHER_EMAIL)
+		frappe.cache.delete_keys("rl:")
+		self.addCleanup(frappe.cache.delete_keys, "rl:")
 		self.addCleanup(_delete_messages, EMAIL, OTHER_EMAIL)
 		self.addCleanup(frappe.set_user, "Administrator")
 
@@ -118,17 +121,17 @@ class TestContact(IntegrationTestCase):
 		self.assertEqual(len(message.topic), TOPIC_LIMIT)
 
 	def test_the_fourth_message_in_an_hour_is_rate_limited(self):
-		with _as_request(EMAIL):
+		with as_request():
 			for _ in range(contact.MESSAGES_PER_HOUR):
 				contact.submit("Ravi", EMAIL, "hello")
 			with self.assertRaises(frappe.RateLimitExceededError):
 				contact.submit("Ravi", EMAIL, "hello")
 
-	def test_the_rate_limit_is_per_address(self):
-		with _as_request(EMAIL):
+	def test_the_rate_limit_is_per_email(self):
+		with as_request():
 			for _ in range(contact.MESSAGES_PER_HOUR):
 				contact.submit("Ravi", EMAIL, "hello")
-		with _as_request(OTHER_EMAIL):
+
 			self.assertTrue(contact.submit("Priya", OTHER_EMAIL, "hello")["sent"])
 
 	def test_both_notifications_fire_on_a_send(self):
@@ -226,23 +229,3 @@ class TestContactPageSettings(IntegrationTestCase):
 
 		self.assertEqual(settings.response_window("Bug"), "3 days")
 		self.assertEqual(settings.response_window("Anything else"), "1 business day")
-
-
-class _as_request:
-	"""Make the rate limiter apply — it is a no-op outside an HTTP request."""
-
-	def __init__(self, email):
-		self.email = email
-
-	def __enter__(self):
-		frappe.cache.delete_keys("rl:")
-		frappe.local.request = MagicMock(method="POST")
-		frappe.local.request_ip = "127.0.0.1"
-		frappe.local.form_dict = frappe._dict(cmd="benchpress.contact.submit", email=self.email)
-		return self
-
-	def __exit__(self, *exception):
-		frappe.cache.delete_keys("rl:")
-		frappe.local.request = None
-		frappe.local.form_dict = frappe._dict()
-		return False

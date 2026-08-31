@@ -2,7 +2,7 @@
 # See license.txt
 
 import re
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import frappe
 from frappe.tests import IntegrationTestCase
@@ -13,6 +13,7 @@ from benchpress.benchpress.doctype.waitlist_entry.waitlist_entry import (
 	WEBSITE_USER,
 	derive_reference,
 )
+from benchpress.tests.guest_request import as_request
 
 EMAIL = "waitlist-test@example.com"
 OTHER_EMAIL = "waitlist-other@example.com"
@@ -33,6 +34,8 @@ class TestWaitlist(IntegrationTestCase):
 	def setUp(self):
 		frappe.set_user("Administrator")
 		self._silence_outgoing_mail()
+		frappe.cache.delete_keys("rl:")
+		self.addCleanup(frappe.cache.delete_keys, "rl:")
 		for email in (EMAIL, OTHER_EMAIL):
 			_delete_entry(email)
 			self.addCleanup(_delete_entry, email)
@@ -140,17 +143,17 @@ class TestWaitlist(IntegrationTestCase):
 			sender.assert_not_called()
 
 	def test_the_fourth_submission_in_an_hour_is_rate_limited(self):
-		with _as_request(EMAIL):
+		with as_request():
 			for _ in range(waitlist.JOINS_PER_HOUR):
 				waitlist.join(EMAIL)
 			with self.assertRaises(frappe.RateLimitExceededError):
 				waitlist.join(EMAIL)
 
-	def test_the_rate_limit_is_per_address(self):
-		with _as_request(EMAIL):
+	def test_the_rate_limit_is_per_email(self):
+		with as_request():
 			for _ in range(waitlist.JOINS_PER_HOUR):
 				waitlist.join(EMAIL)
-		with _as_request(OTHER_EMAIL):
+
 			self.assertTrue(waitlist.join(OTHER_EMAIL)["joined"])
 
 	def test_approval_creates_a_user_with_exactly_the_access_role(self):
@@ -233,23 +236,3 @@ class TestWaitlist(IntegrationTestCase):
 		frappe.set_user("Guest")
 		with self.assertRaises(frappe.PermissionError):
 			waitlist.reject([EMAIL])
-
-
-class _as_request:
-	"""Make the rate limiter apply — it is a no-op outside an HTTP request."""
-
-	def __init__(self, email):
-		self.email = email
-
-	def __enter__(self):
-		frappe.cache.delete_keys("rl:")
-		frappe.local.request = MagicMock(method="POST")
-		frappe.local.request_ip = "127.0.0.1"
-		frappe.local.form_dict = frappe._dict(cmd="benchpress.waitlist.join", email=self.email)
-		return self
-
-	def __exit__(self, *exception):
-		frappe.cache.delete_keys("rl:")
-		frappe.local.request = None
-		frappe.local.form_dict = frappe._dict()
-		return False

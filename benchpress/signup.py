@@ -6,10 +6,10 @@
 import frappe
 from frappe import _
 from frappe.core.doctype.user.user import sign_up as frappe_sign_up
-from frappe.rate_limiter import rate_limit
 from frappe.utils import cstr
 
 from benchpress.credits import config, onboarding
+from benchpress.throttle import public_form
 
 SIGNUPS_PER_HOUR = 3
 
@@ -17,7 +17,7 @@ SIGNUPS_PER_HOUR = 3
 # Overrides a method Frappe already exposes to guests, so the surface is narrowed here, not
 # widened.
 @frappe.whitelist(allow_guest=True, methods=["POST"])  # nosemgrep -- reviewed, see the note above
-@rate_limit(key="email", limit=SIGNUPS_PER_HOUR, seconds=60 * 60, ip_based=True)
+@public_form(limit=SIGNUPS_PER_HOUR)
 def sign_up(email: str, full_name: str, redirect_to: str = "") -> tuple[int, str]:
 	"""Frappe's signup, behind the hosted plan's two gates. Answers exactly as Frappe's does."""
 	if config.credits_enabled():

@@ -6,12 +6,12 @@
 import frappe
 from frappe import _
 from frappe.database import savepoint
-from frappe.rate_limiter import rate_limit
 from frappe.utils import cint, cstr, get_url, now_datetime
 
 from benchpress.benchpress.doctype.waitlist_entry.waitlist_entry import derive_reference, send_notice
 from benchpress.credits import config
 from benchpress.permissions import require_admin
+from benchpress.throttle import public_form
 
 DOCTYPE = "Waitlist Entry"
 JOINS_PER_HOUR = 3
@@ -23,7 +23,7 @@ APPROVED = "Approved"
 # Guest-writable by design; answers identically for a known and an unknown address so it cannot
 # be used to enumerate members.
 @frappe.whitelist(allow_guest=True, methods=["POST"])  # nosemgrep -- reviewed, see the note above
-@rate_limit(key="email", limit=JOINS_PER_HOUR, seconds=60 * 60, ip_based=True)
+@public_form(limit=JOINS_PER_HOUR)
 def join(
 	email: str,
 	full_name: str | None = None,
