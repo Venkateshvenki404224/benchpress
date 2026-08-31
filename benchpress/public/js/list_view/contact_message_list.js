@@ -7,9 +7,7 @@ frappe.listview_settings["Contact Message"] = {
 	},
 
 	onload(listview) {
-		listview.page.add_actions_menu_item(__("Mark answered"), () =>
-			mark_answered(listview)
-		);
+		listview.page.add_actions_menu_item(__("Mark answered"), () => mark_answered(listview));
 	},
 };
 
