@@ -65,6 +65,12 @@ benchpress/public/node_modules
 # Design handoffs and other binary drops land here while a phase is in flight;
 # they are not part of the published repository.
 *.zip
+handoff*/
+*.pen
+
+# Internal review of the public-site change set: notes for the maintainer, not
+# documentation for a reader of the published repository.
+docs/frappe-idiom-review.md
 
 # Local tooling artifacts (knowledge graph + scratch specs)
 graphify-out/
