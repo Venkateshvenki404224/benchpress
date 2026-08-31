@@ -135,7 +135,7 @@
   },
   {
    "default": "1",
-   "description": "While this is on, the landing page shows the waitlist form and self-serve signup is refused. Turn it off to open signup to anyone: the CTA becomes Start free and the waitlist refuses instead. Its rows are kept either way.",
+   "description": "While this is on, the landing page shows the waitlist form and self-serve signup is refused. Turn it off to open signup to anyone: the call to action points at the signup route and the waitlist refuses instead. Its rows are kept either way.",
    "fieldname": "waitlist_open",
    "fieldtype": "Check",
    "label": "Waitlist Open"
