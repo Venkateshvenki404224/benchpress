@@ -1,24 +1,21 @@
 # Copyright (c) 2026, Venkatesh and Contributors
 # See license.txt
 
-"""`waitlist.join` is the first `allow_guest` method in the app, so it is tested as a boundary.
-
-The assertions that matter are the ones about what the endpoint refuses to do: it must not tell a
-stranger whether an address is already registered, it must not accept an address that is not one,
-it must not let a single caller enumerate through it, and approving an entry must hand out exactly
-one role — the least-privileged one — rather than whatever the inviter happens to hold.
-"""
-
+import re
 from unittest.mock import MagicMock, patch
 
 import frappe
 from frappe.tests import IntegrationTestCase
 
 from benchpress import waitlist
-from benchpress.benchpress.doctype.waitlist_entry.waitlist_entry import ACCESS_ROLE
+from benchpress.benchpress.doctype.waitlist_entry.waitlist_entry import ACCESS_ROLE, derive_reference
 
 EMAIL = "waitlist-test@example.com"
 OTHER_EMAIL = "waitlist-other@example.com"
+REFERENCE_FORMAT = re.compile(r"^REQ-[0-9A-F]{4}-[0-9A-F]{4}$")
+
+JOIN_SENDER = "benchpress.waitlist.send_notice"
+DECISION_SENDER = "benchpress.benchpress.doctype.waitlist_entry.waitlist_entry.send_notice"
 
 
 def _delete_entry(email):
@@ -38,15 +35,7 @@ class TestWaitlist(IntegrationTestCase):
 		self.addCleanup(frappe.set_user, "Administrator")
 
 	def _silence_outgoing_mail(self) -> None:
-		"""Approval creates a `User` with a welcome email, which must not leave the test.
-
-		Muting alone is not enough: the send runs as an after-commit task, so on a site with no
-		Email Account it raises `OutgoingEmailError` inside whichever *later* test commits first —
-		which is how it failed in CI while passing on a dev site that has an account configured.
-		Patching the send out means no queue row is ever written.
-		"""
-		# `None`, not a mock: `User.send_welcome_mail_to_user` reads `.message` off the returned
-		# Email Queue document when there is one, and a mock's attribute is not a string.
+		# `None`, not a mock: `User.send_welcome_mail_to_user` reads `.message` off the return value.
 		mailer = patch("frappe.sendmail", return_value=None)
 		mailer.start()
 		self.addCleanup(mailer.stop)
@@ -80,11 +69,71 @@ class TestWaitlist(IntegrationTestCase):
 		self.assertEqual(frappe.db.count("Waitlist Entry", {"email": "not-an-address"}), 0)
 
 	def test_free_text_is_clipped_to_the_column_width(self):
-		waitlist.join(EMAIL, company="c" * 400, use_case="u" * 4000)
+		waitlist.join(EMAIL, company="c" * 400, use_case="u" * 4000, expected_apps="a" * 400)
 
 		entry = frappe.get_doc("Waitlist Entry", EMAIL)
 		self.assertEqual(len(entry.company), waitlist.DATA_LIMIT)
 		self.assertEqual(len(entry.use_case), waitlist.TEXT_LIMIT)
+		self.assertEqual(len(entry.expected_apps), waitlist.DATA_LIMIT)
+
+	def test_the_signup_form_fields_are_recorded(self):
+		waitlist.join(
+			EMAIL,
+			full_name="Test Person",
+			team_size="16 or more",
+			intent="Agent / automation",
+			expected_apps="ERPNext v15, two custom apps",
+			consented="1",
+			source="Landing Waitlist",
+		)
+
+		entry = frappe.get_doc("Waitlist Entry", EMAIL)
+		self.assertEqual(entry.team_size, "16 or more")
+		self.assertEqual(entry.intent, "Agent / automation")
+		self.assertEqual(entry.expected_apps, "ERPNext v15, two custom apps")
+		self.assertEqual(entry.consented, 1)
+		self.assertEqual(entry.source, "Landing Waitlist")
+
+	def test_a_select_value_the_column_does_not_offer_becomes_the_default(self):
+		waitlist.join(EMAIL, team_size="900", intent="'; drop table", source="Desk\nApproved")
+
+		entry = frappe.get_doc("Waitlist Entry", EMAIL)
+		self.assertEqual(entry.team_size, "1 — just me")
+		self.assertEqual(entry.intent, "Hosted account")
+		self.assertEqual(entry.source, "Signup Page")
+
+	def test_consented_is_recorded_and_never_enforced(self):
+		self.assertTrue(waitlist.join(EMAIL)["joined"])
+		self.assertEqual(frappe.db.get_value("Waitlist Entry", EMAIL, "consented"), 0)
+
+	def test_an_argument_outside_the_signature_is_not_accepted(self):
+		with self.assertRaises(TypeError):
+			waitlist.join(EMAIL, status="Approved")
+
+	def test_the_reference_is_formatted_and_derived_from_the_address_alone(self):
+		first = waitlist.join(EMAIL)["reference"]
+
+		self.assertRegex(first, REFERENCE_FORMAT)
+		self.assertEqual(first, derive_reference(EMAIL.upper()), "case must not change the handle")
+		self.assertEqual(first, frappe.get_doc("Waitlist Entry", EMAIL).request_reference())
+		self.assertNotEqual(first, derive_reference(OTHER_EMAIL))
+
+	def test_the_reference_is_the_same_before_and_after_the_row_exists(self):
+		before = derive_reference(EMAIL)
+		self.assertEqual(waitlist.join(EMAIL)["reference"], before)
+		self.assertEqual(waitlist.join(EMAIL)["reference"], before)
+
+	def test_a_duplicate_join_mails_nobody_a_second_time(self):
+		with patch(JOIN_SENDER) as sender:
+			waitlist.join(EMAIL)
+			self.assertEqual(
+				[call.args[0] for call in sender.call_args_list],
+				["send_access_request_received", "notify_admins_of_access_request"],
+			)
+			sender.reset_mock()
+
+			waitlist.join(EMAIL)
+			sender.assert_not_called()
 
 	def test_the_fourth_submission_in_an_hour_is_rate_limited(self):
 		with _as_request(EMAIL):
@@ -125,13 +174,44 @@ class TestWaitlist(IntegrationTestCase):
 		with self.assertRaises(frappe.PermissionError):
 			waitlist.approve([EMAIL])
 
+	def test_the_approval_notice_follows_the_decision_not_the_call(self):
+		waitlist.join(EMAIL)
+		with patch(DECISION_SENDER) as sender:
+			waitlist.approve([EMAIL])
+			waitlist.approve([EMAIL])
+
+		self.assertEqual([call.args[0] for call in sender.call_args_list], ["send_access_request_approved"])
+
+	def test_rejection_records_the_decision_and_clips_the_reason(self):
+		waitlist.join(EMAIL)
+
+		self.assertEqual(waitlist.reject([EMAIL], reason="r" * 4000)["rejected"], 1)
+
+		entry = frappe.get_doc("Waitlist Entry", EMAIL)
+		self.assertEqual(entry.status, "Rejected")
+		self.assertEqual(len(entry.rejection_reason), waitlist.TEXT_LIMIT)
+		self.assertIsNotNone(entry.rejected_on)
+		self.assertIsNone(entry.approved_on)
+
+	def test_approving_a_rejected_entry_clears_the_rejection_stamp(self):
+		waitlist.join(EMAIL)
+		waitlist.reject([EMAIL], reason="no capacity")
+
+		waitlist.approve([EMAIL])
+
+		entry = frappe.get_doc("Waitlist Entry", EMAIL)
+		self.assertIsNone(entry.rejected_on)
+		self.assertIsNotNone(entry.approved_on)
+
+	def test_rejection_is_denied_to_a_non_admin(self):
+		waitlist.join(EMAIL)
+		frappe.set_user("Guest")
+		with self.assertRaises(frappe.PermissionError):
+			waitlist.reject([EMAIL])
+
 
 class _as_request:
-	"""Make the rate limiter apply — it is a no-op outside an HTTP request.
-
-	The decorator keys on the request IP and the `email` form field, so a direct function call
-	from a test would sail past it and the limit would never be exercised.
-	"""
+	"""Make the rate limiter apply — it is a no-op outside an HTTP request."""
 
 	def __init__(self, email):
 		self.email = email

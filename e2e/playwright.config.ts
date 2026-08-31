@@ -24,11 +24,19 @@ export default defineConfig({
     },
     {
       name: "chromium",
+      testIgnore: /public-.*\.spec\.ts/,
       use: {
         ...devices["Desktop Chrome"],
         storageState: ".auth/admin.json",
       },
       dependencies: ["auth-setup"],
+    },
+    // The public pages are what a visitor sees, so this project carries no session: signed in,
+    // the header renders its other half and `/` resolves to the desk.
+    {
+      name: "public",
+      testMatch: /public-.*\.spec\.ts/,
+      use: { ...devices["Desktop Chrome"], storageState: { cookies: [], origins: [] } },
     },
   ],
 });

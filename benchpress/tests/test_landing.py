@@ -1,32 +1,43 @@
 # Copyright (c) 2026, Venkatesh and Contributors
 # See license.txt
 
-"""The landing page's contract is that it is *not* a static file.
-
-Two things must hold, and both are easy to break by "just hardcoding it for now": the page has to
-render for an anonymous visitor (it is the public launch surface, and the SPA's router sends every
-guest to /login), and every commercial number on it has to come from `Credit Pack` / `Instance
-Size`, so an operator can retune a price in Desk and see it live without a deploy.
-
-The query test asserts flatness rather than an absolute count — the point is that adding packs or
-sizes must not add queries, which is what an accidental per-row `get_doc` would do.
-"""
-
 import frappe
 from frappe.tests import IntegrationTestCase
 from frappe.website.serve import get_response_content
+from frappe.website.utils import get_home_page
 
-from benchpress.credits import config
+from benchpress.benchpress.site_content import (
+	ABOUT_SEED,
+	CONSOLE_ROUTE,
+	LANDING_SEED,
+	LOGOUT_METHOD,
+	clear_content_cache,
+)
 from benchpress.credits.seed import seed_defaults
-from benchpress.www import home
+from benchpress.public_site.home import (
+	LANDING_PAGE,
+	SIGNED_IN_DEFAULT,
+	WEBSITE_SETTINGS,
+	home_page_for,
+)
+from benchpress.public_site.seed import claim_home_page, seed_public_site
+from benchpress.www import index
 
-PACK = "Landing Test Pack"
 BENCHPRESS_SETTINGS = "BenchPress Settings"
+LANDING_SETTINGS = "Landing Page Settings"
 
 
-def _delete_pack():
-	if frappe.db.exists("Credit Pack", PACK):
-		frappe.delete_doc("Credit Pack", PACK, force=True, ignore_permissions=True)
+def _set_show_about(value: int) -> None:
+	frappe.db.set_single_value(LANDING_SETTINGS, "show_about", value)
+	frappe.clear_document_cache(LANDING_SETTINGS, LANDING_SETTINGS)
+	clear_content_cache()
+
+
+def _set_home_page(value, commit: bool = False) -> None:
+	frappe.db.set_single_value(WEBSITE_SETTINGS, "home_page", value)
+	frappe.cache.delete_value("home_page")
+	if commit:
+		frappe.db.commit()  # nosemgrep -- must outlive the per-test transaction
 
 
 class TestLanding(IntegrationTestCase):
@@ -35,11 +46,19 @@ class TestLanding(IntegrationTestCase):
 		super().setUpClass()
 		frappe.set_user("Administrator")
 		seed_defaults()
+		seed_public_site()
 		cls.switch_at_start = frappe.db.get_single_value(BENCHPRESS_SETTINGS, "enable_credits")
-		frappe.db.commit()  # nosemgrep -- class fixtures must outlive the per-test transaction
+		cls.home_page_at_start = frappe.db.get_single_value(WEBSITE_SETTINGS, "home_page")
+		_set_home_page(LANDING_PAGE, commit=True)
+
+	@classmethod
+	def tearDownClass(cls):
+		_set_home_page(cls.home_page_at_start, commit=True)
+		super().tearDownClass()
 
 	def setUp(self):
-		config.clear_size_index()
+		clear_content_cache()
+		self.addCleanup(clear_content_cache)
 		self.addCleanup(frappe.set_user, "Administrator")
 
 	def enable_credits(self) -> None:
@@ -56,144 +75,154 @@ class TestLanding(IntegrationTestCase):
 
 	def render_as_guest(self) -> str:
 		frappe.set_user("Guest")
-		return get_response_content("/home")
+		return get_response_content("/")
 
-	def test_page_renders_for_guest(self):
+	def test_slash_serves_the_landing_page_to_a_guest(self):
 		self.disable_credits()
 		html = self.render_as_guest()
-		self.assertIn("Pick a template.", html)
-		self.assertNotIn("Join the waitlist.", html)
+		self.assertIn(LANDING_SEED["hero_badge_text"], html)
+		self.assertIn('id="paths"', html)
 
-	def test_pricing_is_read_from_the_documents(self):
-		"""The Pricing section is commented out in home.html until the pack/rate numbers are
-		final (see the block's disabled-for-now note), so nothing here reaches the page yet --
-		assert the context assembles it correctly instead. Restore the `html`-based assertions
-		below once the section is back."""
-		self.enable_credits()
-		context = home.get_context(frappe._dict())
-		self.assertEqual(
-			{pack.pack_label for pack in config.active_packs()},
-			{pack["pack_label"] for pack in context.packs},
-		)
-		self.assertEqual(
-			{size.size_label for size in config.instance_sizes()},
-			{row["label"] for row in context.sizes},
-		)
-
-		html = self.render_as_guest()
-		for pack in config.active_packs():
-			self.assertNotIn(pack.pack_label, html)
-
-	def test_a_price_edited_in_desk_changes_the_page(self):
-		"""Same disabled-section caveat as above: a new price now only has to reach the
-		context, not the page. Restore the `html`-based assertions once Pricing is back."""
-		self.enable_credits()
+	def test_copy_edited_in_desk_reaches_the_page(self):
 		frappe.set_user("Administrator")
-		self.addCleanup(_delete_pack)
-		frappe.get_doc(
-			{
-				"doctype": "Credit Pack",
-				"pack_label": PACK,
-				"inr_price": 12345,
-				"credits": 500,
-				"is_active": 1,
-				"sort_order": 99,
-			}
-		).insert(ignore_permissions=True)
+		settings = frappe.get_doc(LANDING_SETTINGS)
+		settings.hero_subhead = "Edited in Desk, live on the page."
+		settings.save(ignore_permissions=True)
 
-		context = home.get_context(frappe._dict())
-		self.assertIn(PACK, {pack["pack_label"] for pack in context.packs})
-
-		html = self.render_as_guest()
-		self.assertNotIn("₹12,345", html)
-		self.assertNotIn(PACK, html)
-
-	def test_an_inactive_pack_is_not_offered(self):
-		self.enable_credits()
-		frappe.set_user("Administrator")
-		self.addCleanup(_delete_pack)
-		frappe.get_doc(
-			{
-				"doctype": "Credit Pack",
-				"pack_label": PACK,
-				"inr_price": 12345,
-				"credits": 500,
-				"is_active": 0,
-				"sort_order": 99,
-			}
-		).insert(ignore_permissions=True)
-
-		self.assertNotIn(PACK, self.render_as_guest())
+		self.assertIn("Edited in Desk, live on the page.", self.render_as_guest())
 
 	def test_repo_url_is_wired_everywhere(self):
 		html = self.render_as_guest()
-		# Header, hero, clone command, footer (twice) and the film endcard.
-		self.assertGreaterEqual(html.count(home.REPO_URL), 5)
+		self.assertIn(index.REPO_URL, html)
 		self.assertNotIn("github.com/benchpress/benchpress", html)
 
-	def test_trademark_disclaimer_sits_beside_the_logo_grid(self):
+	def test_trademark_disclaimer_sits_under_the_template_gallery(self):
 		html = self.render_as_guest()
-		gallery = html.index('id="templates"')
+		marquee = html.index("bp-tmpl__track")
 		disclaimer = html.index("trademarks of Frappe Technologies")
-		how_it_works = html.index('id="how"')
-		self.assertLess(gallery, disclaimer)
-		self.assertLess(disclaimer, how_it_works)
-
-	def test_the_page_states_the_real_address_model(self):
-		"""A bench answers on public names too once base_domain is set, so the page may only
-		claim the narrower truth: no bench port is published on the host."""
-		self.disable_credits()
-		html = self.render_as_guest()
-		self.assertIn("Unreachable", html)
-		self.assertIn("No bench port is published on the host.", html)
-		self.assertNotIn("Nothing is published to the internet.", html)
+		paths = html.index('id="paths"')
+		self.assertLess(marquee, disclaimer)
+		self.assertLess(disclaimer, paths)
 
 	def test_the_hosted_surfaces_wait_for_metering(self):
 		self.disable_credits()
-		self.assertNotIn("Join the waitlist.", self.render_as_guest())
-		self.enable_credits()
-		self.assertIn("Join the waitlist.", self.render_as_guest())
+		context = index.get_context(frappe._dict())
+		self.assertFalse(context.credits_enabled)
+		self.assertFalse(context.waitlist_open)
 
-	def test_metering_off_costs_fewer_queries_than_metering_on(self):
+	def test_the_header_and_footer_reach_the_about_and_contact_pages(self):
+		# Both pages existed before anything linked to them, so neither was reachable from `/`.
+		html = self.render_as_guest()
+		self.assertIn('href="/about"', html)
+		self.assertIn('href="/contact"', html)
+		self.assertIn("Company", html)
+
+	def test_a_guest_is_offered_a_way_in(self):
+		html = self.render_as_guest()
+		self.assertIn('href="/login"', html)
+		self.assertNotIn("Log out", html)
+
+	def test_a_signed_in_visitor_is_offered_a_way_out(self):
 		self.disable_credits()
-		self._build_context()  # warm the doctype meta and Singles caches
-		off = _count_queries(self._build_context)
-		self.enable_credits()
-		self._build_context()
-		self.assertLess(off, _count_queries(self._build_context))
+		frappe.set_user("Administrator")
 
-	def test_context_cost_does_not_grow_with_the_catalogue(self):
+		html = get_response_content("/landing")
+
+		self.assertIn("Log out", html)
+		self.assertIn(f'href="{CONSOLE_ROUTE}"', html)
+		self.assertIn(f'action="/api/method/{LOGOUT_METHOD}"', html)
+
+	def test_the_about_teaser_carries_the_numbers_from_the_about_page(self):
+		# One home for the stats: the landing teaser reads `About Page Settings`, not a copy.
+		html = self.render_as_guest()
+		self.assertIn('id="about"', html)
+		self.assertIn(LANDING_SEED["about_title"], html)
+		self.assertIn(ABOUT_SEED["stats"][0]["value"], html)
+
+	def test_the_about_teaser_can_be_switched_off_in_desk(self):
+		self.addCleanup(_set_show_about, 1)
+		_set_show_about(0)
+
+		self.assertNotIn('id="about"', self.render_as_guest())
+
+	def test_the_landing_page_is_not_where_a_signed_in_user_lands(self):
+		# `Website Settings.home_page` is also Frappe's post-login destination, for every user.
+		self.assertEqual(frappe.db.get_single_value(WEBSITE_SETTINGS, "home_page"), LANDING_PAGE)
+		self.assertIsNone(home_page_for("Guest"))
+		self.assertEqual(home_page_for("Administrator"), SIGNED_IN_DEFAULT)
+
+		self.assertNotEqual(self.home_page_for_user("Administrator"), LANDING_PAGE)
+		self.assertEqual(self.home_page_for_user("Guest"), LANDING_PAGE)
+
+	def test_a_home_page_chosen_in_desk_reaches_a_signed_in_user_too(self):
+		# `get_home_page_via_hooks` runs before the Single is read, so an unconditional override
+		# would make `Website Settings.home_page` a guests-only setting.
+		self.addCleanup(_set_home_page, LANDING_PAGE)
+		_set_home_page("about")
+
+		self.assertIsNone(home_page_for("Administrator"))
+		self.assertEqual(self.home_page_for_user("Administrator"), "about")
+		self.assertEqual(self.home_page_for_user("Guest"), "about")
+
+	def test_the_landing_page_has_a_route_a_signed_in_operator_can_reach(self):
+		# `/` and `/index` both resolve through `get_home_page`, which sends a System User to Desk.
+		self.disable_credits()
+		frappe.set_user("Administrator")
+
+		html = get_response_content("/landing")
+
+		self.assertIn(LANDING_SEED["hero_badge_text"], html)
+		self.assertIn('id="paths"', html)
+
+	def home_page_for_user(self, user: str) -> str:
+		"""`get_home_page` past its per-user memo."""
+		frappe.set_user(user)
+		frappe.cache.delete_value("home_page")
+		self.addCleanup(frappe.cache.delete_value, "home_page")
+		return get_home_page()
+
+	def test_the_seeder_leaves_a_chosen_home_page_alone(self):
+		self.addCleanup(_set_home_page, LANDING_PAGE)
+		_set_home_page("some-other-page")
+
+		claim_home_page()
+
+		self.assertEqual(frappe.db.get_single_value(WEBSITE_SETTINGS, "home_page"), "some-other-page")
+
+	def test_context_cost_does_not_grow_with_the_content(self):
 		self.enable_credits()
-		self._build_context()  # warm the doctype meta and Singles caches the switch just cleared
+		frappe.set_user("Administrator")
+		settings = frappe.get_doc(LANDING_SETTINGS)
+		self.addCleanup(_restore_cards, [row.as_dict() for row in settings.template_cards])
+
+		settings.append("template_cards", {"app_name": "Query Probe", "build_time": "~1s"})
+		settings.save(ignore_permissions=True)
+		self._build_context()  # warm the caches the save just cleared
 		baseline = _count_queries(self._build_context)
 
-		self.addCleanup(_delete_pack)
-		frappe.get_doc(
-			{
-				"doctype": "Credit Pack",
-				"pack_label": PACK,
-				"inr_price": 999,
-				"credits": 100,
-				"is_active": 1,
-				"sort_order": 98,
-			}
-		).insert(ignore_permissions=True)
+		settings.append("template_cards", {"app_name": "Second Probe", "build_time": "~1s"})
+		settings.save(ignore_permissions=True)
+		self._build_context()
 
 		grown = _count_queries(self._build_context)
-		self.assertEqual(grown, baseline, "another pack cost another query — the read path is per-row")
-
-	def test_context_is_two_queries(self):
-		self.enable_credits()
-		self._build_context()  # warm the doctype meta and Singles caches
-		self.assertEqual(_count_queries(self._build_context), 2)
+		self.assertEqual(grown, baseline, "another card cost another query — the read path is per-row")
 
 	def _build_context(self):
-		config.clear_size_index()
-		home.get_context(frappe._dict())
+		clear_content_cache()
+		index.get_context(frappe._dict())
+
+
+def _restore_cards(rows) -> None:
+	frappe.set_user("Administrator")
+	settings = frappe.get_doc(LANDING_SETTINGS)
+	settings.template_cards = []
+	for row in rows:
+		settings.append("template_cards", row)
+	settings.save(ignore_permissions=True)
+	clear_content_cache()
 
 
 def _count_queries(action) -> int:
-	"""Statements sent to MariaDB while `action` runs. Same trick as test_api."""
 	count = 0
 	original_sql = frappe.db.__class__.sql
 

@@ -46,6 +46,10 @@ DESK_EMAIL = "signup-desk@example.com"
 NOTIFIED_EMAIL = "signup-notified@example.com"
 BLOCKED_DOMAIN = "signup-throwaway.example"
 BLOCKED_EMAIL = f"nobody@{BLOCKED_DOMAIN}"
+
+# Enough of `waitlist.announce_signup`'s subject to tell the one-shot apart from the other mail
+# the same address now gets. Keep in step with `benchpress/waitlist.py`.
+RETIREMENT_SUBJECT = "Hosted BenchPress is open"
 EVERY_EMAIL = (EMAIL, OAUTH_EMAIL, DESK_EMAIL, NOTIFIED_EMAIL, BLOCKED_EMAIL)
 
 GRANT_CREDITS = 40.0
@@ -172,8 +176,16 @@ class TestSelfServeSignup(IntegrationTestCase):
 	# --- Assertions the whole module shares -----------------------------------
 
 	def mails_to(self, email: str) -> int:
-		"""Sends to one address. The waitlist notice goes out to the whole list at once."""
-		return len([call for call in self.mailer.call_args_list if call.kwargs["recipients"] == [email]])
+		"""Retirement notices sent to one address, counted by subject."""
+		# Matched on the subject, not just the recipient: `waitlist.join` now also acknowledges the
+		# request to the same address (spec §6.1), and this count is about the one-shot alone.
+		return len(
+			[
+				call
+				for call in self.mailer.call_args_list
+				if call.kwargs["recipients"] == [email] and RETIREMENT_SUBJECT in call.kwargs["subject"]
+			]
+		)
 
 	def assert_granted_once(self, email: str) -> None:
 		grants = frappe.get_all(

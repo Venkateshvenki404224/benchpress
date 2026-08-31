@@ -1,0 +1,254 @@
+# Copyright (c) 2026, Venkatesh and Contributors
+# See license.txt
+
+"""The public site is served to guests, so these tests guard cheapness and completeness."""
+
+# Two failure modes matter here and neither shows up in a browser on a developer's seeded site.
+# The first is a fresh install: a Single nobody has saved must still render every section, so
+# every read falls back to the seed constant. The second is cost: `/` is the hottest page on the
+# deployment, and a warm request must reach the database zero times.
+
+import frappe
+from frappe.tests import IntegrationTestCase
+
+from benchpress.benchpress.site_content import (
+	ABOUT_DOCTYPE,
+	ABOUT_SEED,
+	CONSOLE_ROUTE,
+	LANDING_DOCTYPE,
+	LANDING_SEED,
+	LOGIN_ROUTE,
+	WAITLIST_ROUTE,
+	WITH_COLUMN,
+	WITHOUT_COLUMN,
+	about_content,
+	chrome_content,
+	clear_content_cache,
+	landing_content,
+	seed_page_content,
+)
+from benchpress.credits.config import BENCHPRESS_SETTINGS, SIGNUP_ROUTE
+from benchpress.credits.config import SETTINGS as CREDIT_SETTINGS
+
+# Nothing on the page renders these, so they are allowed to be empty. `show_testimonials`
+# is seeded off for as long as the quotes behind it are placeholders.
+OPTIONAL_LANDING_KEYS = {"og_image", "logo_strip", "show_testimonials"}
+OPTIONAL_ABOUT_KEYS = {"og_image"}
+
+
+class TestSiteContent(IntegrationTestCase):
+	@classmethod
+	def setUpClass(cls):
+		super().setUpClass()
+		frappe.set_user("Administrator")
+		# The test site predates these doctypes, so the install hook that seeds them never ran.
+		# Seeding here is idempotent and doubles as a test of the seeder.
+		seed_page_content()
+		frappe.db.commit()  # nosemgrep
+
+	def setUp(self):
+		super().setUp()
+		clear_content_cache()
+		self.addCleanup(self.restore_singles)
+
+	def restore_singles(self):
+		"""`IntegrationTestCase` rolls back once per class, so each test undoes its own writes."""
+		frappe.db.rollback()
+		frappe.clear_document_cache(LANDING_DOCTYPE, LANDING_DOCTYPE)
+		frappe.clear_document_cache(ABOUT_DOCTYPE, ABOUT_DOCTYPE)
+		clear_content_cache()
+
+	# ------------------------------------------------------------------ completeness
+
+	def test_landing_renders_every_key_on_an_unsaved_single(self):
+		empty_single(LANDING_DOCTYPE)
+		settings = landing_content()["settings"]
+		for fieldname in LANDING_SEED:
+			if fieldname in OPTIONAL_LANDING_KEYS:
+				continue
+			self.assertTrue(settings.get(fieldname), f"{fieldname} is empty on a fresh install")
+
+	def test_about_renders_every_key_on_an_unsaved_single(self):
+		empty_single(ABOUT_DOCTYPE)
+		settings = about_content()["settings"]
+		for fieldname in ABOUT_SEED:
+			if fieldname in OPTIONAL_ABOUT_KEYS:
+				continue
+			self.assertTrue(settings.get(fieldname), f"{fieldname} is empty on a fresh install")
+
+	def test_every_landing_section_has_rows_on_an_unsaved_single(self):
+		empty_single(LANDING_DOCTYPE)
+		content = landing_content()
+		self.assertEqual(len(content["phases"]), 4)
+		self.assertEqual(sum(len(phase["steps"]) for phase in content["phases"]), 11)
+		self.assertEqual(len(content["footer_columns"]), 4)
+		self.assertEqual(len(content["hosted_points"]), 3)
+		self.assertEqual(len(content["self_points"]), 3)
+		self.assertTrue(content["show_agents"])
+		# Off by default: the seeded quotes are placeholders, not real customers.
+		self.assertFalse(content["show_testimonials"])
+
+	def test_placeholder_quotes_raise_the_testimonial_disclaimer(self):
+		empty_single(LANDING_DOCTYPE)
+		self.assertTrue(landing_content()["show_testimonial_disclaimer"])
+
+	# ------------------------------------------------------------------ shaping
+
+	def test_steps_group_under_their_phase_in_step_order(self):
+		phases = {phase["phase_key"]: phase for phase in landing_content()["phases"]}
+		self.assertEqual([step.step_number for step in phases["site"]["steps"]], [5, 6, 7, 8])
+		self.assertEqual(phases["request"]["nodes"], ["device", "control"])
+		self.assertEqual(phases["site"]["chips"], [])
+
+	def test_default_phase_falls_back_to_the_first_phase(self):
+		settings = frappe.get_doc(LANDING_DOCTYPE)
+		settings.pipeline_default_phase = "no-such-phase"
+		settings.save(ignore_permissions=True)
+		self.assertEqual(landing_content()["default_phase"], "request")
+
+	def test_footer_links_group_by_heading_in_first_seen_order(self):
+		columns = landing_content()["footer_columns"]
+		self.assertEqual(
+			[column["heading"] for column in columns],
+			["Product", "Developers", "Services", "Company"],
+		)
+		self.assertEqual(columns[0]["links"][0], {"label": "Pipeline", "url": "/#how"})
+
+	def test_about_days_split_by_column_preserving_order(self):
+		content = about_content()
+		self.assertEqual(len(content["days_without"]), 5)
+		self.assertEqual(len(content["days_with"]), 5)
+		self.assertEqual(content["days_without"][0].time_label, "09:00")
+		self.assertEqual(content["days_with"][-1].time_label, "Later")
+		self.assertTrue(all(row.column == WITHOUT_COLUMN for row in content["days_without"]))
+		self.assertTrue(all(row.column == WITH_COLUMN for row in content["days_with"]))
+
+	def test_service_cards_expose_the_reserved_meta_key(self):
+		# `meta` cannot be a column: Frappe's Document swallows it. The template still reads it.
+		card = landing_content()["settings"].service_cards[0]
+		self.assertEqual(card.meta, "Hosted · monthly")
+		self.assertEqual(card.meta_label, card.meta)
+
+	def test_chrome_is_shared_by_every_page(self):
+		chrome = chrome_content(is_landing=False)
+		self.assertFalse(chrome["is_landing"])
+		self.assertEqual(next(item.label for item in chrome["nav_items"]), "Hosted or self-host")
+		self.assertTrue(chrome["footer_trademark_short"])
+
+	def test_the_chrome_names_the_about_and_contact_pages(self):
+		anchors = [item.anchor for item in chrome_content()["nav_items"]]
+		self.assertIn("/about", anchors)
+		self.assertIn("/contact", anchors)
+
+		columns = {column["heading"] for column in chrome_content()["footer_columns"]}
+		self.assertIn("Company", columns)
+
+	def test_the_chrome_carries_the_session_state_the_header_renders(self):
+		chrome = chrome_content()
+		self.assertTrue(chrome["is_signed_in"])  # tests run as Administrator
+		self.assertEqual(chrome["login_route"], LOGIN_ROUTE)
+		self.assertEqual(chrome["console_route"], CONSOLE_ROUTE)
+
+		frappe.set_user("Guest")
+		self.addCleanup(frappe.set_user, "Administrator")
+		self.assertFalse(chrome_content()["is_signed_in"])
+		self.assertEqual(chrome_content()["csrf_token"], "")
+
+	def test_the_header_cta_follows_the_switches(self):
+		"""One door, on all five pages. `/` enforced this alone once, and the other four disagreed."""
+		self.set_switches(credits=1, waitlist=1)
+		self.assertEqual(self.cta(), ("Start free", WAITLIST_ROUTE))
+		self.assertEqual(chrome_content()["signup_route"], WAITLIST_ROUTE)
+
+		self.set_switches(credits=1, waitlist=0)
+		self.assertEqual(self.cta(), ("Start free", SIGNUP_ROUTE))
+		self.assertEqual(chrome_content()["signup_route"], SIGNUP_ROUTE)
+
+		# No hosted product at all: the header may not offer an account that cannot exist.
+		self.set_switches(credits=0, waitlist=1)
+		self.assertEqual(
+			self.cta(), (LANDING_SEED["paths_self_cta_label"], LANDING_SEED["paths_self_cta_url"])
+		)
+
+	def cta(self) -> tuple[str, str]:
+		"""The one primary button in the shared header, as `(label, url)`."""
+		rows = [row for row in chrome_content()["nav_items"] if row.is_cta]
+		self.assertEqual(len(rows), 1, "the header carries exactly one primary button")
+		return rows[0].label, rows[0].anchor
+
+	def set_switches(self, credits: int, waitlist: int) -> None:
+		frappe.db.set_single_value(BENCHPRESS_SETTINGS, "enable_credits", credits)
+		frappe.db.set_single_value(CREDIT_SETTINGS, "waitlist_open", waitlist)
+		self.forget_switches()
+		self.addCleanup(self.forget_switches)
+
+	def forget_switches(self) -> None:
+		frappe.clear_document_cache(BENCHPRESS_SETTINGS, BENCHPRESS_SETTINGS)
+		frappe.clear_document_cache(CREDIT_SETTINGS, CREDIT_SETTINGS)
+
+	# ------------------------------------------------------------------ cost
+
+	def test_a_warm_landing_read_touches_no_database(self):
+		landing_content()
+		clear_content_cache()
+		with self.assertQueryCount(0):
+			landing_content()
+
+	def test_content_is_assembled_once_per_request(self):
+		self.assertIs(landing_content(), landing_content())
+		first = about_content()
+		clear_content_cache()
+		self.assertIsNot(about_content(), first)
+
+	def test_saving_in_desk_is_visible_to_the_next_read(self):
+		landing_content()
+		settings = frappe.get_doc(LANDING_DOCTYPE)
+		settings.faq_title = "Frequently asked"
+		settings.save(ignore_permissions=True)
+		self.assertEqual(landing_content()["settings"].faq_title, "Frequently asked")
+
+	def test_reads_never_hand_out_the_cached_documents_rows(self):
+		rows = landing_content()["settings"].hero_assurances
+		self.assertTrue(all(isinstance(row, dict) for row in rows))
+		self.assertIsNot(rows, frappe.get_cached_doc(LANDING_DOCTYPE).hero_assurances)
+
+	# ------------------------------------------------------------------ seeding
+
+	def test_seeding_twice_adds_no_rows(self):
+		before = frappe.db.count("Landing Pipeline Step", {"parent": LANDING_DOCTYPE})
+		seed_page_content()
+		self.assertEqual(frappe.db.count("Landing Pipeline Step", {"parent": LANDING_DOCTYPE}), before)
+
+	def test_seeding_never_overwrites_an_edited_value(self):
+		settings = frappe.get_doc(LANDING_DOCTYPE)
+		settings.hero_headline = "Edited by an operator"
+		settings.save(ignore_permissions=True)
+		seed_page_content()
+		self.assertEqual(frappe.get_doc(LANDING_DOCTYPE).hero_headline, "Edited by an operator")
+
+	def test_seeding_never_refills_an_edited_child_table(self):
+		settings = frappe.get_doc(LANDING_DOCTYPE)
+		settings.faq_items = []
+		settings.append("faq_items", {"question": "Only mine?", "answer": "Yes."})
+		settings.save(ignore_permissions=True)
+		seed_page_content()
+		self.assertEqual(len(frappe.get_doc(LANDING_DOCTYPE).faq_items), 1)
+
+	# ------------------------------------------------------------------ validation
+
+	def test_a_step_naming_an_unknown_phase_is_rejected(self):
+		settings = frappe.get_doc(LANDING_DOCTYPE)
+		settings.append(
+			"pipeline_steps",
+			{"phase_key": "no-such-phase", "step_number": 12, "title": "Orphan"},
+		)
+		self.assertRaises(frappe.ValidationError, settings.save)
+
+
+def empty_single(doctype: str) -> None:
+	"""Put a Single back to the state a fresh install leaves it in. Rolled back with the test."""
+	for table in frappe.get_meta(doctype).get_table_fields():
+		frappe.db.delete(table.options, {"parent": doctype, "parenttype": doctype})
+	frappe.db.delete("Singles", {"doctype": doctype})
+	frappe.clear_document_cache(doctype, doctype)
+	clear_content_cache()
