@@ -12,10 +12,18 @@
   "company",
   "column_break_identity",
   "status",
+  "source",
   "approved_on",
+  "rejected_on",
   "invite_sent_on",
+  "request_section",
+  "team_size",
+  "intent",
+  "expected_apps",
+  "consented",
   "context_section",
-  "use_case"
+  "use_case",
+  "rejection_reason"
  ],
  "fields": [
   {
@@ -54,10 +62,26 @@
    "reqd": 1
   },
   {
+   "default": "Signup Page",
+   "description": "Which door the request came through. Written by the endpoint, never typed.",
+   "fieldname": "source",
+   "fieldtype": "Select",
+   "label": "Source",
+   "options": "Signup Page\nLanding Waitlist\nDesk\nImport",
+   "read_only": 1
+  },
+  {
    "description": "Stamped when the entry is approved and the user is invited.",
    "fieldname": "approved_on",
    "fieldtype": "Datetime",
    "label": "Approved On",
+   "read_only": 1
+  },
+  {
+   "description": "Stamped when the entry is declined.",
+   "fieldname": "rejected_on",
+   "fieldtype": "Datetime",
+   "label": "Rejected On",
    "read_only": 1
   },
   {
@@ -66,6 +90,40 @@
    "fieldtype": "Datetime",
    "label": "Invite Sent On",
    "read_only": 1
+  },
+  {
+   "fieldname": "request_section",
+   "fieldtype": "Section Break",
+   "label": "Request"
+  },
+  {
+   "default": "1 — just me",
+   "fieldname": "team_size",
+   "fieldtype": "Select",
+   "label": "People Who Need Environments",
+   "options": "1 — just me\n2–5\n6–15\n16 or more"
+  },
+  {
+   "default": "Hosted account",
+   "fieldname": "intent",
+   "fieldtype": "Select",
+   "in_standard_filter": 1,
+   "label": "What They Are Here For",
+   "options": "Hosted account\nSetup on my server\nJust evaluating\nAgent / automation"
+  },
+  {
+   "description": "Self-reported. Clipped to the column width before it is stored.",
+   "fieldname": "expected_apps",
+   "fieldtype": "Data",
+   "in_list_view": 0,
+   "label": "Apps They Expect To Run"
+  },
+  {
+   "default": "0",
+   "description": "What the form's checkbox said. Recorded, never enforced server-side.",
+   "fieldname": "consented",
+   "fieldtype": "Check",
+   "label": "Acknowledged Manual Review"
   },
   {
    "fieldname": "context_section",
@@ -77,12 +135,18 @@
    "fieldname": "use_case",
    "fieldtype": "Small Text",
    "label": "Use Case"
+  },
+  {
+   "description": "Shown to the person in the decline email. Written by `waitlist.reject`.",
+   "fieldname": "rejection_reason",
+   "fieldtype": "Small Text",
+   "label": "Rejection Reason"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-08-17 12:10:00.000000",
+ "modified": "2026-08-30 09:00:00.000000",
  "modified_by": "Administrator",
  "module": "Benchpress",
  "name": "Waitlist Entry",
