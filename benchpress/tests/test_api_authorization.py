@@ -1,6 +1,7 @@
 # Copyright (c) 2026, Venkatesh and Contributors
 # See license.txt
 
+import contextlib
 import importlib
 import json
 import pkgutil
@@ -8,6 +9,7 @@ from unittest.mock import MagicMock, patch
 
 import frappe
 import frappe.client
+from frappe.handler import execute_cmd
 from frappe.tests import IntegrationTestCase
 
 import benchpress
@@ -16,6 +18,16 @@ from benchpress.benchpress.doctype.bench_instance import get_instance_id
 
 GUEST_WAITLIST_EMAIL = "authz-guest-waitlist@example.com"
 GUEST_CONTACT_EMAIL = "authz-guest-contact@example.com"
+PROBE_EMAIL = "authz-method-probe@example.com"
+
+# Every command a browser can address one of the three public forms by. The login page posts the
+# framework's own signup path, which `override_whitelisted_methods` sends to ours.
+PUBLIC_FORM_COMMANDS = (
+	"benchpress.waitlist.join",
+	"benchpress.contact.submit",
+	"benchpress.signup.sign_up",
+	"frappe.core.doctype.user.user.sign_up",
+)
 
 
 def _delete_waitlist_entry(email):
@@ -190,6 +202,36 @@ class TestApiAuthorization(IntegrationTestCase):
 				"benchpress.contact.submit",
 			},
 		)
+
+	def test_a_get_request_is_refused_at_every_public_form(self):
+		frappe.set_user("Guest")
+		for cmd in PUBLIC_FORM_COMMANDS:
+			with self.subTest(cmd=cmd), _as_http("GET", cmd, email=PROBE_EMAIL):
+				with self.assertRaises(frappe.PermissionError):
+					execute_cmd(cmd)
+
+	def test_a_get_request_writes_nothing(self):
+		self.addCleanup(_delete_waitlist_entry, PROBE_EMAIL)
+		self.addCleanup(_delete_contact_messages, PROBE_EMAIL)
+		frappe.set_user("Guest")
+		for cmd in PUBLIC_FORM_COMMANDS:
+			with _as_http("GET", cmd, email=PROBE_EMAIL, name="Authz Probe", message="hello"):
+				with contextlib.suppress(frappe.PermissionError):
+					execute_cmd(cmd)
+
+		frappe.set_user("Administrator")
+		self.assertFalse(frappe.db.exists("Waitlist Entry", PROBE_EMAIL))
+		self.assertFalse(frappe.db.exists("Contact Message", {"email": PROBE_EMAIL}))
+		self.assertFalse(frappe.db.exists("User", PROBE_EMAIL))
+
+	def test_a_post_still_reaches_the_waitlist_through_the_handler(self):
+		self.addCleanup(_delete_waitlist_entry, PROBE_EMAIL)
+		self.addCleanup(setattr, frappe.flags, "mute_emails", frappe.flags.mute_emails)
+		frappe.flags.mute_emails = True
+		frappe.set_user("Guest")
+
+		with _as_http("POST", "benchpress.waitlist.join", email=PROBE_EMAIL):
+			self.assertTrue(execute_cmd("benchpress.waitlist.join")["joined"])
 
 	def test_guest_can_reach_the_waitlist(self):
 		frappe.set_user("Guest")
@@ -713,3 +755,24 @@ class TestApiAuthorization(IntegrationTestCase):
 		frappe.set_user(self.admin_user)
 		with patch("benchpress.diagnostics.run_diagnostics", return_value=[]):
 			self.assertEqual(api.run_diagnostics(), [])
+
+
+class _as_http:
+	"""Dispatch a command the way an HTTP request would, with a chosen method."""
+
+	def __init__(self, method, cmd, **form):
+		self.method = method
+		self.form = frappe._dict(cmd=cmd, **form)
+
+	def __enter__(self):
+		frappe.cache.delete_keys("rl:")
+		frappe.local.request = MagicMock(method=self.method)
+		frappe.local.request_ip = "127.0.0.1"
+		frappe.local.form_dict = self.form
+		return self
+
+	def __exit__(self, *exception):
+		frappe.cache.delete_keys("rl:")
+		frappe.local.request = None
+		frappe.local.form_dict = frappe._dict()
+		return False

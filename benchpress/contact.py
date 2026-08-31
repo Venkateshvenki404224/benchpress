@@ -21,7 +21,7 @@ MAIL_ERROR_TITLE = "BenchPress contact mail failed"
 
 # Guest-writable by design; answers identically for every caller and is rate limited per IP and
 # address.
-@frappe.whitelist(allow_guest=True)  # nosemgrep -- reviewed, see the note above
+@frappe.whitelist(allow_guest=True, methods=["POST"])  # nosemgrep -- reviewed, see the note above
 @rate_limit(key="email", limit=MESSAGES_PER_HOUR, seconds=60 * 60, ip_based=True)
 def submit(name: str, email: str, message: str, topic: str | None = None) -> dict:
 	"""Record one contact message. Always answers the same way."""

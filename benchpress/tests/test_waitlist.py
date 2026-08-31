@@ -8,7 +8,11 @@ import frappe
 from frappe.tests import IntegrationTestCase
 
 from benchpress import waitlist
-from benchpress.benchpress.doctype.waitlist_entry.waitlist_entry import ACCESS_ROLE, derive_reference
+from benchpress.benchpress.doctype.waitlist_entry.waitlist_entry import (
+	ACCESS_ROLE,
+	WEBSITE_USER,
+	derive_reference,
+)
 
 EMAIL = "waitlist-test@example.com"
 OTHER_EMAIL = "waitlist-other@example.com"
@@ -160,6 +164,27 @@ class TestWaitlist(IntegrationTestCase):
 		entry = frappe.get_doc("Waitlist Entry", EMAIL)
 		self.assertEqual(entry.status, "Approved")
 		self.assertIsNotNone(entry.approved_on)
+
+	def test_approval_creates_a_website_user(self):
+		waitlist.join(EMAIL, full_name="Test Person")
+
+		waitlist.approve([EMAIL])
+
+		self.assertEqual(frappe.db.get_value("User", EMAIL, "user_type"), WEBSITE_USER)
+
+	def test_the_new_user_stays_a_website_user_when_the_role_grants_desk_access(self):
+		self._grant_the_access_role_desk_access()
+		waitlist.join(EMAIL, full_name="Test Person")
+
+		waitlist.approve([EMAIL])
+		waitlist.approve([EMAIL])
+
+		self.assertEqual(frappe.db.get_value("User", EMAIL, "user_type"), WEBSITE_USER)
+
+	def _grant_the_access_role_desk_access(self) -> None:
+		was = frappe.db.get_value("Role", ACCESS_ROLE, "desk_access")
+		self.addCleanup(frappe.db.set_value, "Role", ACCESS_ROLE, "desk_access", was)
+		frappe.db.set_value("Role", ACCESS_ROLE, "desk_access", 1)
 
 	def test_approving_twice_does_not_duplicate_the_role(self):
 		waitlist.join(EMAIL)

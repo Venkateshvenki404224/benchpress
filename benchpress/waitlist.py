@@ -22,7 +22,7 @@ APPROVED = "Approved"
 
 # Guest-writable by design; answers identically for a known and an unknown address so it cannot
 # be used to enumerate members.
-@frappe.whitelist(allow_guest=True)  # nosemgrep -- reviewed, see the note above
+@frappe.whitelist(allow_guest=True, methods=["POST"])  # nosemgrep -- reviewed, see the note above
 @rate_limit(key="email", limit=JOINS_PER_HOUR, seconds=60 * 60, ip_based=True)
 def join(
 	email: str,

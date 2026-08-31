@@ -23,6 +23,7 @@ from frappe.utils.password import get_encryption_key
 from benchpress.credits.onboarding import ACCESS_ROLE, grant_access_role
 
 REFERENCE_PREFIX = "REQ"
+WEBSITE_USER = "Website User"
 
 
 class WaitlistEntry(Document):
@@ -77,6 +78,9 @@ class WaitlistEntry(Document):
 		user.send_welcome_email = 1
 		user.append("roles", {"role": ACCESS_ROLE})
 		user.insert(ignore_permissions=True)
+		# After the insert, not before: `User.set_system_user` re-derives the type from role desk
+		# access on every save.
+		user.db_set("user_type", WEBSITE_USER)
 		return user.name
 
 
