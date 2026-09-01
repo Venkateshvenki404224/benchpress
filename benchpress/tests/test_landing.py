@@ -9,6 +9,8 @@ from frappe.website.utils import get_home_page
 from benchpress.benchpress.site_content import (
 	ABOUT_SEED,
 	CONSOLE_ROUTE,
+	FORUM_REPLIES,
+	FORUM_URL,
 	LANDING_SEED,
 	LOGOUT_METHOD,
 	clear_content_cache,
@@ -119,6 +121,22 @@ class TestLanding(IntegrationTestCase):
 		self.assertIn('id="about"', html)
 		self.assertIn(LANDING_SEED["about_title"], html)
 		self.assertIn(ABOUT_SEED["stats"][0]["value"], html)
+
+	def test_no_placeholder_quote_is_left_on_the_page(self):
+		html = self.render_as_guest()
+		self.assertNotIn("Placeholder", html)
+		self.assertNotIn("<blockquote", html)
+
+	def test_the_forum_thread_stands_in_for_the_quotes(self):
+		html = self.render_as_guest()
+		self.assertIn(FORUM_URL, html)
+		self.assertIn(f"{FORUM_REPLIES} replies", html)
+		self.assertIn(LANDING_SEED["forum_title"], html)
+
+	def test_the_forum_link_sits_between_the_about_teaser_and_the_questions(self):
+		html = self.render_as_guest()
+		self.assertLess(html.index('id="about"'), html.index(FORUM_URL))
+		self.assertLess(html.index(FORUM_URL), html.index(LANDING_SEED["faq_title"]))
 
 	def test_the_landing_page_is_not_where_a_signed_in_user_lands(self):
 		# `Website Settings.home_page` is also Frappe's post-login destination, for every user.

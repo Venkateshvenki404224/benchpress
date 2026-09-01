@@ -14,6 +14,13 @@ ABOUT_ATTRIBUTE = "benchpress_about_content"
 
 REPO_URL = "https://github.com/Venkateshvenki404224/benchpress"
 
+FORUM_URL = (
+	"https://discuss.frappe.io/t/introducing-benchpress-self-hosted-frappe-cloud-alternative"
+	"-docker-wireguard-vue-3-dashboard/161766"
+)
+# Read off the thread by hand; nothing counts it for us.
+FORUM_REPLIES = 20
+
 # The branded access-request page; `SIGNUP_ROUTE` is Frappe's own login page. Never both open.
 WAITLIST_ROUTE = "/signup"
 
@@ -723,6 +730,16 @@ LANDING_SEED = {
 	),
 	"about_link_label": "Read the full story",
 	"about_link_url": "/about",
+	# forum
+	"forum_eyebrow": "In the open",
+	"forum_title": "We would rather you read the thread.",
+	"forum_body": (
+		"BenchPress was introduced on the Frappe community forum and the thread is still open: "
+		"what it does, what it does not do yet, and every question people have asked since. "
+		"Read it and judge the reception yourself."
+	),
+	"forum_link_label": f"Read the thread — {FORUM_REPLIES} replies",
+	"forum_link_url": FORUM_URL,
 	# faq
 	"faq_title": "Questions",
 	"faq_items": [

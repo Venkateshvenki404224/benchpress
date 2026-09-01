@@ -474,7 +474,6 @@ body {
  *   data-r="nav"    the dock's link row
  *   data-r~="split" two-column grid
  *   data-r="bento"  five-card feature grid
- *   data-r="quote"  testimonial card
  *   data-r="tabs" / "tabs2"  tab strip
  *   data-r="float"  floating badge
  * --------------------------------------------------------------------------------------- */
@@ -509,9 +508,6 @@ body {
 	}
 	.bp [data-r="bento"] > * {
 		grid-column: auto !important;
-	}
-	.bp [data-r="quote"] {
-		width: min(78vw, 320px) !important;
 	}
 	.bp [data-r="tabs"],
 	.bp [data-r="tabs2"] {

@@ -2236,109 +2236,54 @@
 	}
 }
 
-/* -- Testimonials ------------------------------------------------------------------------ */
+/* -- Forum ------------------------------------------------------------------------------- */
 
-.bp-quotes {
+.bp-forum {
 	background: var(--bg-alt);
 	color: var(--m-ink);
-	padding: 88px 0;
-	overflow: hidden;
+	padding: 0 0 88px;
 }
 
-.bp-quotes__head {
-	display: flex;
-	align-items: baseline;
-	gap: 14px;
-	flex-wrap: wrap;
-}
-
-.bp-quotes__disclaimer {
-	margin: 0;
-	padding: 3px 10px;
-	border-radius: 999px;
-	background: var(--m-thead);
-	border: 1px dashed var(--m-line-strong);
-	font-size: 11px;
-	font-weight: 600;
-	color: var(--m-muted);
-}
-
-.bp-quotes__viewport {
-	margin-top: 28px;
-	-webkit-mask-image: linear-gradient(90deg, transparent, #000 5%, #000 95%, transparent);
-	mask-image: linear-gradient(90deg, transparent, #000 5%, #000 95%, transparent);
-}
-
-.bp-quotes__track {
-	display: flex;
-	gap: 16px;
-	width: max-content;
-	animation: bp-marquee 44s linear infinite;
-}
-
-.bp-quote {
-	width: 380px;
-	margin: 0;
-	display: flex;
-	flex-direction: column;
-	gap: 16px;
-	padding: 24px;
-	background: #fff;
-	border: 1px solid var(--m-line);
-	border-radius: 16px;
-}
-
-.bp-quote__text {
-	margin: 0;
-	padding: 0;
-	border: 0;
-	font-size: 15.5px;
-	line-height: 1.6;
-	letter-spacing: -0.005em;
-	text-wrap: pretty;
-}
-
-.bp-quote__by {
-	margin-top: auto;
+.bp-forum__panel {
+	padding: 32px 36px;
+	background: var(--m-panel);
+	border: 1px solid var(--m-line-strong);
+	border-radius: 20px;
 	display: flex;
 	align-items: center;
-	gap: 11px;
-}
-
-.bp-quote__avatar {
-	width: 34px;
-	height: 34px;
-	flex: none;
-	border-radius: 999px;
-	background: var(--m-thead);
-	border: 1px dashed var(--m-line-strong);
-}
-
-.bp-quote__by b {
-	display: block;
-	font-size: 13px;
-	font-weight: 600;
-}
-
-.bp-quote__by > span > span {
-	display: block;
-	font-size: 12px;
-	color: var(--m-muted);
-}
-
-.bp-logos {
-	margin: 28px auto 0;
-	list-style: none;
-	display: flex;
-	align-items: center;
+	justify-content: space-between;
 	flex-wrap: wrap;
 	gap: 28px;
 }
 
-.bp-logos img {
-	display: block;
-	height: 26px;
-	width: auto;
+.bp-forum__copy {
+	max-width: 640px;
+}
+
+.bp-forum__title {
+	margin: 8px 0 0;
+}
+
+.bp-forum__body {
+	margin: 12px 0 0;
+	font-size: 15px;
+	line-height: 1.65;
+	color: var(--m-muted);
+	text-wrap: pretty;
+}
+
+.bp-forum__link {
+	flex: none;
+}
+
+@media (max-width: 700px) {
+	.bp-forum__panel {
+		padding: 26px 22px;
+	}
+	.bp-forum__link {
+		width: 100%;
+		justify-content: center;
+	}
 }
 
 /* -- FAQ --------------------------------------------------------------------------------- */

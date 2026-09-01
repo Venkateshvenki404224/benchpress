@@ -669,6 +669,19 @@ Built js/erpnext.bundle.js in 12.4s</pre>
 	</div>
 </section>
 
+<section class="bp-forum" data-r="sec">
+	<div class="bp-shell" data-r="pad">
+		<div class="bp-forum__panel">
+			<div class="bp-forum__copy">
+				<p class="bp-eyebrow bp-eyebrow--light">{{ settings.forum_eyebrow | e }}</p>
+				<h2 class="bp-h2 bp-forum__title">{{ settings.forum_title | e }}</h2>
+				<p class="bp-forum__body">{{ settings.forum_body | e }}</p>
+			</div>
+			<a class="bp-btn bp-btn--lg bp-btn--primary bp-forum__link" href="{{ settings.forum_link_url | e }}" target="_blank" rel="noopener">{{ settings.forum_link_label | e }}{{ arrow_right("bp-btn__icon") }}</a>
+		</div>
+	</div>
+</section>
+
 {%- if settings.faq_items %}
 <section class="bp-faq" data-r="sec">
 	<div class="bp-shell bp-faq__shell" data-r="pad">
