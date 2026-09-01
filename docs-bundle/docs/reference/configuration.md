@@ -3,7 +3,7 @@ title: Configuration
 description: Where each BenchPress setting lives — build arguments that need a
   rebuild, runtime environment that needs a restart, and DocType fields that
   apply on save.
-lastModified: "2026-08-31T22:27:49-04:00"
+lastModified: "2026-09-01T13:47:42-04:00"
 lastAuthor: Venkatesh
 ---
 # Configuration
@@ -90,8 +90,8 @@ and an install that runs labs for one team has no use for the marketing pages
 of the hosted service. With the key absent, `/`, `/landing`, `/about`,
 `/contact` and `/signup` are not found, `/login` serves Frappe's own login
 form, the three guest form endpoints refuse, `Website Settings → Home Page` is
-left as the operator set it, and the six transactional email templates are not
-created.
+left as the operator set it, and the seven transactional email templates are
+not created.
 
 Set it only on a deployment that is the public site:
 
@@ -102,7 +102,7 @@ bench --site <site> clear-cache
 docker compose restart backend
 ```
 
-The second command plants the page copy, the six mail templates and the home
+The second command plants the page copy, the seven mail templates and the home
 page. Run it every time you set the key: the seeding patch is marked as run on
 a fresh install whether or not the key was set, so a migrate will not plant
 them later. It never overwrites an edit.

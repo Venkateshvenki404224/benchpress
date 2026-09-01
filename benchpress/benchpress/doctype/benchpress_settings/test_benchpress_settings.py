@@ -10,8 +10,15 @@ is invisible to anyone testing as Administrator, which is why it is asserted
 here rather than left to manual checking.
 """
 
+from unittest.mock import patch
+
 import frappe
 from frappe.tests import IntegrationTestCase
+
+from benchpress.benchpress.doctype.benchpress_settings.benchpress_settings import (
+	HOST_NAME_KEY,
+	claim_host_name,
+)
 
 EXTRA_TEST_RECORD_DEPENDENCIES = []
 IGNORE_TEST_RECORD_DEPENDENCIES = []
@@ -93,3 +100,40 @@ class IntegrationTestBenchPressSettings(IntegrationTestCase):
 		settings.save(ignore_permissions=True)
 		# Restores a singleton the test committed through the real save path.
 		frappe.db.commit()  # nosemgrep
+
+
+class IntegrationTestHostName(IntegrationTestCase):
+	"""`host_name` is what keeps a mailed link off `http://frontend/`."""
+
+	def setUp(self):
+		self.written = patch(
+			"benchpress.benchpress.doctype.benchpress_settings.benchpress_settings.update_site_config"
+		).start()
+		self.addCleanup(patch.stopall)
+		# Patched, not written: the real key belongs to the site, not to a test run.
+		patch.dict(frappe.conf, {HOST_NAME_KEY: None}).start()
+
+	def test_a_bench_zone_becomes_the_site_url(self):
+		claim_host_name("benchpress.cloud")
+
+		self.written.assert_called_once_with(HOST_NAME_KEY, "https://benchpress.cloud")
+		self.assertEqual(frappe.conf.get(HOST_NAME_KEY), "https://benchpress.cloud")
+
+	def test_an_empty_bench_zone_writes_nothing(self):
+		claim_host_name("")
+		claim_host_name(None)
+		claim_host_name("   ")
+
+		self.written.assert_not_called()
+
+	def test_localhost_writes_nothing(self):
+		claim_host_name("localhost")
+
+		self.written.assert_not_called()
+
+	def test_the_key_is_not_rewritten_when_it_already_agrees(self):
+		frappe.conf[HOST_NAME_KEY] = "https://benchpress.cloud"
+
+		claim_host_name("benchpress.cloud")
+
+		self.written.assert_not_called()

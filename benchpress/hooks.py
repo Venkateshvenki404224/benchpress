@@ -159,11 +159,17 @@ has_permission = {
 
 # DocType Class
 # ---------------
-# Override standard doctype classes
+# Extend standard doctype classes with a mixin
 
-# override_doctype_class = {
-# 	"ToDo": "custom_app.overrides.CustomToDo"
-# }
+# One method: the password reset mail. `User.send_login_mail` forces `with_container`, so the
+# framework's white masthead cannot be turned off from a template — and shadowing
+# `templates/emails/password_reset.html` alone would leave the mail with two brand bars.
+#
+# A mixin rather than `override_doctype_class`: that replaces the controller class, so only one
+# app can own a DocType, and the frappe semgrep rules block it.
+extend_doctype_class = {
+	"User": "benchpress.user.BenchPressPasswordResetMixin",
+}
 
 # Document Events
 # ---------------

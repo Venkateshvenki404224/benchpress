@@ -4,14 +4,22 @@
 from unittest.mock import patch
 
 import frappe
+from frappe.model.base_document import get_controller
 from frappe.tests import IntegrationTestCase
+from frappe.utils import get_url
 
 from benchpress import contact, emails
+from benchpress.patches.refresh_approval_mail import DEAD_PROMISE
+from benchpress.patches.refresh_approval_mail import execute as refresh_approval_mail
+from benchpress.user import BenchPressPasswordResetMixin
 
 REQUESTER = "emails-requester@example.com"
 SENDER = "emails-sender@example.com"
 ADMIN = "emails-admin@example.com"
 ADMIN_ROLE = "BenchPress Admin"
+ROLE_HOLDER = "emails-role-holder@example.com"
+SET_PASSWORD_URL = "https://benchpress.example/update-password?key=abc123"
+RESET_USER = "emails-reset@example.com"
 
 # `_message()` files under "Sales"; routing it at the admin pins who the notice reaches.
 ROUTED_TO_ADMIN = ({"label": "Sales", "route_to_email": ADMIN},)
@@ -85,20 +93,27 @@ class TestEmails(IntegrationTestCase):
 		self.assertEqual(self.sent["subject"], "Your BenchPress access request — REQ-A1B2-C3D4")
 		self.assertIn("REQ-A1B2-C3D4", self.sent["message"])
 
-	def test_the_admin_notice_names_the_requester_and_the_company(self):
-		with patch.object(emails, "admin_recipients", return_value=[ADMIN]):
+	def test_the_operator_notice_names_the_requester_and_the_company(self):
+		with patch.dict(frappe.conf, {contact.NOTIFY_KEY: ADMIN}):
 			emails.notify_admins_of_access_request(_entry())
 
 		self.assertEqual(self.sent["recipients"], [ADMIN])
 		self.assertEqual(self.sent["subject"], "Access request from Priya Nair (Kettle Works)")
 		self.assertIn("Two interns<br>starting on Monday", self.sent["message"])
 
-	def test_the_approval_goes_to_the_requester_and_carries_no_password(self):
-		emails.send_access_request_approved(_entry())
+	def test_the_approval_goes_to_the_requester_and_carries_the_way_in(self):
+		emails.send_access_request_approved(_entry(), set_password_url=SET_PASSWORD_URL)
 
 		self.assertEqual(self.sent["recipients"], [REQUESTER])
 		self.assertEqual(self.sent["subject"], "Your BenchPress account is open")
-		self.assertIn("separate welcome email", self.sent["message"])
+		self.assertIn("Set your password", self.sent["message"])
+		self.assertIn(SET_PASSWORD_URL, self.sent["message"])
+
+	def test_the_approval_offers_the_sign_in_door_when_there_is_no_link(self):
+		emails.send_access_request_approved(_entry())
+
+		self.assertNotIn("Set your password", self.sent["message"])
+		self.assertIn("Sign in", self.sent["message"])
 
 	def test_the_decline_carries_the_reason_and_the_self_hosting_door(self):
 		emails.send_access_request_rejected(_entry(rejection_reason="Hosted access is invite-only."))
@@ -136,10 +151,48 @@ class TestEmails(IntegrationTestCase):
 		self.assertEqual(self.sent["recipients"], ["hello@benchpress.example"])
 
 	def test_nothing_is_queued_when_there_is_nobody_to_tell(self):
-		with patch.object(emails, "admin_recipients", return_value=[]):
+		with patch.object(contact, "notify_email", return_value=""):
 			emails.notify_admins_of_access_request(_entry())
 
 		self.mailer.assert_not_called()
+
+	def test_an_admin_role_holder_is_not_a_recipient(self):
+		self._install_role_holder()
+
+		with patch.dict(frappe.conf, {contact.NOTIFY_KEY: ADMIN}):
+			emails.notify_admins_of_access_request(_entry())
+
+		self.assertEqual(self.sent["recipients"], [ADMIN], "a role query is back in the recipient list")
+
+	# the password reset mail
+
+	def test_the_reset_mail_is_branded_and_signed_as_benchpress(self):
+		emails.send_password_reset(self._reset_user(), SET_PASSWORD_URL)
+
+		self.assertEqual(self.sent["recipients"], [RESET_USER])
+		self.assertEqual(self.sent["subject"], "Reset your BenchPress password")
+		self.assertIn(get_url(emails.LOGO_PATH), self.sent["message"])
+		self.assertIn('alt="BenchPress"', self.sent["message"])
+		self.assertIn("Thank you,<br>BenchPress", self.sent["message"])
+		self.assertIn(SET_PASSWORD_URL, self.sent["message"])
+		self.assertNotIn("Administrator", self.sent["message"])
+
+	def test_the_reset_mail_is_sent_at_once_and_redacted_after(self):
+		emails.send_password_reset(self._reset_user(), SET_PASSWORD_URL)
+
+		self.assertTrue(self.sent["now"], "a queued reset mail waits on the scheduler")
+		self.assertTrue(self.sent["redact_message_after_send"], "the key would stay in Email Queue")
+
+	def test_the_framework_reaches_the_branded_mail(self):
+		user = self._reset_user()
+
+		user._reset_password(send_email=True)
+
+		self.assertIn(RESET_USER, self.sent["recipients"])
+		self.assertEqual(self.sent["subject"], "Reset your BenchPress password")
+
+	def test_the_user_class_carries_the_mixin(self):
+		self.assertTrue(issubclass(get_controller("User"), BenchPressPasswordResetMixin))
 
 	# email templates
 
@@ -162,6 +215,27 @@ class TestEmails(IntegrationTestCase):
 
 		self.assertEqual(self.sent["subject"], "Welcome aboard, Priya Nair")
 		self.assertEqual(self.sent["message"], "<p>REQ-A1B2-C3D4</p>")
+
+	def test_a_row_that_still_promises_a_welcome_mail_is_re_seeded(self):
+		self._install_template(
+			emails.ACCESS_APPROVED, subject="x", body=f"<p>the link in the {DEAD_PROMISE}</p>"
+		)
+
+		refresh_approval_mail()
+
+		body = frappe.db.get_value("Email Template", emails.ACCESS_APPROVED, "response_html")
+		self.assertNotIn(DEAD_PROMISE, body)
+		self.assertIn("Set your password", body)
+
+	def test_a_row_that_no_longer_promises_one_is_left_alone(self):
+		self._install_template(emails.ACCESS_APPROVED, subject="x", body="<p>operator copy</p>")
+
+		refresh_approval_mail()
+
+		self.assertEqual(
+			frappe.db.get_value("Email Template", emails.ACCESS_APPROVED, "response_html"),
+			"<p>operator copy</p>",
+		)
 
 	def test_every_shipped_body_renders_from_an_empty_document(self):
 		bare = frappe._dict({"name": REQUESTER, "email": SENDER, "sender_name": ""})
@@ -211,19 +285,24 @@ class TestEmails(IntegrationTestCase):
 
 		self.assertEqual(self.sent["message"], "<p>Ampersand &amp; co</p>")
 
-	# admin recipients
-
-	def test_admin_recipients_are_the_enabled_role_holders(self):
-		self._install_admin_user()
-
-		self.assertIn(ADMIN, emails.admin_recipients())
-
-	def test_a_disabled_admin_is_not_a_recipient(self):
-		self._install_admin_user(enabled=0)
-
-		self.assertNotIn(ADMIN, emails.admin_recipients())
-
 	# helpers
+
+	def _reset_user(self):
+		self.addCleanup(self._drop_reset_user)
+		self._drop_reset_user()
+		return frappe.get_doc(
+			{
+				"doctype": "User",
+				"email": RESET_USER,
+				"first_name": "Reset",
+				"last_name": "Person",
+				"send_welcome_email": 0,
+			}
+		).insert(ignore_permissions=True)
+
+	def _drop_reset_user(self) -> None:
+		if frappe.db.exists("User", RESET_USER):
+			frappe.delete_doc("User", RESET_USER, force=True, ignore_permissions=True)
 
 	def _install_template(self, name: str, subject: str, body: str) -> None:
 		if frappe.db.exists("Email Template", name):
@@ -253,23 +332,22 @@ class TestEmails(IntegrationTestCase):
 			frappe.delete_doc("Email Template", name, force=True, ignore_permissions=True)
 		frappe.clear_cache(doctype="Email Template")
 
-	def _install_admin_user(self, enabled: int = 1) -> None:
-		self.addCleanup(self._drop_admin_user)
-		self._drop_admin_user()
+	def _install_role_holder(self) -> None:
+		self.addCleanup(self._drop_role_holder)
+		self._drop_role_holder()
 		user = frappe.get_doc(
 			{
 				"doctype": "User",
-				"email": ADMIN,
+				"email": ROLE_HOLDER,
 				"first_name": "Emails",
 				"last_name": "Admin",
 				"user_type": "System User",
-				"enabled": enabled,
 				"send_welcome_email": 0,
 			}
 		)
 		user.append("roles", {"role": ADMIN_ROLE})
 		user.insert(ignore_permissions=True)
 
-	def _drop_admin_user(self) -> None:
-		if frappe.db.exists("User", ADMIN):
-			frappe.delete_doc("User", ADMIN, force=True, ignore_permissions=True)
+	def _drop_role_holder(self) -> None:
+		if frappe.db.exists("User", ROLE_HOLDER):
+			frappe.delete_doc("User", ROLE_HOLDER, force=True, ignore_permissions=True)
