@@ -1,7 +1,7 @@
 # Copyright (c) 2026, Venkatesh and contributors
 # For license information, please see license.txt
 
-"""Transactional mail for the public site — six operator-editable `Email Template` rows."""
+"""Transactional mail — seven operator-editable `Email Template` rows."""
 
 import functools
 
@@ -10,7 +10,7 @@ from frappe.utils import cint, format_datetime, get_url, get_url_to_form
 from markupsafe import Markup, escape
 
 from benchpress import contact
-from benchpress.benchpress.site_content import REPO_URL
+from benchpress.benchpress.site_content import REPO_URL, asset_version
 from benchpress.credits import config
 from benchpress.permissions import ADMIN_ROLES
 
@@ -23,8 +23,12 @@ ACCESS_APPROVED = "BenchPress Access Approved"
 ACCESS_DECLINED = "BenchPress Access Declined"
 CONTACT_RECEIVED = "BenchPress Contact Message Received"
 CONTACT_FILED = "BenchPress Contact Message Filed"
+PASSWORD_RESET = "BenchPress Password Reset"
 
 TEMPLATE_DIR = "benchpress/templates/emails"
+
+# The header lockup, in the one variant that reads on the dark bar the templates draw it on.
+LOGO_PATH = "/assets/benchpress/images/logo/wordmark-on-dark.png"
 
 # Template name -> (subject, body file). The file is both the fallback body and the Desk seed.
 DEFAULTS = {
@@ -34,6 +38,7 @@ DEFAULTS = {
 	ACCESS_DECLINED: ("About your BenchPress access request", "access_declined.html"),
 	CONTACT_RECEIVED: ("We got your message", "contact_received.html"),
 	CONTACT_FILED: ("[{{ topic }}] {{ sender_name }}", "contact_filed.html"),
+	PASSWORD_RESET: ("Reset your BenchPress password", "password_reset.html"),
 }
 
 NO_COMPANY = "no company"
@@ -106,6 +111,21 @@ def notify_admins_of_contact(message) -> None:
 	_send(CONTACT_FILED, recipients, context, CONTACT, message.name, reply_to=message.email)
 
 
+def send_password_reset(user, link: str) -> None:
+	"""Frappe's own reset mail, in BenchPress's chrome. Raises so the caller can report a failure."""
+	body = _render(
+		PASSWORD_RESET,
+		{"full_name": user.get_fullname() or user.name, "email": user.name, "reset_url": link, **_urls()},
+	)
+	frappe.sendmail(
+		recipients=[user.name],
+		subject=body["subject"],
+		message=body["message"],
+		now=True,
+		redact_message_after_send=True,
+	)
+
+
 def admin_recipients() -> list[str]:
 	"""Enabled system users holding an admin role; the contact address when there are none."""
 	has_role = frappe.qb.DocType("Has Role")
@@ -127,7 +147,7 @@ def admin_recipients() -> list[str]:
 
 
 def seed_rows() -> list[dict]:
-	"""The six `Email Template` records as the seed hook should insert them."""
+	"""The seven `Email Template` records as the seed hook should insert them."""
 	# `use_html`, or the Text Editor would rewrite these hand-built tables on the first save.
 	return [
 		{
@@ -218,6 +238,7 @@ def _urls() -> dict:
 	return {
 		"site_url": get_url(),
 		"login_url": get_url("/login"),
+		"logo_url": f"{get_url(LOGO_PATH)}?v={asset_version()}",
 		"docs_url": "https://benchpress.cloud/docs",
 		"repo_url": REPO_URL,
 	}

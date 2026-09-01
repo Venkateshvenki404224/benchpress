@@ -4,17 +4,21 @@
 from unittest.mock import patch
 
 import frappe
+from frappe.model.base_document import get_controller
 from frappe.tests import IntegrationTestCase
+from frappe.utils import get_url
 
 from benchpress import contact, emails
 from benchpress.patches.refresh_approval_mail import DEAD_PROMISE
 from benchpress.patches.refresh_approval_mail import execute as refresh_approval_mail
+from benchpress.user import BenchPressPasswordResetMixin
 
 REQUESTER = "emails-requester@example.com"
 SENDER = "emails-sender@example.com"
 ADMIN = "emails-admin@example.com"
 ADMIN_ROLE = "BenchPress Admin"
 SET_PASSWORD_URL = "https://benchpress.example/update-password?key=abc123"
+RESET_USER = "emails-reset@example.com"
 
 # `_message()` files under "Sales"; routing it at the admin pins who the notice reaches.
 ROUTED_TO_ADMIN = ({"label": "Sales", "route_to_email": ADMIN},)
@@ -151,6 +155,36 @@ class TestEmails(IntegrationTestCase):
 
 		self.mailer.assert_not_called()
 
+	# the password reset mail
+
+	def test_the_reset_mail_is_branded_and_signed_as_benchpress(self):
+		emails.send_password_reset(self._reset_user(), SET_PASSWORD_URL)
+
+		self.assertEqual(self.sent["recipients"], [RESET_USER])
+		self.assertEqual(self.sent["subject"], "Reset your BenchPress password")
+		self.assertIn(get_url(emails.LOGO_PATH), self.sent["message"])
+		self.assertIn('alt="BenchPress"', self.sent["message"])
+		self.assertIn("Thank you,<br>BenchPress", self.sent["message"])
+		self.assertIn(SET_PASSWORD_URL, self.sent["message"])
+		self.assertNotIn("Administrator", self.sent["message"])
+
+	def test_the_reset_mail_is_sent_at_once_and_redacted_after(self):
+		emails.send_password_reset(self._reset_user(), SET_PASSWORD_URL)
+
+		self.assertTrue(self.sent["now"], "a queued reset mail waits on the scheduler")
+		self.assertTrue(self.sent["redact_message_after_send"], "the key would stay in Email Queue")
+
+	def test_the_framework_reaches_the_branded_mail(self):
+		user = self._reset_user()
+
+		user._reset_password(send_email=True)
+
+		self.assertIn(RESET_USER, self.sent["recipients"])
+		self.assertEqual(self.sent["subject"], "Reset your BenchPress password")
+
+	def test_the_user_class_carries_the_mixin(self):
+		self.assertTrue(issubclass(get_controller("User"), BenchPressPasswordResetMixin))
+
 	# email templates
 
 	def test_a_deleted_template_row_falls_back_to_the_shipped_body(self):
@@ -255,6 +289,23 @@ class TestEmails(IntegrationTestCase):
 		self.assertNotIn(ADMIN, emails.admin_recipients())
 
 	# helpers
+
+	def _reset_user(self):
+		self.addCleanup(self._drop_reset_user)
+		self._drop_reset_user()
+		return frappe.get_doc(
+			{
+				"doctype": "User",
+				"email": RESET_USER,
+				"first_name": "Reset",
+				"last_name": "Person",
+				"send_welcome_email": 0,
+			}
+		).insert(ignore_permissions=True)
+
+	def _drop_reset_user(self) -> None:
+		if frappe.db.exists("User", RESET_USER):
+			frappe.delete_doc("User", RESET_USER, force=True, ignore_permissions=True)
 
 	def _install_template(self, name: str, subject: str, body: str) -> None:
 		if frappe.db.exists("Email Template", name):
