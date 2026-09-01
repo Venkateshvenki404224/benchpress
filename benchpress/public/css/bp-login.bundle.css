@@ -1,6 +1,6 @@
 /* Log-in page — every class `benchpress/www/login.html` uses.
  *
- * `/login` loads `website.bundle.css`, `login.bundle.css`, `brand.css` and then this file.
+ * `/login` loads `website.bundle.css`, `login.bundle.css`, `bp-brand.bundle.css` and then this file.
  * `login.bundle.css` cannot be dropped and its selectors weigh 0-4-1 (`.for-login .page-card
  * .page-card-body input[type="text"]`), so a long selector here is buying specificity — check
  * what it is fighting before simplifying it. The `display` toggles on `.hide`, `.field-error`
@@ -647,7 +647,7 @@
 	font-size: 12.5px;
 }
 
-/* -- Breakpoints — only what is specific to this page; `brand.css` owns the rest. ----------- */
+/* -- Breakpoints — only what is specific to this page; `bp-brand.bundle.css` owns the rest. ----------- */
 
 @media (max-width: 900px) {
 	.bp-login__section {
@@ -659,7 +659,7 @@
 		padding-bottom: 56px;
 	}
 
-	/* `brand.css` sizes every `h1` at 34px below this width with `!important`. The card title is
+	/* `bp-brand.bundle.css` sizes every `h1` at 34px below this width with `!important`. The card title is
 	 * a control label, not a headline, so it needs an `!important` of its own to hold. */
 	.bp .bp-card__title {
 		font-size: 24px !important;

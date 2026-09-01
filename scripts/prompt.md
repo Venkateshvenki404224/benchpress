@@ -95,7 +95,7 @@ width; both light and dark mode; every form on it submits and shows its result.
   not write a block comment above a function or a rule explaining why the decision was made — that
   belongs in the commit message.
 - A `PostToolUse` hook caps docstrings at two lines. The hook is a ceiling, not a target.
-- Every colour comes from `benchpress/public/css/brand.css`. Never a raw hex value.
+- Every colour comes from `benchpress/public/css/bp-brand.bundle.css`. Never a raw hex value.
 - Load the `code-style` skill for any code change, and `frappe-app-dev` for any Frappe work.
 
 ## Before you commit

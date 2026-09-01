@@ -1,4 +1,4 @@
-/* Landing page — every class `benchpress/www/home.html` uses. Tokens come from `brand.css`.
+/* Landing page — every class `benchpress/www/home.html` uses. Tokens come from `bp-brand.bundle.css`.
  * The page wears Cobalt; the console block keeps the Espresso ramp of the real product. */
 
 /* -- Shell, type and controls ------------------------------------------------------------ */
@@ -2408,7 +2408,7 @@
 	color: var(--fg3);
 }
 
-/* -- Breakpoints — the ones only this page needs; `brand.css` owns the two the site shares. */
+/* -- Breakpoints — the ones only this page needs; `bp-brand.bundle.css` owns the two the site shares. */
 
 @media (max-width: 900px) {
 	.bp-tmpl {

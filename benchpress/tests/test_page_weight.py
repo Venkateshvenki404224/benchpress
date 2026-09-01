@@ -20,6 +20,7 @@ LOGIN_ROUTE = "/login"
 
 STYLESHEET = re.compile(r"website\.bundle\.[\w.]*css")
 SCRIPT = re.compile(r"frappe-web\.bundle\.[\w.]*js")
+BRAND_STYLESHEET = re.compile(r"bp-brand\.bundle\.\w+\.css")
 BOOT_PAYLOAD = "frappe.boot ="
 BODY_TOKEN = re.compile(r'<body[^>]*\bdata-csrf-token="([^"]*)"')
 
@@ -65,7 +66,7 @@ class TestPageWeight(IntegrationTestCase):
 	def test_every_marketing_page_still_links_the_brand_stylesheet(self):
 		for route in MARKETING_ROUTES:
 			with self.subTest(route=route):
-				self.assertIn("/assets/benchpress/css/brand.css", self.render(route))
+				self.assertIsNotNone(BRAND_STYLESHEET.search(self.render(route)))
 
 	def test_the_login_page_keeps_the_framework_assets(self):
 		html = self.render(LOGIN_ROUTE)
@@ -77,4 +78,3 @@ class TestPageWeight(IntegrationTestCase):
 			with self.subTest(route=route):
 				html = self.render(route, user="Administrator")
 				self.assertIsNotNone(BODY_TOKEN.search(html))
-

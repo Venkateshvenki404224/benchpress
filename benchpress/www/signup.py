@@ -1,8 +1,6 @@
 # Copyright (c) 2026, Venkatesh and contributors
 # For license information, please see license.txt
 
-import os
-
 import frappe
 from frappe.utils import cint, cstr, strip_html
 
@@ -23,15 +21,6 @@ DEFAULT_TITLE = "Request access — BenchPress"
 
 # Also `waitlist.join`'s keyword names: `posted_values()` hands the whole dict straight to it.
 FORM_FIELDS = ("email", "full_name", "company", "team_size", "intent", "expected_apps", "use_case")
-
-CACHE_BUST_PATHS = (
-	("public", "css", "brand.css"),
-	("public", "css", "signup.css"),
-	("public", "js", "site.js"),
-	("public", "js", "signup.js"),
-	("public", "images", "logo"),
-	("public", "manifest.json"),
-)
 
 no_cache = 1
 
@@ -68,7 +57,6 @@ def get_context(context):
 	context.og_image = settings.og_image
 	context.title = context.meta_title
 	context.metatags = preview_tags(context.title, context.meta_description, context.og_image)
-	context.asset_version = asset_version()
 	return context
 
 
@@ -113,18 +101,6 @@ def select_field(fieldname: str) -> frappe._dict:
 	options = [line.strip() for line in cstr(field.options).split("\n") if line.strip()]
 	fallback = options[0] if options else ""
 	return frappe._dict(options=options, default=cstr(field.default) or fallback)
-
-
-def asset_version() -> str:
-	"""Newest mtime among the assets this page links by plain filename."""
-	mtimes = []
-	for parts in CACHE_BUST_PATHS:
-		path = frappe.get_app_path("benchpress", *parts)
-		if os.path.isdir(path):
-			mtimes += [os.path.getmtime(os.path.join(path, name)) for name in os.listdir(path)]
-		elif os.path.exists(path):
-			mtimes.append(os.path.getmtime(path))
-	return str(int(max(mtimes))) if mtimes else "0"
 
 
 # Seed content: what an unset field falls back to, and what the seeder writes.

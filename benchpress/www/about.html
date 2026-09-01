@@ -59,7 +59,7 @@
 {% block title %}{{ (meta_title or title) | e }}{% endblock %}
 
 {% block head_include %}
-<link rel="stylesheet" href="/assets/benchpress/css/pages.css?v={{ asset_version | e }}">
+{{ include_style('bp-pages.bundle.css') }}
 {% endblock %}
 
 {% block page_content %}

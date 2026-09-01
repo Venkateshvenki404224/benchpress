@@ -36,7 +36,7 @@
 {% block title %}{{ (meta_title or title) | e }}{% endblock %}
 
 {% block head_include %}
-<link rel="stylesheet" href="/assets/benchpress/css/signup.css?v={{ asset_version | e }}">
+{{ include_style('bp-signup.bundle.css') }}
 {% endblock %}
 
 {% block page_content %}
@@ -220,5 +220,5 @@
 {% endblock %}
 
 {% block script %}
-<script defer src="/assets/benchpress/js/signup.js?v={{ asset_version | e }}"></script>
+{{ include_script('bp-signup.bundle.js') }}
 {% endblock %}

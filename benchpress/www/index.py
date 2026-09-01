@@ -21,16 +21,6 @@ VIDEO_DIRECTORY = ("public", "videos")
 HERO_VIDEO = "hero.mp4"
 HERO_POSTER = "hero-poster.jpg"
 
-CACHE_BUST_PATHS = (
-	("public", "css", "brand.css"),
-	("public", "css", "landing.css"),
-	("public", "js", "site.js"),
-	("public", "js", "landing.js"),
-	("public", "images", "logo"),
-	("public", "manifest.json"),
-	("public", "videos"),
-)
-
 no_cache = 1
 
 NO_COMMERCE = {
@@ -56,7 +46,6 @@ def get_context(context):
 	context.title = context.meta_title or DEFAULT_TITLE
 	context.metatags = preview_tags(context.title, context.meta_description, context.og_image)
 	context.repo_url = REPO_URL
-	context.asset_version = asset_version()
 	context.hero_media = hero_media(context.asset_version)
 	return context
 
@@ -78,15 +67,3 @@ def asset_url(filename: str, version: str) -> str | None:
 	if not os.path.exists(path):
 		return None
 	return f"/assets/benchpress/videos/{filename}?v={version}"
-
-
-def asset_version() -> str:
-	"""Newest mtime among the assets this page links by plain filename."""
-	mtimes = []
-	for parts in CACHE_BUST_PATHS:
-		path = frappe.get_app_path("benchpress", *parts)
-		if os.path.isdir(path):
-			mtimes += [os.path.getmtime(os.path.join(path, name)) for name in os.listdir(path)]
-		elif os.path.exists(path):
-			mtimes.append(os.path.getmtime(path))
-	return str(int(max(mtimes))) if mtimes else "0"

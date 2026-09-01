@@ -156,7 +156,7 @@
 {% block head_include %}
 {{ include_style('login.bundle.css') }}
 {% include "templates/includes/site_head.html" %}
-<link rel="stylesheet" href="/assets/benchpress/css/login.css?v={{ asset_version | e }}">
+{{ include_style('bp-login.bundle.css') }}
 {% endblock %}
 
 {#- The framework's chrome, blanked. These are the real block names; anything else is a no-op. -#}
@@ -311,9 +311,10 @@
 </div>
 {% endblock %}
 
-{#- No `defer`: `login.js` calls `login.route()` synchronously as this block parses, so anything
-  it needs must load ahead of it. It is included, never linked, so its `_()` calls render. -#}
+{#- `include_script` emits no `defer`, which is what this page needs: the framework's own
+  `login.js` below calls `login.route()` as this block parses, so anything it needs must load
+  ahead of it. That one is included, never linked, so its `_()` calls render. -#}
 {% block script %}
-<script src="/assets/benchpress/js/login.js?v={{ asset_version | e }}"></script>
+{{ include_script('bp-login.bundle.js') }}
 <script>{% include "templates/includes/login/login.js" %}</script>
 {% endblock %}

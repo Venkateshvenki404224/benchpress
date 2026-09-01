@@ -20,9 +20,7 @@ HEADER = re.compile(r'<header class="bp-header".*?</header>', re.S)
 FOOTER = re.compile(r'<footer class="bp-footer".*?</footer>', re.S)
 FOOTER_HREF = re.compile(r'<a class="bp-footer__link" href="([^"]+)"')
 
-# Each page fingerprints the assets it links, so the wordmark's `?v=` is the one thing that
-# legitimately differs between two copies of the same chrome.
-CACHE_BUST = re.compile(r"\?v=\d+")
+CACHE_BUST = re.compile(r"\?v=[\w.]+")
 
 
 class TestPublicChrome(IntegrationTestCase):

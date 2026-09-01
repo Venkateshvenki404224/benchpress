@@ -1,4 +1,4 @@
-/* `/signup` — request access. `brand.css` owns the palette, the type stack, the keyframes and
+/* `/signup` — request access. `bp-brand.bundle.css` owns the palette, the type stack, the keyframes and
  * the `data-r` breakpoints; the primitives it repeats from `home.html` are named to match. */
 
 /* Cobalt names no error colour and the Espresso ramp is fenced to the console mock, so the two
@@ -575,7 +575,7 @@
 	align-self: flex-start;
 }
 
-/* -- Narrow — only what `brand.css` cannot know about this page. --------------------------- */
+/* -- Narrow — only what `bp-brand.bundle.css` cannot know about this page. --------------------------- */
 
 @media (max-width: 900px) {
 	.bp-request__grid {

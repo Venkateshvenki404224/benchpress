@@ -4,7 +4,7 @@
 """The read side of the public site: the shipped copy, shaped the way each template reads it."""
 
 import frappe
-from frappe.utils import cint
+from frappe.utils import cint, get_build_version
 
 from benchpress.credits.config import SIGNUP_ROUTE, credits_enabled, waitlist_open
 from benchpress.request_cache import clear_local_cache, local_cache
@@ -69,6 +69,7 @@ def chrome_content() -> dict:
 		"console_route": CONSOLE_ROUTE,
 		"logout_method": LOGOUT_METHOD,
 		"csrf_token": session_csrf_token(),
+		"asset_version": asset_version(),
 	}
 
 
@@ -81,6 +82,11 @@ def preview_tags(title: str, description: str, image: str = "") -> dict:
 		"description": description,
 		"image": image or DEFAULT_OG_IMAGE,
 	}
+
+
+def asset_version() -> str:
+	"""One token for what the bundler does not hash: the icons, the manifest and the logos."""
+	return get_build_version()
 
 
 def session_csrf_token() -> str:

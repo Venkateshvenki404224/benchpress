@@ -1,8 +1,6 @@
 # Copyright (c) 2026, Venkatesh and contributors
 # For license information, please see license.txt
 
-import os
-
 import frappe
 from frappe.utils import cstr, strip_html
 
@@ -17,15 +15,6 @@ DEFAULT_TITLE = "Contact BenchPress"
 
 # Also `contact.submit`'s keyword names: `posted_values()` hands the whole dict straight to it.
 FORM_FIELDS = ("name", "email", "message", "topic")
-
-CACHE_BUST_PATHS = (
-	("public", "css", "brand.css"),
-	("public", "css", "pages.css"),
-	("public", "js", "site.js"),
-	("public", "js", "contact.js"),
-	("public", "images", "logo"),
-	("public", "manifest.json"),
-)
 
 no_cache = 1
 
@@ -55,7 +44,6 @@ def get_context(context):
 	context.og_image = settings.og_image
 	context.title = context.meta_title
 	context.metatags = preview_tags(context.title, context.meta_description, context.og_image)
-	context.asset_version = asset_version()
 	return context
 
 
@@ -110,18 +98,6 @@ def link_href(line: str) -> str:
 	if line.startswith(("http://", "https://")):
 		return line
 	return f"https://{line}" if "." in line else ""
-
-
-def asset_version() -> str:
-	"""Newest mtime among the assets this page links by plain filename."""
-	mtimes = []
-	for parts in CACHE_BUST_PATHS:
-		path = frappe.get_app_path("benchpress", *parts)
-		if os.path.isdir(path):
-			mtimes += [os.path.getmtime(os.path.join(path, name)) for name in os.listdir(path)]
-		elif os.path.exists(path):
-			mtimes.append(os.path.getmtime(path))
-	return str(int(max(mtimes))) if mtimes else "0"
 
 
 # Seed content: what the page renders, and what the seeder writes into Desk.

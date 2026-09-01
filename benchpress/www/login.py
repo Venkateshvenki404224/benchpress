@@ -3,13 +3,11 @@
 
 """`/login`: branded while the public site is on, Frappe's own page while it is off."""
 
-import os
-
 import frappe
 from frappe.utils import cint
 from frappe.www.login import get_context as frappe_login_context
 
-from benchpress.benchpress.site_content import chrome_content, preview_tags
+from benchpress.benchpress.site_content import asset_version, chrome_content, preview_tags
 from benchpress.public_site import public_site_enabled
 
 no_cache = True
@@ -35,14 +33,6 @@ LOGIN_SEED = {
 	"login_panel_eyebrow": "After you log in",
 	"login_panel_title": "A console, a credit balance, and one button that matters.",
 }
-
-CACHE_BUST_PATHS = (
-	("public", "css", "brand.css"),
-	("public", "css", "login.css"),
-	("public", "js", "site.js"),
-	("public", "js", "login.js"),
-	("public", "images", "logo"),
-)
 
 # The chrome keys `site_header.html` and `site_footer.html` read.
 FALLBACK_CHROME = {
@@ -77,7 +67,6 @@ def branded(context) -> dict:
 def with_chrome(context) -> dict:
 	content = page_context(LOGIN_SEED)
 	content.update(chrome_content())
-	content["asset_version"] = asset_version()
 	content["signup_prompt"] = signup_prompt(
 		content["login_signup_prompt"], cint(context.get("disable_signup"))
 	)
@@ -85,10 +74,10 @@ def with_chrome(context) -> dict:
 
 
 def without_chrome() -> dict:
-	"""The login card with the chrome keys emptied, and no disk read."""
+	"""The login card with the chrome keys emptied."""
 	content = page_context(LOGIN_SEED)
 	content.update(FALLBACK_CHROME)
-	content["asset_version"] = "0"
+	content["asset_version"] = asset_version()
 	content["signup_prompt"] = LOGIN_SEED["login_signup_prompt"]
 	return content
 
@@ -114,15 +103,3 @@ def signup_prompt(html: str, disable_signup: int) -> str:
 	if not disable_signup:
 		return html
 	return html.replace('href="#signup"', 'href="/signup"')
-
-
-def asset_version() -> str:
-	"""Newest mtime among the assets this page links by plain filename."""
-	mtimes = []
-	for parts in CACHE_BUST_PATHS:
-		path = frappe.get_app_path("benchpress", *parts)
-		if os.path.isdir(path):
-			mtimes += [os.path.getmtime(os.path.join(path, name)) for name in os.listdir(path)]
-		elif os.path.exists(path):
-			mtimes.append(os.path.getmtime(path))
-	return str(int(max(mtimes))) if mtimes else "0"

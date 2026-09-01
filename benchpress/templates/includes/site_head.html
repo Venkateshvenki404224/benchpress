@@ -17,16 +17,16 @@
 <link rel="manifest" href="/assets/benchpress/manifest.json?v={{ v | e }}">
 
 {#-
-  No `?v=` on these hrefs, so they match the @font-face `src` in brand.css exactly and the browser
-  reuses one fetch. `crossorigin` is required even same-origin.
+  No `?v=` on these hrefs, so they match the @font-face `src` in the brand bundle exactly
+  and the browser reuses one fetch. `crossorigin` is required even same-origin.
 -#}
 <link rel="preload" as="font" type="font/woff2" crossorigin href="/assets/benchpress/fonts/Poppins-800-latin.woff2">
 <link rel="preload" as="font" type="font/woff2" crossorigin href="/assets/benchpress/fonts/Poppins-600-latin.woff2">
 <link rel="preload" as="font" type="font/woff2" crossorigin href="/assets/benchpress/fonts/Poppins-400-latin.woff2">
 
-<link rel="stylesheet" href="/assets/benchpress/css/brand.css?v={{ v | e }}">
+{{ include_style('bp-brand.bundle.css') }}
 
-{#- Chrome-only CSS. Every colour is a brand.css token; this block carries no hex. -#}
+{#- Chrome-only CSS. Every colour is a brand-bundle token; this block carries no hex. -#}
 <style>
 .bp-sr{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
 .bp-skip{position:absolute;left:-9999px;top:0;z-index:100}
@@ -155,4 +155,5 @@ button.bp-navlink{border:0;background:none;font:inherit;line-height:1.2;cursor:p
 	observer.observe(document.documentElement, { childList: true, subtree: true });
 })();
 </script>
-<script defer src="/assets/benchpress/js/site.js?v={{ v | e }}"></script>
+{#- Its own tag, not `include_script`: that helper emits no `defer`, and this one is in the head. -#}
+<script defer src="{{ bundled_asset('bp-site.bundle.js') }}"></script>

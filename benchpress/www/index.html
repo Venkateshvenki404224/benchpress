@@ -72,7 +72,7 @@
 {% block title %}{{ (meta_title or title) | e }}{% endblock %}
 
 {% block head_include %}
-<link rel="stylesheet" href="/assets/benchpress/css/landing.css?v={{ asset_version | e }}">
+{{ include_style('bp-landing.bundle.css') }}
 {% endblock %}
 
 {% block page_content %}
@@ -719,5 +719,5 @@ Built js/erpnext.bundle.js in 12.4s</pre>
 {% endblock %}
 
 {% block script %}
-<script defer src="/assets/benchpress/js/landing.js?v={{ asset_version | e }}"></script>
+{{ include_script('bp-landing.bundle.js') }}
 {% endblock %}

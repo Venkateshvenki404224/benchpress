@@ -1,4 +1,4 @@
-/* `/about` and `/contact` — every class the two pages use. `brand.css` owns the palette, the
+/* `/about` and `/contact` — every class the two pages use. `bp-brand.bundle.css` owns the palette, the
  * type stack, the keyframes and the `data-r` breakpoints; the two pages share one file
  * because they share most of their vocabulary. */
 
@@ -892,10 +892,10 @@ a.bp-channel__body:focus-visible {
 	outline-offset: 2px;
 }
 
-/* -- Breakpoints — only what is specific to these two pages; `brand.css` owns the rest. --- */
+/* -- Breakpoints — only what is specific to these two pages; `bp-brand.bundle.css` owns the rest. --- */
 
 @media (max-width: 900px) {
-	/* `brand.css` drops every h1–h3 to a section-title size below 900px, with `!important`. These
+	/* `bp-brand.bundle.css` drops every h1–h3 to a section-title size below 900px, with `!important`. These
 	 * pages use real headings for hierarchy, so each restates its size at the same weight. */
 	.bp .bp-eyebrow {
 		font-size: 11px !important;

@@ -26,12 +26,13 @@ EMAIL = "gate@example.com"
 
 # Structure only Frappe's own login card renders. The branded template carries none of it.
 FRAMEWORK_MARKERS = ("page-card-actions", "app-logo", "es-line-email")
-# Not `/assets/benchpress/` wholesale: the `app_logo_url` hook is app-wide, not public-site
-# branding, so Frappe's own page still carries the logo of whichever app is installed.
+# Anchored on the attribute, and never on `/assets/benchpress/` wholesale: the `app_logo_url` hook
+# is app-wide, and Frappe's own page serialises the whole build manifest into `frappe.boot`, so
+# both the logo and every bundle path are on the framework page too.
 BRANDED_MARKERS = (
-	"bp-login",
-	"/assets/benchpress/css/",
-	"/assets/benchpress/js/",
+	'class="bp bp-login"',
+	'href="/assets/benchpress/dist/css/bp-login.bundle.',
+	'src="/assets/benchpress/dist/js/bp-login.bundle.',
 	"bp-film",
 	LOGIN_SEED["login_panel_title"],
 )

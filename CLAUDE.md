@@ -69,7 +69,7 @@ given one.
 | `/about` | `www/about.html` | `www/about.py` | `site_content.ABOUT_SEED` |
 | `/contact` | `www/contact.html` | `www/contact.py` | `www/contact.CONTACT_SEED` |
 
-Nine facts that are easy to break:
+Ten facts that are easy to break:
 
 - `www/login.html` deliberately shadows `frappe/www/login.html`, because
   `TemplatePage.set_template_path` searches `reversed(get_installed_apps())`.
@@ -107,10 +107,10 @@ Nine facts that are easy to break:
   them in a page controller. Sign-out is a form, not a link — both of Frappe's
   logout endpoints are POST-only.
 - The header is fixed, so every page's first section has to clear it. The dock's
-  height at each breakpoint is `--m-header-height` in `brand.css`; the desktop
-  clearance is `calc(var(--m-header-height) + …)` in the page's own stylesheet, and
-  below 900px `brand.css` does it through `data-r~="hero"` on the section's inner
-  element.
+  height at each breakpoint is `--m-header-height` in `bp-brand.bundle.css`; the
+  desktop clearance is `calc(var(--m-header-height) + …)` in the page's own stylesheet,
+  and below 900px `bp-brand.bundle.css` does it through `data-r~="hero"` on the
+  section's inner element.
 - Every page renders from its constant and reads nothing at render time. There is
   nothing behind a page in Desk any more, so a section that should not appear is
   absent from the template rather than switched off.
@@ -124,19 +124,33 @@ Nine facts that are easy to break:
   which overwrites an edited body.
 - The four marketing pages extend `benchpress/templates/public_base.html`, not
   `templates/web.html`. It emits no framework stylesheet, no script bundle and no
-  boot payload, so `site.js` takes the request token from `data-csrf-token` on the
-  body. `/login` keeps `templates/base.html`, because Frappe's login script needs
-  both bundles. The element defaults the framework used to supply — inherited
+  boot payload, so `bp-site.bundle.js` takes the request token from `data-csrf-token`
+  on the body. `/login` keeps `templates/base.html`, because Frappe's login script
+  needs both bundles. The element defaults the framework used to supply — inherited
   weight, line height and letter spacing, and the bare-element margins — are in
-  `brand.css` on `.bp` and under `:where(.bp)`.
+  `bp-brand.bundle.css` on `.bp` and under `:where(.bp)`.
+- Every stylesheet and script the pages load is a bundler entry point, emitted with
+  `include_style` / `include_script` / `bundled_asset` and served under
+  `/assets/benchpress/dist/` with a content hash. Editing one needs
+  `bench build --app benchpress`; without a build the helpers hand back a path that
+  404s. The `bp-` prefix is not decoration — `sites/assets/assets.json` is keyed by
+  bare filename across every installed app, and `login.bundle.css` is Frappe's.
+  The chrome pair is emitted by `site_head.html`, not by the `web_include_css` /
+  `web_include_js` hooks: those are site-wide, and would put the marketing CSS on
+  every website route of a self-hosted install.
+  A stylesheet's hash changes on every build even when the file did not: Frappe's
+  postcss step copies the source through a temp directory with a random name, and
+  that name lands in the sourcemap the hash covers. Scripts are content-stable.
+  Whatever the bundler does not hash — the icons, the manifest, the logos and the hero
+  video — takes one `?v=` token from `site_content.asset_version`.
 
 The contract the five pages were built against is
 [internal/public-site-spec.md](internal/public-site-spec.md).
 
 ## Cobalt is the palette of record
 
-Every token lives in `benchpress/public/css/brand.css`. A new marketing surface
-uses those tokens and never a raw hex value.
+Every token lives in `benchpress/public/css/bp-brand.bundle.css`. A new marketing
+surface uses those tokens and never a raw hex value.
 
 - `:root` holds the mode-independent marketing tokens (`--m-ink`, `--m-blue`,
   `--m-panel` and the rest). `.bp[data-mode="dark"]` and `.bp[data-mode="light"]`
@@ -153,8 +167,8 @@ uses those tokens and never a raw hex value.
   Cobalt value back to it.
 - Cobalt names no error color. `/signup` declares a page-scoped `--bp-danger`
   set, and `/login` falls back to Frappe's own red tokens. Promoting one
-  mode-varying `--danger` triplet into `brand.css` would let both stop inventing
-  one.
+  mode-varying `--danger` triplet into `bp-brand.bundle.css` would let both stop
+  inventing one.
 
 ## Everyday commands
 
