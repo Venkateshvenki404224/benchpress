@@ -39,9 +39,10 @@ def public_form(limit: int):
 
 def spend(identity: str, limit: int) -> None:
 	key = frappe.cache.make_key(f"rl:{identity}")
-	if not frappe.cache.get(key):
-		frappe.cache.setex(key, HOUR, 0)
-	if frappe.cache.incrby(key, 1) > limit:
+	spent = frappe.cache.incrby(key, 1)
+	if spent == 1:
+		frappe.cache.expire(key, HOUR)
+	if spent > limit:
 		frappe.throw(
 			_("You hit the rate limit because of too many requests. Please try after sometime."),
 			frappe.RateLimitExceededError,
