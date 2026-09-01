@@ -47,9 +47,14 @@ class WaitlistEntry(Document):
 		if decided_now:
 			self.status = "Approved"
 			self.save(ignore_permissions=True)
+		created_now = not frappe.db.exists("User", self.email)
 		user = self.invite_user()
 		if decided_now:
-			send_notice("send_access_request_approved", self)
+			send_notice(
+				"send_access_request_approved",
+				self,
+				set_password_url=set_password_url(user) if created_now else "",
+			)
 		return user
 
 	def reject(self, reason: str = "") -> None:
@@ -75,7 +80,9 @@ class WaitlistEntry(Document):
 		user = frappe.new_doc("User")
 		user.email = self.email
 		user.first_name = self.full_name or self.email.split("@")[0]
-		user.send_welcome_email = 1
+		# The approval mail carries the set-password link itself, so Frappe's welcome mail would
+		# be a second mail saying the same thing — and a second key, invalidating the first.
+		user.send_welcome_email = 0
 		user.append("roles", {"role": ACCESS_ROLE})
 		user.insert(ignore_permissions=True)
 		# After the insert, not before: `User.set_system_user` re-derives the type from role desk
@@ -93,12 +100,21 @@ def derive_reference(email: str) -> str:
 	return f"{REFERENCE_PREFIX}-{digest[:4].upper()}-{digest[4:8].upper()}"
 
 
-def send_notice(sender: str, entry) -> None:
+def set_password_url(user: str) -> str:
+	"""Frappe's own one-time key, so the approval mail carries the way in. Never raises."""
+	try:
+		return frappe.get_doc("User", user)._reset_password()
+	except Exception:
+		frappe.log_error(title="BenchPress set-password link failed", message=frappe.get_traceback())
+		return ""
+
+
+def send_notice(sender: str, entry, **context) -> None:
 	"""Fire one `benchpress.emails` sender. Never raises — mail must not undo a decision."""
 	try:
 		from benchpress import emails
 
-		getattr(emails, sender)(entry)
+		getattr(emails, sender)(entry, **context)
 	except Exception:
 		frappe.log_error(
 			title=f"BenchPress access request email failed: {sender}",

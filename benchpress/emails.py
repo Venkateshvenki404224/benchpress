@@ -70,10 +70,11 @@ def notify_admins_of_access_request(entry) -> None:
 
 
 @best_effort
-def send_access_request_approved(entry) -> None:
-	"""The decision, never a credential — Frappe's welcome mail carries the password link."""
+def send_access_request_approved(entry, set_password_url: str = "") -> None:
+	"""The decision and the way in, in one mail — a second mail can be undone by a stalled queue."""
 	context = _request_context(entry)
 	context["free_credits"] = cint(config.settings().signup_grant_credits)
+	context["set_password_url"] = set_password_url
 	_send(ACCESS_APPROVED, [entry.name], context, WAITLIST, entry.name)
 
 

@@ -1,10 +1,11 @@
 <!--
-	BenchPress Access Approved — the decision, and never a credential.
+	BenchPress Access Approved — the decision and the way in, in one mail.
 
-	The password-set link travels in Frappe's own welcome mail. This one must read correctly
-	whether that mail was sent or the account already existed, so it points at the login page and
-	names the welcome mail rather than assuming it.
+	`set_password_url` is Frappe's one-time key, and is set only for an account this approval
+	created. An address that already had a login gets the sign-in door instead, so the mail reads
+	correctly either way.
 -->
+{% set action_url = set_password_url or login_url %}
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#F6F8FF;">
 	<tr>
 		<td align="center" style="padding:24px 12px;font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
@@ -25,7 +26,7 @@
 					<td style="padding:30px 28px 0;">
 						<div style="font-size:12px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:#2FB714;">Approved</div>
 						<h1 style="margin:10px 0 0;font-family:'Poppins','Segoe UI',Helvetica,Arial,sans-serif;font-size:24px;line-height:32px;font-weight:800;color:#0A1024;">Your account is open, {{ full_name | e }}.</h1>
-						<p style="margin:14px 0 0;font-size:15px;line-height:24px;color:#4E5A7C;">Request {{ reference | e }} is approved. Sign in with {{ email | e }} and deploy your first lab — a template picks the Frappe version and the app set, and the site is usually answering in about ninety seconds.</p>
+						<p style="margin:14px 0 0;font-size:15px;line-height:24px;color:#4E5A7C;">Request {{ reference | e }} is approved. Your login is {{ email | e }} — deploy your first lab — a template picks the Frappe version and the app set, and the site is usually answering in about ninety seconds.</p>
 					</td>
 				</tr>
 
@@ -49,12 +50,16 @@
 						<table role="presentation" cellpadding="0" cellspacing="0" border="0">
 							<tr>
 								<td bgcolor="#1F5CF5" style="border-radius:10px;">
-									<a href="{{ login_url | e }}" style="display:inline-block;padding:13px 22px;font-family:'Poppins','Segoe UI',Helvetica,Arial,sans-serif;font-size:15px;font-weight:700;color:#FFFFFF;text-decoration:none;">Sign in</a>
+									<a href="{{ action_url | e }}" style="display:inline-block;padding:13px 22px;font-family:'Poppins','Segoe UI',Helvetica,Arial,sans-serif;font-size:15px;font-weight:700;color:#FFFFFF;text-decoration:none;">{% if set_password_url %}Set your password{% else %}Sign in{% endif %}</a>
 								</td>
 							</tr>
 						</table>
-						<p style="margin:12px 0 0;font-family:'SFMono-Regular',Consolas,Menlo,monospace;font-size:12px;line-height:19px;color:#8B94AE;"><a href="{{ login_url | e }}" style="color:#8B94AE;text-decoration:none;">{{ login_url | e }}</a></p>
-						<p style="margin:10px 0 0;font-size:13px;line-height:20px;color:#8B94AE;">If you have not set a password yet, use the link in the separate welcome email — we never put one in this message.</p>
+						<p style="margin:12px 0 0;font-family:'SFMono-Regular',Consolas,Menlo,monospace;font-size:12px;line-height:19px;color:#8B94AE;"><a href="{{ action_url | e }}" style="color:#8B94AE;text-decoration:none;">{{ action_url | e }}</a></p>
+						{% if set_password_url %}
+						<p style="margin:10px 0 0;font-size:13px;line-height:20px;color:#8B94AE;">The link sets your password once and then expires. If it has, ask for a new one with Forgot Password at <a href="{{ login_url | e }}" style="color:#8B94AE;text-decoration:underline;">{{ login_url | e }}</a>.</p>
+						{% else %}
+						<p style="margin:10px 0 0;font-size:13px;line-height:20px;color:#8B94AE;">This address already has a login. Use Forgot Password on the sign-in page if you need a new one.</p>
+						{% endif %}
 					</td>
 				</tr>
 

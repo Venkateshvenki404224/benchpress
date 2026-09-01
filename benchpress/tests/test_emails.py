@@ -7,11 +7,14 @@ import frappe
 from frappe.tests import IntegrationTestCase
 
 from benchpress import contact, emails
+from benchpress.patches.refresh_approval_mail import DEAD_PROMISE
+from benchpress.patches.refresh_approval_mail import execute as refresh_approval_mail
 
 REQUESTER = "emails-requester@example.com"
 SENDER = "emails-sender@example.com"
 ADMIN = "emails-admin@example.com"
 ADMIN_ROLE = "BenchPress Admin"
+SET_PASSWORD_URL = "https://benchpress.example/update-password?key=abc123"
 
 # `_message()` files under "Sales"; routing it at the admin pins who the notice reaches.
 ROUTED_TO_ADMIN = ({"label": "Sales", "route_to_email": ADMIN},)
@@ -93,12 +96,19 @@ class TestEmails(IntegrationTestCase):
 		self.assertEqual(self.sent["subject"], "Access request from Priya Nair (Kettle Works)")
 		self.assertIn("Two interns<br>starting on Monday", self.sent["message"])
 
-	def test_the_approval_goes_to_the_requester_and_carries_no_password(self):
-		emails.send_access_request_approved(_entry())
+	def test_the_approval_goes_to_the_requester_and_carries_the_way_in(self):
+		emails.send_access_request_approved(_entry(), set_password_url=SET_PASSWORD_URL)
 
 		self.assertEqual(self.sent["recipients"], [REQUESTER])
 		self.assertEqual(self.sent["subject"], "Your BenchPress account is open")
-		self.assertIn("separate welcome email", self.sent["message"])
+		self.assertIn("Set your password", self.sent["message"])
+		self.assertIn(SET_PASSWORD_URL, self.sent["message"])
+
+	def test_the_approval_offers_the_sign_in_door_when_there_is_no_link(self):
+		emails.send_access_request_approved(_entry())
+
+		self.assertNotIn("Set your password", self.sent["message"])
+		self.assertIn("Sign in", self.sent["message"])
 
 	def test_the_decline_carries_the_reason_and_the_self_hosting_door(self):
 		emails.send_access_request_rejected(_entry(rejection_reason="Hosted access is invite-only."))
@@ -162,6 +172,27 @@ class TestEmails(IntegrationTestCase):
 
 		self.assertEqual(self.sent["subject"], "Welcome aboard, Priya Nair")
 		self.assertEqual(self.sent["message"], "<p>REQ-A1B2-C3D4</p>")
+
+	def test_a_row_that_still_promises_a_welcome_mail_is_re_seeded(self):
+		self._install_template(
+			emails.ACCESS_APPROVED, subject="x", body=f"<p>the link in the {DEAD_PROMISE}</p>"
+		)
+
+		refresh_approval_mail()
+
+		body = frappe.db.get_value("Email Template", emails.ACCESS_APPROVED, "response_html")
+		self.assertNotIn(DEAD_PROMISE, body)
+		self.assertIn("Set your password", body)
+
+	def test_a_row_that_no_longer_promises_one_is_left_alone(self):
+		self._install_template(emails.ACCESS_APPROVED, subject="x", body="<p>operator copy</p>")
+
+		refresh_approval_mail()
+
+		self.assertEqual(
+			frappe.db.get_value("Email Template", emails.ACCESS_APPROVED, "response_html"),
+			"<p>operator copy</p>",
+		)
 
 	def test_every_shipped_body_renders_from_an_empty_document(self):
 		bare = frappe._dict({"name": REQUESTER, "email": SENDER, "sender_name": ""})
