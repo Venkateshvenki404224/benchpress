@@ -1,0 +1,96 @@
+<!--
+	BenchPress Access Approved — the decision, and never a credential.
+
+	The password-set link travels in Frappe's own welcome mail. This one must read correctly
+	whether that mail was sent or the account already existed, so it points at the login page and
+	names the welcome mail rather than assuming it.
+-->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#F6F8FF;">
+	<tr>
+		<td align="center" style="padding:24px 12px;font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+			<table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:600px;background-color:#FFFFFF;border:1px solid #DFE7FA;border-radius:14px;">
+
+				<tr>
+					<td style="padding:20px 28px;background-color:#0A1024;border-radius:13px 13px 0 0;">
+						<table role="presentation" cellpadding="0" cellspacing="0" border="0">
+							<tr>
+								<td width="10" bgcolor="#4E8BFB" style="width:10px;height:10px;border-radius:3px;font-size:0;line-height:10px;">&nbsp;</td>
+								<td style="padding-left:12px;font-family:'Poppins','Segoe UI',Helvetica,Arial,sans-serif;font-size:17px;font-weight:800;letter-spacing:0.04em;color:#FFFFFF;">BENCHPRESS</td>
+							</tr>
+						</table>
+					</td>
+				</tr>
+
+				<tr>
+					<td style="padding:30px 28px 0;">
+						<div style="font-size:12px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:#2FB714;">Approved</div>
+						<h1 style="margin:10px 0 0;font-family:'Poppins','Segoe UI',Helvetica,Arial,sans-serif;font-size:24px;line-height:32px;font-weight:800;color:#0A1024;">Your account is open, {{ full_name | e }}.</h1>
+						<p style="margin:14px 0 0;font-size:15px;line-height:24px;color:#4E5A7C;">Request {{ reference | e }} is approved. Sign in with {{ email | e }} and deploy your first lab — a template picks the Frappe version and the app set, and the site is usually answering in about ninety seconds.</p>
+					</td>
+				</tr>
+
+				{% if free_credits %}
+				<tr>
+					<td style="padding:22px 28px 0;">
+						<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#E8EEFF;border-radius:10px;">
+							<tr>
+								<td style="padding:16px 18px;">
+									<div style="font-family:'Poppins','Segoe UI',Helvetica,Arial,sans-serif;font-size:26px;font-weight:800;line-height:32px;color:#1F5CF5;">{{ free_credits | e }} credits</div>
+									<div style="padding-top:4px;font-size:13px;line-height:20px;color:#4E5A7C;">Already on your account. Deploys are free, stopped instances are free, and a build that fails costs nothing.</div>
+								</td>
+							</tr>
+						</table>
+					</td>
+				</tr>
+				{% endif %}
+
+				<tr>
+					<td style="padding:26px 28px 0;">
+						<table role="presentation" cellpadding="0" cellspacing="0" border="0">
+							<tr>
+								<td bgcolor="#1F5CF5" style="border-radius:10px;">
+									<a href="{{ login_url | e }}" style="display:inline-block;padding:13px 22px;font-family:'Poppins','Segoe UI',Helvetica,Arial,sans-serif;font-size:15px;font-weight:700;color:#FFFFFF;text-decoration:none;">Sign in</a>
+								</td>
+							</tr>
+						</table>
+						<p style="margin:12px 0 0;font-family:'SFMono-Regular',Consolas,Menlo,monospace;font-size:12px;line-height:19px;color:#8B94AE;"><a href="{{ login_url | e }}" style="color:#8B94AE;text-decoration:none;">{{ login_url | e }}</a></p>
+						<p style="margin:10px 0 0;font-size:13px;line-height:20px;color:#8B94AE;">If you have not set a password yet, use the link in the separate welcome email — we never put one in this message.</p>
+					</td>
+				</tr>
+
+				<tr>
+					<td style="padding:24px 28px 0;">
+						<div style="font-size:12px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:#0A1024;">First three minutes</div>
+						<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:10px;border-top:1px solid #E3EAFB;">
+							<tr>
+								<td width="28" valign="top" style="padding:10px 0;border-bottom:1px solid #E3EAFB;font-family:'SFMono-Regular',Consolas,Menlo,monospace;font-size:13px;line-height:21px;color:#1F5CF5;">1</td>
+								<td style="padding:10px 0;border-bottom:1px solid #E3EAFB;font-size:14px;line-height:21px;color:#0A1024;">Pick a lab template — the version and the app set are already pinned.</td>
+							</tr>
+							<tr>
+								<td width="28" valign="top" style="padding:10px 0;border-bottom:1px solid #E3EAFB;font-family:'SFMono-Regular',Consolas,Menlo,monospace;font-size:13px;line-height:21px;color:#1F5CF5;">2</td>
+								<td style="padding:10px 0;border-bottom:1px solid #E3EAFB;font-size:14px;line-height:21px;color:#0A1024;">Press deploy, then install the WireGuard config it hands you.</td>
+							</tr>
+							<tr>
+								<td width="28" valign="top" style="padding:10px 0;border-bottom:1px solid #E3EAFB;font-family:'SFMono-Regular',Consolas,Menlo,monospace;font-size:13px;line-height:21px;color:#1F5CF5;">3</td>
+								<td style="padding:10px 0;border-bottom:1px solid #E3EAFB;font-size:14px;line-height:21px;color:#0A1024;">Open the site and the browser VS Code session on the mesh address.</td>
+							</tr>
+						</table>
+						<p style="margin:12px 0 0;font-size:14px;line-height:22px;color:#4E5A7C;">The longer version is in the documentation: <a href="{{ docs_url | e }}" style="color:#1F5CF5;text-decoration:underline;">{{ docs_url | e }}</a></p>
+					</td>
+				</tr>
+
+				<tr>
+					<td style="padding:24px 28px 0;">
+						<div style="height:1px;background-color:#E3EAFB;line-height:1px;font-size:0;">&nbsp;</div>
+					</td>
+				</tr>
+				<tr>
+					<td style="padding:16px 28px 26px;">
+						<p style="margin:0;font-size:12px;line-height:19px;color:#8B94AE;">Sent by <a href="{{ site_url | e }}" style="color:#4E5A7C;text-decoration:underline;">BenchPress</a>. Frappe and ERPNext are trademarks of Frappe Technologies Pvt. Ltd. BenchPress is an independent project, not affiliated with Frappe Technologies.</p>
+					</td>
+				</tr>
+
+			</table>
+		</td>
+	</tr>
+</table>

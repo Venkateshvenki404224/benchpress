@@ -1,15 +1,7 @@
 # Copyright (c) 2026, Venkatesh and Contributors
 # See license.txt
 
-"""Authorization suite for the whitelisted API.
-
-Phase 2 asserted the happy path; this proves the negative paths: Guest,
-wrong-role, and cross-user callers are all rejected by the endpoint guards
-(`require_admin`, `require_bench_access`, and the owner-scoped bench filter).
-Each denial test has a positive control so a guard that vacuously throws for
-everyone — or silently returns an empty result — is caught as a failure.
-"""
-
+import contextlib
 import importlib
 import json
 import pkgutil
@@ -17,13 +9,25 @@ from unittest.mock import MagicMock, patch
 
 import frappe
 import frappe.client
+from frappe.handler import execute_cmd
 from frappe.tests import IntegrationTestCase
 
 import benchpress
-from benchpress import api, waitlist
+from benchpress import api, contact, waitlist
 from benchpress.benchpress.doctype.bench_instance import get_instance_id
 
 GUEST_WAITLIST_EMAIL = "authz-guest-waitlist@example.com"
+GUEST_CONTACT_EMAIL = "authz-guest-contact@example.com"
+PROBE_EMAIL = "authz-method-probe@example.com"
+
+# Every command a browser can address one of the three public forms by. The login page posts the
+# framework's own signup path, which `override_whitelisted_methods` sends to ours.
+PUBLIC_FORM_COMMANDS = (
+	"benchpress.waitlist.join",
+	"benchpress.contact.submit",
+	"benchpress.signup.sign_up",
+	"frappe.core.doctype.user.user.sign_up",
+)
 
 
 def _delete_waitlist_entry(email):
@@ -32,13 +36,14 @@ def _delete_waitlist_entry(email):
 		frappe.delete_doc("Waitlist Entry", email, force=True, ignore_permissions=True)
 
 
-def _guest_endpoints() -> set[str]:
-	"""Every `allow_guest` method this app registers.
+def _delete_contact_messages(email):
+	frappe.set_user("Administrator")
+	for name in frappe.get_all("Contact Message", filters={"email": email}, pluck="name"):
+		frappe.delete_doc("Contact Message", name, force=True, ignore_permissions=True)
 
-	Whitelisting happens at import time, so the whole package is walked first — otherwise the
-	inventory would only cover the modules this test file happens to import, and a guest endpoint
-	added elsewhere would go unnoticed.
-	"""
+
+def _guest_endpoints() -> set[str]:
+	"""Every `allow_guest` method this app registers."""
 	_import_every_module()
 	return {
 		f"{method.__module__}.{method.__name__}"
@@ -84,7 +89,6 @@ def _ensure_lab(lab_id):
 
 
 def _ensure_owned_bench(owner, lab):
-	"""Insert a Running bench whose owner is `owner` (owner comes from the session)."""
 	name = get_instance_id(owner, lab.name)
 	if frappe.db.exists("Bench Instance", name):
 		frappe.delete_doc("Bench Instance", name, force=True, ignore_permissions=True)
@@ -152,6 +156,10 @@ class TestApiAuthorization(IntegrationTestCase):
 
 	def setUp(self):
 		frappe.set_user("Administrator")
+		# The guest waitlist and contact endpoints send real mail. `frappe.in_test` makes the queue
+		# resolve an outgoing account at once, which raises on a site that has none configured.
+		patch("frappe.sendmail").start()
+		self.addCleanup(patch.stopall)
 
 	def tearDown(self):
 		frappe.set_user("Administrator")
@@ -185,21 +193,45 @@ class TestApiAuthorization(IntegrationTestCase):
 		self.assert_denied(lambda: api.restart_code_server(bench))
 		self.assert_denied(lambda: api.renew_bench(bench, "any-plan", "authz-guest-req"))
 
-	def test_only_the_two_signup_doors_are_open_to_guests(self):
-		"""Whitelisting an endpoint for Guest is a decision, not an accident.
-
-		Two methods have been argued for: `waitlist.join`, which the landing page's form posts to,
-		and `signup.sign_up`, which *replaces* a method Frappe already exposes to guests and only
-		narrows it. Anything else appearing in this inventory means somebody opened an endpoint to
-		the internet without saying so.
-
-		The two are never both accepting — `Credit Settings.waitlist_open` decides which — but they
-		are both reachable, which is what this counts.
-		"""
+	def test_only_the_three_public_form_doors_are_open_to_guests(self):
 		self.assertEqual(
 			_guest_endpoints(),
-			{"benchpress.waitlist.join", "benchpress.signup.sign_up"},
+			{
+				"benchpress.waitlist.join",
+				"benchpress.signup.sign_up",
+				"benchpress.contact.submit",
+			},
 		)
+
+	def test_a_get_request_is_refused_at_every_public_form(self):
+		frappe.set_user("Guest")
+		for cmd in PUBLIC_FORM_COMMANDS:
+			with self.subTest(cmd=cmd), _as_http("GET", cmd, email=PROBE_EMAIL):
+				with self.assertRaises(frappe.PermissionError):
+					execute_cmd(cmd)
+
+	def test_a_get_request_writes_nothing(self):
+		self.addCleanup(_delete_waitlist_entry, PROBE_EMAIL)
+		self.addCleanup(_delete_contact_messages, PROBE_EMAIL)
+		frappe.set_user("Guest")
+		for cmd in PUBLIC_FORM_COMMANDS:
+			with _as_http("GET", cmd, email=PROBE_EMAIL, name="Authz Probe", message="hello"):
+				with contextlib.suppress(frappe.PermissionError):
+					execute_cmd(cmd)
+
+		frappe.set_user("Administrator")
+		self.assertFalse(frappe.db.exists("Waitlist Entry", PROBE_EMAIL))
+		self.assertFalse(frappe.db.exists("Contact Message", {"email": PROBE_EMAIL}))
+		self.assertFalse(frappe.db.exists("User", PROBE_EMAIL))
+
+	def test_a_post_still_reaches_the_waitlist_through_the_handler(self):
+		self.addCleanup(_delete_waitlist_entry, PROBE_EMAIL)
+		self.addCleanup(setattr, frappe.flags, "mute_emails", frappe.flags.mute_emails)
+		frappe.flags.mute_emails = True
+		frappe.set_user("Guest")
+
+		with _as_http("POST", "benchpress.waitlist.join", email=PROBE_EMAIL):
+			self.assertTrue(execute_cmd("benchpress.waitlist.join")["joined"])
 
 	def test_guest_can_reach_the_waitlist(self):
 		frappe.set_user("Guest")
@@ -209,9 +241,29 @@ class TestApiAuthorization(IntegrationTestCase):
 
 		self.assertTrue(waitlist.join(GUEST_WAITLIST_EMAIL)["joined"])
 
+	def test_guest_can_reach_the_contact_form(self):
+		frappe.set_user("Guest")
+		self.addCleanup(_delete_contact_messages, GUEST_CONTACT_EMAIL)
+		self.addCleanup(setattr, frappe.flags, "mute_emails", frappe.flags.mute_emails)
+		frappe.flags.mute_emails = True
+
+		self.assertTrue(contact.submit("Authz Guest", GUEST_CONTACT_EMAIL, "hello")["sent"])
+
 	def test_guest_denied_from_approving_the_waitlist(self):
 		frappe.set_user("Guest")
 		self.assert_denied(lambda: waitlist.approve([GUEST_WAITLIST_EMAIL]))
+
+	def test_guest_denied_from_rejecting_the_waitlist(self):
+		frappe.set_user("Guest")
+		self.assert_denied(lambda: waitlist.reject([GUEST_WAITLIST_EMAIL]))
+
+	def test_guest_denied_from_the_contact_admin_endpoints(self):
+		frappe.set_user("Guest")
+		self.assert_denied(lambda: contact.mark_answered(["nonexistent"]))
+
+	def test_non_admin_denied_from_reading_contact_messages(self):
+		frappe.set_user(self.user_a)
+		self.assertFalse(frappe.has_permission("Contact Message", "read"))
 
 	# --- Wrong-role (BenchPress User) blocked from admin-only endpoints -------
 
@@ -232,12 +284,10 @@ class TestApiAuthorization(IntegrationTestCase):
 		self.assert_denied(lambda: api.run_diagnostics())
 
 	def test_non_admin_denied_from_preflight_runtime(self):
-		"""It creates a container on the host — the guard is the only thing stopping a tenant."""
 		frappe.set_user(self.user_a)
 		self.assert_denied(lambda: api.preflight_runtime("sysbox"))
 
 	def test_an_admin_reaches_preflight_runtime(self):
-		"""The positive control: the guard must not be refusing everyone."""
 		frappe.set_user("Administrator")
 		with patch("benchpress.docker_manager.get_client") as mock_client:
 			self.assertTrue(api.preflight_runtime("sysbox")["ok"])
@@ -251,8 +301,7 @@ class TestApiAuthorization(IntegrationTestCase):
 	# --- Cross-user isolation (user_b against user_a's bench) -----------------
 
 	def test_owner_denied_from_lowering_their_own_benchs_runtime(self):
-		"""`if_owner` write is granted on Bench Instance, so only permlevel stands between a
-		tenant and their own isolation."""
+		# `if_owner` write is granted on Bench Instance; only permlevel stops this.
 		frappe.set_user(self.user_a)
 		self.assert_denied(
 			lambda: frappe.client.set_value("Bench Instance", self.bench.name, "runtime", "runc")
@@ -261,7 +310,6 @@ class TestApiAuthorization(IntegrationTestCase):
 		self.assertEqual(frappe.db.get_value("Bench Instance", self.bench.name, "runtime"), "sysbox")
 
 	def test_owner_can_still_see_their_benchs_runtime(self):
-		"""The positive control: read at permlevel 1 is granted on purpose."""
 		frappe.set_user(self.user_a)
 		mine = [b for b in api.get_benches() if b["name"] == self.bench.name]
 		self.assertEqual([b["runtime"] for b in mine], ["sysbox"])
@@ -275,7 +323,6 @@ class TestApiAuthorization(IntegrationTestCase):
 		self.assert_denied(lambda: api.bench_action(self.bench.name, "start"))
 
 	def test_cross_user_denied_from_renew_bench(self):
-		"""Renew spends the owner's credits and can start their container. It is theirs alone."""
 		frappe.set_user(self.user_b)
 		self.assert_denied(lambda: api.renew_bench(self.bench.name, "any-plan", "authz-cross-req"))
 
@@ -297,7 +344,6 @@ class TestApiAuthorization(IntegrationTestCase):
 		self.assertNotIn(self.bench.name, names)
 
 	def test_get_lab_hides_another_users_bench_health(self):
-		"""Lab detail must not report user_a's container, address or sites to user_b."""
 		frappe.set_user(self.user_b)
 		self.assertIsNone(api.get_lab(self.lab.name)["bench"])
 		self.assertEqual(api.get_lab(self.lab.name)["sites"], [])
@@ -310,14 +356,12 @@ class TestApiAuthorization(IntegrationTestCase):
 		self.assert_denied(lambda: api.get_lab(self.lab.name))
 
 	def test_get_labs_hides_another_users_deployment(self):
-		"""The Labs table must not tell user_b where user_a's bench lives."""
 		frappe.set_user(self.user_b)
 		row = self._lab_row(api.get_labs())
 		self.assertIsNone(row["deployed_as"])
 		self.assertEqual(row["bench_count"], 0)
 
 	def test_get_labs_shows_the_owner_their_own_deployment(self):
-		"""Positive control: the same row is populated for the bench's owner."""
 		frappe.set_user(self.user_a)
 		row = self._lab_row(api.get_labs())
 		self.assertEqual(row["deployed_as"]["bench"], self.bench.name)
@@ -340,7 +384,6 @@ class TestApiAuthorization(IntegrationTestCase):
 		self.assertNotIn(self.build_log.name, names, "Build Log is leaking across users")
 
 	def test_build_history_shows_an_admin_every_build(self):
-		"""Positive control: the row hidden above is present for an admin."""
 		frappe.set_user(self.admin_user)
 		names = [row["name"] for row in api.get_build_history()["rows"]]
 		self.assertIn(self.build_log.name, names)
@@ -384,7 +427,6 @@ class TestApiAuthorization(IntegrationTestCase):
 		return log.name
 
 	# --- Role-less user blocked by require_app_user (issue #88) ---------------
-	# No mocks: the guard raises before any side effect can happen.
 
 	def test_roleless_denied_from_create_bench(self):
 		frappe.set_user(self.norole_user)
@@ -412,7 +454,6 @@ class TestApiAuthorization(IntegrationTestCase):
 		self.assert_denied(api.get_credit_statement)
 
 	def test_roleless_denied_from_the_purchase_endpoints(self):
-		"""A stranger may not price what is for sale, let alone open an order against an account."""
 		frappe.set_user(self.norole_user)
 		self.assert_denied(api.get_purchase_options)
 		self.assert_denied(lambda: api.buy_credits("Starter"))
@@ -420,13 +461,7 @@ class TestApiAuthorization(IntegrationTestCase):
 	# --- The credit gate must never answer a permission question -------------
 
 	def test_the_credit_gate_never_precedes_an_endpoints_own_guard(self):
-		"""With credits armed, a role-less caller must still meet `PermissionError` — not a price.
-
-		`requires_admission` wraps these endpoints, so it runs before their `require_app_user()`. It
-		passes a caller without an app role straight through for exactly this reason: a stranger
-		must not be answered with an accounting sentence, and must not have a `Credit Account`
-		opened in their name on the way to being refused.
-		"""
+		# `requires_admission` wraps these endpoints and runs before their `require_app_user()`.
 		self.with_credits_armed()
 		frappe.set_user(self.norole_user)
 		self.assert_denied(lambda: api.create_bench(json.dumps({"lab": self.lab.name})))
@@ -441,18 +476,13 @@ class TestApiAuthorization(IntegrationTestCase):
 		self.assert_denied(lambda: api.create_bench(json.dumps({"lab": self.lab.name})))
 
 	def test_an_app_user_still_reaches_the_endpoint_with_credits_armed(self):
-		"""The positive control: the gate charges, it does not deny by existing."""
 		self.with_credits_armed()
 		frappe.set_user(self.user_a)
 		with patch("frappe.enqueue"):
 			self.assertEqual(api.create_bench(json.dumps({"lab": self.lab.name}))["status"], "Deploying")
 
 	def with_credits_armed(self):
-		"""Turn the feature on for one test, and take every trace of it away again.
-
-		This class commits its fixtures, so anything left pending here becomes durable alongside
-		them — including the `Credit Account` the gate opens for a caller who gets through it.
-		"""
+		# This class commits its fixtures, so anything left pending here becomes durable too.
 		frappe.db.set_single_value("BenchPress Settings", "enable_credits", 1)
 		frappe.clear_cache(doctype="BenchPress Settings")
 		self.addCleanup(self.forget_credit_rows)
@@ -465,7 +495,6 @@ class TestApiAuthorization(IntegrationTestCase):
 			frappe.db.delete("Credit Account", {"user": user})
 
 	def test_a_credit_statement_is_only_ever_the_callers_own(self):
-		"""Positive control, and the scoping rule: the filter is the session, not an argument."""
 		frappe.set_user(self.user_a)
 		self.assertEqual(api.get_credit_statement()["rows"], [])
 		self.assertIn("enabled", api.get_credit_summary())
@@ -526,8 +555,7 @@ class TestApiAuthorization(IntegrationTestCase):
 			self.assertEqual(api.get_overview()["infrastructure"], [])
 
 	def test_overview_activity_never_leaks_build_logs_to_a_user(self):
-		# Build Log carries no permission query condition, so the feed must
-		# exclude it for non-admins rather than rely on one.
+		# Build Log has no permission query condition, so the feed must exclude it itself.
 		frappe.set_user(self.user_a)
 		activity = api.get_overview()["activity"]
 		self.assertTrue(activity, "user_a's own deploy log should still appear")
@@ -545,7 +573,6 @@ class TestApiAuthorization(IntegrationTestCase):
 		self.assertFalse([event for event in activity if event.get("bench") == self.bench.name])
 
 	def test_overview_activity_hides_another_users_bench_events(self):
-		"""The panel is the only place a tenant reads these, so the scoping is exercised there."""
 		frappe.set_user("Administrator")
 		event = frappe.get_doc(
 			{
@@ -635,11 +662,7 @@ class TestApiAuthorization(IntegrationTestCase):
 			frappe.db.commit()
 
 	def test_creating_a_site_is_not_a_capability_this_api_offers(self):
-		"""The Sites tab is read-only, so neither the endpoint nor the perm behind it may return.
-
-		`frappe.client.insert` is whitelisted, so a leftover `create` DocPerm would be a second
-		way to make exactly the site the deploy cannot serve.
-		"""
+		# `frappe.client.insert` is whitelisted, so a leftover `create` DocPerm is a second door.
 		self.assertFalse(hasattr(api, "create_site"))
 		self.assertNotIn("create_site", {method.__name__ for method in frappe.whitelisted})
 		frappe.set_user(self.user_a)
@@ -682,8 +705,6 @@ class TestApiAuthorization(IntegrationTestCase):
 		frappe.set_user(self.user_a)
 		self.assertIsInstance(api.get_lab_templates(), list)
 
-	# get_benches positive control: test_owner_sees_own_bench_in_get_benches below.
-
 	# --- Positive controls: the guards permit the legitimate caller ----------
 
 	def test_owner_reads_own_bench_credentials(self):
@@ -704,7 +725,7 @@ class TestApiAuthorization(IntegrationTestCase):
 			self.assertIn(key, logs[0])
 
 	def test_get_benches_omits_password_fields(self):
-		# Ponytail check for issue #91: fails if the decrypt loop is reintroduced.
+		# Regression check for issue #91: the decrypt loop must not come back.
 		frappe.set_user(self.user_a)
 		for bench in api.get_benches():
 			for field in ("ssh_password", "admin_password", "code_server_password"):
@@ -734,3 +755,24 @@ class TestApiAuthorization(IntegrationTestCase):
 		frappe.set_user(self.admin_user)
 		with patch("benchpress.diagnostics.run_diagnostics", return_value=[]):
 			self.assertEqual(api.run_diagnostics(), [])
+
+
+class _as_http:
+	"""Dispatch a command the way an HTTP request would, with a chosen method."""
+
+	def __init__(self, method, cmd, **form):
+		self.method = method
+		self.form = frappe._dict(cmd=cmd, **form)
+
+	def __enter__(self):
+		frappe.cache.delete_keys("rl:")
+		frappe.local.request = MagicMock(method=self.method)
+		frappe.local.request_ip = "127.0.0.1"
+		frappe.local.form_dict = self.form
+		return self
+
+	def __exit__(self, *exception):
+		frappe.cache.delete_keys("rl:")
+		frappe.local.request = None
+		frappe.local.form_dict = frappe._dict()
+		return False

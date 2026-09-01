@@ -23,6 +23,10 @@ Route by the task:
 - **Documentation source is `docs/**/*.mdx`.** Everything under `docs-site/` and
   `docs-bundle/` is generated. Never edit a generated file. Edit the `.mdx`, then
   run `npm run docs:build`.
+- **Nothing but page source lives under `docs/`.** leadtype lists every `.md` it
+  finds there in `llms.txt` but converts only `.mdx`, so a working note dropped
+  in `docs/` becomes a dead link an agent follows. Internal notes go in
+  `internal/`.
 - **Lint the source folder positionally: `npm run docs:lint`.** It runs
   `leadtype lint docs`. Passing `--src .` makes leadtype lint its own output and
   report errors on generated files that are not pages.

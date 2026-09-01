@@ -1,0 +1,716 @@
+/* Log-in page — every class `benchpress/www/login.html` uses.
+ *
+ * `/login` loads `website.bundle.css`, `login.bundle.css`, `bp-brand.bundle.css` and then this file.
+ * `login.bundle.css` cannot be dropped and its selectors weigh 0-4-1 (`.for-login .page-card
+ * .page-card-body input[type="text"]`), so a long selector here is buying specificity — check
+ * what it is fighting before simplifying it. The `display` toggles on `.hide`, `.field-error`
+ * and the two banners are left alone; they belong to the framework's JavaScript.
+ *
+ * Cobalt has no error red, so the three error surfaces keep the framework's own `--red-50` /
+ * `--ink-red-*` / `--outline-red-*`. */
+
+/* -- Framework reset: flattens the `templates/web.html` and `login.bundle.css` wrappers ---- */
+
+.bp-body .page-content-wrapper,
+.bp-body .page_content {
+	min-height: 0;
+	margin: 0;
+	padding: 0;
+}
+
+.bp-body .page-content-wrapper > main {
+	width: auto;
+	max-width: none;
+	margin: 0;
+	padding: 0;
+}
+
+.bp-body .page-breadcrumbs,
+.bp-body .page-header-wrapper,
+.bp-body .page-footer {
+	display: none;
+}
+
+/* `login.js` strips `.hide` on `frappe.ready`; until then it has to beat the form layout rule
+ * below it, which is two classes heavier. */
+.bp .page-card form.hide {
+	display: none;
+}
+
+/* DOM contract only — see the `indicator_stub` macro. Never shown. */
+.bp .bp-login__status {
+	display: none;
+}
+
+/* -- Page layout -------------------------------------------------------------------------- */
+
+.bp-login__section {
+	position: relative;
+	display: flex;
+	align-items: center;
+	min-height: 78vh;
+	overflow: hidden;
+}
+
+/* `#000` here is a mask alpha, not a colour. */
+.bp-login__dots {
+	position: absolute;
+	inset: 0;
+	background-image: radial-gradient(var(--grid) 1px, transparent 1px);
+	background-size: 26px 26px;
+	-webkit-mask-image: radial-gradient(760px 460px at 22% 10%, #000, transparent 72%);
+	mask-image: radial-gradient(760px 460px at 22% 10%, #000, transparent 72%);
+	pointer-events: none;
+}
+
+.bp-login__grid {
+	position: relative;
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(min(360px, 100%), 1fr));
+	gap: 40px;
+	align-items: center;
+	width: 100%;
+	max-width: 1080px;
+	margin: 0 auto;
+	padding: calc(var(--m-header-height) + 56px) 28px 76px;
+}
+
+/* The track floor is `min(360px, 100%)` so a viewport under 360px yields instead of forcing
+ * the page wider; `min-width: 0` then lets the column narrow rather than overflow. */
+.bp-login__forms {
+	min-width: 0;
+}
+
+.bp-login__panel {
+	min-width: 0;
+}
+
+.bp-eyebrow {
+	margin: 0;
+	font-size: 11px;
+	font-weight: 600;
+	letter-spacing: 0.14em;
+	text-transform: uppercase;
+	color: var(--fg3);
+}
+
+.bp-login__panel-title {
+	margin: 12px 0 0;
+	font-size: clamp(26px, 2.6vw, 34px);
+	line-height: 1.12;
+	font-weight: 800;
+	letter-spacing: -0.025em;
+}
+
+.bp-noscript {
+	max-width: 640px;
+	margin: 0 auto;
+	padding: 40px 28px 0;
+	text-align: center;
+	color: var(--fg2);
+}
+
+/* -- The card. `login.bundle.css` pins `.page-card` to 371px, centres it, and at its own xs
+ * breakpoint makes it a full-height borderless sheet; each rule below undoes one. ------- */
+
+.bp .page-card {
+	display: flex;
+	flex-direction: column;
+	gap: 14px;
+	width: 100%;
+	max-width: none;
+	min-height: 0;
+	margin: 0;
+	padding: 30px;
+	border: 1px solid var(--cardb);
+	border-radius: 20px;
+	background: var(--bg1);
+	box-shadow: 0 30px 70px var(--glow);
+}
+
+.bp .bp-card__head {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+/* One `h1` per section, but four of the five sections are `display: none` and out of the
+ * accessibility tree, so exactly one heading is ever exposed. */
+.bp .bp-card__title {
+	margin: 0;
+	font-size: 24px;
+	line-height: 1.15;
+	font-weight: 800;
+	letter-spacing: -0.02em;
+	color: var(--fg);
+}
+
+.bp .bp-card__body {
+	margin: 0;
+	font-size: 13.5px;
+	line-height: 1.6;
+	color: var(--fg2);
+}
+
+/* -- The form ----------------------------------------------------------------------------- */
+
+.bp .page-card form {
+	display: flex;
+	flex-direction: column;
+	gap: 14px;
+	max-width: none;
+	margin: 0;
+}
+
+.bp .page-card .page-card-body {
+	display: flex;
+	flex-direction: column;
+	gap: 14px;
+}
+
+.bp .page-card form .form-group {
+	display: flex;
+	flex-direction: column;
+	align-items: stretch;
+	gap: 7px;
+	margin: 0;
+}
+
+.bp .page-card .page-card-body .form-label {
+	width: 100%;
+	margin: 0;
+	font-size: 12.5px;
+	font-weight: 600;
+	line-height: 1.2;
+	color: var(--fg2);
+}
+
+.bp .bp-label--row {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+}
+
+.bp .bp-login__forgot {
+	margin-left: auto;
+	font-weight: 500;
+	color: var(--accent);
+}
+
+.bp .bp-login__forgot:hover {
+	color: var(--brand2);
+	text-decoration: underline;
+}
+
+/* `input[type="text"]` inside `.page-card-body` weighs 0-4-1 in `login.bundle.css`, so the
+ * element name has to come with the class. */
+.bp .page-card .page-card-body input.bp-input {
+	height: 44px;
+	padding: 0 13px;
+	border: 1px solid var(--hair);
+	border-radius: 9px;
+	background: var(--input);
+	color: var(--fg);
+	font-size: 14px;
+	line-height: 1.2;
+}
+
+.bp .page-card .page-card-body input.bp-input::placeholder {
+	color: var(--fg3);
+	opacity: 1;
+}
+
+.bp .page-card .page-card-body input.bp-input:focus {
+	border-color: var(--accent);
+	outline: none;
+}
+
+.bp .page-card .page-card-body input.bp-input:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 2px;
+}
+
+.bp .page-card .page-card-body input.bp-input--padded {
+	padding-right: 44px;
+}
+
+.bp .bp-field {
+	position: relative;
+	width: 100%;
+}
+
+.bp .bp-field__reveal {
+	position: absolute;
+	top: 50%;
+	right: 6px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 32px;
+	height: 32px;
+	padding: 0;
+	transform: translateY(-50%);
+	border: 0;
+	border-radius: 8px;
+	background: none;
+	color: var(--fg3);
+	cursor: pointer;
+	transition: var(--transition-control);
+}
+
+.bp .bp-field__reveal:hover {
+	color: var(--fg);
+	background: var(--card);
+}
+
+.bp .bp-field__reveal:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 2px;
+}
+
+.bp .bp-field__icon {
+	display: block;
+	width: 16px;
+	height: 16px;
+}
+
+.bp .bp-field__icon--hide,
+.bp .bp-field__reveal[aria-pressed="true"] .bp-field__icon--show {
+	display: none;
+}
+
+.bp .bp-field__reveal[aria-pressed="true"] .bp-field__icon--hide {
+	display: block;
+}
+
+/* "Keep me signed in" is checked and disabled: Frappe has one site-wide session expiry and no
+ * per-login switch. */
+.bp .bp-check {
+	display: flex;
+	flex-direction: column;
+	gap: 5px;
+}
+
+.bp .bp-check__row {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	margin: 0;
+	font-size: 13px;
+	line-height: 1.4;
+	font-weight: 400;
+	color: var(--fg2);
+}
+
+.bp .bp-check__box {
+	width: 16px;
+	height: 16px;
+	flex: none;
+	margin: 0;
+	accent-color: var(--brand);
+}
+
+.bp .bp-check__box:disabled {
+	opacity: 0.8;
+	cursor: default;
+}
+
+.bp .bp-check__note {
+	margin: 0;
+	padding-left: 26px;
+	font-size: 12px;
+	line-height: 1.5;
+	color: var(--fg3);
+}
+
+/* `display` is left to `login.js`, which sets it inline; only the look is taken back. */
+.bp .page-card .page-card-body .login-error-banner,
+.bp .page-card .page-card-body .login-success-banner {
+	gap: 9px;
+	align-items: flex-start;
+	padding: 10px 12px;
+	border-radius: 10px;
+	font-size: 13px;
+	line-height: 1.5;
+}
+
+.bp .page-card .page-card-body .login-error-banner {
+	background: var(--red-50);
+	border: 1px solid var(--outline-red-1);
+	color: var(--ink-red-4);
+}
+
+.bp .bp-banner__icon {
+	flex: none;
+	width: 16px;
+	height: 16px;
+	margin-top: 1px;
+}
+
+.bp .page-card .page-card-body .field-error {
+	margin: 0;
+	padding: 7px 10px;
+	border-radius: 8px;
+	background: var(--red-50);
+	color: var(--ink-red-4);
+	font-size: 12.5px;
+	line-height: 1.4;
+}
+
+.bp .page-card .page-card-body.invalid input.bp-input,
+.bp .page-card .page-card-body .form-group.invalid input.bp-input {
+	border-color: var(--ink-red-3);
+}
+
+/* -- Buttons, divider, prompt --------------------------------------------------------------- */
+
+.bp .bp-form__actions {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+}
+
+.bp .bp-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 10px;
+	width: 100%;
+	padding: 0 20px;
+	border: 1px solid transparent;
+	border-radius: 999px;
+	font-family: inherit;
+	font-size: 14.5px;
+	font-weight: 600;
+	line-height: 1.2;
+	text-align: center;
+	text-decoration: none;
+	cursor: pointer;
+	transition: var(--transition-control);
+}
+
+.bp .bp-btn--lg {
+	height: var(--m-button-height-lg);
+}
+
+.bp .bp-btn--primary {
+	background: var(--brand);
+	color: var(--onbrand);
+}
+
+.bp .bp-btn--primary:hover {
+	background: var(--accent);
+	color: var(--onbrand);
+}
+
+.bp .bp-btn--ghost {
+	border-color: var(--cardb);
+	background: var(--card);
+	color: var(--fg);
+}
+
+.bp .bp-btn--ghost:hover {
+	background: var(--tint);
+	color: var(--fg);
+}
+
+.bp .bp-btn:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 2px;
+}
+
+.bp .bp-btn:disabled,
+.bp .bp-btn[aria-disabled="true"] {
+	opacity: 0.55;
+	cursor: not-allowed;
+}
+
+.bp .bp-btn--ghost:disabled:hover,
+.bp .bp-btn--ghost[aria-disabled="true"]:hover {
+	background: var(--card);
+	color: var(--fg);
+}
+
+.bp .bp-btn--primary:disabled:hover,
+.bp .bp-btn--primary[aria-disabled="true"]:hover {
+	background: var(--brand);
+	color: var(--onbrand);
+}
+
+.bp .bp-btn__icon {
+	flex: none;
+	width: 16px;
+	height: 16px;
+}
+
+/* Any icon the framework put inside an OAuth button — `provider.icon` is an `<img>` it built. */
+.bp .btn-login-option img {
+	width: 16px;
+	height: 16px;
+	margin: 0;
+}
+
+.bp .bp-oauth {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+}
+
+/* The unwired "Continue with GitHub". */
+.bp .bp-oauth__stub {
+	position: relative;
+}
+
+.bp .bp-tag {
+	padding: 3px 8px;
+	border: 1px solid var(--cardb);
+	border-radius: 999px;
+	background: var(--tint);
+	color: var(--accent);
+	font-size: 10.5px;
+	font-weight: 600;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+}
+
+.bp .bp-divider {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	font-size: 12px;
+	color: var(--fg3);
+}
+
+.bp .bp-divider::before,
+.bp .bp-divider::after {
+	content: "";
+	flex: 1;
+	height: 1px;
+	background: var(--hair);
+}
+
+.bp .bp-prompt {
+	padding: 13px 15px;
+	border: 1px solid var(--cardb);
+	border-radius: 12px;
+	background: var(--tint);
+	font-size: 13px;
+	line-height: 1.6;
+	color: var(--fg2);
+}
+
+.bp .bp-prompt p {
+	margin: 0;
+}
+
+.bp .bp-prompt a {
+	font-weight: 600;
+	color: var(--accent);
+}
+
+.bp .bp-prompt a:hover {
+	color: var(--brand2);
+	text-decoration: underline;
+}
+
+/* Shown by `login.js` when a magic link has been sent. */
+.bp .resend-link {
+	display: none;
+	align-items: center;
+	gap: 8px;
+	margin: 0;
+	font-size: 13px;
+	color: var(--fg2);
+}
+
+.bp .resend-link a {
+	color: var(--accent);
+	text-decoration: underline;
+}
+
+/* -- The session film — [TEMPLATE] ---------------------------------------------------------- */
+
+.bp-film {
+	margin-top: 22px;
+	border: 1px solid var(--cardb);
+	border-radius: var(--m-radius-film);
+	background: var(--code);
+	overflow: hidden;
+}
+
+.bp-film__bar {
+	display: flex;
+	align-items: center;
+	gap: 9px;
+	padding: 11px 15px;
+	border-bottom: 1px solid var(--cardb);
+	font-family: var(--font-mono);
+	font-size: 11px;
+	color: var(--fg3);
+}
+
+.bp-film__dots {
+	display: flex;
+	gap: 5px;
+}
+
+.bp-film__dots i {
+	display: block;
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	background: var(--cardb);
+}
+
+.bp-film__body {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	padding: 15px;
+	font-family: var(--font-mono);
+	font-size: 11.5px;
+	line-height: 1.55;
+}
+
+.bp-film__line {
+	display: flex;
+	gap: 9px;
+	margin: 0;
+	color: var(--codefg);
+	animation: bp-line 0.5s var(--ease-out) both;
+	animation-delay: var(--bp-delay, 0s);
+}
+
+.bp-film__line--prompt {
+	animation: none;
+}
+
+.bp-film__mark {
+	flex: none;
+	color: var(--lime);
+}
+
+.bp-film__sigil {
+	flex: none;
+	color: var(--fg3);
+}
+
+.bp-film__caret {
+	display: inline-block;
+	width: 6px;
+	height: 12px;
+	margin-left: 4px;
+	vertical-align: -2px;
+	background: var(--codefg);
+	animation: bp-caret 1s step-end infinite;
+}
+
+/* -- Framework-injected markup: the signup form from the `signup_form_template` hook and the
+ * two-factor form `request_otp()` builds. Their layout stays the framework's. ----------- */
+
+.bp .page-card .page-card-actions {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	margin: 0;
+}
+
+.bp .page-card .page-card-body input.form-control,
+.bp .page-card #twofactor_div input.form-control {
+	height: 44px;
+	padding: 0 13px;
+	border: 1px solid var(--hair);
+	border-radius: 9px;
+	background: var(--input);
+	color: var(--fg);
+	font-size: 14px;
+}
+
+.bp .page-card .btn {
+	border-radius: 999px;
+	font-size: 14.5px;
+	font-weight: 600;
+}
+
+.bp .page-card .sign-up-message,
+.bp .page-card .sign-up-message a {
+	color: var(--fg2);
+}
+
+.bp .page-card #twofactor_div .page-card-head {
+	margin-bottom: 12px;
+}
+
+/* The signup-disabled notice keeps its indicator: `login.reset_sections` skips that section. */
+.bp .signup-disabled .indicator {
+	color: var(--fg3);
+	font-size: 12.5px;
+}
+
+/* -- Breakpoints — only what is specific to this page; `bp-brand.bundle.css` owns the rest. ----------- */
+
+@media (max-width: 900px) {
+	.bp-login__section {
+		min-height: 0;
+	}
+
+	.bp-login__grid {
+		padding-top: 32px;
+		padding-bottom: 56px;
+	}
+
+	/* `bp-brand.bundle.css` sizes every `h1` at 34px below this width with `!important`. The card title is
+	 * a control label, not a headline, so it needs an `!important` of its own to hold. */
+	.bp .bp-card__title {
+		font-size: 24px !important;
+		line-height: 1.15 !important;
+	}
+}
+
+@media (max-width: 560px) {
+	.bp .page-card {
+		padding: 22px 18px;
+		border-radius: 16px;
+	}
+
+	.bp-login__grid {
+		gap: 28px;
+	}
+}
+
+/* -- Phone type floor and hit areas --------------------------------------------------------- */
+
+@media (max-width: 560px) {
+	.bp-eyebrow {
+		font-size: 12px;
+	}
+
+	.bp-tag {
+		font-size: 12px;
+	}
+
+	.bp-login__forgot {
+		display: inline-block;
+		padding: 6px 0;
+	}
+
+	.bp-field__reveal {
+		width: 40px;
+		height: 40px;
+	}
+
+	/* `.bp`-prefixed to match the rules these override — a media query adds no specificity, so a
+	   bare `.bp-check__box` loses to the `.bp .bp-check__box` above and silently does nothing. */
+	.bp .bp-check {
+		padding: 4px 0;
+	}
+
+	/* Frappe sizes bare `input[type="checkbox"]` from its own `--checkbox-size`; `min-width` /
+	   `min-height` settle it whichever `width` wins, and `input` keeps this above that rule. */
+	.bp input.bp-check__box {
+		width: 24px;
+		height: 24px;
+		min-width: 24px;
+		min-height: 24px;
+	}
+}

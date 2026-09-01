@@ -312,7 +312,7 @@ One request for hosted access, named by `field:email`. `full_name`, `company`,
 `use_case`, `status`, `approved_on` and `invite_sent_on`.
 
 This is the only DocType a guest can cause to be written. See
-[the guest endpoints](/docs/reference/api#the-two-guest-endpoints).
+[the guest endpoints](/docs/reference/api#the-three-guest-endpoints).
 
 ## Troubleshooting
 

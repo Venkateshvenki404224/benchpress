@@ -5,10 +5,13 @@ import os
 import subprocess
 
 import frappe
+from frappe.installer import update_site_config
 
 from benchpress.credits.seed import seed_defaults
 from benchpress.indexes import ensure_indexes
 from benchpress.lab_templates import seed_lab_templates
+from benchpress.public_site import CONFIG_KEY
+from benchpress.public_site.seed import seed_public_site
 from benchpress.vpn_access import grant_vpn_access
 
 
@@ -21,15 +24,12 @@ def after_install():
 	print("  BenchPress — Running post-install setup")
 	print("=" * 60 + "\n")
 
-	# Fresh installs mark every patch as executed without running it, so the VPN
-	# permissions the desk workspace needs have to be granted here as well.
+	# Fresh installs mark every patch as executed without running it, so everything the seeders
+	# below would have done has to be done here as well.
 	grant_vpn_access()
-
-	# Same reason: seed_credit_config would never fire on a fresh install.
 	seed_defaults()
-
-	# Same reason again: seed_lab_templates would never fire on a fresh install.
 	seed_lab_templates()
+	seed_public_site()
 	ensure_indexes()
 
 	# setup.sh requires host-level access (docker group, sysctl, sudoers).
@@ -53,16 +53,12 @@ def after_install():
 			print(f"\n[!] Could not run setup.sh: {e}")
 			_print_manual_instructions(site)
 
-	# Create test users in developer mode
 	if frappe.conf.get("developer_mode"):
 		create_test_users()
 
 
 def create_test_users():
-	"""Create test users for BenchPress Admin and BenchPress User roles.
-
-	Safe to call multiple times — skips if users already exist.
-	"""
+	"""Create the two role test users. Skips any that already exist."""
 	test_users = [
 		{
 			"email": "admin@benchpress.local",
@@ -94,7 +90,7 @@ def create_test_users():
 			user.append("roles", {"role": role_name})
 		user.insert(ignore_permissions=True)
 
-		# Set password after insert to bypass strength validation
+		# After insert, so the strength validation on the field is not applied to it.
 		from frappe.utils.password import update_password
 
 		update_password(user_data["email"], "admin")
@@ -103,6 +99,34 @@ def create_test_users():
 		)
 
 	frappe.db.commit()  # nosemgrep
+
+
+def before_tests() -> None:
+	"""Prepare the test site: an outgoing mail account, and the public site switched on."""
+	# The file as well as the live conf: IntegrationTestCase re-reads site_config.json after every
+	# test class, and an in-memory key alone is gone by the second one.
+	update_site_config(CONFIG_KEY, 1)
+	frappe.conf[CONFIG_KEY] = 1
+	# `after_install` ran with the key off, so the mail templates and the home page are still unset.
+	seed_public_site()
+	ensure_outgoing_email_account()
+	frappe.db.commit()  # nosemgrep -- the test runner reads this from a new connection
+
+
+def ensure_outgoing_email_account() -> None:
+	if frappe.db.exists("Email Account", {"default_outgoing": 1}):
+		return
+	frappe.get_doc(
+		{
+			"doctype": "Email Account",
+			"email_account_name": "BenchPress Tests",
+			"email_id": "tests@benchpress.invalid",
+			"smtp_server": "localhost",
+			"enable_outgoing": 1,
+			"default_outgoing": 1,
+			"no_smtp_authentication": 1,
+		}
+	).insert(ignore_permissions=True)
 
 
 def _print_manual_instructions(site: str) -> None:

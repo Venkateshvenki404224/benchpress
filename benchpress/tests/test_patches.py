@@ -7,7 +7,11 @@ from frappe.tests import IntegrationTestCase
 from benchpress.patches.backfill_bench_runtime import FIELD as RUNTIME_FIELD
 from benchpress.patches.backfill_bench_runtime import SETTINGS
 from benchpress.patches.backfill_bench_runtime import execute as backfill_bench_runtime
+from benchpress.patches.drop_page_content_doctypes import PAGE_CONTENT_DOCTYPES
+from benchpress.patches.drop_page_content_doctypes import execute as drop_page_content_doctypes
 from benchpress.patches.retire_orphaned_creating_sites import execute as retire_creating_sites
+
+KEPT_DOCTYPES = ("Contact Message", "Waitlist Entry")
 
 
 class TestRetireOrphanedCreatingSites(IntegrationTestCase):
@@ -140,3 +144,44 @@ class TestBackfillBenchRuntime(IntegrationTestCase):
 		backfill_bench_runtime()
 
 		self.assertEqual(frappe.db.get_single_value(SETTINGS, RUNTIME_FIELD), "runc")
+
+
+class TestDropPageContentDoctypes(IntegrationTestCase):
+	"""The page-copy doctypes leave the schema, not only the app directory."""
+
+	def test_desk_search_can_no_longer_find_any_of_them(self):
+		drop_page_content_doctypes()
+
+		self.assertEqual(self.survivors(), [])
+		self.assertEqual(self.leftover_singles(), [])
+
+	def test_a_site_that_never_had_them_runs_the_step_again_unchanged(self):
+		drop_page_content_doctypes()
+
+		drop_page_content_doctypes()
+
+		self.assertEqual(self.survivors(), [])
+
+	def test_the_records_that_hold_real_data_are_left_alone(self):
+		drop_page_content_doctypes()
+
+		for doctype in KEPT_DOCTYPES:
+			self.assertTrue(frappe.db.exists("DocType", doctype), doctype)
+			self.assertTrue(frappe.db.table_exists(doctype), doctype)
+
+	def survivors(self) -> list[str]:
+		return [
+			doctype
+			for doctype in PAGE_CONTENT_DOCTYPES
+			if frappe.db.exists("DocType", doctype) or frappe.db.table_exists(doctype)
+		]
+
+	def leftover_singles(self) -> list[str]:
+		singles = frappe.qb.Table("tabSingles")
+		rows = (
+			frappe.qb.from_(singles)
+			.select(singles.doctype)
+			.where(singles.doctype.isin(list(PAGE_CONTENT_DOCTYPES)))
+			.run()
+		)
+		return [row[0] for row in rows]

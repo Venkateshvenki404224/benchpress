@@ -1,0 +1,87 @@
+<!--
+	BenchPress Access Declined — the plain answer the signup page promises instead of silence.
+
+	Never explains the person, only the decision, and always leaves a door open: self-hosting
+	needs no approval from anyone.
+-->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#F6F8FF;">
+	<tr>
+		<td align="center" style="padding:24px 12px;font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+			<table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:600px;background-color:#FFFFFF;border:1px solid #DFE7FA;border-radius:14px;">
+
+				<tr>
+					<td style="padding:20px 28px;background-color:#0A1024;border-radius:13px 13px 0 0;">
+						<table role="presentation" cellpadding="0" cellspacing="0" border="0">
+							<tr>
+								<td width="10" bgcolor="#4E8BFB" style="width:10px;height:10px;border-radius:3px;font-size:0;line-height:10px;">&nbsp;</td>
+								<td style="padding-left:12px;font-family:'Poppins','Segoe UI',Helvetica,Arial,sans-serif;font-size:17px;font-weight:800;letter-spacing:0.04em;color:#FFFFFF;">BENCHPRESS</td>
+							</tr>
+						</table>
+					</td>
+				</tr>
+
+				<tr>
+					<td style="padding:30px 28px 0;">
+						<div style="font-size:12px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:#8B94AE;">Access request {{ reference | e }}</div>
+						<h1 style="margin:10px 0 0;font-family:'Poppins','Segoe UI',Helvetica,Arial,sans-serif;font-size:24px;line-height:32px;font-weight:800;color:#0A1024;">Not this time, {{ full_name | e }}.</h1>
+						<p style="margin:14px 0 0;font-size:15px;line-height:24px;color:#4E5A7C;">We are not opening a hosted account for {{ email | e }}. You asked for a plain answer rather than silence, so here it is — and you are welcome to ask again later.</p>
+					</td>
+				</tr>
+
+				{% if rejection_reason %}
+				<tr>
+					<td style="padding:22px 28px 0;">
+						<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#F6F8FF;border-left:3px solid #C9D6F4;border-radius:0 10px 10px 0;">
+							<tr>
+								<td style="padding:14px 18px;">
+									<div style="font-size:11px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:#8B94AE;">Why</div>
+									<div style="padding-top:6px;font-size:14px;line-height:22px;color:#0A1024;">{{ rejection_reason }}</div>
+								</td>
+							</tr>
+						</table>
+					</td>
+				</tr>
+				{% endif %}
+
+				<tr>
+					<td style="padding:26px 28px 0;">
+						<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#0A1024;border-radius:12px;">
+							<tr>
+								<td style="padding:20px 22px;">
+									<div style="font-family:'Poppins','Segoe UI',Helvetica,Arial,sans-serif;font-size:16px;line-height:24px;font-weight:700;color:#FFFFFF;">The software is still yours.</div>
+									<p style="margin:8px 0 0;font-size:14px;line-height:22px;color:#9FC3FF;">BenchPress is AGPL-3.0. Self-hosting is the same code, needs no account and no approval, and has no ceiling on labs — point it at your own Docker daemon and every container stays in-house.</p>
+									<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin-top:16px;">
+										<tr>
+											<td bgcolor="#1F5CF5" style="border-radius:10px;">
+												<a href="{{ repo_url | e }}" style="display:inline-block;padding:12px 20px;font-family:'Poppins','Segoe UI',Helvetica,Arial,sans-serif;font-size:14px;font-weight:700;color:#FFFFFF;text-decoration:none;">Read the repo</a>
+											</td>
+										</tr>
+									</table>
+									<p style="margin:12px 0 0;font-family:'SFMono-Regular',Consolas,Menlo,monospace;font-size:12px;line-height:19px;color:#9FC3FF;"><a href="{{ repo_url | e }}" style="color:#9FC3FF;text-decoration:none;">{{ repo_url | e }}</a></p>
+								</td>
+							</tr>
+						</table>
+					</td>
+				</tr>
+
+				<tr>
+					<td style="padding:22px 28px 0;">
+						<p style="margin:0;font-size:14px;line-height:22px;color:#4E5A7C;">The install path is written down in the documentation: <a href="{{ docs_url | e }}" style="color:#1F5CF5;text-decoration:underline;">{{ docs_url | e }}</a></p>
+					</td>
+				</tr>
+
+				<tr>
+					<td style="padding:24px 28px 0;">
+						<div style="height:1px;background-color:#E3EAFB;line-height:1px;font-size:0;">&nbsp;</div>
+					</td>
+				</tr>
+				<tr>
+					<td style="padding:16px 28px 26px;">
+						<p style="margin:0;font-size:12px;line-height:19px;color:#8B94AE;">Frappe and ERPNext are trademarks of Frappe Technologies Pvt. Ltd. BenchPress is an independent project, not affiliated with Frappe Technologies.</p>
+					</td>
+				</tr>
+
+			</table>
+		</td>
+	</tr>
+</table>

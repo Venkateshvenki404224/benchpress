@@ -1,0 +1,29 @@
+{#- Every key is optional: the fallback login page renders this against an empty context. -#}
+{%- set v = asset_version or "0" -%}
+{%- set copyright = footer_copyright or "© 2026 BenchPress. AGPL-3.0 licensed." -%}
+{%- set trademark = footer_trademark or "Frappe, ERPNext and Frappe HR are trademarks of Frappe Technologies Pvt. Ltd. BenchPress is an independent project, not affiliated with or endorsed by Frappe Technologies." -%}
+{%- set tagline = footer_tagline or "Isolated Frappe environments, deployed in one click and kept on your private network." -%}
+
+<footer class="bp-footer">
+	<div class="bp-footer__inner">
+		<div class="bp-footer__grid">
+			<div class="bp-footer__brand">
+				<img class="bp-when-dark" src="/assets/benchpress/images/logo/wordmark-on-dark.png?v={{ v | e }}" alt="BenchPress" width="140" height="36">
+				<img class="bp-when-light" src="/assets/benchpress/images/logo/wordmark-on-light.png?v={{ v | e }}" alt="" width="140" height="36">
+				<p class="bp-footer__tagline">{{ tagline | e }}</p>
+			</div>
+			{%- for column in footer_columns or [] %}
+			<nav class="bp-footer__col" aria-labelledby="bp-footer-col-{{ loop.index }}">
+				<h2 class="bp-footer__heading" id="bp-footer-col-{{ loop.index }}">{{ column.heading | e }}</h2>
+				{%- for link in column.links %}
+				<a class="bp-footer__link" href="{{ link.url | e }}">{{ link.label | e }}</a>
+				{%- endfor %}
+			</nav>
+			{%- endfor %}
+		</div>
+		<div class="bp-footer__legal">
+			<p>{{ copyright | e }}</p>
+			<p>{{ trademark | e }}</p>
+		</div>
+	</div>
+</footer>

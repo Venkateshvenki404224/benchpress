@@ -39,7 +39,7 @@ Read the summary links first. If the page links are not enough, use `/llms-full.
 
 ### Start
 
-- [Operator track](/docs/operator.md): Run BenchPress on your own box — install, the VPN plane, settings, the shared database, images, upgrades, safety and diagnostics.
+- [Operator track](/docs/operator/index.md): Run BenchPress on your own box — install, the VPN plane, settings, the shared database, images, upgrades, safety and diagnostics.
 
 ### Stand a host up
 
@@ -75,7 +75,7 @@ Read the summary links first. If the page links are not enough, use `/llms-full.
 
 ### Start
 
-- [Reference track](/docs/reference.md): The data model, the whitelisted API, the eleven deploy steps, the reconcilers, the address plan and the configuration split — for a contributor or an integrator.
+- [Reference track](/docs/reference/index.md): The data model, the whitelisted API, the eleven deploy steps, the reconcilers, the address plan and the configuration split — for a contributor or an integrator.
 
 ### What it is made of
 
@@ -102,8 +102,3 @@ Read the summary links first. If the page links are not enough, use `/llms-full.
 ## Other
 
 - [BenchPress documentation](/docs/index.md): Start here. Three tracks — use a bench, run the server that hosts one, or read the data model and the API.
-- [Integration Notices](/docs/integration-notices.md): Reference page for integration notices.
-- [DESIGN BRIEF](/docs/internal/DESIGN_BRIEF.md): Reference page for design brief.
-- [SCREENSHOT CHECKLIST](/docs/internal/SCREENSHOT-CHECKLIST.md): Reference page for screenshot checklist.
-- [DESIGN BRIEF](/docs/internal/design_handoff_benchpress_ui/DESIGN_BRIEF.md): Reference page for design brief.
-- [Design Handoff Benchpress Ui](/docs/internal/design_handoff_benchpress_ui/README.md): Reference page for design handoff benchpress ui.

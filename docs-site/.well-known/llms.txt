@@ -36,7 +36,7 @@ is done.
 
 ## Operator Track
 
-- [Operator track](/docs/operator.md): Run BenchPress on your own box — install, the VPN plane, settings, the shared database, images, upgrades, safety and diagnostics.
+- [Operator track](/docs/operator/index.md): Run BenchPress on your own box — install, the VPN plane, settings, the shared database, images, upgrades, safety and diagnostics.
 - [Prerequisites](/docs/operator/prerequisites.md): What a BenchPress host needs before you install — the four preconditions, supported platforms, versions, Docker socket access, and the measured CPU and disk sizing.
 - [Install](/docs/operator/install.md): Install BenchPress into a Frappe v16 bench — get-app, setup.sh, the frontend build, the base domain, and the first screen.
 - [WireGuard and the VPN plane](/docs/operator/wireguard-setup.md): How the vpn_management app owns the tunnel, what BenchPress consumes from it, the measured server and pool values, and why userns-remap matters.
@@ -55,7 +55,7 @@ is done.
 
 ## Reference Track
 
-- [Reference track](/docs/reference.md): The data model, the whitelisted API, the eleven deploy steps, the reconcilers, the address plan and the configuration split — for a contributor or an integrator.
+- [Reference track](/docs/reference/index.md): The data model, the whitelisted API, the eleven deploy steps, the reconcilers, the address plan and the configuration split — for a contributor or an integrator.
 - [Architecture](/docs/reference/architecture.md): The moving parts of BenchPress — the control plane, the bench containers, the shared infrastructure, and which Python module owns each concern.
 - [Data model](/docs/reference/data-model.md): All 20 BenchPress DocTypes with their fields, links, naming and the permission rule that scopes each one — plus why there is no Device DocType.
 - [API](/docs/reference/api.md): Every whitelisted BenchPress endpoint, with arguments, what each returns, and the permission check each one makes for itself.

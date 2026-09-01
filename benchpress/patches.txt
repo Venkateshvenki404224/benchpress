@@ -30,3 +30,5 @@ benchpress.patches.default_golden_switches
 benchpress.patches.backfill_bench_health
 benchpress.patches.default_traefik_health
 benchpress.patches.seed_route_rate_limits
+benchpress.patches.seed_public_site
+benchpress.patches.drop_page_content_doctypes

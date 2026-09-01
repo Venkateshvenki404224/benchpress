@@ -284,7 +284,7 @@ points at the flattened copy in `docs-bundle/`.
 [SECURITY.md](SECURITY.md) ·
 [TRADEMARKS.md](TRADEMARKS.md) ·
 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) ·
-[Integration notices](docs/integration-notices.md)
+[Integration notices](INTEGRATION-NOTICES.md)
 
 ---
 
@@ -352,7 +352,7 @@ required dependency, under the same license.
 Third-party components are listed in
 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md), each under its own license.
 The Frappe apps BenchPress integrates with are listed in
-[integration notices](docs/integration-notices.md). The BenchPress name and logo
+[integration notices](INTEGRATION-NOTICES.md). The BenchPress name and logo
 are trademarks and are **not** covered by the AGPL grant. See
 [TRADEMARKS.md](TRADEMARKS.md).
 

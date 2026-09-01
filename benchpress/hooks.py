@@ -11,7 +11,13 @@ app_home = "/desk/benchpress"
 required_apps = ["vpn_management"]
 
 # Fixtures
-fixtures = [{"dt": "Role", "filters": [["role_name", "in", ["BenchPress Admin", "BenchPress User"]]]}]
+#
+# Every entry is filtered to rows this app owns; an unfiltered `dt` carries one deployment's
+# operator data into the next site. The public-site mails are deliberately not here:
+# `sync_fixtures` imports with `force=True` on every migrate and would overwrite an edited body.
+fixtures = [
+	{"dt": "Role", "filters": [["role_name", "in", ["BenchPress Admin", "BenchPress User"]]]},
+]
 
 # Apps screen entry
 add_to_apps_screen = [
@@ -56,6 +62,7 @@ doctype_list_js = {
 	"Bench Site": "public/js/list_view/bench_site_list.js",
 	"Database Server": "public/js/list_view/database_server_list.js",
 	"Waitlist Entry": "public/js/list_view/waitlist_entry_list.js",
+	"Contact Message": "public/js/list_view/contact_message_list.js",
 }
 
 # doctype_tree_js = {"doctype" : "public/js/doctype_tree.js"}
@@ -199,6 +206,14 @@ override_whitelisted_methods = {
 # files as Jinja and convert the markdown ones to HTML.
 page_renderer = ["benchpress.docs_assets.DocsAssetRenderer"]
 
+# The public routes resolve from `benchpress/www/` by filename and get no `website_route_rules`
+# entry. A rule for `/login` would bypass `frappe/www/login.py` and take the signed-in redirect,
+# the `redirect-to` sanitisation and the OAuth paths with it — do not add one.
+#
+# The hook below keeps a signed-in visitor off the marketing page that `Website Settings.home_page`
+# names. Its name is Frappe's and is misleading: it runs for every user, not only a Website User.
+get_website_user_home_page = "benchpress.public_site.home.home_page_for"
+
 website_route_rules = [
 	{"from_route": "/frontend/<path:app_path>", "to_route": "frontend"},
 ]
@@ -276,7 +291,7 @@ scheduler_events = {
 # Testing
 # -------
 
-# before_tests = "benchpress.install.before_tests"
+before_tests = "benchpress.install.before_tests"
 
 # Overriding Methods
 # --------------------

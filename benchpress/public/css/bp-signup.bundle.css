@@ -1,0 +1,617 @@
+/* `/signup` — request access. `bp-brand.bundle.css` owns the palette, the type stack, the keyframes and
+ * the `data-r` breakpoints; the primitives it repeats from `home.html` are named to match. */
+
+/* Cobalt names no error colour and the Espresso ramp is fenced to the console mock, so the two
+ * below are declared here, page-scoped and mode-aware. */
+.bp-request {
+	--bp-danger: #c7291f;
+	--bp-danger-soft: #fdf0ef;
+	--bp-danger-line: #f7e0de;
+}
+
+[data-mode="dark"] .bp-request {
+	--bp-danger: #ff9a90;
+	--bp-danger-soft: rgba(224, 54, 54, 0.14);
+	--bp-danger-line: rgba(224, 54, 54, 0.38);
+}
+
+/* A class with its own `display` outranks the UA sheet's `[hidden]{display:none}`. Three
+ * explicit rules rather than a blanket `!important`. */
+.bp-form[hidden],
+.bp-receipt[hidden],
+.bp-form__alert[hidden] {
+	display: none;
+}
+
+/* -- Shell and section --------------------------------------------------------------------- */
+
+.bp-shell {
+	max-width: var(--m-shell);
+	margin: 0 auto;
+	padding-left: 28px;
+	padding-right: 28px;
+}
+
+.bp-request {
+	position: relative;
+	overflow: hidden;
+	padding: calc(var(--m-header-height) + 56px) 0 80px;
+}
+
+.bp-request__dots {
+	position: absolute;
+	inset: 0;
+	background-image: radial-gradient(var(--grid) 1px, transparent 1px);
+	background-size: 26px 26px;
+	mask-image: radial-gradient(900px 520px at 78% 0%, #000, transparent 74%);
+	-webkit-mask-image: radial-gradient(900px 520px at 78% 0%, #000, transparent 74%);
+	pointer-events: none;
+}
+
+.bp-request__grid {
+	position: relative;
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(min(420px, 100%), 1fr));
+	gap: 44px;
+	align-items: start;
+}
+
+/* -- Intro column ------------------------------------------------------------------------- */
+
+.bp-badge {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	margin: 0;
+	padding: 6px 13px;
+	border-radius: 999px;
+	background: var(--tint);
+	border: 1px solid var(--cardb);
+	font-size: 12px;
+	font-weight: 600;
+	color: var(--accent);
+}
+
+.bp-badge__icon {
+	width: 14px;
+	height: 14px;
+	flex: none;
+}
+
+.bp-intro__title {
+	margin: 20px 0 0;
+	font-size: clamp(32px, 3.4vw, 46px);
+	line-height: 1.05;
+	font-weight: 800;
+	letter-spacing: -0.03em;
+	text-wrap: balance;
+}
+
+.bp-intro__body {
+	margin: 16px 0 0;
+	max-width: 520px;
+	font-size: 16px;
+	line-height: 1.6;
+	color: var(--fg2);
+}
+
+.bp-steps {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	margin: 26px 0 0;
+	padding: 0;
+	list-style: none;
+}
+
+.bp-step {
+	display: flex;
+	align-items: flex-start;
+	gap: 13px;
+	padding: 15px 16px;
+	border-radius: var(--m-radius-pane);
+	background: var(--card);
+	border: 1px solid var(--cardb);
+}
+
+.bp-step__number {
+	flex: none;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 26px;
+	height: 26px;
+	border-radius: 9px;
+	background: var(--tint);
+	border: 1px solid var(--cardb);
+	font-family: var(--font-mono);
+	font-size: 11.5px;
+	font-weight: 600;
+	color: var(--accent);
+}
+
+.bp-step__title {
+	display: block;
+	font-size: 14.5px;
+	font-weight: 600;
+}
+
+.bp-step__body {
+	display: block;
+	margin-top: 5px;
+	font-size: 13.5px;
+	line-height: 1.6;
+	color: var(--fg2);
+}
+
+.bp-note {
+	margin-top: 22px;
+	padding: 16px 18px;
+	border-radius: var(--m-radius-pane);
+	border: 1px dashed var(--cardb);
+	font-size: 13.5px;
+	line-height: 1.6;
+	color: var(--fg2);
+}
+
+.bp-note p {
+	margin: 0;
+}
+
+.bp-note b {
+	color: var(--fg);
+	font-weight: 600;
+}
+
+.bp-note code {
+	font-family: var(--font-mono);
+	font-size: 12.5px;
+	color: var(--accent);
+}
+
+/* -- The card — form and receipt share it -------------------------------------------------- */
+
+.bp-card {
+	border-radius: 20px;
+	background: var(--bg1);
+	border: 1px solid var(--cardb);
+	box-shadow: 0 30px 70px var(--glow);
+	overflow: hidden;
+}
+
+.bp-form__head {
+	padding: 26px 26px 8px;
+}
+
+.bp-form__title {
+	margin: 0;
+	font-size: 19px;
+	font-weight: 700;
+	letter-spacing: -0.015em;
+}
+
+.bp-form__subtitle {
+	margin: 6px 0 0;
+	font-size: 13.5px;
+	color: var(--fg2);
+}
+
+.bp-form__body {
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+	padding: 18px 26px 26px;
+}
+
+.bp-pair {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(min(180px, 100%), 1fr));
+	gap: 14px;
+}
+
+/* -- Fields --------------------------------------------------------------------------------- */
+
+.bp-field {
+	display: flex;
+	flex-direction: column;
+	gap: 7px;
+	min-width: 0;
+}
+
+.bp-field__label {
+	font-size: 12.5px;
+	font-weight: 600;
+	color: var(--fg2);
+}
+
+.bp-field__optional {
+	font-weight: 400;
+	color: var(--fg3);
+}
+
+.bp-field__input {
+	height: 42px;
+	padding: 0 13px;
+	border-radius: 9px;
+	border: 1px solid var(--hair);
+	background: var(--input);
+	color: var(--fg);
+	font-size: 14px;
+	transition: var(--transition-control), box-shadow var(--duration-base) var(--ease-out);
+}
+
+.bp-field__input--select {
+	padding: 0 11px;
+}
+
+.bp-field__input--area {
+	height: auto;
+	padding: 11px 13px;
+	line-height: 1.55;
+	resize: vertical;
+}
+
+.bp-field__input:hover {
+	border-color: var(--cardb);
+}
+
+.bp-field__input:focus-visible {
+	outline: none;
+	border-color: var(--accent);
+	box-shadow: 0 0 0 3px var(--glow);
+}
+
+.bp-field__input[aria-invalid="true"] {
+	border-color: var(--bp-danger);
+}
+
+.bp-field__error {
+	margin: 0;
+	font-size: 12.5px;
+	line-height: 1.5;
+	color: var(--bp-danger);
+}
+
+/* -- Intent chips: the state is one class, and the value posts from the hidden input. ------- */
+
+.bp-chips {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 9px;
+}
+
+.bp-chip {
+	padding: 9px 14px;
+	border-radius: 999px;
+	border: 1px solid var(--cardb);
+	background: transparent;
+	color: var(--fg2);
+	font-size: 13px;
+	font-weight: 600;
+	cursor: pointer;
+	transition: var(--transition-control);
+}
+
+.bp-chip:hover {
+	border-color: var(--accent);
+	color: var(--fg);
+}
+
+.bp-chip:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 2px;
+}
+
+.bp-chip.is-selected {
+	border-color: var(--brand);
+	background: var(--brand);
+	color: var(--onbrand);
+}
+
+.bp-chip.is-selected:hover {
+	border-color: var(--brand2);
+	background: var(--brand2);
+	color: var(--onbrand);
+}
+
+/* -- Consent -------------------------------------------------------------------------------- */
+
+.bp-field--check {
+	gap: 8px;
+}
+
+.bp-consent {
+	display: flex;
+	align-items: flex-start;
+	gap: 10px;
+	font-size: 13px;
+	line-height: 1.55;
+	color: var(--fg2);
+	cursor: pointer;
+}
+
+.bp-consent__box {
+	flex: none;
+	width: 16px;
+	height: 16px;
+	margin: 2px 0 0;
+	accent-color: var(--brand);
+}
+
+.bp-consent__box:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 2px;
+}
+
+/* -- Actions and footnotes ------------------------------------------------------------------ */
+
+.bp-form__actions {
+	display: flex;
+}
+
+.bp-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+	height: var(--m-button-height);
+	padding: 0 16px;
+	border: 1px solid transparent;
+	border-radius: 999px;
+	font-size: 13.5px;
+	font-weight: 600;
+	line-height: 1;
+	text-decoration: none;
+	cursor: pointer;
+	transition: var(--transition-control);
+}
+
+.bp-btn--lg {
+	height: var(--m-button-height-lg);
+	padding: 0 22px;
+	font-size: 15px;
+}
+
+.bp-btn--primary {
+	background: var(--brand);
+	border-color: var(--brand);
+	color: var(--onbrand);
+}
+
+.bp-btn--primary:hover {
+	background: var(--brand2);
+	border-color: var(--brand2);
+	color: var(--onbrand);
+}
+
+.bp-btn--ghost {
+	background: transparent;
+	border-color: var(--cardb);
+	color: var(--fg);
+}
+
+.bp-btn--ghost:hover {
+	background: var(--card);
+	color: var(--fg);
+}
+
+.bp-btn:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 2px;
+}
+
+.bp-btn[aria-busy="true"] {
+	opacity: 0.65;
+	cursor: progress;
+}
+
+.bp-btn__icon {
+	width: 16px;
+	height: 16px;
+	flex: none;
+}
+
+.bp-form__alert {
+	display: flex;
+	margin: 16px 26px 0;
+	padding: 11px 14px;
+	border-radius: 10px;
+	background: var(--bp-danger-soft);
+	border: 1px solid var(--bp-danger-line);
+	font-size: 13.5px;
+	line-height: 1.55;
+	color: var(--bp-danger);
+}
+
+.bp-form__note {
+	display: flex;
+	align-items: center;
+	gap: 9px;
+	margin: 0;
+	font-size: 12.5px;
+	color: var(--fg3);
+}
+
+.bp-form__note-icon {
+	width: 14px;
+	height: 14px;
+	flex: none;
+}
+
+.bp-form__login {
+	margin: 0;
+	padding-top: 14px;
+	border-top: 1px solid var(--hair);
+	font-size: 13.5px;
+	color: var(--fg2);
+}
+
+.bp-form__login a {
+	font-weight: 600;
+	color: var(--accent);
+}
+
+/* The chrome's focus ring is scoped to the header and footer, so the card's links need one. */
+.bp-form__login a:focus-visible,
+.bp-wait a:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 3px;
+}
+
+/* -- The receipt ---------------------------------------------------------------------------- */
+
+.bp-receipt {
+	display: flex;
+	flex-direction: column;
+	gap: 18px;
+	padding: 34px 28px;
+	animation: bp-rise 0.4s var(--ease-out) both;
+}
+
+.bp-receipt__mark {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 46px;
+	height: 46px;
+	border-radius: var(--m-radius-pane);
+	background: var(--tint);
+	border: 1px solid var(--cardb);
+	color: var(--accent);
+}
+
+.bp-receipt__mark-icon {
+	width: 22px;
+	height: 22px;
+}
+
+.bp-receipt__title {
+	margin: 0;
+	font-size: 22px;
+	font-weight: 700;
+	letter-spacing: -0.02em;
+}
+
+/* Focus is moved here after the swap, so it has to hold focus without a ring for a mouse. */
+.bp-receipt__title:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 4px;
+}
+
+.bp-receipt__body {
+	margin: 0;
+	font-size: 14.5px;
+	line-height: 1.65;
+	color: var(--fg2);
+}
+
+.bp-receipt__meta {
+	margin: 0;
+	padding: 14px 16px;
+	border-radius: 12px;
+	background: var(--code);
+	border: 1px solid var(--cardb);
+	font-family: var(--font-mono);
+	font-size: 11.5px;
+	line-height: 1.9;
+	color: var(--codefg);
+}
+
+.bp-receipt__row {
+	display: flex;
+	gap: 8px;
+}
+
+.bp-receipt__row dt {
+	flex: none;
+	width: 68px;
+	opacity: 0.7;
+}
+
+.bp-receipt__row dd {
+	margin: 0;
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+
+.bp-waits {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.bp-wait {
+	display: flex;
+	align-items: flex-start;
+	gap: 10px;
+	font-size: 13.5px;
+	line-height: 1.6;
+	color: var(--fg2);
+}
+
+.bp-wait__icon {
+	flex: none;
+	width: 16px;
+	height: 16px;
+	margin-top: 2px;
+	color: var(--accent);
+}
+
+.bp-wait a {
+	color: var(--fg2);
+	text-decoration: underline;
+	text-underline-offset: 3px;
+}
+
+.bp-wait a:hover,
+.bp-wait a:focus-visible {
+	color: var(--fg);
+}
+
+.bp-receipt__back {
+	align-self: flex-start;
+}
+
+/* -- Narrow — only what `bp-brand.bundle.css` cannot know about this page. --------------------------- */
+
+@media (max-width: 900px) {
+	.bp-request__grid {
+		grid-template-columns: 1fr;
+	}
+
+	.bp-form__head {
+		padding: 22px 20px 6px;
+	}
+
+	.bp-form__body {
+		padding: 16px 20px 22px;
+	}
+
+	.bp-form__alert {
+		margin: 14px 20px 0;
+	}
+
+	.bp-receipt {
+		padding: 28px 20px;
+	}
+}
+
+/* -- Phone type floor ------------------------------------------------------------------------ */
+
+@media (max-width: 560px) {
+	.bp-eyebrow {
+		font-size: 12px;
+	}
+
+	/* Frappe sizes bare `input[type="checkbox"]` from its own `--checkbox-size`, which outranks a
+	   lone `.bp-consent__box`; `input` takes it back and the `min-*` pair settles the width. */
+	.bp input.bp-consent__box {
+		width: 24px;
+		height: 24px;
+		min-width: 24px;
+		min-height: 24px;
+	}
+}

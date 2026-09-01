@@ -10,21 +10,22 @@ Which knob lives where, and what changing it costs.
 **Who this is for.** Somebody who changed a value and is waiting for it to take
 effect.
 
-**Before you start.** BenchPress is configured in three layers, and they behave
+**Before you start.** BenchPress is configured in four layers, and they behave
 differently. A value in the wrong layer looks ignored. Read
-[The three layers](#the-three-layers) before you change anything.
+[The four layers](#the-four-layers) before you change anything.
 
-## The three layers
+## The four layers
 
 | Layer | Lives in | A change costs | Owns |
 |---|---|---|---|
 | Build arguments | `Dockerfile`, passed by `entry.py` | a rebuild | what is inside the control plane image |
 | Runtime environment | `.env`, read by Docker Compose | a restart | ports, passwords, hostnames, the image tag |
+| Site configuration | `sites/<site>/site_config.json` | a restart of the bench services | what this one deployment is |
 | DocType settings | `BenchPress Settings`, `Credit Settings` | a save, and a cache clear | how benches are built, placed and priced |
 
-Most of what a reader wants is the third layer, and it is documented field by
+Most of what a reader wants is the last layer, and it is documented field by
 field in the [Settings reference](/docs/operator/settings-reference). This page
-covers the first two, and the rule for telling them apart.
+covers the other three, and the rule for telling them apart.
 
 ## Build arguments
 
@@ -72,6 +73,43 @@ file in the repository names a hostname. A new domain is a flag, never an edit.
 Ubuntu hosts differ. `entry.py` writes the real value at setup and on every
 `--build`.
 
+## Site configuration
+
+`site_config.json` holds the keys that are read before any DocType exists.
+BenchPress adds one.
+
+| Key | Decides |
+|---|---|
+| `benchpress_public_site` | whether this deployment serves the public marketing site |
+
+**The public site is off unless this key is set.** BenchPress is open source,
+and an install that runs labs for one team has no use for the marketing pages
+of the hosted service. With the key absent, `/`, `/landing`, `/about`,
+`/contact` and `/signup` are not found, `/login` serves Frappe's own login
+form, the three guest form endpoints refuse, `Website Settings → Home Page` is
+left as the operator set it, and the six transactional email templates are not
+created.
+
+Set it only on a deployment that is the public site:
+
+```bash
+bench --site <site> set-config benchpress_public_site true
+bench --site <site> execute benchpress.public_site.seed.seed_public_site
+bench --site <site> clear-cache
+docker compose restart backend
+```
+
+The second command plants the page copy, the six mail templates and the home
+page. Run it every time you set the key: the seeding patch is marked as run on
+a fresh install whether or not the key was set, so a migrate will not plant
+them later. It never overwrites an edit.
+
+The cache clear is not optional. Frappe remembers every URL that answered 404
+and short-circuits it on the next request, so without it the pages keep
+answering 404 after the key goes on.
+
+Unsetting the key hides the pages again. It deletes nothing.
+
 ## The site name invariant
 
 The control plane site is `frontend` everywhere: in `.env`, in the Compose
@@ -114,6 +152,7 @@ ships as `0`. Nothing in `Credit Settings` has any effect while it is `0`.
 | A preset, or `FRAPPE_BRANCH` | `./entry.py --build` |
 | `PORT`, `IMAGE_NAME`, a password | `./entry.py --restart` |
 | `PUBLIC_HOSTNAME` | `./entry.py --domain <fqdn>`, which regenerates `COMPOSE_FILE` |
+| `benchpress_public_site` | seeding the public site, a cache clear, then `docker compose restart backend` |
 | Python in the app | `docker compose restart backend`, and the workers if they import it |
 | A Vue file or a bundle | `bench build --app benchpress`, then restart `backend frontend` |
 | A hook, a fixture or a DocType schema | `bench --site frontend migrate` |
@@ -146,6 +185,8 @@ grep COMPOSE_FILE .env
 | The site is served in plaintext on a public host | The dev port mapping survived | The production overlay uses `ports: !override` |
 | Docker calls fail with a permission error | `DOCKER_GID` is the default, not this host's | Re-run `--build`, which detects it |
 | Every deploy is refused | `enable_credits` is `1` and nobody can pay | Set it back to `0` |
+| The marketing pages answer 404 | `benchpress_public_site` is not set | Set it, then seed the public site |
+| They still answer 404 with the key set | The 404s are cached per URL | `bench --site <site> clear-cache` |
 | A container resize did nothing | Sizes apply at deploy time | Redeploy the bench |
 
 ## Reference
@@ -157,6 +198,7 @@ grep COMPOSE_FILE .env
 | `Credit Settings` fields | 16 |
 | Control plane site | `frontend` |
 | Public switch | `PUBLIC_HOSTNAME` |
+| Public site switch | `benchpress_public_site`, absent by default |
 | Credits switch | `BenchPress Settings.enable_credits`, ships `0` |
 
 `enable_credits` is a field on a Single, not a site config key.

@@ -1,0 +1,27 @@
+{#- Base for the four marketing pages: no framework stylesheet, script bundle or boot payload.
+    `/login` keeps `templates/web.html`, because Frappe's login script needs all three. -#}
+<!DOCTYPE html>
+<html lang="{{ frappe.lang }}" dir="{{ 'rtl' if is_rtl() else 'ltr' }}">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+	{% include "templates/includes/meta_block.html" %}
+
+	<title>{% block title %}{{ title | striptags }}{% endblock %}</title>
+	{%- if favicon %}
+	<link rel="shortcut icon" href="{{ favicon | abs_url }}" type="image/x-icon">
+	{%- endif %}
+
+	{{ head_html or "" }}
+	{%- for link in web_include_css %}
+	{{ include_style(link) }}
+	{%- endfor %}
+
+	{% include "templates/includes/site_head.html" %}
+	{%- block head_include %}{% endblock %}
+</head>
+<body class="bp-standalone {{ body_class or '' }}" data-csrf-token="{{ (csrf_token or '') | e }}">
+	{%- block page_content %}{% endblock %}
+	{%- block script %}{% endblock %}
+</body>
+</html>
