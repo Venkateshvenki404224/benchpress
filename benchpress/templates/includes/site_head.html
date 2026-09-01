@@ -4,6 +4,15 @@
 
 <meta name="color-scheme" content="dark light">
 
+{#- Our own key: frappe overwrites `canonical` in `set_missing_values` with the raw request
+    path, which makes `/` name `/index` and the `/landing` alias name itself. -#}
+{%- if bp_canonical %}
+<link rel="canonical" href="{{ bp_canonical | e }}">
+{%- endif %}
+{%- if bp_noindex %}
+<meta name="robots" content="noindex,follow">
+{%- endif %}
+
 <link rel="icon" type="image/svg+xml" href="/assets/benchpress/images/logo/favicon.svg?v={{ v | e }}">
 <link rel="icon" type="image/png" sizes="32x32" href="/assets/benchpress/images/logo/favicon-32.png?v={{ v | e }}">
 <link rel="icon" type="image/png" sizes="96x96" href="/assets/benchpress/images/logo/favicon-96x96.png?v={{ v | e }}">

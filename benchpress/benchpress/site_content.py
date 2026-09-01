@@ -4,7 +4,7 @@
 """The read side of the public site: the shipped copy, shaped the way each template reads it."""
 
 import frappe
-from frappe.utils import cint, get_build_version
+from frappe.utils import cint, get_build_version, get_url
 
 from benchpress.credits.config import SIGNUP_ROUTE, credits_enabled, waitlist_open
 from benchpress.request_cache import clear_local_cache, local_cache
@@ -78,6 +78,11 @@ def chrome_content() -> dict:
 		"csrf_token": session_csrf_token(),
 		"asset_version": asset_version(),
 	}
+
+
+def canonical_url(route: str) -> str:
+	"""The one address a page should be indexed under. `/landing` names `/`, not itself."""
+	return get_url(route)
 
 
 def preview_tags(title: str, description: str, image: str = "") -> dict:
@@ -847,7 +852,11 @@ LANDING_SEED = {
 	"footer_trademark": FOOTER_TRADEMARK,
 	# seo
 	"meta_title": "BenchPress — Frappe dev environments your team can deploy themselves",
-	"meta_description": HERO_SUBHEAD,
+	# Its own line, not the subhead: a search result truncates near 160 characters.
+	"meta_description": (
+		"Self-hosted Frappe dev environments. Describe a lab once — a version and an app "
+		"list — and anyone on the team deploys it in a click. Open source, AGPL-3.0."
+	),
 	"og_image": "",
 }
 

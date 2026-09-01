@@ -5,7 +5,7 @@ import frappe
 from frappe.utils import cint, cstr, strip_html
 
 from benchpress import waitlist
-from benchpress.benchpress.site_content import chrome_content, preview_tags, shipped
+from benchpress.benchpress.site_content import canonical_url, chrome_content, preview_tags, shipped
 from benchpress.credits.config import SIGNUP_ROUTE, credits_enabled, waitlist_open
 from benchpress.public_site import require_public_site
 
@@ -23,6 +23,7 @@ DEFAULT_TITLE = "Request access — BenchPress"
 FORM_FIELDS = ("email", "full_name", "company", "team_size", "intent", "expected_apps", "use_case")
 
 no_cache = 1
+sitemap = 1
 
 
 def get_context(context):
@@ -34,6 +35,7 @@ def get_context(context):
 		raise frappe.Redirect
 
 	context.no_cache = 1
+	context.bp_canonical = canonical_url("/signup")
 	context.body_class = "bp-body"
 	context.mode_default = "dark"
 

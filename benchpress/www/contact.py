@@ -5,7 +5,7 @@ import frappe
 from frappe.utils import cstr, strip_html
 
 from benchpress import contact
-from benchpress.benchpress.site_content import chrome_content, preview_tags, shipped
+from benchpress.benchpress.site_content import canonical_url, chrome_content, preview_tags, shipped
 from benchpress.public_site import require_public_site
 
 ROUTE = "/contact"
@@ -17,12 +17,14 @@ DEFAULT_TITLE = "Contact BenchPress"
 FORM_FIELDS = ("name", "email", "message", "topic")
 
 no_cache = 1
+sitemap = 1
 
 
 def get_context(context):
 	require_public_site()
 
 	context.no_cache = 1
+	context.bp_canonical = canonical_url("/contact")
 	context.body_class = "bp-body"
 	context.mode_default = "dark"
 

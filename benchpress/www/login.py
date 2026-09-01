@@ -7,7 +7,7 @@ import frappe
 from frappe.utils import cint
 from frappe.www.login import get_context as frappe_login_context
 
-from benchpress.benchpress.site_content import asset_version, chrome_content, preview_tags
+from benchpress.benchpress.site_content import asset_version, canonical_url, chrome_content, preview_tags
 from benchpress.public_site import public_site_enabled
 
 no_cache = True
@@ -51,6 +51,9 @@ def get_context(context):
 		return context
 
 	context.update(branded(context))
+	# A sign-in form is not a search result.
+	context.bp_canonical = canonical_url("/login")
+	context.bp_noindex = 1
 	return context
 
 

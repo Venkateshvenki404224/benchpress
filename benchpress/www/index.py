@@ -7,6 +7,7 @@ import frappe
 
 from benchpress.benchpress.site_content import (
 	about_content,
+	canonical_url,
 	chrome_content,
 	landing_content,
 	preview_tags,
@@ -23,6 +24,7 @@ HERO_VIDEO = "hero.mp4"
 HERO_POSTER = "hero-poster.jpg"
 
 no_cache = 1
+sitemap = 1
 
 NO_COMMERCE = {
 	"credits_enabled": False,
@@ -34,6 +36,7 @@ def get_context(context):
 	require_public_site()
 
 	context.no_cache = 1
+	context.bp_canonical = canonical_url("/")
 	context.body_class = "bp-body"
 	context.mode_default = "dark"
 
