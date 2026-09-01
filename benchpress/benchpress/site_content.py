@@ -275,11 +275,11 @@ LANDING_SEED = {
 	# templates marquee
 	"templates_eyebrow": "Templates",
 	"template_cards": [
-		{"app_name": "ERPNext v15", "build_time": "~90s", "icon": f"{APP_ICONS}/erpnext.svg"},
-		{"app_name": "Frappe HR", "build_time": "~2m", "icon": f"{APP_ICONS}/hrms.svg"},
-		{"app_name": "Frappe CRM", "build_time": "~60s", "icon": f"{APP_ICONS}/crm.svg"},
-		{"app_name": "Helpdesk", "build_time": "~75s", "icon": f"{APP_ICONS}/helpdesk.svg"},
-		{"app_name": "Frappe Learning", "build_time": "~90s", "icon": f"{APP_ICONS}/lms.svg"},
+		{"app_name": "ERPNext v15", "build_time": "under 1m", "icon": f"{APP_ICONS}/erpnext.svg"},
+		{"app_name": "Frappe HR", "build_time": "under 1m", "icon": f"{APP_ICONS}/hrms.svg"},
+		{"app_name": "Frappe CRM", "build_time": "under 1m", "icon": f"{APP_ICONS}/crm.svg"},
+		{"app_name": "Helpdesk", "build_time": "under 1m", "icon": f"{APP_ICONS}/helpdesk.svg"},
+		{"app_name": "Frappe Learning", "build_time": "under 1m", "icon": f"{APP_ICONS}/lms.svg"},
 		{"app_name": "Custom image", "build_time": "build once", "icon": f"{APP_ICONS}/frappe.svg"},
 	],
 	# paths
@@ -311,7 +311,7 @@ LANDING_SEED = {
 	"path_points": [
 		{
 			"path": "Hosted",
-			"point": "Nothing to install — first environment in about 90 seconds",
+			"point": "Nothing to install — first environment in under a minute",
 		},
 		{
 			"path": "Hosted",
@@ -418,7 +418,7 @@ LANDING_SEED = {
 				"The container comes up and BenchPress runs the exact bench commands you "
 				"would have typed, in order."
 			),
-			"timing": "Roughly 60-120 seconds depending on the app set.",
+			"timing": "Roughly 20-40 seconds depending on the app set.",
 			"plane_nodes": "host",
 			"plane_chips": "",
 		},
@@ -624,7 +624,7 @@ LANDING_SEED = {
 				"→ 200 {\n"
 				'  "step": 7,\n'
 				'  "title": "Install apps and migrate",\n'
-				'  "elapsed": "1m 45s",\n'
+				'  "elapsed": "38s",\n'
 				'  "lines": [\n'
 				'    "Installing app erpnext...",\n'
 				'    "Updating DocTypes for erpnext : 100%",\n'
@@ -658,7 +658,7 @@ LANDING_SEED = {
 		{
 			"aspect": "New environment",
 			"manual": "30–90 min, SSH required",  # noqa: RUF001 -- en dash is verbatim spec copy
-			"benchpress": "One click, ~90 seconds",
+			"benchpress": "One click, under a minute",
 		},
 		{
 			"aspect": "Who can do it",
@@ -989,7 +989,7 @@ ABOUT_SEED = {
 		"attached.</p>"
 	),
 	"stats": [
-		{"value": "~90s", "label": "From a new joiner's click to a working site and IDE"},
+		{"value": "<1 min", "label": "From a new joiner's click to a working site and IDE"},
 		{"value": "1 install", "label": "On one server, for the whole team — not per laptop"},
 		{"value": "0", "label": "Credits charged for a build that fails"},
 		{"value": "AGPL-3.0", "label": "Licensed, self-hostable, no telemetry"},

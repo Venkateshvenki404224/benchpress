@@ -161,9 +161,9 @@
 					<div class="bp-term">
 						<p class="bp-term__line" style="--bp-delay:0s"><span class="bp-term__time">00:00</span><span class="bp-term__mark">✓</span><span class="bp-term__text">Reserved a container slot</span></p>
 						<p class="bp-term__line" style="--bp-delay:0.35s"><span class="bp-term__time">00:04</span><span class="bp-term__mark">✓</span><span class="bp-term__text">Pulled bp/erpnext-v15:cached</span></p>
-						<p class="bp-term__line" style="--bp-delay:0.7s"><span class="bp-term__time">00:22</span><span class="bp-term__mark">✓</span><span class="bp-term__text">Container up · mariadb, redis, code-server</span></p>
-						<p class="bp-term__line" style="--bp-delay:1.05s"><span class="bp-term__time">00:49</span><span class="bp-term__mark">✓</span><span class="bp-term__text">Created site erpnext-demo.bp.local</span></p>
-						<p class="bp-term__line" style="--bp-delay:1.4s"><span class="bp-term__time">01:16</span><span class="bp-term__mark">•</span><span class="bp-term__text bp-term__text--live">Installing erpnext · migrating</span></p>
+						<p class="bp-term__line" style="--bp-delay:0.7s"><span class="bp-term__time">00:14</span><span class="bp-term__mark">✓</span><span class="bp-term__text">Container up · mariadb, redis, code-server</span></p>
+						<p class="bp-term__line" style="--bp-delay:1.05s"><span class="bp-term__time">00:26</span><span class="bp-term__mark">✓</span><span class="bp-term__text">Created site erpnext-demo.bp.local</span></p>
+						<p class="bp-term__line" style="--bp-delay:1.4s"><span class="bp-term__time">00:38</span><span class="bp-term__mark">•</span><span class="bp-term__text bp-term__text--live">Installing erpnext · migrating</span></p>
 						<p class="bp-term__line"><span class="bp-term__time"></span><span class="bp-term__mark bp-term__mark--dim">$</span><span class="bp-term__cmd">bench build --production<i class="bp-caret" aria-hidden="true"></i></span></p>
 					</div>
 					{%- endif %}
@@ -177,7 +177,7 @@
 					</div>
 				</div>
 
-				<p class="bp-float" data-r="float">{{ check("bp-float__icon") }}<span>Site live in 1m 52s</span></p>
+				<p class="bp-float" data-r="float">{{ check("bp-float__icon") }}<span>Site live in under a minute</span></p>
 			</div>
 		</div>
 
@@ -498,7 +498,7 @@ doc_events = {
 						<p class="bp-dstep"><span class="bp-dstep__badge bp-dstep__badge--done">✓</span><span class="bp-dstep__body"><b>Pull the lab image</b><span>docker pull bp/erpnext-v15:cached</span></span><span class="bp-dstep__time">11s</span></p>
 						<p class="bp-dstep"><span class="bp-dstep__badge bp-dstep__badge--done">✓</span><span class="bp-dstep__body"><b>Start the container and services</b><span>docker run -v bp_sites:/home/frappe/…</span></span><span class="bp-dstep__time">18s</span></p>
 						<p class="bp-dstep"><span class="bp-dstep__badge bp-dstep__badge--done">✓</span><span class="bp-dstep__body"><b>Create the site</b><span>bench new-site erpnext-demo.bp.local</span></span><span class="bp-dstep__time">27s</span></p>
-						<p class="bp-dstep"><span class="bp-dstep__badge bp-dstep__badge--active">•</span><span class="bp-dstep__body"><b>Install apps and migrate</b><span>bench --site erpnext-demo.bp.local install-app erpnext</span></span><span class="bp-dstep__time">1m 45s</span></p>
+						<p class="bp-dstep"><span class="bp-dstep__badge bp-dstep__badge--active">•</span><span class="bp-dstep__body"><b>Install apps and migrate</b><span>bench --site erpnext-demo.bp.local install-app erpnext</span></span><span class="bp-dstep__time">38s</span></p>
 						<p class="bp-dstep bp-dstep--todo"><span class="bp-dstep__badge"></span><span class="bp-dstep__body"><b>Build assets</b><span>bench build --production</span></span><span class="bp-dstep__time">—</span></p>
 						<p class="bp-dstep bp-dstep--todo"><span class="bp-dstep__badge"></span><span class="bp-dstep__body"><b>Attach the WireGuard route</b><span>wg set wg0 peer &lt;pubkey&gt;</span></span><span class="bp-dstep__time">—</span></p>
 					</div>
