@@ -755,55 +755,99 @@ LANDING_SEED = {
 	"forum_link_url": FORUM_URL,
 	# faq
 	"faq_title": "Questions",
+	# Every answer names its subject in the first clause: an assistant quotes the answer without
+	# the question, and "No." on its own carries nothing.
 	"faq_items": [
 		{
-			"question": "Do I need to know bench or Docker?",
+			"question": "What is BenchPress?",
 			"answer": (
-				"No. Deploying a template needs a name and a click. Bench commands only show "
-				"up in the log, and only if you expand it."
+				"BenchPress is a self-hosted tool for handing out Frappe development "
+				"environments. Someone describes a lab once — a Frappe version and an app list "
+				"— and anyone on the team deploys it in a click, works in it over SSH or "
+				"browser VS Code, and destroys it when the task is done."
 			),
 			"default_open": 1,
 		},
 		{
+			"question": "Do I need to know bench or Docker?",
+			"answer": (
+				"No. Deploying a BenchPress template needs a name and a click. The bench "
+				"commands run inside the container and only appear in the deploy log, if you "
+				"expand it. Docker matters for whoever installs BenchPress on the server, not "
+				"for the people using it."
+			),
+			"default_open": 0,
+		},
+		{
+			"question": "Is BenchPress free and open source?",
+			"answer": (
+				"Yes. BenchPress is published under AGPL-3.0 and won FOSS Hack 2026. "
+				"Self-hosting it costs nothing, needs no account and sends no telemetry. The "
+				"hosted build is the same repository with billing attached."
+			),
+			"default_open": 0,
+		},
+		{
 			"question": "What is the difference between hosted and self-hosted?",
 			"answer": (
-				"The code — there isn't any. The hosted build is this repo with billing "
-				"attached. Hosted means we run the server, the mesh and the upgrades; "
-				"self-hosted means you do, for free, forever."
+				"There is no difference in the code: the hosted build of BenchPress is this "
+				"repository with billing attached. Hosted means we run the server, the mesh and "
+				"the upgrades. Self-hosted means you run them, for free, forever."
+			),
+			"default_open": 0,
+		},
+		{
+			"question": "What do I need to self-host BenchPress?",
+			"answer": (
+				"BenchPress needs a Linux server with Docker, an existing Frappe v16 bench and a "
+				"domain you control. Disk is the binding constraint: lab images measured 5.5 GB "
+				"to 19.7 GB here, so provision 100 GB free for one image and 250 GB for a "
+				"catalog. A 20 GB VPS disk fails mid-build."
 			),
 			"default_open": 0,
 		},
 		{
 			"question": "Where do the environments actually run?",
 			"answer": (
-				"As Docker containers on a server — ours on the hosted build, or one you "
-				"connect: your VPS, your bare metal, a machine in the office. BenchPress "
-				"orchestrates; it doesn't hold your data."
+				"BenchPress environments run as Docker containers on a server — ours on the "
+				"hosted build, or one you connect: your VPS, your bare metal, a machine in the "
+				"office. BenchPress orchestrates the containers; it doesn't hold your data."
+			),
+			"default_open": 0,
+		},
+		{
+			"question": "Is BenchPress a hosting platform for client sites?",
+			"answer": (
+				"No. BenchPress runs development and demo environments, disposable on purpose "
+				"and removed when the work is done. It is not a production hosting platform, and "
+				"a live client site does not belong on it."
 			),
 			"default_open": 0,
 		},
 		{
 			"question": "Can an agent spin environments up and down on its own?",
 			"answer": (
-				"Yes. Issue a scoped API key with a credit ceiling and a TTL. The agent "
-				"deploys, works, reads logs and destroys the instance; the ceiling stops a "
-				"runaway loop."
+				"Yes. A BenchPress API key can be scoped with a credit ceiling and a TTL: the "
+				"agent deploys, works, reads logs and destroys the instance. The ceiling stops a "
+				"runaway loop, and both limits are enforced server-side."
 			),
 			"default_open": 0,
 		},
 		{
 			"question": "What happens to credits if a build fails?",
 			"answer": (
-				"Nothing is charged. Failed builds and stopped instances are free; the ledger "
-				"in Settings shows every line so you can check."
+				"Nothing is charged when a build fails. Failed builds and stopped instances are "
+				"free on BenchPress; the ledger in Settings shows every line, so you can check "
+				"what was metered."
 			),
 			"default_open": 0,
 		},
 		{
 			"question": "Is the VPN optional?",
 			"answer": (
-				"On the hosted build, no — it's the access path. Self-hosted, you can expose "
-				"sites yourself, but the default assumes private."
+				"On the hosted build the WireGuard mesh is the access path, so it is not "
+				"optional. Self-hosted, you can expose sites yourself, but BenchPress defaults "
+				"to private: every environment answers on a mesh address, one key per device."
 			),
 			"default_open": 0,
 		},
