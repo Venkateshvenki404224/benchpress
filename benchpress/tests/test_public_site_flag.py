@@ -8,6 +8,7 @@ from unittest.mock import patch
 
 import frappe
 from frappe.tests import IntegrationTestCase
+from frappe.utils.fixtures import sync_fixtures
 from frappe.website.serve import get_response
 
 from benchpress import contact, emails, signup, waitlist
@@ -19,7 +20,7 @@ from benchpress.tests.guest_request import as_request
 
 EMAIL_TEMPLATE = "Email Template"
 PUBLIC_ROUTES = ("/landing", "/about", "/contact", "/signup")
-ADDRESS = "gate@example.com"
+EMAIL = "gate@example.com"
 
 
 @contextmanager
@@ -80,14 +81,26 @@ class TestPublicSiteFlag(IntegrationTestCase):
 		self.assertEqual(frappe.db.get_single_value(WEBSITE_SETTINGS, "home_page"), "")
 
 	def test_the_seeder_creates_no_mail_templates_without_the_key(self):
-		name = emails.seed_rows()[0]["name"]
-		if frappe.db.exists(EMAIL_TEMPLATE, name):
-			frappe.delete_doc(EMAIL_TEMPLATE, name, force=True, ignore_permissions=True)
+		name = self.drop_a_mail_template()
 
 		with public_site(False):
 			seed_public_site()
 
 		self.assertFalse(frappe.db.exists(EMAIL_TEMPLATE, name))
+
+	def test_migrating_creates_no_mail_templates_without_the_key(self):
+		name = self.drop_a_mail_template()
+
+		with public_site(False):
+			sync_fixtures("benchpress")
+
+		self.assertFalse(frappe.db.exists(EMAIL_TEMPLATE, name))
+
+	def drop_a_mail_template(self) -> str:
+		name = emails.seed_rows()[0]["name"]
+		if frappe.db.exists(EMAIL_TEMPLATE, name):
+			frappe.delete_doc(EMAIL_TEMPLATE, name, force=True, ignore_permissions=True)
+		return name
 
 	def test_the_home_page_hook_is_silent_without_the_key(self):
 		self.addCleanup(_set_home_page, frappe.db.get_single_value(WEBSITE_SETTINGS, "home_page"))
@@ -100,15 +113,15 @@ class TestPublicSiteFlag(IntegrationTestCase):
 
 	def test_the_guest_endpoints_refuse_without_the_key(self):
 		calls = (
-			("waitlist", lambda: waitlist.join(ADDRESS)),
-			("contact", lambda: contact.submit("Ravi", ADDRESS, "hello")),
-			("signup", lambda: signup.sign_up(ADDRESS, "Ravi")),
+			("waitlist", lambda: waitlist.join(EMAIL)),
+			("contact", lambda: contact.submit("Ravi", EMAIL, "hello")),
+			("signup", lambda: signup.sign_up(EMAIL, "Ravi")),
 		)
 		with public_site(False), as_request():
 			for label, call in calls:
 				with self.subTest(endpoint=label):
 					self.assertRaises(frappe.PageDoesNotExistError, call)
 
-		self.assertFalse(frappe.db.exists("Waitlist Entry", {"email": ADDRESS}))
-		self.assertFalse(frappe.db.exists("Contact Message", {"email": ADDRESS}))
-		self.assertFalse(frappe.db.exists("User", ADDRESS))
+		self.assertFalse(frappe.db.exists("Waitlist Entry", {"email": EMAIL}))
+		self.assertFalse(frappe.db.exists("Contact Message", {"email": EMAIL}))
+		self.assertFalse(frappe.db.exists("User", EMAIL))

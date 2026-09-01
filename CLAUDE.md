@@ -107,10 +107,9 @@ Seven facts that are easy to break:
 - Every page renders from a seed constant when its Single is empty. The seed is
   also what `benchpress.public_site.seed.seed_public_site` writes into Desk, so
   each string has one home. The seeder never overwrites an operator's edit.
-- The six `Email Template` rows are the exception. They are a `fixtures` entry,
-  and `sync_fixtures` imports with `force=True` on every `bench migrate`, so a
-  body edited in Desk is overwritten on the next migrate. After an edit, run
-  `bench --site frontend export-fixtures --app benchpress` and commit the result.
+- The six `Email Template` rows are seeded the same way, and are deliberately not
+  a `fixtures` entry: `sync_fixtures` imports with `force=True` on every
+  `bench migrate`, which no flag can gate and which overwrites an edited body.
 
 The contract the five pages were built against is
 [internal/public-site-spec.md](internal/public-site-spec.md).

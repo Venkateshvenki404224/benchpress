@@ -16,32 +16,11 @@ required_apps = ["vpn_management"]
 # and re-imports it into the next site, which is how one deployment's operator data ends up in
 # another's.
 #
-# The `Email Template` entry makes the six public-site mails version-controlled: the wording ships
-# with the app instead of living only in one site's database. The cost is real and worth naming —
-# `sync_fixtures` imports with `force=True` on *every* `bench migrate`, so a body edited in Desk is
-# overwritten on the next migrate. The workflow is therefore: edit in Desk, then
-# `bench --site <site> export-fixtures --app benchpress` and commit the result. That is also why
-# the page Singles are seeded (`benchpress/public_site/seed.py`) rather than fixtured — page copy
-# is meant to be an operator's to keep.
+# The six public-site mails are not here. `sync_fixtures` imports with `force=True` on every
+# migrate, which no flag can gate and which overwrites an edited body;
+# `benchpress/public_site/seed.py` plants them instead, only when absent.
 fixtures = [
 	{"dt": "Role", "filters": [["role_name", "in", ["BenchPress Admin", "BenchPress User"]]]},
-	{
-		"dt": "Email Template",
-		"filters": [
-			[
-				"name",
-				"in",
-				[
-					"BenchPress Access Request Received",
-					"BenchPress Access Request Filed",
-					"BenchPress Access Approved",
-					"BenchPress Access Declined",
-					"BenchPress Contact Message Received",
-					"BenchPress Contact Message Filed",
-				],
-			]
-		],
-	},
 ]
 
 # Apps screen entry

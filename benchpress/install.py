@@ -114,7 +114,6 @@ def create_test_users():
 
 def before_tests() -> None:
 	"""Prepare the test site: an outgoing mail account, and the public site switched on."""
-	# The suite covers the hosted deployment, so the flag is on unless a test turns it off.
 	frappe.conf[CONFIG_KEY] = 1
 	if frappe.db.exists("Email Account", {"default_outgoing": 1}):
 		return
