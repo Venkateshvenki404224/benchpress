@@ -26,13 +26,15 @@ def email_channel() -> list:
 	if not address:
 		return []
 	return [
-		{
-			"icon": "mail",
-			"title": "Email us",
-			"body": "Sales, hosted access, quotes for setup or app work. A human replies.",
-			"meta_label": address,
-			"url": f"mailto:{address}",
-		}
+		frappe._dict(
+			{
+				"icon": "mail",
+				"title": "Email us",
+				"body": "Sales, hosted access, quotes for setup or app work. A human replies.",
+				"meta_label": address,
+				"url": f"mailto:{address}",
+			}
+		)
 	]
 
 
@@ -48,7 +50,7 @@ def get_context(context):
 	context.update(chrome_content())
 	context.update(submission())
 	context.settings = settings
-	context.channels = channel_rows(settings.channels)
+	context.channels = channel_rows([*email_channel(), *settings.channels])
 	context.topics = settings.topics
 	context.response_times = settings.response_times
 	context.default_topic = contact.default_topic()
@@ -62,7 +64,6 @@ def get_context(context):
 	context.og_image = settings.og_image
 	context.title = context.meta_title
 	context.metatags = preview_tags(context.title, context.meta_description, context.og_image)
-	context.channels = [*email_channel(), *context.channels]
 	context.bp_schema = structured_data.contact(context.meta_description, contact.public_email())
 	return context
 
