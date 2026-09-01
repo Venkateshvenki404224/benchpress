@@ -3,6 +3,7 @@
 
 import frappe
 from frappe.tests import IntegrationTestCase
+from frappe.utils import escape_html
 from frappe.website.serve import get_response_content
 from frappe.website.utils import get_home_page
 
@@ -120,7 +121,7 @@ class TestLanding(IntegrationTestCase):
 		html = self.render_as_guest()
 		self.assertIn('id="about"', html)
 		self.assertIn(LANDING_SEED["about_title"], html)
-		self.assertIn(ABOUT_SEED["stats"][0]["value"], html)
+		self.assertIn(escape_html(ABOUT_SEED["stats"][0]["value"]), html)
 
 	def test_no_placeholder_quote_is_left_on_the_page(self):
 		html = self.render_as_guest()

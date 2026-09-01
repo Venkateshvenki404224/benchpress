@@ -8,6 +8,7 @@
 {%- macro arrow_right(klass="") -%}{{ svg('<path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>', klass) }}{%- endmacro -%}
 {%- macro check(klass="") -%}{{ svg('<path d="M20 6 9 17l-5-5"/>', klass) }}{%- endmacro -%}
 {%- macro clock(klass="") -%}{{ svg('<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>', klass) }}{%- endmacro -%}
+{%- macro award(klass="") -%}{{ svg('<circle cx="12" cy="8" r="6"/><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"/>', klass) }}{%- endmacro -%}
 {%- macro copy(klass="") -%}{{ svg('<rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>', klass) }}{%- endmacro -%}
 {%- macro cpu(klass="") -%}{{ svg('<rect width="16" height="16" x="4" y="4" rx="2"/><rect width="6" height="6" x="9" y="9" rx="1"/><path d="M15 2v2"/><path d="M15 20v2"/><path d="M2 15h2"/><path d="M2 9h2"/><path d="M20 15h2"/><path d="M20 9h2"/><path d="M9 2v2"/><path d="M9 20v2"/>', klass) }}{%- endmacro -%}
 {%- macro credit_card(klass="") -%}{{ svg('<rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/>', klass) }}{%- endmacro -%}
@@ -89,14 +90,21 @@
 	<div class="bp-shell bp-hero__inner" data-r="pad hero">
 		<div class="bp-hero__split" data-r="split">
 			<div class="bp-hero__copy">
-				{%- if settings.hero_badge_text or settings.hero_badge_version %}
-				<p class="bp-badge">
-					<span class="bp-badge__dot" aria-hidden="true"></span>
-					{{ settings.hero_badge_text | default("", true) | e }}
-					{%- if settings.hero_badge_version %}
-					<span class="bp-badge__version">{{ settings.hero_badge_version | e }}</span>
+				{%- if settings.hero_badge_text or settings.hero_badge_version or settings.hero_award_text %}
+				<div class="bp-badgerow">
+					{%- if settings.hero_badge_text or settings.hero_badge_version %}
+					<p class="bp-badge">
+						<span class="bp-badge__dot" aria-hidden="true"></span>
+						{{ settings.hero_badge_text | default("", true) | e }}
+						{%- if settings.hero_badge_version %}
+						<span class="bp-badge__version">{{ settings.hero_badge_version | e }}</span>
+						{%- endif %}
+					</p>
 					{%- endif %}
-				</p>
+					{%- if settings.hero_award_text %}
+					<a class="bp-badge bp-badge--award" href="{{ settings.hero_award_url | default('', true) | e }}" target="_blank" rel="noopener" data-bp-track="outbound_clicked" data-bp-track-location="hero" data-bp-track-destination="award">{{ award("bp-badge__icon") }}{{ settings.hero_award_text | e }}</a>
+					{%- endif %}
+				</div>
 				{%- endif %}
 
 				{%- set headline = settings.hero_headline | default("", true) -%}
@@ -153,9 +161,9 @@
 					<div class="bp-term">
 						<p class="bp-term__line" style="--bp-delay:0s"><span class="bp-term__time">00:00</span><span class="bp-term__mark">✓</span><span class="bp-term__text">Reserved a container slot</span></p>
 						<p class="bp-term__line" style="--bp-delay:0.35s"><span class="bp-term__time">00:04</span><span class="bp-term__mark">✓</span><span class="bp-term__text">Pulled bp/erpnext-v15:cached</span></p>
-						<p class="bp-term__line" style="--bp-delay:0.7s"><span class="bp-term__time">00:22</span><span class="bp-term__mark">✓</span><span class="bp-term__text">Container up · mariadb, redis, code-server</span></p>
-						<p class="bp-term__line" style="--bp-delay:1.05s"><span class="bp-term__time">00:49</span><span class="bp-term__mark">✓</span><span class="bp-term__text">Created site erpnext-demo.bp.local</span></p>
-						<p class="bp-term__line" style="--bp-delay:1.4s"><span class="bp-term__time">01:16</span><span class="bp-term__mark">•</span><span class="bp-term__text bp-term__text--live">Installing erpnext · migrating</span></p>
+						<p class="bp-term__line" style="--bp-delay:0.7s"><span class="bp-term__time">00:14</span><span class="bp-term__mark">✓</span><span class="bp-term__text">Container up · mariadb, redis, code-server</span></p>
+						<p class="bp-term__line" style="--bp-delay:1.05s"><span class="bp-term__time">00:26</span><span class="bp-term__mark">✓</span><span class="bp-term__text">Created site erpnext-demo.bp.local</span></p>
+						<p class="bp-term__line" style="--bp-delay:1.4s"><span class="bp-term__time">00:38</span><span class="bp-term__mark">•</span><span class="bp-term__text bp-term__text--live">Installing erpnext · migrating</span></p>
 						<p class="bp-term__line"><span class="bp-term__time"></span><span class="bp-term__mark bp-term__mark--dim">$</span><span class="bp-term__cmd">bench build --production<i class="bp-caret" aria-hidden="true"></i></span></p>
 					</div>
 					{%- endif %}
@@ -169,7 +177,7 @@
 					</div>
 				</div>
 
-				<p class="bp-float" data-r="float">{{ check("bp-float__icon") }}<span>Site live in 1m 52s</span></p>
+				<p class="bp-float" data-r="float">{{ check("bp-float__icon") }}<span>Site live in under a minute</span></p>
 			</div>
 		</div>
 
@@ -490,7 +498,7 @@ doc_events = {
 						<p class="bp-dstep"><span class="bp-dstep__badge bp-dstep__badge--done">✓</span><span class="bp-dstep__body"><b>Pull the lab image</b><span>docker pull bp/erpnext-v15:cached</span></span><span class="bp-dstep__time">11s</span></p>
 						<p class="bp-dstep"><span class="bp-dstep__badge bp-dstep__badge--done">✓</span><span class="bp-dstep__body"><b>Start the container and services</b><span>docker run -v bp_sites:/home/frappe/…</span></span><span class="bp-dstep__time">18s</span></p>
 						<p class="bp-dstep"><span class="bp-dstep__badge bp-dstep__badge--done">✓</span><span class="bp-dstep__body"><b>Create the site</b><span>bench new-site erpnext-demo.bp.local</span></span><span class="bp-dstep__time">27s</span></p>
-						<p class="bp-dstep"><span class="bp-dstep__badge bp-dstep__badge--active">•</span><span class="bp-dstep__body"><b>Install apps and migrate</b><span>bench --site erpnext-demo.bp.local install-app erpnext</span></span><span class="bp-dstep__time">1m 45s</span></p>
+						<p class="bp-dstep"><span class="bp-dstep__badge bp-dstep__badge--active">•</span><span class="bp-dstep__body"><b>Install apps and migrate</b><span>bench --site erpnext-demo.bp.local install-app erpnext</span></span><span class="bp-dstep__time">38s</span></p>
 						<p class="bp-dstep bp-dstep--todo"><span class="bp-dstep__badge"></span><span class="bp-dstep__body"><b>Build assets</b><span>bench build --production</span></span><span class="bp-dstep__time">—</span></p>
 						<p class="bp-dstep bp-dstep--todo"><span class="bp-dstep__badge"></span><span class="bp-dstep__body"><b>Attach the WireGuard route</b><span>wg set wg0 peer &lt;pubkey&gt;</span></span><span class="bp-dstep__time">—</span></p>
 					</div>

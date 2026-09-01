@@ -30,6 +30,13 @@ SIGNUP_DOORS = (WAITLIST_ROUTE, SIGNUP_ROUTE)
 
 LOGIN_ROUTE = "/login"
 CONSOLE_ROUTE = "/frontend"
+DOCS_ROUTE = "/docs/index"
+DOCS_INSTALL_ROUTE = "/docs/operator/install"
+
+AWARD_URL = "https://fossunited.org/hack/fosshack26/p/f5fk2d9gqd"
+
+# A waitlist is not a free start, so the hosted CTA is named for whichever door is open.
+WAITLIST_CTA_LABEL = "Request access"
 
 # Both logout endpoints are POST-only, so the header signs out through a form, not a link.
 LOGOUT_METHOD = "frappe.handler.web_logout"
@@ -104,6 +111,11 @@ def signup_route() -> str:
 	return WAITLIST_ROUTE if credits_enabled() and waitlist_open() else SIGNUP_ROUTE
 
 
+def signup_cta_label(seed_label: str) -> str:
+	"""What to call the hosted door, following the same switch that picks it."""
+	return WAITLIST_CTA_LABEL if credits_enabled() and waitlist_open() else seed_label
+
+
 def nav_items(items: list, settings, route: str) -> list:
 	"""The header's link rows, with the CTA pointed at whichever door is actually open."""
 	if not credits_enabled():
@@ -112,10 +124,10 @@ def nav_items(items: list, settings, route: str) -> list:
 
 
 def repointed(row, route: str):
-	"""One nav row, aimed at `route` if it points at either signup door."""
+	"""One nav row, aimed at `route` and named for whichever door that is."""
 	if row.anchor not in SIGNUP_DOORS:
 		return row
-	return frappe._dict({**row, "anchor": route})
+	return frappe._dict({**row, "anchor": route, "label": signup_cta_label(row.label)})
 
 
 def selfhost_cta(settings):
@@ -246,6 +258,8 @@ LANDING_SEED = {
 	# hero
 	"hero_badge_text": "Open source, AGPL-3.0",
 	"hero_badge_version": "v16",
+	"hero_award_text": "FOSS Hack 2026 winner",
+	"hero_award_url": AWARD_URL,
 	"hero_headline": "A Frappe environment in the time it takes to read this line.",
 	"hero_headline_accent": "read this line.",
 	"hero_subhead": HERO_SUBHEAD,
@@ -261,11 +275,11 @@ LANDING_SEED = {
 	# templates marquee
 	"templates_eyebrow": "Templates",
 	"template_cards": [
-		{"app_name": "ERPNext v15", "build_time": "~90s", "icon": f"{APP_ICONS}/erpnext.svg"},
-		{"app_name": "Frappe HR", "build_time": "~2m", "icon": f"{APP_ICONS}/hrms.svg"},
-		{"app_name": "Frappe CRM", "build_time": "~60s", "icon": f"{APP_ICONS}/crm.svg"},
-		{"app_name": "Helpdesk", "build_time": "~75s", "icon": f"{APP_ICONS}/helpdesk.svg"},
-		{"app_name": "Frappe Learning", "build_time": "~90s", "icon": f"{APP_ICONS}/lms.svg"},
+		{"app_name": "ERPNext v15", "build_time": "under 1m", "icon": f"{APP_ICONS}/erpnext.svg"},
+		{"app_name": "Frappe HR", "build_time": "under 1m", "icon": f"{APP_ICONS}/hrms.svg"},
+		{"app_name": "Frappe CRM", "build_time": "under 1m", "icon": f"{APP_ICONS}/crm.svg"},
+		{"app_name": "Helpdesk", "build_time": "under 1m", "icon": f"{APP_ICONS}/helpdesk.svg"},
+		{"app_name": "Frappe Learning", "build_time": "under 1m", "icon": f"{APP_ICONS}/lms.svg"},
 		{"app_name": "Custom image", "build_time": "build once", "icon": f"{APP_ICONS}/frappe.svg"},
 	],
 	# paths
@@ -297,7 +311,7 @@ LANDING_SEED = {
 	"path_points": [
 		{
 			"path": "Hosted",
-			"point": "Nothing to install — first environment in about 90 seconds",
+			"point": "Nothing to install — first environment in under a minute",
 		},
 		{
 			"path": "Hosted",
@@ -404,7 +418,7 @@ LANDING_SEED = {
 				"The container comes up and BenchPress runs the exact bench commands you "
 				"would have typed, in order."
 			),
-			"timing": "Roughly 60-120 seconds depending on the app set.",
+			"timing": "Roughly 20-40 seconds depending on the app set.",
 			"plane_nodes": "host",
 			"plane_chips": "",
 		},
@@ -610,7 +624,7 @@ LANDING_SEED = {
 				"→ 200 {\n"
 				'  "step": 7,\n'
 				'  "title": "Install apps and migrate",\n'
-				'  "elapsed": "1m 45s",\n'
+				'  "elapsed": "38s",\n'
 				'  "lines": [\n'
 				'    "Installing app erpnext...",\n'
 				'    "Updating DocTypes for erpnext : 100%",\n'
@@ -644,7 +658,7 @@ LANDING_SEED = {
 		{
 			"aspect": "New environment",
 			"manual": "30–90 min, SSH required",  # noqa: RUF001 -- en dash is verbatim spec copy
-			"benchpress": "One click, ~90 seconds",
+			"benchpress": "One click, under a minute",
 		},
 		{
 			"aspect": "Who can do it",
@@ -815,6 +829,7 @@ LANDING_SEED = {
 	# chrome
 	"nav_items": [
 		{"label": "Hosted or self-host", "anchor": "/#paths", "is_cta": 0},
+		{"label": "Docs", "anchor": DOCS_ROUTE, "is_cta": 0},
 		{"label": "Pipeline", "anchor": "/#how", "is_cta": 0},
 		{"label": "Console", "anchor": "/#console", "is_cta": 0},
 		{"label": "Agents", "anchor": "/#agents", "is_cta": 0},
@@ -831,7 +846,8 @@ LANDING_SEED = {
 		{"column_heading": "Product", "label": "Console", "url": "/#console"},
 		{"column_heading": "Product", "label": "Templates", "url": "/#top"},
 		{"column_heading": "Developers", "label": "Agent API", "url": "/#agents"},
-		{"column_heading": "Developers", "label": "Self-hosting guide", "url": "/#paths"},
+		{"column_heading": "Developers", "label": "Documentation", "url": DOCS_ROUTE},
+		{"column_heading": "Developers", "label": "Self-hosting guide", "url": DOCS_INSTALL_ROUTE},
 		{"column_heading": "Developers", "label": "GitHub", "url": REPO_URL},
 		{"column_heading": "Services", "label": "Managed hosting", "url": "/#services"},
 		{"column_heading": "Services", "label": "Setup on your server", "url": "/#services"},
@@ -973,7 +989,7 @@ ABOUT_SEED = {
 		"attached.</p>"
 	),
 	"stats": [
-		{"value": "~90s", "label": "From a new joiner's click to a working site and IDE"},
+		{"value": "<1 min", "label": "From a new joiner's click to a working site and IDE"},
 		{"value": "1 install", "label": "On one server, for the whole team — not per laptop"},
 		{"value": "0", "label": "Credits charged for a build that fails"},
 		{"value": "AGPL-3.0", "label": "Licensed, self-hostable, no telemetry"},

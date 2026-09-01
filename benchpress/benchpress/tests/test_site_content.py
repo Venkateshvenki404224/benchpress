@@ -17,6 +17,7 @@ from benchpress.benchpress.site_content import (
 	CONSOLE_ROUTE,
 	LANDING_SEED,
 	LOGIN_ROUTE,
+	WAITLIST_CTA_LABEL,
 	WAITLIST_ROUTE,
 	WITH_COLUMN,
 	WITHOUT_COLUMN,
@@ -130,7 +131,7 @@ class TestSiteContent(IntegrationTestCase):
 	def test_the_header_cta_follows_the_switches(self):
 		"""One door, on all five pages. `/` enforced this alone once, and the other four disagreed."""
 		self.set_switches(credits=1, waitlist=1)
-		self.assertEqual(self.cta(), ("Start free", WAITLIST_ROUTE))
+		self.assertEqual(self.cta(), (WAITLIST_CTA_LABEL, WAITLIST_ROUTE))
 		self.assertEqual(chrome_content()["signup_route"], WAITLIST_ROUTE)
 
 		self.set_switches(credits=1, waitlist=0)

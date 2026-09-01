@@ -16,6 +16,9 @@ BENCHPRESS_SETTINGS = "BenchPress Settings"
 
 ROUTES = ("/", "/landing", "/signup", "/login", "/about", "/contact")
 
+# The wiki app serves /docs, and a bench without it has no such route.
+WIKI_PREFIX = "/docs/"
+
 HEADER = re.compile(r'<header class="bp-header".*?</header>', re.S)
 FOOTER = re.compile(r'<footer class="bp-footer".*?</footer>', re.S)
 FOOTER_HREF = re.compile(r'<a class="bp-footer__link" href="([^"]+)"')
@@ -73,7 +76,7 @@ class TestPublicChrome(IntegrationTestCase):
 
 	def test_every_footer_link_resolves(self):
 		for href in FOOTER_HREF.findall(self.chrome(FOOTER, "/")):
-			if not href.startswith("/"):
+			if not href.startswith("/") or href.startswith(WIKI_PREFIX):
 				continue
 			route, _, fragment = href.partition("#")
 			with self.subTest(href=href):
