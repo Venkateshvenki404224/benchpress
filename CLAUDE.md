@@ -221,6 +221,21 @@ the dead link either way.
   legacy ones are left alone. Review or disable it with `/hooks`.
 - Full checklist: [CONTRIBUTING.md](CONTRIBUTING.md).
 
+## Clean up every test record you create
+
+Whatever a test run puts on a site is yours to remove, in the same session that
+made it. That covers users — including any `@example.com` or `.local` address —
+throwaway roles, Email Accounts and Domains, queued mail, and the application
+rows a test inserted: labs, bench instances, credit accounts and ledger entries,
+waitlist entries, contact messages, deploy logs. It also covers any site setting
+a test changed.
+
+Prefer a test that tears down its own fixtures, so nothing can be left behind.
+Where a console session or a one-off script created the rows, delete them before
+the task is called done, and say what was removed. Leftovers are not only
+clutter: test users have been found on the live site still holding
+`System Manager`.
+
 ## Two things that will bite you
 
 - Query with `frappe.qb`, never `frappe.db.sql` — and every `@frappe.whitelist()`
