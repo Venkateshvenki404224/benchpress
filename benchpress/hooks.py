@@ -214,6 +214,9 @@ page_renderer = [
 	# `/llms.txt` is composed: the product first, then the generated docs index. It comes before
 	# the static server, which still serves that index verbatim on an install with no public site.
 	"benchpress.llms_txt.LlmsTxtRenderer",
+	# The generated sitemap holds the docs and nothing else, so on its own it hides every
+	# marketing route from a crawler that reads only this file.
+	"benchpress.sitemap_xml.SitemapRenderer",
 	"benchpress.docs_assets.DocsAssetRenderer",
 ]
 
