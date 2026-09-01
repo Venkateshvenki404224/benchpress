@@ -45,10 +45,14 @@ class TestLlmsTxt(IntegrationTestCase):
 		body = llms_txt.build()
 		self.assertIn(ABOUT_SEED["contrast_rows"][0]["not_text"], body)
 
-	def test_the_install_commands_carry_no_shell_prompt(self):
+	def test_the_install_block_shows_the_commands_that_run(self):
 		block = llms_txt.install_block()
-		self.assertIn("git clone", block)
+		self.assertIn("bench get-app", block)
+		self.assertIn("setup.sh", block)
+		# `$ ` is a prompt in a screenshot, not something a reader can paste.
 		self.assertNotIn("$ ", block)
+		# There is no clone-and-run path: BenchPress installs into an existing bench.
+		self.assertNotIn("git clone", block)
 
 	def test_every_link_is_absolute(self):
 		for line in llms_txt.build().splitlines():

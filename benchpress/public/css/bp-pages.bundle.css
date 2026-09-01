@@ -915,6 +915,10 @@ a.bp-channel__body:focus-visible {
 		font-size: 15.5px !important;
 	}
 
+	.bp .bp-step__title {
+		font-size: 16px !important;
+	}
+
 	.bp .bp-form__title,
 	.bp .bp-sent__title,
 	.bp .bp-cta-panel__title {
@@ -995,5 +999,164 @@ a.bp-channel__body:focus-visible {
 	.bp-addresses__link {
 		display: inline-block;
 		padding: 6px 0;
+	}
+}
+
+/* -- Self-host — the warning, the steps, the commands and the failures --------------------- */
+
+.bp-page--self-host {
+	--bp-shell: 1040px;
+}
+
+.bp-hero__actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 12px;
+	margin-top: 26px;
+}
+
+/* Cobalt names no warning colour, and this panel does not invent one: the left rule and the
+   icon carry the weight, in the palette's own accent. */
+.bp-panel--warn {
+	border-left: 3px solid var(--accent);
+}
+
+.bp-panel__icon {
+	width: 15px;
+	height: 15px;
+	margin-right: 7px;
+	vertical-align: -2px;
+	color: var(--accent);
+}
+
+.bp-steps {
+	display: flex;
+	flex-direction: column;
+	margin: 24px 0 0;
+	padding: 0;
+	list-style: none;
+}
+
+.bp-step {
+	display: grid;
+	grid-template-columns: 44px 1fr;
+	gap: 18px;
+	padding: 22px 0;
+	border-top: 1px solid var(--hair);
+}
+
+.bp-step__n {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 30px;
+	height: 30px;
+	border-radius: 999px;
+	background: var(--card);
+	border: 1px solid var(--cardb);
+	font-family: var(--font-mono);
+	font-size: 13px;
+	color: var(--accent);
+}
+
+.bp-step__body {
+	min-width: 0;
+}
+
+.bp-step__title {
+	margin: 0;
+	font-size: 16px;
+	font-weight: 600;
+	line-height: 1.4;
+}
+
+.bp-step__text {
+	margin: 6px 0 0;
+	max-width: 68ch;
+	font-size: 14px;
+	line-height: 1.65;
+	color: var(--fg2);
+}
+
+/* A dark island in both modes, like `.bp-addresses` — `data-ondark` in the markup re-pins its
+   text tokens. `overflow-x` is on the block itself, so a long command scrolls inside the card
+   and the page never does; `tabindex="0"` in the markup makes that scroller reachable from a
+   keyboard. */
+.bp-cmd {
+	margin: 16px 0 0;
+	padding: 16px 18px;
+	overflow-x: auto;
+	border-radius: 14px;
+	background: var(--code);
+	border: 1px solid var(--cardb);
+	font-family: var(--font-mono);
+	font-size: 12.5px;
+	line-height: 1.9;
+	color: var(--codefg);
+	tab-size: 4;
+}
+
+.bp-cmd:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 2px;
+}
+
+.bp-breaks {
+	display: flex;
+	flex-direction: column;
+	margin: 24px 0 0;
+}
+
+.bp-break {
+	display: grid;
+	grid-template-columns: minmax(0, 34%) minmax(0, 1fr);
+	gap: 20px;
+	padding: 18px 0;
+	border-top: 1px solid var(--hair);
+}
+
+.bp-break__symptom {
+	margin: 0;
+	font-family: var(--font-mono);
+	font-size: 12.5px;
+	line-height: 1.7;
+	color: var(--fg);
+}
+
+.bp-break__meaning {
+	margin: 0;
+	max-width: 68ch;
+	font-size: 14px;
+	line-height: 1.65;
+	color: var(--fg2);
+}
+
+.bp-morelink {
+	display: inline-flex;
+	align-items: center;
+	gap: 7px;
+	color: var(--accent);
+	font-weight: 600;
+	text-decoration: none;
+}
+
+.bp-morelink:hover {
+	text-decoration: underline;
+}
+
+@media (max-width: 720px) {
+	.bp-step {
+		grid-template-columns: 1fr;
+		gap: 12px;
+	}
+
+	.bp-break {
+		grid-template-columns: 1fr;
+		gap: 8px;
+	}
+
+	.bp-cmd {
+		font-size: 12px;
+		padding: 14px;
 	}
 }

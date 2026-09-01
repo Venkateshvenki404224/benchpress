@@ -13,9 +13,9 @@ from benchpress.benchpress.site_content import clear_content_cache
 
 BENCHPRESS_SETTINGS = "BenchPress Settings"
 
-MARKETING_ROUTES = ("/", "/landing", "/about", "/contact", "/signup")
+MARKETING_ROUTES = ("/", "/landing", "/about", "/self-host", "/contact", "/signup")
 # `/` resolves to the desk for a System User, so the signed-in view of the page is `/landing`.
-SIGNED_IN_ROUTES = ("/landing", "/about", "/contact", "/signup")
+SIGNED_IN_ROUTES = ("/landing", "/about", "/self-host", "/contact", "/signup")
 LOGIN_ROUTE = "/login"
 
 STYLESHEET = re.compile(r"website\.bundle\.[\w.]*css")

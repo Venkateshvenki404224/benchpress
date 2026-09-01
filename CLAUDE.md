@@ -56,7 +56,7 @@ the back.
 
 ## Public site
 
-Five pages under `benchpress/www/`, on six routes. Each one resolves by
+Six pages under `benchpress/www/`, on seven routes. Each one resolves by
 filename. None of them has a `website_route_rules` entry, and none may be
 given one.
 
@@ -74,9 +74,10 @@ page, their own login screen and no marketing pages.
 | `/signup` | `www/signup.html` | `www/signup.py` | `www/signup.SIGNUP_SEED` |
 | `/login` | `www/login.html` | `www/login.py` | `www/login.LOGIN_SEED` |
 | `/about` | `www/about.html` | `www/about.py` | `site_content.ABOUT_SEED` |
+| `/self-host` | `www/self-host.html` | `www/self_host.py` | `www/self_host.SELF_HOST_SEED` |
 | `/contact` | `www/contact.html` | `www/contact.py` | `www/contact.CONTACT_SEED` |
 
-Eleven facts that are easy to break:
+Thirteen facts that are easy to break:
 
 - `www/login.html` deliberately shadows `frappe/www/login.html`, because
   `TemplatePage.set_template_path` searches `reversed(get_installed_apps())`.
@@ -110,7 +111,7 @@ Eleven facts that are easy to break:
   every route — no variant, no page flag. `site_content.chrome_content` is the only
   thing that resolves the header CTA, `signup_route`, the session state the header
   renders (`is_signed_in`, `login_route`, `console_route`) and the page's
-  `csrf_token`. All five pages must offer the same door: never re-resolve any of
+  `csrf_token`. All six pages must offer the same door: never re-resolve any of
   them in a page controller. Sign-out is a form, not a link — both of Frappe's
   logout endpoints are POST-only.
 - The header is fixed, so every page's first section has to clear it. The dock's
@@ -129,7 +130,7 @@ Eleven facts that are easy to break:
   still plants, and they are deliberately not a `fixtures` entry: `sync_fixtures`
   imports with `force=True` on every `bench migrate`, which no flag can gate and
   which overwrites an edited body.
-- The four marketing pages extend `benchpress/templates/public_base.html`, not
+- The five marketing pages extend `benchpress/templates/public_base.html`, not
   `templates/web.html`. It emits no framework stylesheet, no script bundle and no
   boot payload, so `bp-site.bundle.js` takes the request token from `data-csrf-token`
   on the body. `/login` keeps `templates/base.html`, because Frappe's login script
@@ -150,6 +151,16 @@ Eleven facts that are easy to break:
   that name lands in the sourcemap the hash covers. Scripts are content-stable.
   Whatever the bundler does not hash — the icons, the manifest, the logos and the hero
   video — takes one `?v=` token from `site_content.asset_version`.
+- **The commands on the public site are the ones that run.** BenchPress installs into a
+  Frappe bench you already have, so there is no `git clone` path. `site_content` owns
+  `INSTALL_COMMANDS` and `SETUP_COMMAND`, verbatim from `/docs/operator/install`, and both
+  `/self-host` and `/llms.txt` read them from there. A test asserts that no public surface
+  carries `git clone`: the landing page shipped a clone-and-run pair for months, and it never
+  worked.
+- `bp-brand.bundle.css` drops every h1-h3 to one size below 900px, with `!important`. A page
+  that uses real headings for hierarchy restates each title's size in the `max-width: 900px`
+  block of `bp-pages.bundle.css`. A new heading class that skips this renders at 24px on a
+  phone.
 - Jinja autoescape is off in Frappe, so a template escapes by hand: `| e` on every
   value a controller passes it. What a template renders raw is shipped HTML, a
   macro's output or a framework helper's, and carries a comment saying which. The

@@ -13,6 +13,7 @@ LANDING_ATTRIBUTE = "benchpress_landing_content"
 ABOUT_ATTRIBUTE = "benchpress_about_content"
 
 REPO_URL = "https://github.com/Venkateshvenki404224/benchpress"
+VPN_REPO_URL = "https://github.com/Venkateshvenki404224/vpn_management"
 
 FORUM_URL = (
 	"https://discuss.frappe.io/t/introducing-benchpress-self-hosted-frappe-cloud-alternative"
@@ -28,6 +29,24 @@ LOGIN_ROUTE = "/login"
 CONSOLE_ROUTE = "/frontend"
 DOCS_ROUTE = "/docs/index"
 DOCS_INSTALL_ROUTE = "/docs/operator/install"
+DOCS_PREREQ_ROUTE = "/docs/operator/prerequisites"
+
+# The self-host page carries the primary business goal, so it owns the primary CTA. It ends in
+# the install guide rather than repeating it.
+SELF_HOST_ROUTE = "/self-host"
+
+# Verbatim from /docs/operator/install. BenchPress installs into a bench you already run, so
+# there is no `git clone` path — every public surface that shows commands shows these.
+INSTALL_COMMANDS = (
+	"cd /path/to/your/frappe-bench\n"
+	f"bench get-app {VPN_REPO_URL} --branch version-16\n"
+	f"bench get-app {REPO_URL} --branch version-16\n"
+	"bench pip install docker\n"
+	"bench --site <site> install-app benchpress\n"
+	"bench --site <site> migrate"
+)
+
+SETUP_COMMAND = "bash apps/benchpress/setup.sh <site> --strict"
 
 AWARD_URL = "https://fossunited.org/hack/fosshack26/p/f5fk2d9gqd"
 
@@ -129,7 +148,7 @@ def nav_items(items: list, settings, route: str) -> list:
 
 def selfhost_cta(settings):
 	"""The header CTA. Self-hosting is the goal, so it owns the one button that stands out."""
-	return frappe._dict({"label": SELFHOST_CTA_LABEL, "anchor": DOCS_INSTALL_ROUTE, "is_cta": 1})
+	return frappe._dict({"label": SELFHOST_CTA_LABEL, "anchor": SELF_HOST_ROUTE, "is_cta": 1})
 
 
 def clear_content_cache() -> None:
@@ -257,7 +276,7 @@ LANDING_SEED = {
 	"hero_cta_hosted_label": "Start free",
 	"hero_cta_hosted_url": "/signup",
 	"hero_cta_selfhost_label": SELFHOST_CTA_LABEL,
-	"hero_cta_selfhost_url": DOCS_INSTALL_ROUTE,
+	"hero_cta_selfhost_url": SELF_HOST_ROUTE,
 	"hero_assurances": [
 		{"label": "One box, Docker"},
 		{"label": "No account, no telemetry"},
@@ -292,7 +311,7 @@ LANDING_SEED = {
 		"in-house. No account, no telemetry, no ceiling on labs."
 	),
 	"paths_self_terminal": (
-		"$ git clone github.com/Venkateshvenki404224/benchpress\n$ cd benchpress && ./setup.sh"
+		"$ bench --site <site> install-app benchpress\n$ bash apps/benchpress/setup.sh <site>"
 	),
 	"paths_self_cta_label": "Read the repo",
 	"paths_self_cta_url": REPO_URL,
@@ -882,6 +901,7 @@ LANDING_SEED = {
 		{"column_heading": "Product", "label": "Templates", "url": "/#top"},
 		{"column_heading": "Developers", "label": "Agent API", "url": "/#agents"},
 		{"column_heading": "Developers", "label": "Documentation", "url": DOCS_ROUTE},
+		{"column_heading": "Product", "label": "Self-host it", "url": SELF_HOST_ROUTE},
 		{"column_heading": "Developers", "label": "Self-hosting guide", "url": DOCS_INSTALL_ROUTE},
 		{"column_heading": "Developers", "label": "GitHub", "url": REPO_URL},
 		{"column_heading": "Services", "label": "Managed hosting", "url": "/#services"},

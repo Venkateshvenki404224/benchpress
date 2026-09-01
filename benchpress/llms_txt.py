@@ -78,10 +78,14 @@ def not_lines() -> str:
 
 
 def install_block() -> str:
-	# The panel on the landing page shortens the clone URL for reading. This one has to run.
-	commands = f"git clone {site_content.REPO_URL}\ncd benchpress && ./setup.sh"
+	commands = f"{site_content.INSTALL_COMMANDS}\n{site_content.SETUP_COMMAND}"
 	guide = get_url(site_content.DOCS_INSTALL_ROUTE)
-	return f"```bash\n{commands}\n```\n\nThe full procedure, with the preconditions: {guide}"
+	return (
+		"BenchPress installs into a Frappe v16 bench you already run, not as a standalone "
+		"service. Two apps, then the setup script:\n\n"
+		f"```bash\n{commands}\n```\n\n"
+		f"Three steps remain — build the frontend, open 44556/UDP, set a base domain. {guide}"
+	)
 
 
 def page_links() -> str:
@@ -89,6 +93,12 @@ def page_links() -> str:
 	about = site_content.ABOUT_SEED
 	rows = [
 		("Home", "/", landing["meta_description"]),
+		(
+			"Self-host it",
+			site_content.SELF_HOST_ROUTE,
+			"What it takes to run BenchPress yourself: the six preconditions, the commands, the "
+			"measured disk floor, and what breaks.",
+		),
 		("About", "/about", about["meta_description"]),
 		("Contact", "/contact", "Reach the people who build it, by topic."),
 		("Hosted access", site_content.signup_route(), "Ask for access to the hosted build."),

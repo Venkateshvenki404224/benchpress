@@ -21,7 +21,7 @@ from benchpress.tests.guest_request import as_request
 from benchpress.www.login import LOGIN_SEED
 
 EMAIL_TEMPLATE = "Email Template"
-PUBLIC_ROUTES = ("/landing", "/about", "/contact", "/signup")
+PUBLIC_ROUTES = ("/landing", "/about", "/self-host", "/contact", "/signup")
 EMAIL = "gate@example.com"
 
 # Structure only Frappe's own login card renders. The branded template carries none of it.

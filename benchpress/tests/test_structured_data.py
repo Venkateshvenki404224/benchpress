@@ -20,12 +20,17 @@ def graph(payload: str) -> dict:
 	return {node["@type"]: node for node in json.loads(payload)["@graph"]}
 
 
+class TestSelfHostGraph(unittest.TestCase):
+	def test_carries_the_organisation_and_the_page(self):
+		nodes = graph(sd.self_host("a description"))
+		self.assertEqual(sorted(nodes), ["Organization", "WebPage"])
+		self.assertTrue(nodes["WebPage"]["url"].endswith("/self-host"))
+
+
 class TestLandingGraph(unittest.TestCase):
 	def test_carries_the_four_nodes(self):
 		nodes = graph(sd.landing("a description", FAQ))
-		self.assertEqual(
-			sorted(nodes), ["FAQPage", "Organization", "SoftwareApplication", "WebSite"]
-		)
+		self.assertEqual(sorted(nodes), ["FAQPage", "Organization", "SoftwareApplication", "WebSite"])
 
 	def test_software_claims_match_the_product(self):
 		app = graph(sd.landing("a description", FAQ))["SoftwareApplication"]

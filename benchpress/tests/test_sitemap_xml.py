@@ -38,7 +38,7 @@ class TestSitemapXml(IntegrationTestCase):
 
 	def test_the_marketing_routes_are_named(self):
 		found = locations(sitemap_xml.build())
-		for route in ("/", "/about", "/contact"):
+		for route in ("/", "/about", "/self-host", "/contact"):
 			with self.subTest(route=route):
 				self.assertIn(frappe.utils.get_url(route), found)
 
