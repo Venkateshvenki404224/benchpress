@@ -6,12 +6,15 @@ from unittest.mock import patch
 import frappe
 from frappe.tests import IntegrationTestCase
 
-from benchpress import emails
+from benchpress import contact, emails
 
 REQUESTER = "emails-requester@example.com"
 SENDER = "emails-sender@example.com"
 ADMIN = "emails-admin@example.com"
 ADMIN_ROLE = "BenchPress Admin"
+
+# `_message()` files under "Sales"; routing it at the admin pins who the notice reaches.
+ROUTED_TO_ADMIN = ({"label": "Sales", "route_to_email": ADMIN},)
 
 
 def _entry(**overrides) -> frappe._dict:
@@ -112,41 +115,22 @@ class TestEmails(IntegrationTestCase):
 		self.assertEqual(self.sent["subject"], "We got your message")
 
 	def test_the_contact_notice_is_subjected_by_topic_and_replies_to_the_sender(self):
-		with patch.object(emails, "_contact_notice_recipients", return_value=[ADMIN]):
+		with patch.object(contact, "TOPICS", ROUTED_TO_ADMIN):
 			emails.notify_admins_of_contact(_message())
 
 		self.assertEqual(self.sent["recipients"], [ADMIN])
 		self.assertEqual(self.sent["subject"], "[Sales] Ravi Kumar")
 		self.assertEqual(self.sent["reply_to"], SENDER)
 
-	def test_an_operator_can_switch_the_acknowledgement_off(self):
-		settings = frappe._dict({"acknowledge_sender": 0})
-		with patch.object(emails, "_contact_settings", return_value=settings):
-			emails.send_contact_received(_message())
-
-		self.mailer.assert_not_called()
-
-	def test_a_site_that_never_saved_the_single_still_acknowledges(self):
-		with patch.object(emails, "_contact_settings", return_value=None):
-			emails.send_contact_received(_message())
-
-		self.assertEqual(self.sent["recipients"], [SENDER])
-
 	def test_a_topic_routes_the_notice_to_its_own_address(self):
-		settings = frappe._dict(
-			{
-				"notify_email": "hello@benchpress.example",
-				"topics": [frappe._dict({"label": "Sales", "route_to_email": "sales@benchpress.example"})],
-			}
-		)
-		with patch.object(emails, "_contact_settings", return_value=settings):
+		routed = ({"label": "Sales", "route_to_email": "sales@benchpress.example"},)
+		with patch.object(contact, "TOPICS", routed):
 			emails.notify_admins_of_contact(_message())
 
 		self.assertEqual(self.sent["recipients"], ["sales@benchpress.example"])
 
-	def test_a_topic_with_no_address_falls_back_to_the_notify_address(self):
-		settings = frappe._dict({"notify_email": "hello@benchpress.example", "topics": []})
-		with patch.object(emails, "_contact_settings", return_value=settings):
+	def test_a_topic_with_no_address_falls_back_to_the_forwarding_address(self):
+		with patch.dict(frappe.conf, {contact.NOTIFY_KEY: "hello@benchpress.example"}):
 			emails.notify_admins_of_contact(_message())
 
 		self.assertEqual(self.sent["recipients"], ["hello@benchpress.example"])
@@ -213,7 +197,7 @@ class TestEmails(IntegrationTestCase):
 	# escaping
 
 	def test_guest_text_is_escaped_before_it_reaches_the_body(self):
-		with patch.object(emails, "_contact_notice_recipients", return_value=[ADMIN]):
+		with patch.object(contact, "TOPICS", ROUTED_TO_ADMIN):
 			emails.notify_admins_of_contact(_message(message="<script>alert(1)</script>"))
 
 		self.assertNotIn("<script>", self.sent["message"])
@@ -222,7 +206,7 @@ class TestEmails(IntegrationTestCase):
 	def test_a_double_escaping_operator_edit_still_reads_as_text(self):
 		self._install_template(emails.CONTACT_FILED, subject="x", body="<p>{{ message | e }}</p>")
 
-		with patch.object(emails, "_contact_notice_recipients", return_value=[ADMIN]):
+		with patch.object(contact, "TOPICS", ROUTED_TO_ADMIN):
 			emails.notify_admins_of_contact(_message(message="Ampersand & co"))
 
 		self.assertEqual(self.sent["message"], "<p>Ampersand &amp; co</p>")

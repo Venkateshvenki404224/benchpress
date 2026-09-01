@@ -16,25 +16,16 @@ from benchpress.benchpress.site_content import (
 
 NEW_ANCHORS = ("/about", "/contact")
 FOOTER_COLUMN = "Company"
-ABOUT_SWITCH = "show_about"
 
 
 def execute():
 	settings = frappe.get_doc(LANDING_DOCTYPE)
 	if not settings.nav_items and not settings.footer_links:
 		return
-	changed = adopt_about_switch(settings) | add_nav_links(settings) | add_footer_column(settings)
+	changed = add_nav_links(settings) | add_footer_column(settings)
 	if changed:
 		settings.save(ignore_permissions=True)
 		clear_content_cache()
-
-
-def adopt_about_switch(settings) -> bool:
-	# A Check the Single has never stored saves as 0, not as the field's default.
-	if settings.get(ABOUT_SWITCH) not in (None, 0, "0"):
-		return False
-	settings.set(ABOUT_SWITCH, LANDING_SEED[ABOUT_SWITCH])
-	return True
 
 
 def add_nav_links(settings) -> bool:

@@ -48,9 +48,8 @@ the back.
 - **Doctypes:** `Lab`, `Bench Instance`, `Bench Site`, `Bench App`, `Database
   Server`, `Credit Account` / `Credit Ledger Entry` / `Credit Pack`, `Deploy Log`,
   `Build Log` — under `benchpress/benchpress/doctype/`. The public site adds
-  `Landing Page Settings`, `Signup Page Settings`, `About Page Settings`,
-  `Contact Page Settings` (four Singles that hold page copy), `Waitlist Entry`
-  and `Contact Message`.
+  `Waitlist Entry` and `Contact Message`. The four page-settings Singles and
+  their child tables are still in the app but nothing reads them.
 - **Depends on** `vpn_management` (`required_apps` in `hooks.py`) for the WireGuard
   side.
 
@@ -62,12 +61,12 @@ given one.
 
 | Route | Template | Controller | Copy lives in |
 |---|---|---|---|
-| `/` | `www/index.html` | `www/index.py` | `Landing Page Settings` |
-| `/landing` | `www/landing.html` (extends `index.html`) | `www/landing.py` | `Landing Page Settings` |
-| `/signup` | `www/signup.html` | `www/signup.py` | `Signup Page Settings` |
-| `/login` | `www/login.html` | `www/login.py` | `Signup Page Settings` (the nine `login_*` fields) |
-| `/about` | `www/about.html` | `www/about.py` | `About Page Settings` |
-| `/contact` | `www/contact.html` | `www/contact.py` | `Contact Page Settings` |
+| `/` | `www/index.html` | `www/index.py` | `site_content.LANDING_SEED` |
+| `/landing` | `www/landing.html` (extends `index.html`) | `www/landing.py` | `site_content.LANDING_SEED` |
+| `/signup` | `www/signup.html` | `www/signup.py` | `www/signup.SIGNUP_SEED` |
+| `/login` | `www/login.html` | `www/login.py` | `www/login.LOGIN_SEED` |
+| `/about` | `www/about.html` | `www/about.py` | `site_content.ABOUT_SEED` |
+| `/contact` | `www/contact.html` | `www/contact.py` | `www/contact.CONTACT_SEED` |
 
 Seven facts that are easy to break:
 
@@ -105,11 +104,14 @@ Seven facts that are easy to break:
   `csrf_token`. All five pages must offer the same door: never re-resolve any of
   them in a page controller. Sign-out is a form, not a link — both of Frappe's
   logout endpoints are POST-only.
-- Section order lives in the template. Desk owns the copy inside a section,
-  whether an optional section renders, and the rows in a repeater.
-- Every page renders from a seed constant when its Single is empty. The seed is
-  also what `benchpress.public_site.seed.seed_public_site` writes into Desk, so
-  each string has one home. The seeder never overwrites an operator's edit.
+- Every page renders from its constant and reads nothing at render time. A
+  section that should not appear is absent from the template, not switched off
+  in Desk. The constants are still what `benchpress.public_site.seed` plants in
+  Desk, but no page reads those rows back.
+- The contact form's routing is constants too, in `benchpress/contact.py`:
+  `TOPICS` (first row is the default), `RESPONSE_TIMES` and `ACKNOWLEDGE_SENDER`.
+  Only the forwarding address is per-deployment — the `benchpress_contact_email`
+  site-config key, falling back to `CONTACT_EMAIL`.
 - The six `Email Template` rows are seeded the same way, and are deliberately not
   a `fixtures` entry: `sync_fixtures` imports with `force=True` on every
   `bench migrate`, which no flag can gate and which overwrites an edited body.

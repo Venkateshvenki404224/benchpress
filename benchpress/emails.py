@@ -9,13 +9,13 @@ import frappe
 from frappe.utils import cint, format_datetime, get_url, get_url_to_form
 from markupsafe import Markup, escape
 
+from benchpress import contact
 from benchpress.benchpress.site_content import REPO_URL
 from benchpress.credits import config
 from benchpress.permissions import ADMIN_ROLES
 
 WAITLIST = "Waitlist Entry"
 CONTACT = "Contact Message"
-CONTACT_SETTINGS = "Contact Page Settings"
 
 ACCESS_RECEIVED = "BenchPress Access Request Received"
 ACCESS_FILED = "BenchPress Access Request Filed"
@@ -91,9 +91,7 @@ send_access_request_declined = send_access_request_rejected
 
 @best_effort
 def send_contact_received(message) -> None:
-	"""Acknowledge a contact message, unless acknowledgements are off."""
-	if not _acknowledges_sender():
-		return
+	"""Acknowledge one contact message to the person who sent it."""
 	_send(CONTACT_RECEIVED, [message.email], _contact_context(message), CONTACT, message.name)
 
 
@@ -103,12 +101,12 @@ def notify_admins_of_contact(message) -> None:
 	context = _contact_context(message)
 	context["desk_url"] = get_url_to_form(CONTACT, message.name)
 	context["submitted_on"] = _timestamp(message.get("creation"))
-	recipients = _contact_notice_recipients(message.get("topic"))
+	recipients = [contact.route_for(message.get("topic"))]
 	_send(CONTACT_FILED, recipients, context, CONTACT, message.name, reply_to=message.email)
 
 
 def admin_recipients() -> list[str]:
-	"""Enabled system users holding an admin role; the contact notify address when there are none."""
+	"""Enabled system users holding an admin role; the contact address when there are none."""
 	has_role = frappe.qb.DocType("Has Role")
 	user = frappe.qb.DocType("User")
 	addresses = (
@@ -124,7 +122,7 @@ def admin_recipients() -> list[str]:
 		.where(user.email.notnull())
 		.where(user.email != "")
 	).run(pluck=True)
-	return sorted(set(addresses)) or _fallback_recipients()
+	return sorted(set(addresses)) or [contact.notify_email()]
 
 
 def seed_rows() -> list[dict]:
@@ -211,7 +209,7 @@ def _contact_context(message) -> dict:
 		"email": message.email,
 		"topic": topic,
 		"message": _lines(message.get("message")),
-		"response_window": _response_window(topic),
+		"response_window": contact.response_window(topic),
 		**_urls(),
 	}
 
@@ -229,58 +227,6 @@ def _reference(entry) -> str:
 	"""`REQ-XXXX-XXXX`, derived by the controller. Blank if the controller has no such method."""
 	derive = getattr(entry, "request_reference", None)
 	return derive() if callable(derive) else ""
-
-
-def _contact_notice_recipients(topic: str) -> list[str]:
-	"""The topic's own address, then the page's notify address, then whoever holds a role."""
-	route = _topic_route(topic)
-	if route:
-		return [route]
-	notify = _contact_setting("notify_email")
-	return [notify] if notify else admin_recipients()
-
-
-def _topic_route(topic: str) -> str:
-	rows = getattr(_contact_settings(), "topics", None) or []
-	for row in rows:
-		if topic and row.label == topic and row.route_to_email:
-			return row.route_to_email
-	return ""
-
-
-def _response_window(topic: str) -> str:
-	"""The window whose subject matches the topic, else the first row's."""
-	rows = getattr(_contact_settings(), "response_times", None) or []
-	for row in rows:
-		if topic and row.subject == topic:
-			return row.window
-	return rows[0].window if rows else ""
-
-
-def _acknowledges_sender() -> bool:
-	"""Checked by default, including on a never-saved Single."""
-	value = _contact_setting("acknowledge_sender")
-	return True if value is None else bool(cint(value))
-
-
-def _fallback_recipients() -> list[str]:
-	notify = _contact_setting("notify_email")
-	return [notify] if notify else []
-
-
-def _contact_setting(fieldname: str):
-	"""One `Contact Page Settings` field, `None` when the doctype is not installed yet."""
-	# Read off the document, not `get_single_value`, which casts a missing row to 0 — reading an
-	# unset `acknowledge_sender` as switched off.
-	settings = _contact_settings()
-	return settings.get(fieldname) if settings else None
-
-
-def _contact_settings():
-	try:
-		return frappe.get_cached_doc(CONTACT_SETTINGS)
-	except Exception:
-		return None
 
 
 def _timestamp(value) -> str:

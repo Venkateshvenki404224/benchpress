@@ -51,8 +51,8 @@ def get_context(context):
 	context.update(chrome_content(is_landing=True))
 	context.update(commerce_context() if credits_enabled() else dict(NO_COMMERCE))
 
-	# The numbers in the About teaser live on `About Page Settings`, with the page they came from.
-	context.about_stats = about_content()["settings"].stats if context.show_about else []
+	# The numbers in the About teaser live with the page they came from.
+	context.about_stats = about_content()["settings"].stats
 
 	context.title = context.meta_title or DEFAULT_TITLE
 	context.metatags = preview_tags(context.title, context.meta_description, context.og_image)

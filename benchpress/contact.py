@@ -14,10 +14,27 @@ from benchpress.public_site import require_public_site
 from benchpress.throttle import public_form
 
 DOCTYPE = "Contact Message"
-SETTINGS = "Contact Page Settings"
 MESSAGES_PER_HOUR = 3
 SUCCESS_BODY = "Thanks — it is in front of a person, not a queue. You will hear back within one business day."
 MAIL_ERROR_TITLE = "BenchPress contact mail failed"
+
+CONTACT_EMAIL = "hello@benchpress.dev"
+NOTIFY_KEY = "benchpress_contact_email"
+
+ACKNOWLEDGE_SENDER = True
+
+TOPICS = (
+	{"label": "Hosted access", "route_to_email": ""},
+	{"label": "Setup or migration", "route_to_email": ""},
+	{"label": "Custom app work", "route_to_email": ""},
+	{"label": "Bug or issue", "route_to_email": ""},
+)
+
+RESPONSE_TIMES = (
+	{"subject": "Hosted access requests", "window": "1 business day"},
+	{"subject": "Sales and quotes", "window": "1 business day"},
+	{"subject": "GitHub issues", "window": "2–3 days"},  # noqa: RUF001 -- verbatim spec copy
+)
 
 
 # Guest-writable by design; answers identically for every caller and is rate limited per IP and
@@ -27,19 +44,46 @@ MAIL_ERROR_TITLE = "BenchPress contact mail failed"
 def submit(name: str, email: str, message: str, topic: str | None = None) -> dict:
 	"""Record one contact message. Always answers the same way."""
 	require_public_site()
-	settings = page_settings()
 	record = frappe.new_doc(DOCTYPE)
 	record.update(
 		{
 			"sender_name": require_text(name, _("Tell us who to reply to.")),
 			"email": normalise_email(email),
-			"topic": settings.resolve_topic(topic),
+			"topic": resolve_topic(topic),
 			"message": require_text(message, _("Write a message before sending.")),
 		}
 	)
 	record.insert(ignore_permissions=True)
-	announce(record, bool(settings.acknowledge_sender))
-	return {"sent": True, "message": settings.form_success_body or SUCCESS_BODY}
+	announce(record)
+	return {"sent": True, "message": SUCCESS_BODY}
+
+
+def notify_email() -> str:
+	"""Where a contact notice goes when its topic names no address of its own."""
+	return cstr(frappe.conf.get(NOTIFY_KEY)).strip() or CONTACT_EMAIL
+
+
+def default_topic() -> str:
+	"""The first row; the page opens with this chip selected."""
+	return TOPICS[0]["label"] if TOPICS else ""
+
+
+def resolve_topic(label: str | None) -> str:
+	"""A topic the page offered, else the default."""
+	submitted = cstr(label).strip()
+	return submitted if any(row["label"] == submitted for row in TOPICS) else default_topic()
+
+
+def route_for(topic: str) -> str:
+	"""Where a topic's notice goes. A row with no address of its own uses the forwarding one."""
+	routed = next((row["route_to_email"] for row in TOPICS if row["label"] == topic), "")
+	return routed or notify_email()
+
+
+def response_window(topic: str) -> str:
+	"""The window whose subject matches the topic, else the first row's."""
+	matched = next((row["window"] for row in RESPONSE_TIMES if row["subject"] == topic), "")
+	return matched or (RESPONSE_TIMES[0]["window"] if RESPONSE_TIMES else "")
 
 
 @frappe.whitelist()
@@ -61,12 +105,7 @@ def close(name: str) -> None:
 	)
 
 
-def page_settings():
-	"""The Single that owns every string on /contact."""
-	return frappe.get_cached_doc(SETTINGS)
-
-
-def announce(record, acknowledge_sender: bool) -> None:
+def announce(record) -> None:
 	"""Tell the sender and the admins. Both best effort: mail must never lose a message."""
 	# Imported here so a broken or missing mailer cannot take the contact form down with it.
 	try:
@@ -75,7 +114,7 @@ def announce(record, acknowledge_sender: bool) -> None:
 		frappe.log_error(title=MAIL_ERROR_TITLE, message=frappe.get_traceback())
 		return
 
-	if acknowledge_sender:
+	if ACKNOWLEDGE_SENDER:
 		send_quietly(emails.send_contact_received, record)
 	send_quietly(emails.notify_admins_of_contact, record)
 

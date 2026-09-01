@@ -24,13 +24,6 @@ from benchpress.public_site.seed import claim_home_page, seed_public_site
 from benchpress.www import index
 
 BENCHPRESS_SETTINGS = "BenchPress Settings"
-LANDING_SETTINGS = "Landing Page Settings"
-
-
-def _set_show_about(value: int) -> None:
-	frappe.db.set_single_value(LANDING_SETTINGS, "show_about", value)
-	frappe.clear_document_cache(LANDING_SETTINGS, LANDING_SETTINGS)
-	clear_content_cache()
 
 
 def _set_home_page(value, commit: bool = False) -> None:
@@ -61,10 +54,6 @@ class TestLanding(IntegrationTestCase):
 		self.addCleanup(clear_content_cache)
 		self.addCleanup(frappe.set_user, "Administrator")
 
-	def enable_credits(self) -> None:
-		self.addCleanup(self.set_credits_enabled, self.switch_at_start)
-		self.set_credits_enabled(1)
-
 	def disable_credits(self) -> None:
 		self.addCleanup(self.set_credits_enabled, self.switch_at_start)
 		self.set_credits_enabled(0)
@@ -82,14 +71,6 @@ class TestLanding(IntegrationTestCase):
 		html = self.render_as_guest()
 		self.assertIn(LANDING_SEED["hero_badge_text"], html)
 		self.assertIn('id="paths"', html)
-
-	def test_copy_edited_in_desk_reaches_the_page(self):
-		frappe.set_user("Administrator")
-		settings = frappe.get_doc(LANDING_SETTINGS)
-		settings.hero_subhead = "Edited in Desk, live on the page."
-		settings.save(ignore_permissions=True)
-
-		self.assertIn("Edited in Desk, live on the page.", self.render_as_guest())
 
 	def test_repo_url_is_wired_everywhere(self):
 		html = self.render_as_guest()
@@ -133,17 +114,11 @@ class TestLanding(IntegrationTestCase):
 		self.assertIn(f'action="/api/method/{LOGOUT_METHOD}"', html)
 
 	def test_the_about_teaser_carries_the_numbers_from_the_about_page(self):
-		# One home for the stats: the landing teaser reads `About Page Settings`, not a copy.
+		# One home for the stats: the landing teaser reads the About page's own copy, not a copy of it.
 		html = self.render_as_guest()
 		self.assertIn('id="about"', html)
 		self.assertIn(LANDING_SEED["about_title"], html)
 		self.assertIn(ABOUT_SEED["stats"][0]["value"], html)
-
-	def test_the_about_teaser_can_be_switched_off_in_desk(self):
-		self.addCleanup(_set_show_about, 1)
-		_set_show_about(0)
-
-		self.assertNotIn('id="about"', self.render_as_guest())
 
 	def test_the_landing_page_is_not_where_a_signed_in_user_lands(self):
 		# `Website Settings.home_page` is also Frappe's post-login destination, for every user.
@@ -188,52 +163,3 @@ class TestLanding(IntegrationTestCase):
 		claim_home_page()
 
 		self.assertEqual(frappe.db.get_single_value(WEBSITE_SETTINGS, "home_page"), "some-other-page")
-
-	def test_context_cost_does_not_grow_with_the_content(self):
-		self.enable_credits()
-		frappe.set_user("Administrator")
-		settings = frappe.get_doc(LANDING_SETTINGS)
-		self.addCleanup(_restore_cards, [row.as_dict() for row in settings.template_cards])
-
-		settings.append("template_cards", {"app_name": "Query Probe", "build_time": "~1s"})
-		settings.save(ignore_permissions=True)
-		self._build_context()  # warm the caches the save just cleared
-		baseline = _count_queries(self._build_context)
-
-		settings.append("template_cards", {"app_name": "Second Probe", "build_time": "~1s"})
-		settings.save(ignore_permissions=True)
-		self._build_context()
-
-		grown = _count_queries(self._build_context)
-		self.assertEqual(grown, baseline, "another card cost another query — the read path is per-row")
-
-	def _build_context(self):
-		clear_content_cache()
-		index.get_context(frappe._dict())
-
-
-def _restore_cards(rows) -> None:
-	frappe.set_user("Administrator")
-	settings = frappe.get_doc(LANDING_SETTINGS)
-	settings.template_cards = []
-	for row in rows:
-		settings.append("template_cards", row)
-	settings.save(ignore_permissions=True)
-	clear_content_cache()
-
-
-def _count_queries(action) -> int:
-	count = 0
-	original_sql = frappe.db.__class__.sql
-
-	def counting_sql(*args, **kwargs):
-		nonlocal count
-		count += 1
-		return original_sql(*args, **kwargs)
-
-	frappe.db.__class__.sql = counting_sql
-	try:
-		action()
-	finally:
-		frappe.db.__class__.sql = original_sql
-	return count

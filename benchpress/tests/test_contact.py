@@ -17,8 +17,6 @@ from benchpress.tests.guest_request import as_request
 
 EMAIL = "contact-test@example.com"
 OTHER_EMAIL = "contact-other@example.com"
-TOPICS = ("Hosted access", "Setup or migration", "Bug or issue")
-SUCCESS_BODY = "Sent. A person reads this, not a queue."
 
 
 def _delete_messages(*emails):
@@ -29,34 +27,12 @@ def _delete_messages(*emails):
 class TestContact(IntegrationTestCase):
 	def setUp(self):
 		frappe.set_user("Administrator")
-		self.settings = self.use_settings()
 		self.emails = self.use_mailer()
 		_delete_messages(EMAIL, OTHER_EMAIL)
 		frappe.cache.delete_keys("rl:")
 		self.addCleanup(frappe.cache.delete_keys, "rl:")
 		self.addCleanup(_delete_messages, EMAIL, OTHER_EMAIL)
 		self.addCleanup(frappe.set_user, "Administrator")
-
-	def use_settings(self, **overrides):
-		settings = frappe.get_doc(
-			{
-				"doctype": contact.SETTINGS,
-				"title": "Talk to us.",
-				"form_success_body": SUCCESS_BODY,
-				"acknowledge_sender": 1,
-				"notify_email": "hello@benchpress.dev",
-				"topics": [
-					{"label": label, "is_default": int(index == 0)} for index, label in enumerate(TOPICS)
-				],
-				"response_times": [
-					{"subject": TOPICS[0], "window": "1 business day"},
-					{"subject": "GitHub issues", "window": "2-3 days"},
-				],
-				**overrides,
-			}
-		)
-		self.patch(patch.object(contact, "page_settings", return_value=settings))
-		return settings
 
 	def use_mailer(self, **behaviour):
 		mailer = MagicMock(**behaviour)
@@ -68,25 +44,25 @@ class TestContact(IntegrationTestCase):
 		self.addCleanup(patcher.stop)
 
 	def test_a_valid_submission_stores_one_new_row(self):
-		response = contact.submit("Ravi Kumar", EMAIL, "We run ERPNext for 40 people.", TOPICS[1])
+		topic = contact.TOPICS[1]["label"]
+
+		response = contact.submit("Ravi Kumar", EMAIL, "We run ERPNext for 40 people.", topic)
 
 		self.assertTrue(response["sent"])
-		self.assertEqual(response["message"], SUCCESS_BODY)
+		self.assertEqual(response["message"], contact.SUCCESS_BODY)
 		message = frappe.get_doc("Contact Message", {"email": EMAIL})
 		self.assertEqual(message.sender_name, "Ravi Kumar")
-		self.assertEqual(message.topic, TOPICS[1])
+		self.assertEqual(message.topic, topic)
 		self.assertEqual(message.status, "New")
 		self.assertIsNone(message.answered_on)
-
-	def test_the_success_text_comes_from_desk_and_falls_back_to_the_seed(self):
-		self.use_settings(form_success_body=None)
-
-		self.assertEqual(contact.submit("Ravi", EMAIL, "hello")["message"], contact.SUCCESS_BODY)
 
 	def test_a_topic_the_page_never_offered_becomes_the_default_chip(self):
 		contact.submit("Ravi", EMAIL, "hello", "<script>alert(1)</script>")
 
-		self.assertEqual(frappe.db.get_value("Contact Message", {"email": EMAIL}, "topic"), TOPICS[0])
+		self.assertEqual(
+			frappe.db.get_value("Contact Message", {"email": EMAIL}, "topic"),
+			contact.default_topic(),
+		)
 
 	def test_a_second_message_from_the_same_address_gets_its_own_row(self):
 		contact.submit("Ravi", EMAIL, "first")
@@ -111,7 +87,7 @@ class TestContact(IntegrationTestCase):
 
 	def test_free_text_is_clipped_to_the_column_width(self):
 		long_topic = "t" * 200
-		self.use_settings(topics=[{"label": long_topic, "is_default": 1}])
+		self.patch(patch.object(contact, "TOPICS", ({"label": long_topic, "route_to_email": ""},)))
 
 		contact.submit("n" * 400, EMAIL, "m" * 6000, long_topic)
 
@@ -142,8 +118,8 @@ class TestContact(IntegrationTestCase):
 		sent = self.emails.notify_admins_of_contact.call_args.args[0]
 		self.assertEqual(sent.email, EMAIL)
 
-	def test_the_acknowledgement_is_skipped_when_desk_switches_it_off(self):
-		self.use_settings(acknowledge_sender=0)
+	def test_the_acknowledgement_follows_the_shipped_switch(self):
+		self.patch(patch.object(contact, "ACKNOWLEDGE_SENDER", False))
 
 		contact.submit("Ravi", EMAIL, "hello")
 
@@ -188,44 +164,34 @@ class TestContact(IntegrationTestCase):
 		self.assertEqual(frappe.db.get_value("Contact Message", name, "status"), "New")
 
 
-class TestContactPageSettings(IntegrationTestCase):
-	def settings(self, **overrides):
-		return frappe.get_doc({"doctype": contact.SETTINGS, "title": "Talk to us.", **overrides})
+class TestContactConfig(IntegrationTestCase):
+	def test_the_first_topic_is_the_default(self):
+		self.assertEqual(contact.default_topic(), contact.TOPICS[0]["label"])
+		self.assertEqual(contact.resolve_topic("Bug or issue"), "Bug or issue")
+		self.assertEqual(contact.resolve_topic("Never offered"), contact.default_topic())
 
-	def test_two_default_topics_are_refused(self):
-		settings = self.settings(
-			topics=[{"label": "One", "is_default": 1}, {"label": "Two", "is_default": 1}]
+	def test_a_topic_routes_to_its_own_address_before_the_forwarding_one(self):
+		routed = (
+			{"label": "Bug", "route_to_email": "bugs@benchpress.example"},
+			{"label": "Sales", "route_to_email": ""},
 		)
+		with patch.object(contact, "TOPICS", routed):
+			self.assertEqual(contact.route_for("Bug"), "bugs@benchpress.example")
+			self.assertEqual(contact.route_for("Sales"), contact.CONTACT_EMAIL)
 
-		with self.assertRaises(frappe.ValidationError):
-			settings.validate()
+	def test_the_forwarding_address_ships_with_the_app(self):
+		self.assertEqual(contact.notify_email(), contact.CONTACT_EMAIL)
 
-	def test_the_first_topic_is_the_default_when_none_is_flagged(self):
-		settings = self.settings(topics=[{"label": "One"}, {"label": "Two"}])
-
-		self.assertEqual(settings.default_topic(), "One")
-		self.assertEqual(settings.resolve_topic("Two"), "Two")
-		self.assertEqual(settings.resolve_topic("Three"), "One")
-
-	def test_a_page_with_no_topics_stores_no_topic(self):
-		self.assertEqual(self.settings().resolve_topic("Hosted access"), "")
-
-	def test_a_topic_routes_to_its_own_address_before_the_page_default(self):
-		settings = self.settings(
-			notify_email="hello@benchpress.dev",
-			topics=[{"label": "Bug", "route_to_email": "bugs@benchpress.dev"}, {"label": "Sales"}],
-		)
-
-		self.assertEqual(settings.route_for("Bug"), "bugs@benchpress.dev")
-		self.assertEqual(settings.route_for("Sales"), "hello@benchpress.dev")
+	def test_a_site_config_key_overrides_the_forwarding_address(self):
+		with patch.dict(frappe.conf, {contact.NOTIFY_KEY: "ops@benchpress.example"}):
+			self.assertEqual(contact.notify_email(), "ops@benchpress.example")
+			self.assertEqual(contact.route_for("Hosted access"), "ops@benchpress.example")
 
 	def test_the_response_window_falls_back_to_the_first_row(self):
-		settings = self.settings(
-			response_times=[
-				{"subject": "Sales", "window": "1 business day"},
-				{"subject": "Bug", "window": "3 days"},
-			]
+		windows = (
+			{"subject": "Sales", "window": "1 business day"},
+			{"subject": "Bug", "window": "3 days"},
 		)
-
-		self.assertEqual(settings.response_window("Bug"), "3 days")
-		self.assertEqual(settings.response_window("Anything else"), "1 business day")
+		with patch.object(contact, "RESPONSE_TIMES", windows):
+			self.assertEqual(contact.response_window("Bug"), "3 days")
+			self.assertEqual(contact.response_window("Anything else"), "1 business day")

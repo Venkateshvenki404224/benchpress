@@ -3,10 +3,11 @@
 
 """The public site is served to guests, so these tests guard cheapness and completeness."""
 
-# Two failure modes matter here and neither shows up in a browser on a developer's seeded site.
-# The first is a fresh install: a Single nobody has saved must still render every section, so
-# every read falls back to the seed constant. The second is cost: `/` is the hottest page on the
-# deployment, and a warm request must reach the database zero times.
+# Two failure modes matter here. The first is a section that ships with nothing in it, because the
+# page renders whatever the constant holds and nothing fills a gap. The second is cost: `/` is the
+# hottest page on the deployment, and it must reach the database zero times.
+
+from unittest.mock import patch
 
 import frappe
 from frappe.tests import IntegrationTestCase
@@ -30,9 +31,8 @@ from benchpress.benchpress.site_content import (
 from benchpress.credits.config import BENCHPRESS_SETTINGS, SIGNUP_ROUTE
 from benchpress.credits.config import SETTINGS as CREDIT_SETTINGS
 
-# Nothing on the page renders these, so they are allowed to be empty. `show_testimonials`
-# is seeded off for as long as the quotes behind it are placeholders.
-OPTIONAL_LANDING_KEYS = {"og_image", "logo_strip", "show_testimonials"}
+# Nothing on the page renders these, so they are allowed to be empty.
+OPTIONAL_LANDING_KEYS = {"og_image"}
 OPTIONAL_ABOUT_KEYS = {"og_image"}
 
 
@@ -60,37 +60,27 @@ class TestSiteContent(IntegrationTestCase):
 
 	# ------------------------------------------------------------------ completeness
 
-	def test_landing_renders_every_key_on_an_unsaved_single(self):
-		empty_single(LANDING_DOCTYPE)
+	def test_every_landing_key_ships_with_a_value(self):
 		settings = landing_content()["settings"]
 		for fieldname in LANDING_SEED:
 			if fieldname in OPTIONAL_LANDING_KEYS:
 				continue
-			self.assertTrue(settings.get(fieldname), f"{fieldname} is empty on a fresh install")
+			self.assertTrue(settings.get(fieldname), f"{fieldname} ships with nothing in it")
 
-	def test_about_renders_every_key_on_an_unsaved_single(self):
-		empty_single(ABOUT_DOCTYPE)
+	def test_every_about_key_ships_with_a_value(self):
 		settings = about_content()["settings"]
 		for fieldname in ABOUT_SEED:
 			if fieldname in OPTIONAL_ABOUT_KEYS:
 				continue
-			self.assertTrue(settings.get(fieldname), f"{fieldname} is empty on a fresh install")
+			self.assertTrue(settings.get(fieldname), f"{fieldname} ships with nothing in it")
 
-	def test_every_landing_section_has_rows_on_an_unsaved_single(self):
-		empty_single(LANDING_DOCTYPE)
+	def test_every_landing_section_ships_with_rows(self):
 		content = landing_content()
 		self.assertEqual(len(content["phases"]), 4)
 		self.assertEqual(sum(len(phase["steps"]) for phase in content["phases"]), 11)
 		self.assertEqual(len(content["footer_columns"]), 4)
 		self.assertEqual(len(content["hosted_points"]), 3)
 		self.assertEqual(len(content["self_points"]), 3)
-		self.assertTrue(content["show_agents"])
-		# Off by default: the seeded quotes are placeholders, not real customers.
-		self.assertFalse(content["show_testimonials"])
-
-	def test_placeholder_quotes_raise_the_testimonial_disclaimer(self):
-		empty_single(LANDING_DOCTYPE)
-		self.assertTrue(landing_content()["show_testimonial_disclaimer"])
 
 	def test_the_seeder_fills_mandatory_copy_over_a_bookkeeping_only_single(self):
 		"""A fresh install failed here: Frappe's own row made the Single look already seeded."""
@@ -115,10 +105,8 @@ class TestSiteContent(IntegrationTestCase):
 		self.assertEqual(phases["site"]["chips"], [])
 
 	def test_default_phase_falls_back_to_the_first_phase(self):
-		settings = frappe.get_doc(LANDING_DOCTYPE)
-		settings.pipeline_default_phase = "no-such-phase"
-		settings.save(ignore_permissions=True)
-		self.assertEqual(landing_content()["default_phase"], "request")
+		with patch.dict(LANDING_SEED, {"pipeline_default_phase": "no-such-phase"}):
+			self.assertEqual(landing_content()["default_phase"], "request")
 
 	def test_footer_links_group_by_heading_in_first_seen_order(self):
 		columns = landing_content()["footer_columns"]
@@ -202,11 +190,11 @@ class TestSiteContent(IntegrationTestCase):
 
 	# ------------------------------------------------------------------ cost
 
-	def test_a_warm_landing_read_touches_no_database(self):
-		landing_content()
+	def test_building_a_page_touches_no_database(self):
 		clear_content_cache()
 		with self.assertQueryCount(0):
 			landing_content()
+			about_content()
 
 	def test_content_is_assembled_once_per_request(self):
 		self.assertIs(landing_content(), landing_content())
@@ -214,17 +202,10 @@ class TestSiteContent(IntegrationTestCase):
 		clear_content_cache()
 		self.assertIsNot(about_content(), first)
 
-	def test_saving_in_desk_is_visible_to_the_next_read(self):
-		landing_content()
-		settings = frappe.get_doc(LANDING_DOCTYPE)
-		settings.faq_title = "Frequently asked"
-		settings.save(ignore_permissions=True)
-		self.assertEqual(landing_content()["settings"].faq_title, "Frequently asked")
-
-	def test_reads_never_hand_out_the_cached_documents_rows(self):
+	def test_reads_never_hand_out_the_shipped_rows_themselves(self):
 		rows = landing_content()["settings"].hero_assurances
 		self.assertTrue(all(isinstance(row, dict) for row in rows))
-		self.assertIsNot(rows, frappe.get_cached_doc(LANDING_DOCTYPE).hero_assurances)
+		self.assertIsNot(rows[0], LANDING_SEED["hero_assurances"][0])
 
 	# ------------------------------------------------------------------ seeding
 

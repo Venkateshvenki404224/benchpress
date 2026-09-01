@@ -541,7 +541,6 @@ Built js/erpnext.bundle.js in 12.4s</pre>
 	</div>
 </section>
 
-{%- if show_agents %}
 <section class="bp-agents" id="agents" data-r="sec">
 	<div class="bp-agents__dots" aria-hidden="true"></div>
 	<div class="bp-shell bp-agents__split" data-r="pad split">
@@ -578,7 +577,6 @@ Built js/erpnext.bundle.js in 12.4s</pre>
 		{%- endif %}
 	</div>
 </section>
-{%- endif %}
 
 {%- if settings.comparison_rows %}
 <section class="bp-compare" data-r="sec">
@@ -645,7 +643,6 @@ Built js/erpnext.bundle.js in 12.4s</pre>
 	</div>
 </section>
 
-{%- if show_about %}
 <section class="bp-about" id="about" data-r="sec">
 	<div class="bp-shell" data-r="pad">
 		<div class="bp-about__panel">
@@ -671,41 +668,6 @@ Built js/erpnext.bundle.js in 12.4s</pre>
 		</div>
 	</div>
 </section>
-{%- endif %}
-
-{%- if show_testimonials and settings.testimonials %}
-<section class="bp-quotes" data-r="sec">
-	<div class="bp-shell bp-quotes__head" data-r="pad">
-		{%- if settings.testimonials_eyebrow %}<p class="bp-eyebrow bp-eyebrow--light">{{ settings.testimonials_eyebrow | e }}</p>{% endif %}
-		{%- if show_testimonial_disclaimer and settings.testimonials_disclaimer %}
-		<p class="bp-quotes__disclaimer">{{ settings.testimonials_disclaimer | e }}</p>
-		{%- endif %}
-	</div>
-
-	<div class="bp-quotes__viewport">
-		{#- Doubled, exactly as the marquee above; the second pass is decoration. -#}
-		<div class="bp-quotes__track">
-			{%- for copy in [1, 2] %}{% for quote in settings.testimonials %}
-			<figure class="bp-quote" data-r="quote"{% if copy == 2 %} aria-hidden="true"{% endif %}>
-				<blockquote class="bp-quote__text">{{ quote.quote | e }}</blockquote>
-				<figcaption class="bp-quote__by">
-					<span class="bp-quote__avatar" aria-hidden="true"></span>
-					<span><b>{{ quote.person_name | default("", true) | e }}</b><span>{{ quote.person_role | default("", true) | e }}</span></span>
-				</figcaption>
-			</figure>
-			{%- endfor %}{% endfor %}
-		</div>
-	</div>
-
-	{%- if settings.logo_strip %}
-	<ul class="bp-shell bp-logos" data-r="pad">
-		{%- for logo in settings.logo_strip %}
-		<li><img src="{{ logo.logo | e }}" alt="{{ logo.alt_text | default('', true) | e }}" loading="lazy"></li>
-		{%- endfor %}
-	</ul>
-	{%- endif %}
-</section>
-{%- endif %}
 
 {%- if settings.faq_items %}
 <section class="bp-faq" data-r="sec">

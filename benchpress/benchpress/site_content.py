@@ -1,7 +1,7 @@
 # Copyright (c) 2026, Venkatesh and contributors
 # For license information, please see license.txt
 
-"""The read side of the public site: `Landing Page Settings` and `About Page Settings`."""
+"""The read side of the public site: the shipped copy, shaped the way each template reads it."""
 
 import frappe
 from frappe.utils import cint
@@ -136,10 +136,7 @@ def seed_page_content() -> None:
 
 
 def build_landing_content() -> dict:
-	settings = merged(LANDING_DOCTYPE, LANDING_SEED)
-	quotes = settings.testimonials
-	# `meta` is a cached_property on Document, so the column is `meta_label`; these rows are plain
-	# dicts, so the template's `card.meta` can be restored here.
+	settings = shipped(LANDING_SEED)
 	for card in settings.service_cards:
 		card.meta = card.meta_label
 	return {
@@ -150,11 +147,6 @@ def build_landing_content() -> dict:
 		"hosted_points": [row for row in settings.path_points if row.path != "Self-hosted"],
 		"self_points": [row for row in settings.path_points if row.path == "Self-hosted"],
 		"footer_columns": group_footer_links(settings.footer_links),
-		"show_agents": bool(cint(settings.show_agents)),
-		"show_about": bool(cint(settings.show_about)),
-		"show_testimonials": bool(cint(settings.show_testimonials)),
-		"show_testimonial_disclaimer": not settings.logo_strip
-		or any(cint(row.is_placeholder) for row in quotes),
 		"meta_title": settings.meta_title,
 		"meta_description": settings.meta_description,
 		"og_image": settings.og_image,
@@ -163,7 +155,7 @@ def build_landing_content() -> dict:
 
 
 def build_about_content() -> dict:
-	settings = merged(ABOUT_DOCTYPE, ABOUT_SEED)
+	settings = shipped(ABOUT_SEED)
 	return {
 		"settings": settings,
 		"days_without": [row for row in settings.day_entries if row.column != WITH_COLUMN],
@@ -179,22 +171,16 @@ def build_about_content() -> dict:
 	}
 
 
-def merged(doctype: str, seed: dict) -> frappe._dict:
-	"""The Single overlaid on its seed, so an unset field still carries its shipped copy."""
-	doc = frappe.get_cached_doc(doctype)
-	content = frappe._dict()
-	for fieldname, fallback in seed.items():
-		value = doc.get(fieldname)
-		if isinstance(fallback, list):
-			content[fieldname] = detach(value or fallback)
-		else:
-			content[fieldname] = fallback if value in (None, "") else value
-	return content
+def shipped(seed: dict) -> frappe._dict:
+	"""One page's copy, as its template reads it."""
+	return frappe._dict(
+		{key: detach(value) if isinstance(value, list) else value for key, value in seed.items()}
+	)
 
 
 def detach(rows) -> list[frappe._dict]:
-	"""Child rows as plain dicts; the cached document's own rows are shared."""
-	return [frappe._dict(row.as_dict() if hasattr(row, "as_dict") else row) for row in rows]
+	"""Rows a caller may edit without reaching the constant behind them."""
+	return [frappe._dict(row) for row in rows]
 
 
 def group_steps(phases, steps) -> list[dict]:
@@ -285,8 +271,6 @@ FOOTER_TRADEMARK = (
 APP_ICONS = "/assets/benchpress/images/app-icons"
 
 LANDING_SEED = {
-	"show_agents": 1,
-	"show_testimonials": 0,
 	# hero
 	"hero_badge_text": "Open source, AGPL-3.0",
 	"hero_badge_version": "v16",
@@ -772,9 +756,7 @@ LANDING_SEED = {
 	),
 	"services_cta_label": "Book a 20-minute call",
 	"services_cta_url": "/contact",
-	# testimonials
-	# about — a teaser for `/about`; the numbers below it come from `About Page Settings`.
-	"show_about": 1,
+	# about — a teaser for `/about`; the numbers below it come from `ABOUT_SEED`.
 	"about_eyebrow": "About",
 	"about_title": "We built this because onboarding cost us half a day, every time.",
 	"about_body": (
@@ -784,38 +766,6 @@ LANDING_SEED = {
 	),
 	"about_link_label": "Read the full story",
 	"about_link_url": "/about",
-	"testimonials_eyebrow": "In use",
-	"testimonials_disclaimer": "Placeholder — swap in real quotes and logos",
-	"testimonials": [
-		{
-			"quote": (
-				"An intern used to cost us a morning of setup. Now they get a link, a "
-				"password and a VS Code tab before standup."
-			),
-			"person_name": "Placeholder name",
-			"person_role": "Placeholder — engineering lead",
-			"is_placeholder": 1,
-		},
-		{
-			"quote": (
-				"Every client demo is its own container. Nothing leaks between them and "
-				"nothing is on the public internet."
-			),
-			"person_name": "Placeholder name",
-			"person_role": "Placeholder — Frappe agency",
-			"is_placeholder": 1,
-		},
-		{
-			"quote": (
-				"Our agent spins up a fresh ERPNext site per run, reads the logs and destroys "
-				"it. The credit ceiling is the safety net."
-			),
-			"person_name": "Placeholder name",
-			"person_role": "Placeholder — automation team",
-			"is_placeholder": 1,
-		},
-	],
-	"logo_strip": [],
 	# faq
 	"faq_title": "Questions",
 	"faq_items": [

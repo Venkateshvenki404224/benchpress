@@ -7,11 +7,10 @@ import frappe
 from frappe.utils import cint, cstr, strip_html
 
 from benchpress import waitlist
-from benchpress.benchpress.site_content import chrome_content, merged, preview_tags
+from benchpress.benchpress.site_content import chrome_content, preview_tags, shipped
 from benchpress.credits.config import SIGNUP_ROUTE, credits_enabled, waitlist_open
 from benchpress.public_site import require_public_site
 
-DOCTYPE = "Signup Page Settings"
 WAITLIST_DOCTYPE = "Waitlist Entry"
 
 SOURCE = "Signup Page"
@@ -20,7 +19,6 @@ ROUTE = "/signup"
 LOGIN_ROUTE = "/login"
 DOCS_URL = "https://benchpress.cloud/docs"
 REPO_URL = "https://github.com/Venkateshvenki404224/benchpress"
-CONTACT_EMAIL = "hello@benchpress.dev"
 DEFAULT_TITLE = "Request access — BenchPress"
 
 # Also `waitlist.join`'s keyword names: `posted_values()` hands the whole dict straight to it.
@@ -51,7 +49,7 @@ def get_context(context):
 	context.body_class = "bp-body"
 	context.mode_default = "dark"
 
-	settings = page_settings()
+	settings = shipped(SIGNUP_SEED)
 	context.update(chrome_content(is_landing=False))
 	context.update(submission())
 	context.settings = settings
@@ -65,10 +63,9 @@ def get_context(context):
 	context.login_route = LOGIN_ROUTE
 	context.docs_url = DOCS_URL
 	context.repo_url = REPO_URL
-	context.contact_email = CONTACT_EMAIL
 
-	context.meta_title = settings.meta_title or DEFAULT_TITLE
-	context.meta_description = settings.meta_description or settings.intro_body
+	context.meta_title = settings.meta_title
+	context.meta_description = settings.meta_description
 	context.og_image = settings.og_image
 	context.title = context.meta_title
 	context.metatags = preview_tags(context.title, context.meta_description, context.og_image)
@@ -109,10 +106,6 @@ def posted_values() -> frappe._dict:
 	# An unticked checkbox posts nothing at all, so the absent case has to become 0 here.
 	values.consented = cint(form.get("consented"))
 	return values
-
-
-def page_settings() -> frappe._dict:
-	return merged(DOCTYPE, SIGNUP_SEED)
 
 
 def select_field(fieldname: str) -> frappe._dict:

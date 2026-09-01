@@ -18,9 +18,6 @@ no_cache = True
 # switch for a shadow. Colocated assets still resolve by this module's name: never add login.js.
 FRAMEWORK_TEMPLATE = "frappe/www/login.html"
 
-# `/login` has no Single of its own; the nine `login_*` fields ride on the signup Single.
-SETTINGS_DOCTYPE = "Signup Page Settings"
-
 WAITLIST_ROUTE = "/signup"
 
 LOGIN_SEED = {
@@ -72,15 +69,15 @@ def get_context(context):
 
 def branded(context) -> dict:
 	try:
-		return desk_content(context)
+		return with_chrome(context)
 	except Exception:
 		# Deliberately broad: a traceback here would serve the error page instead of the login form.
-		frappe.log_error(title="Branded /login fell back to seed copy")
-		return seed_content()
+		frappe.log_error(title="Branded /login fell back to the shipped chrome")
+		return without_chrome()
 
 
-def desk_content(context) -> dict:
-	content = page_context(login_copy())
+def with_chrome(context) -> dict:
+	content = page_context(LOGIN_SEED)
 	content.update(chrome_content(is_landing=False))
 	content["asset_version"] = asset_version()
 	content["signup_prompt"] = signup_prompt(
@@ -89,9 +86,9 @@ def desk_content(context) -> dict:
 	return content
 
 
-def seed_content() -> dict:
-	"""The shipped copy alone: no Desk read, no disk read."""
-	content = page_context(dict(LOGIN_SEED))
+def without_chrome() -> dict:
+	"""The login card with the chrome keys emptied, and no disk read."""
+	content = page_context(LOGIN_SEED)
 	content.update(FALLBACK_CHROME)
 	content["asset_version"] = "0"
 	content["signup_prompt"] = LOGIN_SEED["login_signup_prompt"]
@@ -112,19 +109,6 @@ def page_context(copy: dict) -> dict:
 		}
 	)
 	return content
-
-
-def login_copy() -> dict:
-	copy = dict(LOGIN_SEED)
-	if not frappe.db.exists("DocType", SETTINGS_DOCTYPE):
-		return copy
-
-	settings = frappe.get_cached_doc(SETTINGS_DOCTYPE)
-	for fieldname in LOGIN_SEED:
-		value = settings.get(fieldname)
-		if value not in (None, ""):
-			copy[fieldname] = value
-	return copy
 
 
 def signup_prompt(html: str, disable_signup: int) -> str:
