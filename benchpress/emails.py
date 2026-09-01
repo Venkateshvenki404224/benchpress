@@ -12,7 +12,6 @@ from markupsafe import Markup, escape
 from benchpress import contact
 from benchpress.benchpress.site_content import REPO_URL, asset_version
 from benchpress.credits import config
-from benchpress.permissions import ADMIN_ROLES
 
 WAITLIST = "Waitlist Entry"
 CONTACT = "Contact Message"
@@ -67,11 +66,11 @@ def send_access_request_received(entry) -> None:
 
 @best_effort
 def notify_admins_of_access_request(entry) -> None:
-	"""Tell the admins a request is waiting, with every field they need to decide."""
+	"""Tell the operator a request is waiting, with every field they need to decide."""
 	context = _request_context(entry)
 	context["desk_url"] = get_url_to_form(WAITLIST, entry.name)
 	context["submitted_on"] = _timestamp(entry.get("creation"))
-	_send(ACCESS_FILED, admin_recipients(), context, WAITLIST, entry.name)
+	_send(ACCESS_FILED, [contact.notify_email()], context, WAITLIST, entry.name)
 
 
 @best_effort
@@ -124,26 +123,6 @@ def send_password_reset(user, link: str) -> None:
 		now=True,
 		redact_message_after_send=True,
 	)
-
-
-def admin_recipients() -> list[str]:
-	"""Enabled system users holding an admin role; the contact address when there are none."""
-	has_role = frappe.qb.DocType("Has Role")
-	user = frappe.qb.DocType("User")
-	addresses = (
-		frappe.qb.from_(has_role)
-		.join(user)
-		.on(has_role.parent == user.name)
-		.select(user.email)
-		.distinct()
-		.where(has_role.parenttype == "User")
-		.where(has_role.role.isin(list(ADMIN_ROLES)))
-		.where(user.enabled == 1)
-		.where(user.user_type == "System User")
-		.where(user.email.notnull())
-		.where(user.email != "")
-	).run(pluck=True)
-	return sorted(set(addresses)) or [contact.notify_email()]
 
 
 def seed_rows() -> list[dict]:
