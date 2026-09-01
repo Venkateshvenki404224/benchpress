@@ -27,6 +27,13 @@ class TestSelfHostGraph(unittest.TestCase):
 		self.assertTrue(nodes["WebPage"]["url"].endswith("/self-host"))
 
 
+class TestServicesGraph(unittest.TestCase):
+	def test_carries_the_organisation_and_the_page(self):
+		nodes = graph(sd.services("a description"))
+		self.assertEqual(sorted(nodes), ["Organization", "WebPage"])
+		self.assertTrue(nodes["WebPage"]["url"].endswith("/services"))
+
+
 class TestLandingGraph(unittest.TestCase):
 	def test_carries_the_four_nodes(self):
 		nodes = graph(sd.landing("a description", FAQ))

@@ -56,7 +56,7 @@ the back.
 
 ## Public site
 
-Six pages under `benchpress/www/`, on seven routes. Each one resolves by
+Seven pages under `benchpress/www/`, on eight routes. Each one resolves by
 filename. None of them has a `website_route_rules` entry, and none may be
 given one.
 
@@ -75,9 +75,10 @@ page, their own login screen and no marketing pages.
 | `/login` | `www/login.html` | `www/login.py` | `www/login.LOGIN_SEED` |
 | `/about` | `www/about.html` | `www/about.py` | `site_content.ABOUT_SEED` |
 | `/self-host` | `www/self-host.html` | `www/self_host.py` | `www/self_host.SELF_HOST_SEED` |
+| `/services` | `www/services.html` | `www/services.py` | `www/services.SERVICES_SEED` |
 | `/contact` | `www/contact.html` | `www/contact.py` | `www/contact.CONTACT_SEED` |
 
-Thirteen facts that are easy to break:
+Fourteen facts that are easy to break:
 
 - `www/login.html` deliberately shadows `frappe/www/login.html`, because
   `TemplatePage.set_template_path` searches `reversed(get_installed_apps())`.
@@ -107,11 +108,14 @@ Thirteen facts that are easy to break:
   from a logged-in session. `www/landing.html` is one `{% extends %}` of
   `www/index.html` and `www/landing.py` delegates to `index.get_context`, so the
   two routes cannot drift. It carries `sitemap = 0`; `/` stays canonical.
+- The header carries **pages only**, never an on-page anchor: an anchor cannot be linked
+  from off the page, and the nine-item list it replaced read as a table of contents. The
+  landing page's own sections live in the footer instead, where no two rows share a URL.
 - The header and footer are one include each, and they render the same markup on
   every route — no variant, no page flag. `site_content.chrome_content` is the only
   thing that resolves the header CTA, `signup_route`, the session state the header
   renders (`is_signed_in`, `login_route`, `console_route`) and the page's
-  `csrf_token`. All six pages must offer the same door: never re-resolve any of
+  `csrf_token`. All seven pages must offer the same door: never re-resolve any of
   them in a page controller. Sign-out is a form, not a link — both of Frappe's
   logout endpoints are POST-only.
 - The header is fixed, so every page's first section has to clear it. The dock's
@@ -130,7 +134,7 @@ Thirteen facts that are easy to break:
   still plants, and they are deliberately not a `fixtures` entry: `sync_fixtures`
   imports with `force=True` on every `bench migrate`, which no flag can gate and
   which overwrites an edited body.
-- The five marketing pages extend `benchpress/templates/public_base.html`, not
+- The six marketing pages extend `benchpress/templates/public_base.html`, not
   `templates/web.html`. It emits no framework stylesheet, no script bundle and no
   boot payload, so `bp-site.bundle.js` takes the request token from `data-csrf-token`
   on the body. `/login` keeps `templates/base.html`, because Frappe's login script

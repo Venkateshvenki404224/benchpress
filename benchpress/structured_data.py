@@ -35,6 +35,10 @@ def self_host(description: str) -> str:
 	return encode([organization(), page("WebPage", "/self-host", "Self-host BenchPress", description)])
 
 
+def services(description: str) -> str:
+	return encode([organization(), page("WebPage", "/services", "BenchPress services", description)])
+
+
 def contact(description: str, email: str) -> str:
 	org = organization()
 	# Only an address the deployment configured. The fallback constant is not guaranteed to

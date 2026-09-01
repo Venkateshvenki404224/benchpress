@@ -34,6 +34,7 @@ DOCS_PREREQ_ROUTE = "/docs/operator/prerequisites"
 # The self-host page carries the primary business goal, so it owns the primary CTA. It ends in
 # the install guide rather than repeating it.
 SELF_HOST_ROUTE = "/self-host"
+SERVICES_ROUTE = "/services"
 
 # Verbatim from /docs/operator/install. BenchPress installs into a bench you already run, so
 # there is no `git clone` path — every public surface that shows commands shows these.
@@ -316,7 +317,7 @@ LANDING_SEED = {
 	"paths_self_cta_label": "Read the repo",
 	"paths_self_cta_url": REPO_URL,
 	"paths_self_cta2_label": "Have us install it",
-	"paths_self_cta2_url": "#services",
+	"paths_self_cta2_url": SERVICES_ROUTE,
 	"paths_footnote": "Same code either way — the hosted build is this repo with billing attached.",
 	"path_points": [
 		{
@@ -750,8 +751,8 @@ LANDING_SEED = {
 		"Tell us the team size, the server you have and what breaks today. We will say "
 		"plainly whether you need us at all."
 	),
-	"services_cta_label": "Book a 20-minute call",
-	"services_cta_url": "/contact",
+	"services_cta_label": "What each engagement includes",
+	"services_cta_url": SERVICES_ROUTE,
 	# about — a teaser for `/about`; the numbers below it come from `ABOUT_SEED`.
 	"about_eyebrow": "About",
 	"about_title": "We built this because onboarding cost us half a day, every time.",
@@ -881,33 +882,31 @@ LANDING_SEED = {
 		"GitHub sign-in is one click and needs no email verification. Self-hosting needs no account at all."
 	),
 	# chrome
+	# Pages only. An on-page anchor cannot be linked from anywhere off the page, and nine items
+	# read as a table of contents rather than a site — the landing sections are reachable from
+	# the footer instead. `/guides` joins this list when the wiki space exists.
 	"nav_items": [
-		{"label": "Hosted or self-host", "anchor": "/#paths", "is_cta": 0},
+		{"label": "Self-host", "anchor": SELF_HOST_ROUTE, "is_cta": 0},
 		{"label": "Docs", "anchor": DOCS_ROUTE, "is_cta": 0},
-		{"label": "Pipeline", "anchor": "/#how", "is_cta": 0},
-		{"label": "Console", "anchor": "/#console", "is_cta": 0},
-		{"label": "Agents", "anchor": "/#agents", "is_cta": 0},
-		{"label": "Services", "anchor": "/#services", "is_cta": 0},
+		{"label": "Services", "anchor": SERVICES_ROUTE, "is_cta": 0},
 		{"label": "About", "anchor": "/about", "is_cta": 0},
-		{"label": "Contact", "anchor": "/contact", "is_cta": 0},
 		{"label": "Start free", "anchor": "/signup", "is_cta": 1},
 	],
 	"footer_tagline": (
 		"Isolated Frappe environments, deployed in one click and kept on your private network."
 	),
+	# Three columns, and no two rows share a URL. The landing page's own sections live here,
+	# because the header carries pages only.
 	"footer_links": [
+		{"column_heading": "Product", "label": "Self-host it", "url": SELF_HOST_ROUTE},
+		{"column_heading": "Product", "label": "Services", "url": SERVICES_ROUTE},
 		{"column_heading": "Product", "label": "Pipeline", "url": "/#how"},
 		{"column_heading": "Product", "label": "Console", "url": "/#console"},
 		{"column_heading": "Product", "label": "Templates", "url": "/#top"},
-		{"column_heading": "Developers", "label": "Agent API", "url": "/#agents"},
 		{"column_heading": "Developers", "label": "Documentation", "url": DOCS_ROUTE},
-		{"column_heading": "Product", "label": "Self-host it", "url": SELF_HOST_ROUTE},
 		{"column_heading": "Developers", "label": "Self-hosting guide", "url": DOCS_INSTALL_ROUTE},
+		{"column_heading": "Developers", "label": "Agent API", "url": "/#agents"},
 		{"column_heading": "Developers", "label": "GitHub", "url": REPO_URL},
-		{"column_heading": "Services", "label": "Managed hosting", "url": "/#services"},
-		{"column_heading": "Services", "label": "Setup on your server", "url": "/#services"},
-		{"column_heading": "Services", "label": "App development", "url": "/#services"},
-		{"column_heading": "Services", "label": "Training", "url": "/#services"},
 		{"column_heading": "Company", "label": "About us", "url": "/about"},
 		{"column_heading": "Company", "label": "Contact", "url": "/contact"},
 		{"column_heading": "Company", "label": "Sign in", "url": LOGIN_ROUTE},

@@ -919,6 +919,10 @@ a.bp-channel__body:focus-visible {
 		font-size: 16px !important;
 	}
 
+	.bp .bp-offer__title {
+		font-size: 16.5px !important;
+	}
+
 	.bp .bp-form__title,
 	.bp .bp-sent__title,
 	.bp .bp-cta-panel__title {
@@ -1142,6 +1146,120 @@ a.bp-channel__body:focus-visible {
 
 .bp-morelink:hover {
 	text-decoration: underline;
+}
+
+/* -- Services — the engagement panels ------------------------------------------------------ */
+
+.bp-page--services {
+	--bp-shell: 1040px;
+}
+
+.bp-offers {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr));
+	gap: 14px;
+	margin: 24px 0 0;
+	padding: 0;
+	list-style: none;
+}
+
+.bp-offer__head {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 10px;
+}
+
+.bp-offer__icon {
+	width: 18px;
+	height: 18px;
+	flex: none;
+	color: var(--accent);
+}
+
+.bp-offer__n {
+	font-family: var(--font-mono);
+	font-size: 12px;
+	color: var(--fg3);
+}
+
+.bp-offer__title {
+	margin: 0;
+	flex: 1;
+	min-width: 0;
+	font-size: 16.5px;
+	font-weight: 600;
+	line-height: 1.35;
+}
+
+.bp-offer__meta {
+	flex: none;
+	padding: 4px 10px;
+	border-radius: 999px;
+	background: var(--tint);
+	color: var(--accent);
+	font-size: 11.5px;
+	font-weight: 600;
+}
+
+.bp-offer__body {
+	margin: 12px 0 0;
+	font-size: 14px;
+	line-height: 1.65;
+	color: var(--fg2);
+}
+
+.bp-offer__list {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	margin: 16px 0 0;
+	padding: 0;
+	list-style: none;
+}
+
+.bp-offer__item {
+	display: flex;
+	align-items: flex-start;
+	gap: 9px;
+	font-size: 13.5px;
+	line-height: 1.55;
+	color: var(--fg);
+}
+
+.bp-offer__check {
+	width: 15px;
+	height: 15px;
+	flex: none;
+	margin-top: 2px;
+	color: var(--accent);
+}
+
+.bp-offer__note {
+	margin: 14px 0 0;
+	padding-top: 12px;
+	border-top: 1px solid var(--hair);
+	font-size: 13px;
+	line-height: 1.6;
+	color: var(--fg3);
+}
+
+.bp-offer__note + .bp-offer__note {
+	padding-top: 0;
+	border-top: 0;
+	margin-top: 8px;
+}
+
+/* On a phone the chip and the title cannot share a line without squeezing the title into
+   three words. It takes its own line, and drops the pill: a flex item at `flex-basis: 100%`
+   is 100% wide, so the pill would stretch into a bar. */
+@media (max-width: 560px) {
+	.bp-offer__meta {
+		flex-basis: 100%;
+		padding: 0;
+		background: none;
+		font-size: 12px;
+	}
 }
 
 @media (max-width: 720px) {
