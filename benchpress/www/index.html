@@ -8,6 +8,7 @@
 {%- macro arrow_right(klass="") -%}{{ svg('<path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>', klass) }}{%- endmacro -%}
 {%- macro check(klass="") -%}{{ svg('<path d="M20 6 9 17l-5-5"/>', klass) }}{%- endmacro -%}
 {%- macro clock(klass="") -%}{{ svg('<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>', klass) }}{%- endmacro -%}
+{%- macro award(klass="") -%}{{ svg('<circle cx="12" cy="8" r="6"/><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"/>', klass) }}{%- endmacro -%}
 {%- macro copy(klass="") -%}{{ svg('<rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>', klass) }}{%- endmacro -%}
 {%- macro cpu(klass="") -%}{{ svg('<rect width="16" height="16" x="4" y="4" rx="2"/><rect width="6" height="6" x="9" y="9" rx="1"/><path d="M15 2v2"/><path d="M15 20v2"/><path d="M2 15h2"/><path d="M2 9h2"/><path d="M20 15h2"/><path d="M20 9h2"/><path d="M9 2v2"/><path d="M9 20v2"/>', klass) }}{%- endmacro -%}
 {%- macro credit_card(klass="") -%}{{ svg('<rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/>', klass) }}{%- endmacro -%}
@@ -89,14 +90,21 @@
 	<div class="bp-shell bp-hero__inner" data-r="pad hero">
 		<div class="bp-hero__split" data-r="split">
 			<div class="bp-hero__copy">
-				{%- if settings.hero_badge_text or settings.hero_badge_version %}
-				<p class="bp-badge">
-					<span class="bp-badge__dot" aria-hidden="true"></span>
-					{{ settings.hero_badge_text | default("", true) | e }}
-					{%- if settings.hero_badge_version %}
-					<span class="bp-badge__version">{{ settings.hero_badge_version | e }}</span>
+				{%- if settings.hero_badge_text or settings.hero_badge_version or settings.hero_award_text %}
+				<div class="bp-badgerow">
+					{%- if settings.hero_badge_text or settings.hero_badge_version %}
+					<p class="bp-badge">
+						<span class="bp-badge__dot" aria-hidden="true"></span>
+						{{ settings.hero_badge_text | default("", true) | e }}
+						{%- if settings.hero_badge_version %}
+						<span class="bp-badge__version">{{ settings.hero_badge_version | e }}</span>
+						{%- endif %}
+					</p>
 					{%- endif %}
-				</p>
+					{%- if settings.hero_award_text %}
+					<a class="bp-badge bp-badge--award" href="{{ settings.hero_award_url | default('', true) | e }}" target="_blank" rel="noopener" data-bp-track="outbound_clicked" data-bp-track-location="hero" data-bp-track-destination="award">{{ award("bp-badge__icon") }}{{ settings.hero_award_text | e }}</a>
+					{%- endif %}
+				</div>
 				{%- endif %}
 
 				{%- set headline = settings.hero_headline | default("", true) -%}

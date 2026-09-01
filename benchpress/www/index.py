@@ -10,6 +10,7 @@ from benchpress.benchpress.site_content import (
 	chrome_content,
 	landing_content,
 	preview_tags,
+	signup_cta_label,
 )
 from benchpress.credits.config import credits_enabled, waitlist_open
 from benchpress.public_site import require_public_site
@@ -42,6 +43,9 @@ def get_context(context):
 
 	# The numbers in the About teaser live with the page they came from.
 	context.about_stats = about_content()["settings"].stats
+
+	for field in ("hero_cta_primary_label", "paths_hosted_cta_label"):
+		context.settings[field] = signup_cta_label(context.settings[field])
 
 	context.title = context.meta_title or DEFAULT_TITLE
 	context.metatags = preview_tags(context.title, context.meta_description, context.og_image)
