@@ -39,7 +39,7 @@ def get_context(context):
 	context.mode_default = "dark"
 
 	settings = shipped(CONTACT_SEED)
-	context.update(chrome_content(is_landing=False))
+	context.update(chrome_content())
 	context.update(submission())
 	context.settings = settings
 	context.channels = channel_rows(settings.channels)

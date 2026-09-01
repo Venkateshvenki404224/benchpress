@@ -57,7 +57,7 @@
 .bp-request {
 	position: relative;
 	overflow: hidden;
-	padding: 56px 0 80px;
+	padding: calc(var(--m-header-height) + 56px) 0 80px;
 }
 
 .bp-request__dots {

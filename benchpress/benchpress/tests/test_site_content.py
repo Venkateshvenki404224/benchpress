@@ -104,10 +104,9 @@ class TestSiteContent(IntegrationTestCase):
 		self.assertEqual(card.meta_label, card.meta)
 
 	def test_chrome_is_shared_by_every_page(self):
-		chrome = chrome_content(is_landing=False)
-		self.assertFalse(chrome["is_landing"])
+		chrome = chrome_content()
 		self.assertEqual(next(item.label for item in chrome["nav_items"]), "Hosted or self-host")
-		self.assertTrue(chrome["footer_trademark_short"])
+		self.assertTrue(chrome["footer_trademark"])
 
 	def test_the_chrome_names_the_about_and_contact_pages(self):
 		anchors = [item.anchor for item in chrome_content()["nav_items"]]

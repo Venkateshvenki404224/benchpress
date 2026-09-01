@@ -69,7 +69,7 @@ given one.
 | `/about` | `www/about.html` | `www/about.py` | `site_content.ABOUT_SEED` |
 | `/contact` | `www/contact.html` | `www/contact.py` | `www/contact.CONTACT_SEED` |
 
-Seven facts that are easy to break:
+Eight facts that are easy to break:
 
 - `www/login.html` deliberately shadows `frappe/www/login.html`, because
   `TemplatePage.set_template_path` searches `reversed(get_installed_apps())`.
@@ -99,12 +99,18 @@ Seven facts that are easy to break:
   from a logged-in session. `www/landing.html` is one `{% extends %}` of
   `www/index.html` and `www/landing.py` delegates to `index.get_context`, so the
   two routes cannot drift. It carries `sitemap = 0`; `/` stays canonical.
-- The header and footer are one include, and `site_content.chrome_content` is the
-  only thing that resolves the header CTA, `signup_route`, the session state the
-  header renders (`is_signed_in`, `login_route`, `console_route`) and the page's
+- The header and footer are one include each, and they render the same markup on
+  every route — no variant, no page flag. `site_content.chrome_content` is the only
+  thing that resolves the header CTA, `signup_route`, the session state the header
+  renders (`is_signed_in`, `login_route`, `console_route`) and the page's
   `csrf_token`. All five pages must offer the same door: never re-resolve any of
   them in a page controller. Sign-out is a form, not a link — both of Frappe's
   logout endpoints are POST-only.
+- The header is fixed, so every page's first section has to clear it. The dock's
+  height at each breakpoint is `--m-header-height` in `brand.css`; the desktop
+  clearance is `calc(var(--m-header-height) + …)` in the page's own stylesheet, and
+  below 900px `brand.css` does it through `data-r~="hero"` on the section's inner
+  element.
 - Every page renders from its constant and reads nothing at render time. There is
   nothing behind a page in Desk any more, so a section that should not appear is
   absent from the template rather than switched off.

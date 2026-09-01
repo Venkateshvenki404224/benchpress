@@ -51,8 +51,6 @@ FALLBACK_CHROME = {
 	"footer_tagline": None,
 	"footer_copyright": None,
 	"footer_trademark": None,
-	"footer_trademark_short": None,
-	"is_landing": False,
 	"signup_route": WAITLIST_ROUTE,
 }
 
@@ -78,7 +76,7 @@ def branded(context) -> dict:
 
 def with_chrome(context) -> dict:
 	content = page_context(LOGIN_SEED)
-	content.update(chrome_content(is_landing=False))
+	content.update(chrome_content())
 	content["asset_version"] = asset_version()
 	content["signup_prompt"] = signup_prompt(
 		content["login_signup_prompt"], cint(context.get("disable_signup"))

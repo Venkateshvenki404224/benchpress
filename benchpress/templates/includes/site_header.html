@@ -3,7 +3,7 @@
   the mobile disclosure live in `site_head.html` and `public/js/site.js`. The theme toggle sits in
   `.bp-nav` so the disclosure carries it on mobile, where the row has no space for it.
 
-  Context: nav_items, signup_route, is_landing, asset_version, and the session keys
+  Context: nav_items, signup_route, asset_version, and the session keys
   is_signed_in / login_route / console_route / logout_method / csrf_token.
 
   Jinja autoescape is off in Frappe, so every interpolation is piped through `| e`.
@@ -16,9 +16,9 @@
 
 <a class="bp-skip" href="#bp-content">Skip to content</a>
 
-<header class="bp-header" data-variant="{{ 'dock' if is_landing else 'bar' }}" data-open="false" data-bp-header>
+<header class="bp-header" data-open="false" data-bp-header>
 	<div class="bp-header__inner">
-		<a class="bp-brand" href="{{ '/#top' if is_landing else '/' }}" aria-label="BenchPress — home">
+		<a class="bp-brand" href="/" aria-label="BenchPress — home">
 			<img class="bp-when-dark" src="/assets/benchpress/images/logo/wordmark-on-dark.png?v={{ v | e }}" alt="BenchPress" width="116" height="30">
 			<img class="bp-when-light" src="/assets/benchpress/images/logo/wordmark-on-light.png?v={{ v | e }}" alt="" width="116" height="30">
 		</a>

@@ -77,7 +77,7 @@
 	width: 100%;
 	max-width: 1080px;
 	margin: 0 auto;
-	padding: 56px 28px 76px;
+	padding: calc(var(--m-header-height) + 56px) 28px 76px;
 }
 
 /* The track floor is `min(360px, 100%)` so a viewport under 360px yields instead of forcing

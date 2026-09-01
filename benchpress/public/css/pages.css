@@ -193,7 +193,7 @@
 .bp-hero {
 	position: relative;
 	overflow: hidden;
-	padding-top: 64px;
+	padding-top: calc(var(--m-header-height) + 64px);
 }
 
 .bp-hero__dots {

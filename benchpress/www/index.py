@@ -48,7 +48,7 @@ def get_context(context):
 	context.mode_default = "dark"
 
 	context.update(landing_content())
-	context.update(chrome_content(is_landing=True))
+	context.update(chrome_content())
 	context.update(commerce_context() if credits_enabled() else dict(NO_COMMERCE))
 
 	# The numbers in the About teaser live with the page they came from.

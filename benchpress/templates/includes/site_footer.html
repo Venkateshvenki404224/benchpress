@@ -1,29 +1,23 @@
 {#-
   Shared footer for the five public pages, included last inside the `.bp` wrapper.
 
-  Context, all optional — the footer renders against an unsaved Single: footer_columns
-  ([{heading, links: [{label, url}]}]), footer_tagline, footer_copyright, footer_trademark,
-  footer_trademark_short, is_landing, asset_version.
+  Context, all optional — the footer renders against an empty context on the fallback login page:
+  footer_columns ([{heading, links: [{label, url}]}]), footer_tagline, footer_copyright,
+  footer_trademark, asset_version.
 
   Jinja autoescape is off in Frappe, so every interpolation is piped through `| e`.
 -#}
 {%- set v = asset_version or "0" -%}
 {%- set copyright = footer_copyright or "© 2026 BenchPress. AGPL-3.0 licensed." -%}
 {%- set trademark = footer_trademark or "Frappe, ERPNext and Frappe HR are trademarks of Frappe Technologies Pvt. Ltd. BenchPress is an independent project, not affiliated with or endorsed by Frappe Technologies." -%}
-{%- set trademark_short = footer_trademark_short or "Not affiliated with Frappe Technologies." -%}
 {%- set tagline = footer_tagline or "Isolated Frappe environments, deployed in one click and kept on your private network." -%}
 
-{%- macro wordmark(height) -%}
-	<img class="bp-when-dark" src="/assets/benchpress/images/logo/wordmark-on-dark.png?v={{ v | e }}" alt="BenchPress" width="{{ (height * 3.88) | round | int }}" height="{{ height }}">
-	<img class="bp-when-light" src="/assets/benchpress/images/logo/wordmark-on-light.png?v={{ v | e }}" alt="" width="{{ (height * 3.88) | round | int }}" height="{{ height }}">
-{%- endmacro -%}
-
-{%- if is_landing %}
-<footer class="bp-footer" data-variant="full">
+<footer class="bp-footer">
 	<div class="bp-footer__inner">
 		<div class="bp-footer__grid">
 			<div class="bp-footer__brand">
-				{{ wordmark(36) }}
+				<img class="bp-when-dark" src="/assets/benchpress/images/logo/wordmark-on-dark.png?v={{ v | e }}" alt="BenchPress" width="140" height="36">
+				<img class="bp-when-light" src="/assets/benchpress/images/logo/wordmark-on-light.png?v={{ v | e }}" alt="" width="140" height="36">
 				<p class="bp-footer__tagline">{{ tagline | e }}</p>
 			</div>
 			{%- for column in footer_columns or [] %}
@@ -41,12 +35,3 @@
 		</div>
 	</div>
 </footer>
-{%- else %}
-<footer class="bp-footer" data-variant="compact">
-	<div class="bp-footer__inner">
-		<span class="bp-footer__brand">{{ wordmark(20) }}</span>
-		<p>{{ copyright | e }}</p>
-		<p class="bp-footer__short">{{ trademark_short | e }}</p>
-	</div>
-</footer>
-{%- endif %}

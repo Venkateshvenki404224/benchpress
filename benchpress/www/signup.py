@@ -50,7 +50,7 @@ def get_context(context):
 	context.mode_default = "dark"
 
 	settings = shipped(SIGNUP_SEED)
-	context.update(chrome_content(is_landing=False))
+	context.update(chrome_content())
 	context.update(submission())
 	context.settings = settings
 	context.steps = settings.signup_steps

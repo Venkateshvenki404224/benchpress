@@ -45,7 +45,7 @@ def about_content() -> dict:
 	return local_cache(ABOUT_ATTRIBUTE, build_about_content)
 
 
-def chrome_content(is_landing: bool = False) -> dict:
+def chrome_content() -> dict:
 	"""Header and footer copy for any public page. All five pages share one source."""
 	landing = landing_content()
 	route = signup_route()
@@ -56,8 +56,6 @@ def chrome_content(is_landing: bool = False) -> dict:
 		"footer_tagline": landing["settings"].footer_tagline,
 		"footer_copyright": landing["settings"].footer_copyright,
 		"footer_trademark": landing["settings"].footer_trademark,
-		"footer_trademark_short": landing["settings"].footer_trademark_short,
-		"is_landing": is_landing,
 		"repo_url": REPO_URL,
 		"is_signed_in": frappe.session.user != "Guest",
 		"login_route": LOGIN_ROUTE,
@@ -820,7 +818,6 @@ LANDING_SEED = {
 	],
 	"footer_copyright": "© 2026 BenchPress. AGPL-3.0 licensed.",
 	"footer_trademark": FOOTER_TRADEMARK,
-	"footer_trademark_short": "Not affiliated with Frappe Technologies.",
 	# seo
 	"meta_title": "BenchPress — a Frappe environment in one click",
 	"meta_description": HERO_SUBHEAD,

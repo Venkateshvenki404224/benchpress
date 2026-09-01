@@ -188,7 +188,7 @@
 	--m-shell: 1200px;
 	--m-shell-pad: 32px;
 	--m-section-pad: 80px;
-	--m-header-height: 68px;
+	--m-header-height: 72px;
 	--m-radius-button: 8px;
 	--m-radius-card: 12px;
 	--m-radius-pane: 14px;
@@ -479,6 +479,12 @@ body {
  *   data-r="float"  floating badge
  * --------------------------------------------------------------------------------------- */
 
+@media (max-width: 1139px) {
+	:root {
+		--m-header-height: 70px;
+	}
+}
+
 @media (max-width: 900px) {
 	.bp [data-r~="pad"] {
 		padding-left: 18px !important;
@@ -489,7 +495,7 @@ body {
 		padding-bottom: 56px !important;
 	}
 	.bp [data-r~="hero"] {
-		padding-top: 100px !important;
+		padding-top: calc(var(--m-header-height) + 40px) !important;
 	}
 	.bp [data-r="nav"] {
 		display: none !important;
@@ -529,6 +535,9 @@ body {
 }
 
 @media (max-width: 560px) {
+	:root {
+		--m-header-height: 62px;
+	}
 	.bp [data-r~="pad"] {
 		padding-left: 14px !important;
 		padding-right: 14px !important;

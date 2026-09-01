@@ -30,7 +30,7 @@ def get_context(context):
 	context.mode_default = "dark"
 
 	context.update(about_content())
-	context.update(chrome_content(is_landing=False))
+	context.update(chrome_content())
 
 	context.cta_url = context.settings.cta_url or context.signup_route
 

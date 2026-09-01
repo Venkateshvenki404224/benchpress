@@ -386,7 +386,7 @@
 
 .bp-hero__inner {
 	position: relative;
-	padding-top: 132px;
+	padding-top: calc(var(--m-header-height) + 60px);
 }
 
 .bp-hero__split {
