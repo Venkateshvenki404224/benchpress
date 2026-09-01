@@ -125,7 +125,7 @@ Eleven facts that are easy to break:
   `TOPICS` (first row is the default), `RESPONSE_TIMES` and `ACKNOWLEDGE_SENDER`.
   Only the forwarding address is per-deployment — the `benchpress_contact_email`
   site-config key, falling back to `CONTACT_EMAIL`.
-- The six `Email Template` rows are the one thing `benchpress.public_site.seed`
+- The seven `Email Template` rows are the one thing `benchpress.public_site.seed`
   still plants, and they are deliberately not a `fixtures` entry: `sync_fixtures`
   imports with `force=True` on every `bench migrate`, which no flag can gate and
   which overwrites an edited body.
