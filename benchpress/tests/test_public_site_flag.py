@@ -27,6 +27,8 @@ PUBLIC_ROUTES = (
 	"/self-host",
 	"/services",
 	"/vs/frappe-docker",
+	"/vs/frappe-manager",
+	"/vs/frappe-pilot",
 	"/contact",
 	"/signup",
 )

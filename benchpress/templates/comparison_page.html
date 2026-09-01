@@ -1,0 +1,152 @@
+{% extends "benchpress/templates/public_base.html" %}
+
+{#- lucide 0.451.0 path data; sizing is CSS, never a width/height attribute. -#}
+{%- macro svg(body, klass) -%}
+<svg class="{{ klass | e }}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">{{ body }}</svg>
+{%- endmacro -%}
+
+{%- macro arrow_right(klass="") -%}{{ svg('<path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>', klass) }}{%- endmacro -%}
+{%- macro check(klass="") -%}{{ svg('<path d="M20 6 9 17l-5-5"/>', klass) }}{%- endmacro -%}
+{%- macro github(klass="") -%}{{ svg('<path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/>', klass) }}{%- endmacro -%}
+{%- macro minus(klass="") -%}{{ svg('<path d="M5 12h14"/>', klass) }}{%- endmacro -%}
+
+{% block title %}{{ (meta_title or title) | e }}{% endblock %}
+
+{% block head_include %}
+{{ include_style('bp-pages.bundle.css') }}
+{% endblock %}
+
+{% block page_content %}
+<div class="bp" data-mode="{{ mode_default | e }}">
+{% include "templates/includes/site_header.html" %}
+
+<main id="bp-content" class="bp-page bp-page--vs">
+
+<section class="bp-hero" id="vs" data-r="sec">
+	<div class="bp-hero__dots" aria-hidden="true"></div>
+	<div class="bp-shell bp-hero__inner" data-r="pad hero">
+		{#- The trail the BreadcrumbList schema describes, so the page shows what it claims. -#}
+		<nav class="bp-crumbs" aria-label="Breadcrumb">
+			<a class="bp-crumbs__link" href="/">BenchPress</a>
+			<span class="bp-crumbs__sep" aria-hidden="true">/</span>
+			<span>{{ settings.eyebrow | e }}</span>
+		</nav>
+		<h1 class="bp-hero__title">{{ settings.title | e }}</h1>
+		{#- Shipped HTML, not input: the page's own seed in `www/vs/` is the only source. -#}
+		<div class="bp-prose bp-hero__lede">{{ settings.lede }}</div>
+		<div class="bp-hero__actions">
+			<a class="bp-btn bp-btn--lg bp-btn--primary" href="{{ settings.cta_url | e }}">{{ settings.cta_label | e }}{{ arrow_right("bp-btn__icon") }}</a>
+			<a class="bp-btn bp-btn--lg" href="{{ settings.cta2_url | e }}">{{ github("bp-btn__icon") }}{{ settings.cta2_label | e }}</a>
+		</div>
+		{#- No orphans: every comparison names the next one a reader would want. -#}
+		<p class="bp-prose bp-prose--small bp-hero__aside">
+			<a class="bp-morelink" href="{{ settings.related_url | e }}">{{ settings.related_label | e }}{{ arrow_right("bp-btn__icon") }}</a>
+		</p>
+	</div>
+</section>
+
+<section class="bp-section bp-section--tight" id="what-it-is" data-r="sec">
+	<div class="bp-shell" data-r="pad">
+		<div class="bp-panel">
+			<h2 class="bp-eyebrow bp-panel__eyebrow">{{ settings.credit_title | e }}</h2>
+			{#- Shipped HTML. -#}
+			<div class="bp-prose">{{ settings.credit_body }}</div>
+		</div>
+	</div>
+</section>
+
+<section class="bp-section" id="table" data-r="sec">
+	<div class="bp-shell" data-r="pad">
+		<h2 class="bp-h2">{{ settings.table_title | e }}</h2>
+		{#- Shipped HTML. -#}
+		<div class="bp-prose bp-section__lede">{{ settings.table_lede }}</div>
+		{#- The scroller is the wrapper, so a wide table never scrolls the page. -#}
+		<div class="bp-tablewrap" tabindex="0" role="group" aria-labelledby="table-caption">
+			<table class="bp-table">
+				<caption id="table-caption" class="bp-sr">{{ settings.table_title | e }}</caption>
+				<thead>
+					<tr>
+						{%- for head in settings.table_head %}
+						<th scope="col">{{ head | e }}</th>
+						{%- endfor %}
+					</tr>
+				</thead>
+				<tbody>
+					{%- for row in settings.table_rows %}
+					<tr>
+						<th scope="row">{{ row.label | e }}</th>
+						<td class="{{ 'is-win' if row.wins == 'theirs' else '' }}">{{ row.theirs | e }}</td>
+						<td class="{{ 'is-win' if row.wins == 'ours' else '' }}">{{ row.ours | e }}</td>
+					</tr>
+					{%- endfor %}
+				</tbody>
+			</table>
+		</div>
+	</div>
+</section>
+
+<section class="bp-section" id="which" data-r="sec">
+	<div class="bp-shell" data-r="pad">
+		<div class="bp-which" data-r="split">
+			<div class="bp-panel">
+				<h2 class="bp-eyebrow bp-panel__eyebrow">{{ settings.stay_title | e }}</h2>
+				<ul class="bp-offer__list">
+					{%- for point in settings.stay_points %}
+					<li class="bp-offer__item">{{ minus("bp-which__mark") }}<span>{{ point | e }}</span></li>
+					{%- endfor %}
+				</ul>
+			</div>
+			<div class="bp-panel">
+				<h2 class="bp-eyebrow bp-panel__eyebrow">{{ settings.switch_title | e }}</h2>
+				<ul class="bp-offer__list">
+					{%- for point in settings.switch_points %}
+					<li class="bp-offer__item">{{ check("bp-offer__check") }}<span>{{ point | e }}</span></li>
+					{%- endfor %}
+				</ul>
+			</div>
+		</div>
+	</div>
+</section>
+
+<section class="bp-section" id="underneath" data-r="sec">
+	<div class="bp-shell" data-r="pad">
+		<h2 class="bp-h2">{{ settings.under_title | e }}</h2>
+		{#- Shipped HTML. -#}
+		<div class="bp-prose bp-section__lede">{{ settings.under_body }}</div>
+	</div>
+</section>
+
+<section class="bp-section" id="faq" data-r="sec">
+	<div class="bp-shell" data-r="pad">
+		<h2 class="bp-h2">{{ settings.faq_title | e }}</h2>
+		<div class="bp-qa">
+			{%- for item in settings.faq_items %}
+			<details class="bp-qa__row"{% if item.default_open %} open{% endif %}>
+				<summary class="bp-qa__q">{{ item.question | e }}</summary>
+				<p class="bp-qa__a">{{ item.answer | e }}</p>
+			</details>
+			{%- endfor %}
+		</div>
+	</div>
+</section>
+
+<section class="bp-section bp-section--last" id="next" data-r="sec">
+	<div class="bp-shell" data-r="pad">
+		<div class="bp-cta-panel">
+			<div class="bp-cta-panel__text">
+				<h2 class="bp-cta-panel__title">{{ settings.closing_title | e }}</h2>
+				<p class="bp-cta-panel__body">{{ settings.closing_body | e }}</p>
+			</div>
+			<div class="bp-hero__actions">
+				<a class="bp-btn bp-btn--lg bp-btn--primary" href="{{ settings.closing_cta_url | e }}">{{ settings.closing_cta_label | e }}{{ arrow_right("bp-btn__icon") }}</a>
+				<a class="bp-btn bp-btn--lg" href="{{ settings.closing_cta2_url | e }}">{{ settings.closing_cta2_label | e }}</a>
+			</div>
+		</div>
+	</div>
+</section>
+
+</main>
+
+{% include "templates/includes/site_footer.html" %}
+</div>
+{% endblock %}

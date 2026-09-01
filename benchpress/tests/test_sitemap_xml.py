@@ -44,7 +44,10 @@ class TestSitemapXml(IntegrationTestCase):
 
 	def test_a_page_in_a_subfolder_is_found(self):
 		# `/vs/<slug>` pages live in `www/vs/`, so the walk cannot stop at the top level.
-		self.assertIn(frappe.utils.get_url("/vs/frappe-docker"), locations(sitemap_xml.build()))
+		found = locations(sitemap_xml.build())
+		for route in ("/vs/frappe-docker", "/vs/frappe-manager", "/vs/frappe-pilot"):
+			with self.subTest(route=route):
+				self.assertIn(frappe.utils.get_url(route), found)
 
 	def test_the_landing_alias_is_left_out(self):
 		# `/landing` renders the same page as `/`, and only `/` is canonical.

@@ -1,16 +1,12 @@
 # Copyright (c) 2026, Venkatesh and contributors
 # For license information, please see license.txt
 
-from benchpress import structured_data
 from benchpress.benchpress.site_content import (
 	DOCS_INSTALL_ROUTE,
-	REPO_URL,
 	SELF_HOST_ROUTE,
-	canonical_url,
-	chrome_content,
-	preview_tags,
+	VS_FRAPPE_MANAGER_ROUTE,
 )
-from benchpress.public_site import require_public_site
+from benchpress.www.vs import render
 
 ROUTE = "/vs/frappe-docker"
 
@@ -34,6 +30,8 @@ COMPARISON_SEED = {
 	"cta_url": SELF_HOST_ROUTE,
 	"cta2_label": "frappe_docker on GitHub",
 	"cta2_url": FRAPPE_DOCKER_URL,
+	"related_label": "Also comparing? BenchPress and Frappe Manager",
+	"related_url": VS_FRAPPE_MANAGER_ROUTE,
 	"credit_title": "What frappe_docker is",
 	"credit_body": (
 		"<p><b>The official container setup for Frappe</b>, maintained in the framework's own "
@@ -214,23 +212,4 @@ COMPARISON_SEED = {
 
 
 def get_context(context):
-	require_public_site()
-
-	context.no_cache = 1
-	context.bp_canonical = canonical_url(ROUTE)
-	context.body_class = "bp-body"
-	context.mode_default = "dark"
-
-	context.settings = COMPARISON_SEED
-	context.update(chrome_content())
-
-	context.title = COMPARISON_SEED["meta_title"]
-	context.metatags = preview_tags(context.title, COMPARISON_SEED["meta_description"])
-	context.bp_schema = structured_data.comparison(
-		ROUTE,
-		COMPARISON_SEED["meta_title"],
-		COMPARISON_SEED["meta_description"],
-		COMPARISON_SEED["faq_items"],
-	)
-	context.repo_url = REPO_URL
-	return context
+	return render(context, ROUTE, COMPARISON_SEED)

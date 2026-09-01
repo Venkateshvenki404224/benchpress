@@ -39,6 +39,8 @@ SERVICES_ROUTE = "/services"
 # Comparison pages. `/vs/<slug>` is the reserved namespace; the frame is a different layer,
 # never a cheaper substitute.
 VS_FRAPPE_DOCKER_ROUTE = "/vs/frappe-docker"
+VS_FRAPPE_MANAGER_ROUTE = "/vs/frappe-manager"
+VS_FRAPPE_PILOT_ROUTE = "/vs/frappe-pilot"
 
 # Verbatim from /docs/operator/install. BenchPress installs into a bench you already run, so
 # there is no `git clone` path — every public surface that shows commands shows these.
@@ -905,6 +907,8 @@ LANDING_SEED = {
 		{"column_heading": "Product", "label": "Self-host it", "url": SELF_HOST_ROUTE},
 		{"column_heading": "Product", "label": "Services", "url": SERVICES_ROUTE},
 		{"column_heading": "Product", "label": "vs frappe_docker", "url": VS_FRAPPE_DOCKER_ROUTE},
+		{"column_heading": "Product", "label": "vs Frappe Manager", "url": VS_FRAPPE_MANAGER_ROUTE},
+		{"column_heading": "Product", "label": "vs Frappe Pilot", "url": VS_FRAPPE_PILOT_ROUTE},
 		{"column_heading": "Product", "label": "Pipeline", "url": "/#how"},
 		{"column_heading": "Product", "label": "Console", "url": "/#console"},
 		{"column_heading": "Product", "label": "Templates", "url": "/#top"},

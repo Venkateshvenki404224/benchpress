@@ -111,6 +111,18 @@ def page_links() -> str:
 			"An honest comparison with the official Docker setup, including the rows "
 			"frappe_docker wins. BenchPress is a layer above it, not a replacement.",
 		),
+		(
+			"BenchPress and Frappe Manager",
+			site_content.VS_FRAPPE_MANAGER_ROUTE,
+			"Per developer against per team. Frappe Manager gives one developer a bench on their "
+			"own machine; BenchPress hands one to each person who needs it.",
+		),
+		(
+			"BenchPress and Frappe Pilot",
+			site_content.VS_FRAPPE_PILOT_ROUTE,
+			"A server manager against disposable environments. Pilot keeps one bench and its "
+			"sites alive; BenchPress makes an environment per person and destroys it after.",
+		),
 		("About", "/about", about["meta_description"]),
 		("Contact", "/contact", "Reach the people who build it, by topic."),
 		("Hosted access", site_content.signup_route(), "Ask for access to the hosted build."),
