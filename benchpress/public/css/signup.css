@@ -1,28 +1,6 @@
 /* `/signup` — request access. `brand.css` owns the palette, the type stack, the keyframes and
  * the `data-r` breakpoints; the primitives it repeats from `home.html` are named to match. */
 
-/* -- Framework reset: flattens the `templates/web.html` wrappers under a full-bleed page -- */
-
-.bp-body .page-content-wrapper,
-.bp-body .page_content {
-	min-height: 0;
-	margin: 0;
-	padding: 0;
-}
-
-.bp-body .page-content-wrapper > main {
-	width: auto;
-	max-width: none;
-	margin: 0;
-	padding: 0;
-}
-
-.bp-body .page-breadcrumbs,
-.bp-body .page-header-wrapper,
-.bp-body .page-footer {
-	display: none;
-}
-
 /* Cobalt names no error colour and the Espresso ramp is fenced to the console mock, so the two
  * below are declared here, page-scoped and mode-aware. */
 .bp-request {

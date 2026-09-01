@@ -31,11 +31,6 @@
 	display: none;
 }
 
-/* Frappe's web bundle sets `display` on generic elements, so `hidden` needs the last word. */
-.bp [hidden] {
-	display: none !important;
-}
-
 /* `login.js` strips `.hide` on `frappe.ready`; until then it has to beat the form layout rule
  * below it, which is two classes heavier. */
 .bp .page-card form.hide {

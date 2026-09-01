@@ -43,7 +43,6 @@ def get_context(context):
 	require_public_site()
 
 	context.no_cache = 1
-	context.full_width = 1
 	context.body_class = "bp-body"
 	context.mode_default = "dark"
 

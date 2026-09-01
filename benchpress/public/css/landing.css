@@ -1,36 +1,10 @@
 /* Landing page — every class `benchpress/www/home.html` uses. Tokens come from `brand.css`.
  * The page wears Cobalt; the console block keeps the Espresso ramp of the real product. */
 
-/* -- Framework reset: flattens the `templates/web.html` wrappers under a full-bleed page -- */
-
-.bp-body .page-content-wrapper,
-.bp-body .page_content {
-	margin: 0;
-	padding: 0;
-}
-
-.bp-body .page-content-wrapper > main {
-	width: auto;
-	max-width: none;
-	margin: 0;
-	padding: 0;
-}
-
-.bp-body .page-breadcrumbs,
-.bp-body .page-header-wrapper,
-.bp-body .page-footer {
-	display: none;
-}
-
-/* Frappe's web bundle sets `display` on generic elements, so `hidden` needs the last word. */
-.bp [hidden] {
-	display: none !important;
-}
-
 /* -- Shell, type and controls ------------------------------------------------------------ */
 
-/* Frappe's `website.bundle.css` paints headings `#171717` at element specificity; `:where()`
- * keeps this override weightless so every component rule below still wins. */
+/* `:where()` keeps the inherited heading colour weightless, so every component rule below
+ * still wins without `!important`. */
 .bp :where(h1, h2, h3, h4, h5, h6) {
 	color: inherit;
 }

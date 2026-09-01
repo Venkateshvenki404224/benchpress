@@ -1,4 +1,4 @@
-{% extends "templates/web.html" %}
+{% extends "benchpress/templates/public_base.html" %}
 
 {#- lucide 0.451.0 path data; sizing is CSS, never a width/height attribute. -#}
 {%- macro svg(body, klass) -%}
@@ -31,15 +31,7 @@
 
 {% block title %}{{ (meta_title or title) | e }}{% endblock %}
 
-{#- The framework's chrome, blanked. These are the real block names; anything else is a no-op. -#}
-{% block navbar %}{% endblock %}
-{% block footer %}{% endblock %}
-{% block breadcrumbs %}{% endblock %}
-{% block page_sidebar %}{% endblock %}
-{% block page_footer %}{% endblock %}
-
 {% block head_include %}
-{% include "templates/includes/site_head.html" %}
 <link rel="stylesheet" href="/assets/benchpress/css/pages.css?v={{ asset_version | e }}">
 {% endblock %}
 

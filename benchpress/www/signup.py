@@ -45,7 +45,6 @@ def get_context(context):
 		raise frappe.Redirect
 
 	context.no_cache = 1
-	context.full_width = 1
 	context.body_class = "bp-body"
 	context.mode_default = "dark"
 

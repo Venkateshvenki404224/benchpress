@@ -374,6 +374,97 @@ body {
 	color: var(--fg);
 }
 
+/* The element defaults the framework used to supply, at the weight it supplied them: the four
+ * pages that load no framework stylesheet carry `bp-standalone`, and `:where()` holds every rule
+ * below to bare-element specificity, so a component class still wins. */
+:where(.bp-standalone) .bp {
+	/* Medium: Frappe's own `--weight-regular: 420` resolved to the Poppins 500 face. */
+	font-weight: 500;
+	line-height: 1.5;
+	letter-spacing: 0.02em;
+}
+
+:where(.bp-standalone .bp) h1,
+:where(.bp-standalone .bp) h2,
+:where(.bp-standalone .bp) h3,
+:where(.bp-standalone .bp) h4,
+:where(.bp-standalone .bp) h5,
+:where(.bp-standalone .bp) h6 {
+	margin-top: 0;
+	margin-bottom: 0.5rem;
+	font-weight: 500;
+	line-height: 1.2;
+}
+
+:where(.bp-standalone .bp) h1,
+:where(.bp-standalone .bp) h2,
+:where(.bp-standalone .bp) h3,
+:where(.bp-standalone .bp) h4 {
+	font-weight: 600;
+}
+
+:where(.bp-standalone .bp) p {
+	margin-top: 0;
+	margin-bottom: 1rem;
+	line-height: 1.7;
+}
+
+:where(.bp-standalone .bp) ol,
+:where(.bp-standalone .bp) ul,
+:where(.bp-standalone .bp) dl {
+	margin-top: 0;
+	margin-bottom: 1rem;
+}
+
+:where(.bp-standalone .bp) dt {
+	font-weight: 700;
+}
+
+:where(.bp-standalone .bp) dd {
+	margin-bottom: 0.5rem;
+	margin-left: 0;
+}
+
+:where(.bp-standalone .bp) b,
+:where(.bp-standalone .bp) strong {
+	font-weight: bolder;
+}
+
+:where(.bp-standalone .bp) img,
+:where(.bp-standalone .bp) svg {
+	vertical-align: middle;
+}
+
+:where(.bp-standalone .bp) img {
+	max-width: 100%;
+	height: auto;
+}
+
+:where(.bp-standalone .bp) label {
+	display: inline-block;
+	margin-bottom: 0.5rem;
+}
+
+:where(.bp-standalone .bp) input,
+:where(.bp-standalone .bp) button,
+:where(.bp-standalone .bp) select,
+:where(.bp-standalone .bp) textarea {
+	margin: 0;
+	font-size: inherit;
+	line-height: inherit;
+}
+
+:where(.bp-standalone .bp) textarea {
+	overflow: auto;
+	resize: vertical;
+}
+
+/* A `display` set by a class outranks the browser's own `[hidden]` rule, so the attribute needs
+ * the last word or a section and its replacement render on top of each other. */
+.bp [hidden] {
+	display: none !important;
+}
+
 /* Frappe's `login.bundle.css` styles bare form controls, so these are scoped and explicit. */
 .bp input,
 .bp textarea,

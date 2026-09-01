@@ -69,7 +69,7 @@ given one.
 | `/about` | `www/about.html` | `www/about.py` | `site_content.ABOUT_SEED` |
 | `/contact` | `www/contact.html` | `www/contact.py` | `www/contact.CONTACT_SEED` |
 
-Eight facts that are easy to break:
+Nine facts that are easy to break:
 
 - `www/login.html` deliberately shadows `frappe/www/login.html`, because
   `TemplatePage.set_template_path` searches `reversed(get_installed_apps())`.
@@ -122,6 +122,13 @@ Eight facts that are easy to break:
   still plants, and they are deliberately not a `fixtures` entry: `sync_fixtures`
   imports with `force=True` on every `bench migrate`, which no flag can gate and
   which overwrites an edited body.
+- The four marketing pages extend `benchpress/templates/public_base.html`, not
+  `templates/web.html`. It emits no framework stylesheet, no script bundle and no
+  boot payload, so `site.js` takes the request token from `data-csrf-token` on the
+  body. `/login` keeps `templates/base.html`, because Frappe's login script needs
+  both bundles. The element defaults the framework used to supply — inherited
+  weight, line height and letter spacing, and the bare-element margins — are in
+  `brand.css` on `.bp` and under `:where(.bp)`.
 
 The contract the five pages were built against is
 [internal/public-site-spec.md](internal/public-site-spec.md).

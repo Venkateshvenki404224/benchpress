@@ -2,33 +2,6 @@
  * type stack, the keyframes and the `data-r` breakpoints; the two pages share one file
  * because they share most of their vocabulary. */
 
-/* -- Framework reset: flattens the `templates/web.html` wrappers under a full-bleed page -- */
-
-.bp-body .page-content-wrapper,
-.bp-body .page_content {
-	margin: 0;
-	padding: 0;
-}
-
-.bp-body .page-content-wrapper > main {
-	width: auto;
-	max-width: none;
-	margin: 0;
-	padding: 0;
-}
-
-.bp-body .page-breadcrumbs,
-.bp-body .page-header-wrapper,
-.bp-body .page-footer {
-	display: none;
-}
-
-/* A `display` set by a class outranks the browser's own `[hidden]` rule, so the attribute needs
- * the last word or the form and its confirmation render on top of each other. */
-.bp [hidden] {
-	display: none !important;
-}
-
 /* -- Shell and rhythm -------------------------------------------------------------------- */
 
 .bp-shell {

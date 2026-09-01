@@ -1,4 +1,4 @@
-{% extends "templates/web.html" %}
+{% extends "benchpress/templates/public_base.html" %}
 
 {#- lucide 0.451.0 path data; sizing is CSS, never a width/height attribute. -#}
 {%- macro svg(body, klass) -%}
@@ -38,7 +38,7 @@
 	{%- if heading %}
 	<h3 class="bp-day__title">
 		{%- if variant == "with" -%}
-		<img class="bp-day__mark bp-day__mark--logo" src="/assets/benchpress/images/logo/mark.png?v={{ version | e }}" alt="" width="18" height="18">
+		<img class="bp-day__mark bp-day__mark--logo" src="/assets/benchpress/images/logo/mark-40.png?v={{ version | e }}" alt="" width="18" height="18">
 		{%- else -%}
 		{{ clock("bp-day__mark") }}
 		{%- endif -%}
@@ -58,15 +58,7 @@
 
 {% block title %}{{ (meta_title or title) | e }}{% endblock %}
 
-{#- The framework's chrome, blanked. These are the real block names; anything else is a no-op. -#}
-{% block navbar %}{% endblock %}
-{% block footer %}{% endblock %}
-{% block breadcrumbs %}{% endblock %}
-{% block page_sidebar %}{% endblock %}
-{% block page_footer %}{% endblock %}
-
 {% block head_include %}
-{% include "templates/includes/site_head.html" %}
 <link rel="stylesheet" href="/assets/benchpress/css/pages.css?v={{ asset_version | e }}">
 {% endblock %}
 

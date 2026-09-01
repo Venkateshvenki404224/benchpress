@@ -1,4 +1,4 @@
-{% extends "templates/web.html" %}
+{% extends "benchpress/templates/public_base.html" %}
 
 {#- lucide 0.451.0 path data; sizing is CSS, never a width/height attribute. -#}
 {%- macro svg(body, klass) -%}
@@ -71,15 +71,7 @@
 
 {% block title %}{{ (meta_title or title) | e }}{% endblock %}
 
-{#- The framework's chrome, blanked. These are the real block names; anything else is a no-op. -#}
-{% block navbar %}{% endblock %}
-{% block footer %}{% endblock %}
-{% block breadcrumbs %}{% endblock %}
-{% block page_sidebar %}{% endblock %}
-{% block page_footer %}{% endblock %}
-
 {% block head_include %}
-{% include "templates/includes/site_head.html" %}
 <link rel="stylesheet" href="/assets/benchpress/css/landing.css?v={{ asset_version | e }}">
 {% endblock %}
 
@@ -599,7 +591,7 @@ Built js/erpnext.bundle.js in 12.4s</pre>
 
 			<div class="bp-compare__col bp-compare__col--bp">
 				<p class="bp-compare__colhead bp-compare__colhead--bp">
-					<img src="/assets/benchpress/images/logo/mark.png?v={{ asset_version | e }}" alt="" width="16" height="16">
+					<img src="/assets/benchpress/images/logo/mark-40.png?v={{ asset_version | e }}" alt="" width="16" height="16">
 					<b>{{ settings.compare_col_bp | default("BenchPress", true) | e }}</b>
 					{%- if settings.compare_col_bp_badge %}<span class="bp-compare__badge">{{ settings.compare_col_bp_badge | e }}</span>{% endif %}
 				</p>
