@@ -116,11 +116,11 @@
 
 				<div class="bp-hero__actions">
 					{%- if credits_enabled %}
-					<a class="bp-btn bp-btn--lg bp-btn--primary" href="{{ signup_route | e }}">
+					<a class="bp-btn bp-btn--lg bp-btn--primary" href="{{ signup_route | e }}" data-bp-track="hosted_cta_clicked" data-bp-track-location="hero">
 						{{ settings.hero_cta_primary_label | default("", true) | e }}{{ arrow_right("bp-btn__icon") }}
 					</a>
 					{%- endif %}
-					<a class="bp-btn bp-btn--lg {{ 'bp-btn--ghost' if credits_enabled else 'bp-btn--primary' }}" href="{{ settings.hero_cta_secondary_url | default('#paths', true) | e }}">
+					<a class="bp-btn bp-btn--lg {{ 'bp-btn--ghost' if credits_enabled else 'bp-btn--primary' }}" href="{{ settings.hero_cta_secondary_url | default('#paths', true) | e }}" data-bp-track="selfhost_cta_clicked" data-bp-track-location="hero">
 						{{ github("bp-btn__icon") }}{{ settings.hero_cta_secondary_label | default("", true) | e }}
 					</a>
 				</div>
@@ -218,11 +218,11 @@
 					{%- endif %}
 
 					<div class="bp-path__actions">
-						<a class="bp-btn bp-btn--lg bp-btn--primary" href="{{ signup_route | e }}">
+						<a class="bp-btn bp-btn--lg bp-btn--primary" href="{{ signup_route | e }}" data-bp-track="hosted_cta_clicked" data-bp-track-location="paths">
 							{{ settings.paths_hosted_cta_label | default("", true) | e }}{{ arrow_right("bp-btn__icon") }}
 						</a>
 						{%- if settings.paths_hosted_cta2_label %}
-						<a class="bp-btn bp-btn--lg bp-btn--outline" href="{{ settings.paths_hosted_cta2_url | default('/contact', true) | e }}">{{ settings.paths_hosted_cta2_label | e }}</a>
+						<a class="bp-btn bp-btn--lg bp-btn--outline" href="{{ settings.paths_hosted_cta2_url | default('/contact', true) | e }}" data-bp-track="contact_cta_clicked" data-bp-track-location="paths_hosted">{{ settings.paths_hosted_cta2_label | e }}</a>
 						{%- endif %}
 					</div>
 				</div>
@@ -235,7 +235,10 @@
 				<p class="bp-path__body">{{ settings.paths_self_body | default("", true) | e }}</p>
 
 				{%- if settings.paths_self_terminal %}
-				<pre class="bp-code" data-ondark>{{ settings.paths_self_terminal | e }}</pre>
+				<div class="bp-code-block" data-ondark>
+					<pre class="bp-code">{{ settings.paths_self_terminal | e }}</pre>
+					<button type="button" class="bp-code__copy" data-bp-copy-target=".bp-code" data-bp-copy-event="clone_command_copied" aria-label="Copy the install commands">{{ copy("bp-code__copyicon") }}<span data-bp-copy-label aria-live="polite">copy</span></button>
+				</div>
 				{%- endif %}
 
 				{%- if self_points %}
@@ -248,10 +251,10 @@
 
 				<div class="bp-path__actions">
 					{%- if settings.paths_self_cta_label %}
-					<a class="bp-btn bp-btn--lg bp-btn--ghost" href="{{ settings.paths_self_cta_url | default(repo_url, true) | e }}">{{ github("bp-btn__icon") }}{{ settings.paths_self_cta_label | e }}</a>
+					<a class="bp-btn bp-btn--lg bp-btn--ghost" href="{{ settings.paths_self_cta_url | default(repo_url, true) | e }}" data-bp-track="selfhost_cta_clicked" data-bp-track-location="paths">{{ github("bp-btn__icon") }}{{ settings.paths_self_cta_label | e }}</a>
 					{%- endif %}
 					{%- if settings.paths_self_cta2_label %}
-					<a class="bp-btn bp-btn--lg bp-btn--quiet" href="{{ settings.paths_self_cta2_url | default('#services', true) | e }}">{{ hammer("bp-btn__icon") }}{{ settings.paths_self_cta2_label | e }}</a>
+					<a class="bp-btn bp-btn--lg bp-btn--quiet" href="{{ settings.paths_self_cta2_url | default('#services', true) | e }}" data-bp-track="contact_cta_clicked" data-bp-track-location="paths_self">{{ hammer("bp-btn__icon") }}{{ settings.paths_self_cta2_label | e }}</a>
 					{%- endif %}
 				</div>
 			</div>
@@ -628,7 +631,7 @@ Built js/erpnext.bundle.js in 12.4s</pre>
 		<div class="bp-services__cta">
 			<p class="bp-services__pitch"><b>{{ settings.services_cta_title | default("", true) | e }}</b> {{ settings.services_cta_body | default("", true) | e }}</p>
 			{%- if settings.services_cta_label %}
-			<a class="bp-btn bp-btn--lg bp-btn--primary" href="{{ settings.services_cta_url | default('/contact', true) | e }}">{{ settings.services_cta_label | e }}{{ arrow_right("bp-btn__icon") }}</a>
+			<a class="bp-btn bp-btn--lg bp-btn--primary" href="{{ settings.services_cta_url | default('/contact', true) | e }}" data-bp-track="contact_cta_clicked" data-bp-track-location="services">{{ settings.services_cta_label | e }}{{ arrow_right("bp-btn__icon") }}</a>
 			{%- endif %}
 		</div>
 		{%- endif %}

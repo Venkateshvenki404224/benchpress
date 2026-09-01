@@ -314,6 +314,51 @@
 	overflow-x: auto;
 }
 
+.bp-code-block {
+	position: relative;
+	margin: 20px 0 0;
+}
+.bp-code-block .bp-code {
+	margin: 0;
+	padding-right: 74px;
+}
+.bp-code__copy {
+	position: absolute;
+	top: 8px;
+	right: 8px;
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	padding: 6px 8px;
+	border: 1px solid var(--cardb);
+	border-radius: 8px;
+	background: var(--card);
+	color: var(--fg3);
+	font-family: var(--font-mono);
+	font-size: 11px;
+	cursor: pointer;
+	transition: var(--transition-control);
+}
+.bp-code__copy:hover {
+	color: var(--fg);
+}
+.bp-code__copyicon {
+	width: 12px;
+	height: 12px;
+	flex: none;
+}
+
+/* Absolute over a 12px mono block leaves too little room for the command on a phone. */
+@media (max-width: 520px) {
+	.bp-code__copy {
+		position: static;
+		margin-top: 8px;
+	}
+	.bp-code-block .bp-code {
+		padding-right: 16px;
+	}
+}
+
 /* -- Hero -------------------------------------------------------------------------------- */
 
 .bp-hero {

@@ -151,3 +151,8 @@ button.bp-navlink{border:0;background:none;font:inherit;line-height:1.2;cursor:p
 </script>
 {#- Its own tag, not `include_script`: that helper emits no `defer`, and this one is in the head. -#}
 <script defer src="{{ bundled_asset('bp-site.bundle.js') }}"></script>
+
+{#- Absent unless the deployment sets both keys, so a self-hosted install loads no tracker. -#}
+{%- if analytics %}
+<script defer src="{{ analytics.script | e }}" data-website-id="{{ analytics.website_id | e }}"></script>
+{%- endif %}

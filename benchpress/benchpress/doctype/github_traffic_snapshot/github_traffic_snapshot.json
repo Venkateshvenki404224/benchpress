@@ -1,0 +1,126 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "hash",
+ "creation": "2026-09-01 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "field_order": [
+  "repository",
+  "snapshot_date",
+  "column_break_source",
+  "stars",
+  "forks",
+  "section_break_traffic",
+  "clone_uniques",
+  "clone_count",
+  "column_break_traffic",
+  "view_uniques",
+  "view_count",
+  "top_referrer"
+ ],
+ "fields": [
+  {
+   "description": "owner/repo, as GitHub names it.",
+   "fieldname": "repository",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Repository",
+   "reqd": 1
+  },
+  {
+   "description": "The day this row counts. One row per repository per day.",
+   "fieldname": "snapshot_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Snapshot Date",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_source",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "stars",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Stars"
+  },
+  {
+   "fieldname": "forks",
+   "fieldtype": "Int",
+   "label": "Forks"
+  },
+  {
+   "fieldname": "section_break_traffic",
+   "fieldtype": "Section Break",
+   "label": "Traffic"
+  },
+  {
+   "description": "Distinct cloners. The nearest available proxy for an install.",
+   "fieldname": "clone_uniques",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Clone Uniques"
+  },
+  {
+   "fieldname": "clone_count",
+   "fieldtype": "Int",
+   "label": "Clone Count"
+  },
+  {
+   "fieldname": "column_break_traffic",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "view_uniques",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "View Uniques"
+  },
+  {
+   "fieldname": "view_count",
+   "fieldtype": "Int",
+   "label": "View Count"
+  },
+  {
+   "description": "The referrer sending the most traffic on this day.",
+   "fieldname": "top_referrer",
+   "fieldtype": "Data",
+   "label": "Top Referrer"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-09-01 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Benchpress",
+ "name": "GitHub Traffic Snapshot",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "export": 1,
+   "read": 1,
+   "report": 1,
+   "role": "BenchPress Admin"
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "snapshot_date",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 0
+}
