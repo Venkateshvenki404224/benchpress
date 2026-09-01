@@ -210,7 +210,12 @@ override_whitelisted_methods = {
 # Website route rules
 # Runs ahead of frappe's TemplatePage, which would otherwise compile these
 # files as Jinja and convert the markdown ones to HTML.
-page_renderer = ["benchpress.docs_assets.DocsAssetRenderer"]
+page_renderer = [
+	# `/llms.txt` is composed: the product first, then the generated docs index. It comes before
+	# the static server, which still serves that index verbatim on an install with no public site.
+	"benchpress.llms_txt.LlmsTxtRenderer",
+	"benchpress.docs_assets.DocsAssetRenderer",
+]
 
 # The public routes resolve from `benchpress/www/` by filename and get no `website_route_rules`
 # entry. A rule for `/login` would bypass `frappe/www/login.py` and take the signed-in redirect,
