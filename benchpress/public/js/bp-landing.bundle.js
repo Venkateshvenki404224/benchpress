@@ -56,22 +56,37 @@
 	// --- copy ------------------------------------------------------------------------------
 
 	// `navigator.clipboard` is undefined outside a secure context.
-	function bindCopy(root) {
-		const button = root.querySelector("[data-bp-copy]");
-		if (!button) return;
-
+	function bindCopyButton(button, readText) {
 		button.addEventListener("click", async () => {
-			const panel = visiblePanel(root, "[data-bp-api-panel]");
-			if (!panel || !navigator.clipboard) return;
+			const text = readText();
+			if (!text || !navigator.clipboard) return;
 
 			try {
-				await navigator.clipboard.writeText(panel.textContent);
+				await navigator.clipboard.writeText(text);
 			} catch (error) {
 				void error;
 				return;
 			}
 			setCopyLabel(button, COPIED_LABEL);
 			window.setTimeout(() => setCopyLabel(button, COPY_LABEL), COPY_RESET_MS);
+
+			const event = button.dataset.bpCopyEvent;
+			if (event && window.bpSite) window.bpSite.track(event);
+		});
+	}
+
+	function bindCopy(root) {
+		const api = root.querySelector("[data-bp-copy]");
+		if (api) {
+			bindCopyButton(api, () => {
+				const panel = visiblePanel(root, "[data-bp-api-panel]");
+				return panel ? panel.textContent : "";
+			});
+		}
+
+		root.querySelectorAll("[data-bp-copy-target]").forEach((button) => {
+			const source = button.parentElement.querySelector(button.dataset.bpCopyTarget);
+			if (source) bindCopyButton(button, () => source.textContent);
 		});
 	}
 

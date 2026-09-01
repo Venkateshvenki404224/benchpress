@@ -16,7 +16,7 @@
 			<nav class="bp-footer__col" aria-labelledby="bp-footer-col-{{ loop.index }}">
 				<h2 class="bp-footer__heading" id="bp-footer-col-{{ loop.index }}">{{ column.heading | e }}</h2>
 				{%- for link in column.links %}
-				<a class="bp-footer__link" href="{{ link.url | e }}">{{ link.label | e }}</a>
+				<a class="bp-footer__link" href="{{ link.url | e }}"{% if link.url.startswith("http") %} data-bp-track="outbound_clicked" data-bp-track-location="footer" data-bp-track-destination="{{ link.label | e }}"{% endif %}>{{ link.label | e }}</a>
 				{%- endfor %}
 			</nav>
 			{%- endfor %}

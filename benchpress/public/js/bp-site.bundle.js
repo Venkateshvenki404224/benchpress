@@ -1,5 +1,6 @@
-// window.bpSite: the theme toggle, the mobile nav disclosure, and postMethod(method, values,
-// options), which posts to a whitelisted method and resolves with its return value.
+// window.bpSite: the theme toggle, the mobile nav disclosure, postMethod(method, values,
+// options), which posts to a whitelisted method and resolves with its return value, and
+// track(name, properties).
 (function () {
 	const MODES = ["dark", "light"];
 	const DEFAULT_MODE = "dark";
@@ -176,6 +177,35 @@
 			.trim();
 	}
 
+	// --- analytics -------------------------------------------------------------------------
+
+	// No-op when no tracker is configured, or when one is blocked. Tracking is never load-bearing.
+	function track(name, properties) {
+		if (!window.umami) return;
+		try {
+			window.umami.track(name, properties);
+		} catch (error) {
+			void error;
+		}
+	}
+
+	// Every `data-bp-track-*` on the element becomes a property, so a new one needs no JS.
+	function trackProperties(element) {
+		const properties = {};
+		Object.keys(element.dataset).forEach((key) => {
+			if (key.startsWith("bpTrack") && key !== "bpTrack") {
+				properties[key.slice(7).toLowerCase()] = element.dataset[key];
+			}
+		});
+		return Object.keys(properties).length ? properties : undefined;
+	}
+
+	function trackClick(event) {
+		const element = event.target.closest("[data-bp-track]");
+		if (!element) return;
+		track(element.dataset.bpTrack, trackProperties(element));
+	}
+
 	function start() {
 		const saved = storedMode();
 		if (saved) setMode(saved);
@@ -184,9 +214,10 @@
 		wireModeToggles();
 		wireNav();
 		wireSignOut();
+		document.addEventListener("click", trackClick);
 	}
 
-	window.bpSite = { mode, setMode, toggleMode, postMethod };
+	window.bpSite = { mode, setMode, toggleMode, postMethod, track };
 
 	if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start);
 	else start();

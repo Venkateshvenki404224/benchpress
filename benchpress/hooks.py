@@ -247,6 +247,8 @@ scheduler_events = {
 	# ],
 	"daily": [
 		"benchpress.credits.reaper.reap_stopped_instances",
+		# GitHub drops traffic data after fourteen days. No repo and token configured, no-op.
+		"benchpress.github_traffic.snapshot_traffic",
 	],
 	# "hourly": [
 	# 	"benchpress.tasks.hourly"

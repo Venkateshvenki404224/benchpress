@@ -72,8 +72,12 @@
 
 			busy(form, true);
 			try {
-				const reply = await window.bpSite.postMethod(METHOD, new FormData(form));
+				const data = new FormData(form);
+				const reply = await window.bpSite.postMethod(METHOD, data);
 				showSent(form, sent, reply);
+				window.bpSite.track("contact_submitted", {
+					topic: String(data.get("topic") || ""),
+				});
 			} catch (error) {
 				show(banner, error.message);
 			} finally {

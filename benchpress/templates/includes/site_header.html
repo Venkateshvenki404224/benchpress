@@ -5,6 +5,8 @@
 {%- set cta = (nav_items | selectattr("is_cta") | first) if nav_items else None -%}
 {%- set cta_label = (cta.label if cta else "") or "Start free" -%}
 {%- set cta_url = (cta.anchor if cta else None) or signup_route or "/signup" -%}
+{#- The CTA flips doors with `credits_enabled`; an external target is the repo, not a signup. -#}
+{%- set cta_event = "selfhost_cta_clicked" if cta_url.startswith("http") else "hosted_cta_clicked" -%}
 
 <a class="bp-skip" href="#bp-content">Skip to content</a>
 
@@ -44,7 +46,7 @@
 		</nav>
 
 		<div class="bp-header__actions">
-			<a class="bp-cta" href="{{ cta_url | e }}"><span class="bp-cta__label">{{ cta_label | e }}</span><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M5 12h14"></path><path d="m12 5 7 7-7 7"></path></svg></a>
+			<a class="bp-cta" href="{{ cta_url | e }}" data-bp-track="{{ cta_event | e }}" data-bp-track-location="header"><span class="bp-cta__label">{{ cta_label | e }}</span><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M5 12h14"></path><path d="m12 5 7 7-7 7"></path></svg></a>
 
 			<button type="button" class="bp-menu" data-bp-nav-toggle aria-controls="bp-nav" aria-expanded="false">
 				<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 6h16"></path><path d="M4 12h16"></path><path d="M4 18h16"></path></svg>

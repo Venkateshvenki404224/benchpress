@@ -100,3 +100,10 @@ docs-site/docs/search-index.json
 .ralph/
 
 .teach/
+
+# Marketing and commercial strategy. The software is open source; the go-to-market is not.
+.marketing/
+.agents/product-marketing.md
+
+# Agent working directories.
+.claude/worktrees/

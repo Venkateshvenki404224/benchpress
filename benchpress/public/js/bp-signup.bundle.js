@@ -107,6 +107,7 @@
 		try {
 			const reply = await window.bpSite.postMethod(METHOD, new FormData(form));
 			showReceipt(root, form, reply, form.elements.email.value.trim());
+			window.bpSite.track("waitlist_submitted");
 		} catch (error) {
 			showAlert(banner, error.message);
 		} finally {
