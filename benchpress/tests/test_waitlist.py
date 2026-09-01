@@ -202,6 +202,32 @@ class TestWaitlist(IntegrationTestCase):
 		with self.assertRaises(frappe.PermissionError):
 			waitlist.approve([EMAIL])
 
+	def test_approval_mails_a_set_password_link_for_an_account_it_created(self):
+		waitlist.join(EMAIL)
+
+		with patch(DECISION_SENDER) as sender:
+			waitlist.approve([EMAIL])
+
+		self.assertIn("/update-password?key=", sender.call_args.kwargs["set_password_url"])
+
+	def test_an_address_that_already_has_a_login_is_mailed_no_link(self):
+		frappe.get_doc(
+			{"doctype": "User", "email": EMAIL, "first_name": "Already", "send_welcome_email": 0}
+		).insert(ignore_permissions=True)
+		waitlist.join(EMAIL)
+
+		with patch(DECISION_SENDER) as sender:
+			waitlist.approve([EMAIL])
+
+		self.assertEqual(sender.call_args.kwargs["set_password_url"], "")
+
+	def test_frappes_own_welcome_mail_is_not_asked_for(self):
+		waitlist.join(EMAIL)
+
+		waitlist.approve([EMAIL])
+
+		self.assertEqual(frappe.db.get_value("User", EMAIL, "send_welcome_email"), 0)
+
 	def test_the_approval_notice_follows_the_decision_not_the_call(self):
 		waitlist.join(EMAIL)
 		with patch(DECISION_SENDER) as sender:
