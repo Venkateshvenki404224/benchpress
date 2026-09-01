@@ -123,17 +123,17 @@
 				{%- endif %}
 
 				<div class="bp-hero__actions">
+					<a class="bp-btn bp-btn--lg bp-btn--primary" href="{{ settings.hero_cta_selfhost_url | default('/docs/operator/install', true) | e }}" data-bp-track="selfhost_cta_clicked" data-bp-track-location="hero">
+						{{ github("bp-btn__icon") }}{{ settings.hero_cta_selfhost_label | default("", true) | e }}{{ arrow_right("bp-btn__icon") }}
+					</a>
 					{%- if credits_enabled %}
-					<a class="bp-btn bp-btn--lg bp-btn--primary" href="{{ signup_route | e }}" data-bp-track="hosted_cta_clicked" data-bp-track-location="hero">
-						{{ settings.hero_cta_primary_label | default("", true) | e }}{{ arrow_right("bp-btn__icon") }}
+					<a class="bp-btn bp-btn--lg bp-btn--ghost" href="{{ signup_route | e }}" data-bp-track="hosted_cta_clicked" data-bp-track-location="hero">
+						{{ settings.hero_cta_hosted_label | default("", true) | e }}
 					</a>
 					{%- endif %}
-					<a class="bp-btn bp-btn--lg {{ 'bp-btn--ghost' if credits_enabled else 'bp-btn--primary' }}" href="{{ settings.hero_cta_secondary_url | default('#paths', true) | e }}" data-bp-track="selfhost_cta_clicked" data-bp-track-location="hero">
-						{{ github("bp-btn__icon") }}{{ settings.hero_cta_secondary_label | default("", true) | e }}
-					</a>
 				</div>
 
-				{%- if credits_enabled and settings.hero_assurances %}
+				{%- if settings.hero_assurances %}
 				<ul class="bp-assurances">
 					{%- for row in settings.hero_assurances %}
 					<li>{{ row.label | e }}</li>
@@ -207,36 +207,6 @@
 <section class="bp-paths" id="paths" data-r="sec">
 	<div class="bp-shell" data-r="pad">
 		<div class="bp-paths__grid" data-r="split">
-			{%- if credits_enabled %}
-			<div class="bp-path-frame">
-				<div class="bp-lightcard bp-path bp-path--hosted">
-					<div class="bp-path__eyebrows">
-						{%- if settings.paths_hosted_eyebrow %}<span class="bp-eyebrow bp-eyebrow--light">{{ settings.paths_hosted_eyebrow | e }}</span>{% endif %}
-						{%- if settings.paths_hosted_badge %}<span class="bp-tag">{{ settings.paths_hosted_badge | e }}</span>{% endif %}
-					</div>
-					<h3 class="bp-h3">{{ settings.paths_hosted_title | default("", true) | e }}</h3>
-					<p class="bp-path__body">{{ settings.paths_hosted_body | default("", true) | e }}</p>
-
-					{%- if hosted_points %}
-					<ul class="bp-points">
-						{%- for row in hosted_points %}
-						<li class="bp-point">{{ check("bp-point__icon") }}<span>{{ row.point | e }}</span></li>
-						{%- endfor %}
-					</ul>
-					{%- endif %}
-
-					<div class="bp-path__actions">
-						<a class="bp-btn bp-btn--lg bp-btn--primary" href="{{ signup_route | e }}" data-bp-track="hosted_cta_clicked" data-bp-track-location="paths">
-							{{ settings.paths_hosted_cta_label | default("", true) | e }}{{ arrow_right("bp-btn__icon") }}
-						</a>
-						{%- if settings.paths_hosted_cta2_label %}
-						<a class="bp-btn bp-btn--lg bp-btn--outline" href="{{ settings.paths_hosted_cta2_url | default('/contact', true) | e }}" data-bp-track="contact_cta_clicked" data-bp-track-location="paths_hosted">{{ settings.paths_hosted_cta2_label | e }}</a>
-						{%- endif %}
-					</div>
-				</div>
-			</div>
-			{%- endif %}
-
 			<div class="bp-card bp-path bp-path--self">
 				{%- if settings.paths_self_eyebrow %}<span class="bp-eyebrow">{{ settings.paths_self_eyebrow | e }}</span>{% endif %}
 				<h3 class="bp-h3">{{ settings.paths_self_title | default("", true) | e }}</h3>
@@ -266,6 +236,35 @@
 					{%- endif %}
 				</div>
 			</div>
+			{%- if credits_enabled %}
+			<div class="bp-path-frame">
+				<div class="bp-lightcard bp-path bp-path--hosted">
+					<div class="bp-path__eyebrows">
+						{%- if settings.paths_hosted_eyebrow %}<span class="bp-eyebrow bp-eyebrow--light">{{ settings.paths_hosted_eyebrow | e }}</span>{% endif %}
+						{%- if settings.paths_hosted_badge %}<span class="bp-tag">{{ settings.paths_hosted_badge | e }}</span>{% endif %}
+					</div>
+					<h3 class="bp-h3">{{ settings.paths_hosted_title | default("", true) | e }}</h3>
+					<p class="bp-path__body">{{ settings.paths_hosted_body | default("", true) | e }}</p>
+
+					{%- if hosted_points %}
+					<ul class="bp-points">
+						{%- for row in hosted_points %}
+						<li class="bp-point">{{ check("bp-point__icon") }}<span>{{ row.point | e }}</span></li>
+						{%- endfor %}
+					</ul>
+					{%- endif %}
+
+					<div class="bp-path__actions">
+						<a class="bp-btn bp-btn--lg bp-btn--primary" href="{{ signup_route | e }}" data-bp-track="hosted_cta_clicked" data-bp-track-location="paths">
+							{{ settings.paths_hosted_cta_label | default("", true) | e }}{{ arrow_right("bp-btn__icon") }}
+						</a>
+						{%- if settings.paths_hosted_cta2_label %}
+						<a class="bp-btn bp-btn--lg bp-btn--outline" href="{{ settings.paths_hosted_cta2_url | default('/contact', true) | e }}" data-bp-track="contact_cta_clicked" data-bp-track-location="paths_hosted">{{ settings.paths_hosted_cta2_label | e }}</a>
+						{%- endif %}
+					</div>
+				</div>
+			</div>
+			{%- endif %}
 		</div>
 
 		{%- if settings.paths_footnote %}

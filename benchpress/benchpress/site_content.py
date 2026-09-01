@@ -24,9 +24,6 @@ FORUM_REPLIES = 20
 # The branded access-request page; `SIGNUP_ROUTE` is Frappe's own login page. Never both open.
 WAITLIST_ROUTE = "/signup"
 
-# A nav CTA aimed at either follows the switch; one aimed anywhere else is left alone.
-SIGNUP_DOORS = (WAITLIST_ROUTE, SIGNUP_ROUTE)
-
 LOGIN_ROUTE = "/login"
 CONSOLE_ROUTE = "/frontend"
 DOCS_ROUTE = "/docs/index"
@@ -36,6 +33,9 @@ AWARD_URL = "https://fossunited.org/hack/fosshack26/p/f5fk2d9gqd"
 
 # A waitlist is not a free start, so the hosted CTA is named for whichever door is open.
 WAITLIST_CTA_LABEL = "Request access"
+
+# The primary door. The install guide converts better than the repo for someone still deciding.
+SELFHOST_CTA_LABEL = "Install it on your server"
 
 # Both logout endpoints are POST-only, so the header signs out through a form, not a link.
 LOGOUT_METHOD = "frappe.handler.web_logout"
@@ -115,28 +115,16 @@ def signup_cta_label(seed_label: str) -> str:
 
 
 def nav_items(items: list, settings, route: str) -> list:
-	"""The header's link rows, with the CTA pointed at whichever door is actually open."""
-	if not credits_enabled():
-		return [*(row for row in items if not cint(row.is_cta)), selfhost_cta(settings)]
-	return [repointed(row, route) if cint(row.is_cta) else row for row in items]
-
-
-def repointed(row, route: str):
-	"""One nav row, aimed at `route` and named for whichever door that is."""
-	if row.anchor not in SIGNUP_DOORS:
-		return row
-	return frappe._dict({**row, "anchor": route, "label": signup_cta_label(row.label)})
+	"""The header's rows. The one button is always self-host; hosted is a plain link beside it."""
+	rows = [row for row in items if not cint(row.is_cta)]
+	if credits_enabled():
+		rows.append(frappe._dict({"label": signup_cta_label("Start free"), "anchor": route, "is_cta": 0}))
+	return [*rows, selfhost_cta(settings)]
 
 
 def selfhost_cta(settings):
-	"""The header CTA when credits are off: there is no hosted account to sign up for."""
-	return frappe._dict(
-		{
-			"label": settings.paths_self_cta_label or "Read the repo",
-			"anchor": settings.paths_self_cta_url or REPO_URL,
-			"is_cta": 1,
-		}
-	)
+	"""The header CTA. Self-hosting is the goal, so it owns the one button that stands out."""
+	return frappe._dict({"label": SELFHOST_CTA_LABEL, "anchor": DOCS_INSTALL_ROUTE, "is_cta": 1})
 
 
 def clear_content_cache() -> None:
@@ -240,9 +228,9 @@ def phase_key(row) -> str:
 # The shipped copy: the only thing any public page renders.
 
 HERO_SUBHEAD = (
-	"Pick a version and an app set. Press deploy. BenchPress builds an isolated Docker "
-	"environment with its own site, database and browser VS Code, and puts it on your "
-	"private WireGuard mesh. No bench commands, no SSH, no ticket to the one person who knows."
+	"Describe a lab once — a Frappe version and an app list. Anyone on the team deploys it "
+	"in a click, works in it over SSH or browser VS Code, and destroys it when the task is "
+	"done. Self-hosted on one box, on your own private network."
 )
 
 FOOTER_TRADEMARK = (
@@ -258,17 +246,17 @@ LANDING_SEED = {
 	"hero_badge_version": "v16",
 	"hero_award_text": "FOSS Hack 2026 winner",
 	"hero_award_url": AWARD_URL,
-	"hero_headline": "A Frappe environment in the time it takes to read this line.",
-	"hero_headline_accent": "read this line.",
+	"hero_headline": "Frappe dev environments your team can deploy themselves.",
+	"hero_headline_accent": "deploy themselves.",
 	"hero_subhead": HERO_SUBHEAD,
-	"hero_cta_primary_label": "Start free",
-	"hero_cta_primary_url": "/signup",
-	"hero_cta_secondary_label": "Self-host it instead",
-	"hero_cta_secondary_url": "#paths",
+	"hero_cta_hosted_label": "Start free",
+	"hero_cta_hosted_url": "/signup",
+	"hero_cta_selfhost_label": SELFHOST_CTA_LABEL,
+	"hero_cta_selfhost_url": DOCS_INSTALL_ROUTE,
 	"hero_assurances": [
-		{"label": "No card required"},
-		{"label": "Bring your own server"},
-		{"label": "Failed builds are free"},
+		{"label": "One box, Docker"},
+		{"label": "No account, no telemetry"},
+		{"label": "Your data stays on your host"},
 	],
 	# templates marquee
 	"templates_eyebrow": "Templates",
@@ -858,7 +846,7 @@ LANDING_SEED = {
 	"footer_copyright": "© 2026 BenchPress. AGPL-3.0 licensed.",
 	"footer_trademark": FOOTER_TRADEMARK,
 	# seo
-	"meta_title": "BenchPress — a Frappe environment in one click",
+	"meta_title": "BenchPress — Frappe dev environments your team can deploy themselves",
 	"meta_description": HERO_SUBHEAD,
 	"og_image": "",
 }

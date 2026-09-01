@@ -16,7 +16,7 @@ from benchpress.credits.config import credits_enabled, waitlist_open
 from benchpress.public_site import require_public_site
 
 REPO_URL = "https://github.com/Venkateshvenki404224/benchpress"
-DEFAULT_TITLE = "BenchPress — a Frappe environment in one click"
+DEFAULT_TITLE = "BenchPress — Frappe dev environments your team can deploy themselves"
 
 VIDEO_DIRECTORY = ("public", "videos")
 HERO_VIDEO = "hero.mp4"
@@ -44,7 +44,7 @@ def get_context(context):
 	# The numbers in the About teaser live with the page they came from.
 	context.about_stats = about_content()["settings"].stats
 
-	for field in ("hero_cta_primary_label", "paths_hosted_cta_label"):
+	for field in ("hero_cta_hosted_label", "paths_hosted_cta_label"):
 		context.settings[field] = signup_cta_label(context.settings[field])
 
 	context.title = context.meta_title or DEFAULT_TITLE
