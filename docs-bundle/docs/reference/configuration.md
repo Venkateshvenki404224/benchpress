@@ -3,7 +3,7 @@ title: Configuration
 description: Where each BenchPress setting lives — build arguments that need a
   rebuild, runtime environment that needs a restart, and DocType fields that
   apply on save.
-lastModified: "2026-08-31T20:23:18-04:00"
+lastModified: "2026-08-31T22:27:49-04:00"
 lastAuthor: Venkatesh
 ---
 # Configuration
@@ -88,9 +88,10 @@ BenchPress adds one.
 **The public site is off unless this key is set.** BenchPress is open source,
 and an install that runs labs for one team has no use for the marketing pages
 of the hosted service. With the key absent, `/`, `/landing`, `/about`,
-`/contact` and `/signup` are not found, the three guest form endpoints refuse,
-`Website Settings → Home Page` is left as the operator set it, and the six
-transactional email templates are not created.
+`/contact` and `/signup` are not found, `/login` serves Frappe's own login
+form, the three guest form endpoints refuse, `Website Settings → Home Page` is
+left as the operator set it, and the six transactional email templates are not
+created.
 
 Set it only on a deployment that is the public site:
 
