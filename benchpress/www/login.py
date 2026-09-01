@@ -1,7 +1,7 @@
 # Copyright (c) 2026, Venkatesh and contributors
 # For license information, please see license.txt
 
-"""Branded `/login`. It shadows Frappe's page; the login flow underneath is still Frappe's."""
+"""`/login`: branded while the public site is on, Frappe's own page while it is off."""
 
 import os
 
@@ -10,8 +10,13 @@ from frappe.utils import cint
 from frappe.www.login import get_context as frappe_login_context
 
 from benchpress.benchpress.site_content import chrome_content, preview_tags
+from benchpress.public_site import public_site_enabled
 
 no_cache = True
+
+# `TemplatePage` reads `context.template` back after `get_context` returns, so this is the off
+# switch for a shadow. Colocated assets still resolve by this module's name: never add login.js.
+FRAMEWORK_TEMPLATE = "frappe/www/login.html"
 
 # `/login` has no Single of its own; the nine `login_*` fields ride on the signup Single.
 SETTINGS_DOCTYPE = "Signup Page Settings"
@@ -57,6 +62,10 @@ FALLBACK_CHROME = {
 
 def get_context(context):
 	frappe_login_context(context)
+	if not public_site_enabled():
+		context.template = FRAMEWORK_TEMPLATE
+		return context
+
 	context.update(branded(context))
 	return context
 

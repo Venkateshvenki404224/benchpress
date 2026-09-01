@@ -74,7 +74,10 @@ Seven facts that are easy to break:
 - `www/login.html` deliberately shadows `frappe/www/login.html`, because
   `TemplatePage.set_template_path` searches `reversed(get_installed_apps())`.
   `www/login.py` calls Frappe's own `get_context` first and only decorates the
-  result. Keep the context keys and the DOM contract (spec §4.3) in step with the
+  result. Filename shadowing has no off position, so with `benchpress_public_site`
+  unset the controller points `context.template` back at `frappe/www/login.html`.
+  `TemplatePage` reads that key after `get_context` returns, so the stock page
+  serves. Keep the context keys and the DOM contract (spec §4.3) in step with the
   framework on every Frappe upgrade. Re-read `frappe/www/login.py`,
   `frappe/templates/includes/login/login.js`, `frappe/templates/signup.html` and
   `frappe/public/scss/login.bundle.scss` when the framework version moves.
