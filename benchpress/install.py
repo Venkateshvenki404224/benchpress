@@ -5,6 +5,7 @@ import os
 import subprocess
 
 import frappe
+from frappe.installer import update_site_config
 
 from benchpress.credits.seed import seed_defaults
 from benchpress.indexes import ensure_indexes
@@ -102,7 +103,17 @@ def create_test_users():
 
 def before_tests() -> None:
 	"""Prepare the test site: an outgoing mail account, and the public site switched on."""
+	# The file as well as the live conf: IntegrationTestCase re-reads site_config.json after every
+	# test class, and an in-memory key alone is gone by the second one.
+	update_site_config(CONFIG_KEY, 1)
 	frappe.conf[CONFIG_KEY] = 1
+	# `after_install` ran with the key off, so the mail templates and the home page are still unset.
+	seed_public_site()
+	ensure_outgoing_email_account()
+	frappe.db.commit()  # nosemgrep -- the test runner reads this from a new connection
+
+
+def ensure_outgoing_email_account() -> None:
 	if frappe.db.exists("Email Account", {"default_outgoing": 1}):
 		return
 	frappe.get_doc(
@@ -116,7 +127,6 @@ def before_tests() -> None:
 			"no_smtp_authentication": 1,
 		}
 	).insert(ignore_permissions=True)
-	frappe.db.commit()  # nosemgrep -- the test runner reads this from a new connection
 
 
 def _print_manual_instructions(site: str) -> None:
