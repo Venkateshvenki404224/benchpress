@@ -34,6 +34,18 @@ class TestServicesGraph(unittest.TestCase):
 		self.assertTrue(nodes["WebPage"]["url"].endswith("/services"))
 
 
+class TestComparisonGraph(unittest.TestCase):
+	def test_carries_the_page_the_breadcrumbs_and_the_questions(self):
+		nodes = graph(sd.comparison("/vs/x", "X", "a description", FAQ))
+		self.assertEqual(sorted(nodes), ["BreadcrumbList", "FAQPage", "Organization", "WebPage"])
+
+	def test_the_trail_starts_at_the_site_root(self):
+		trail = graph(sd.comparison("/vs/x", "X", "d", FAQ))["BreadcrumbList"]["itemListElement"]
+		self.assertEqual([row["position"] for row in trail], [1, 2])
+		self.assertEqual(trail[0]["name"], "BenchPress")
+		self.assertTrue(trail[1]["item"].endswith("/vs/x"))
+
+
 class TestLandingGraph(unittest.TestCase):
 	def test_carries_the_four_nodes(self):
 		nodes = graph(sd.landing("a description", FAQ))

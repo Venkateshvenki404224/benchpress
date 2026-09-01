@@ -1135,6 +1135,10 @@ a.bp-channel__body:focus-visible {
 	color: var(--fg2);
 }
 
+.bp-hero__aside {
+	margin-top: 18px;
+}
+
 .bp-morelink {
 	display: inline-flex;
 	align-items: center;
@@ -1262,7 +1266,171 @@ a.bp-channel__body:focus-visible {
 	}
 }
 
+/* -- Comparison pages — crumbs, the table, the two verdicts and the questions -------------- */
+
+.bp-page--vs {
+	--bp-shell: 1080px;
+}
+
+.bp-crumbs {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-bottom: 14px;
+	font-size: 12.5px;
+	color: var(--fg3);
+}
+
+.bp-crumbs__link {
+	color: var(--accent);
+	text-decoration: none;
+	font-weight: 600;
+}
+
+.bp-crumbs__link:hover {
+	text-decoration: underline;
+}
+
+/* The wrapper scrolls, never the page. `tabindex="0"` in the markup makes the scroller
+   reachable from a keyboard, which is why it also carries a role and a label. */
+.bp-tablewrap {
+	margin: 24px 0 0;
+	overflow-x: auto;
+	border: 1px solid var(--cardb);
+	border-radius: 16px;
+}
+
+.bp-tablewrap:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 2px;
+}
+
+.bp-table {
+	width: 100%;
+	min-width: 640px;
+	border-collapse: collapse;
+	font-size: 13.5px;
+	line-height: 1.55;
+}
+
+.bp-table th,
+.bp-table td {
+	padding: 13px 16px;
+	text-align: left;
+	vertical-align: top;
+	border-top: 1px solid var(--hair);
+}
+
+.bp-table thead th {
+	border-top: 0;
+	background: var(--card);
+	font-size: 12px;
+	font-weight: 600;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	color: var(--fg3);
+}
+
+.bp-table tbody th {
+	width: 22%;
+	font-weight: 600;
+	color: var(--fg);
+}
+
+.bp-table td {
+	color: var(--fg2);
+}
+
+/* The winning cell in each row, whichever side it is on. A comparison table that never marks
+   the other product is not read as a comparison, it is read as an advert. */
+.bp-table td.is-win {
+	color: var(--fg);
+	background: var(--tint);
+}
+
+.bp-which {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 14px;
+}
+
+.bp-which__mark {
+	width: 15px;
+	height: 15px;
+	flex: none;
+	margin-top: 2px;
+	color: var(--fg3);
+}
+
+.bp-qa {
+	display: flex;
+	flex-direction: column;
+	margin: 24px 0 0;
+	border-top: 1px solid var(--hair);
+}
+
+.bp-qa__row {
+	border-bottom: 1px solid var(--hair);
+}
+
+.bp-qa__q {
+	padding: 16px 0;
+	font-size: 15px;
+	font-weight: 600;
+	line-height: 1.45;
+	cursor: pointer;
+	list-style: none;
+}
+
+.bp-qa__q::-webkit-details-marker {
+	display: none;
+}
+
+/* `<details>` has no open-state hook in CSS other than the attribute, and the marker is the
+   only thing that tells a reader the row expands. */
+.bp-qa__q::after {
+	content: "+";
+	float: right;
+	margin-left: 16px;
+	color: var(--accent);
+	font-weight: 600;
+}
+
+.bp-qa__row[open] .bp-qa__q::after {
+	content: "\2212";
+}
+
+.bp-qa__q:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 2px;
+}
+
+.bp-qa__a {
+	margin: 0 0 18px;
+	max-width: 78ch;
+	font-size: 14px;
+	line-height: 1.7;
+	color: var(--fg2);
+}
+
 @media (max-width: 720px) {
+	.bp-which {
+		grid-template-columns: 1fr;
+	}
+
+	/* The table scrolls sideways on a phone, so the row label has to stay put or the reader
+	   loses track of which row they are in. `--card` is translucent in dark mode; the sticky
+	   cell needs an opaque ground of its own. */
+	.bp-table th[scope="row"],
+	.bp-table thead th:first-child {
+		position: sticky;
+		left: 0;
+		z-index: 1;
+		background: var(--bg0);
+		/* A hard edge, so the scrolling column reads as passing behind it. */
+		border-right: 1px solid var(--hair);
+	}
+
 	.bp-step {
 		grid-template-columns: 1fr;
 		gap: 12px;

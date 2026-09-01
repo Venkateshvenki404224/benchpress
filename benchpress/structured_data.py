@@ -39,6 +39,26 @@ def services(description: str) -> str:
 	return encode([organization(), page("WebPage", "/services", "BenchPress services", description)])
 
 
+def comparison(route: str, name: str, description: str, faq_items) -> str:
+	graph = [organization(), page("WebPage", route, name, description), breadcrumbs(route, name)]
+	questions = faq(faq_items)
+	if questions:
+		graph.append(questions)
+	return encode(graph)
+
+
+def breadcrumbs(route: str, name: str) -> dict:
+	# Two levels only. `/vs` has no index page, so the first crumb is the site root.
+	trail = [("BenchPress", "/"), (name, route)]
+	return {
+		"@type": "BreadcrumbList",
+		"itemListElement": [
+			{"@type": "ListItem", "position": index, "name": label, "item": get_url(path)}
+			for index, (label, path) in enumerate(trail, start=1)
+		],
+	}
+
+
 def contact(description: str, email: str) -> str:
 	org = organization()
 	# Only an address the deployment configured. The fallback constant is not guaranteed to
@@ -97,8 +117,10 @@ def faq(items) -> dict | None:
 	rows = [
 		{
 			"@type": "Question",
-			"name": row.question,
-			"acceptedAnswer": {"@type": "Answer", "text": row.answer},
+			# Item access, not attribute: a page's seed rows are plain dicts, and the landing's
+			# are `frappe._dict`. Both answer this.
+			"name": row["question"],
+			"acceptedAnswer": {"@type": "Answer", "text": row["answer"]},
 		}
 		for row in items or []
 		if row.get("question") and row.get("answer")

@@ -20,6 +20,7 @@ from benchpress.www.login import LOGIN_SEED
 from benchpress.www.self_host import SELF_HOST_SEED
 from benchpress.www.services import SERVICES_SEED
 from benchpress.www.signup import SIGNUP_SEED
+from benchpress.www.vs.frappe_docker import COMPARISON_SEED
 
 BENCHPRESS_SETTINGS = "BenchPress Settings"
 
@@ -30,6 +31,7 @@ SHIPPED_COPY = (
 	("/about", ABOUT_SEED["situation_eyebrow"]),
 	("/self-host", SELF_HOST_SEED["reqs_title"]),
 	("/services", SERVICES_SEED["offers_title"]),
+	("/vs/frappe-docker", COMPARISON_SEED["table_title"]),
 	("/contact", CONTACT_SEED["title"]),
 	("/signup", SIGNUP_SEED["title"]),
 	("/login", LOGIN_SEED["login_panel_title"]),

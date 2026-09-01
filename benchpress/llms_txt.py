@@ -105,6 +105,12 @@ def page_links() -> str:
 			"The four engagements — managed hosting, setup on your server, custom Frappe apps "
 			"and half-day training — with what each includes and what it does not.",
 		),
+		(
+			"BenchPress and frappe_docker",
+			site_content.VS_FRAPPE_DOCKER_ROUTE,
+			"An honest comparison with the official Docker setup, including the rows "
+			"frappe_docker wins. BenchPress is a layer above it, not a replacement.",
+		),
 		("About", "/about", about["meta_description"]),
 		("Contact", "/contact", "Reach the people who build it, by topic."),
 		("Hosted access", site_content.signup_route(), "Ask for access to the hosted build."),

@@ -36,6 +36,10 @@ DOCS_PREREQ_ROUTE = "/docs/operator/prerequisites"
 SELF_HOST_ROUTE = "/self-host"
 SERVICES_ROUTE = "/services"
 
+# Comparison pages. `/vs/<slug>` is the reserved namespace; the frame is a different layer,
+# never a cheaper substitute.
+VS_FRAPPE_DOCKER_ROUTE = "/vs/frappe-docker"
+
 # Verbatim from /docs/operator/install. BenchPress installs into a bench you already run, so
 # there is no `git clone` path — every public surface that shows commands shows these.
 INSTALL_COMMANDS = (
@@ -900,6 +904,7 @@ LANDING_SEED = {
 	"footer_links": [
 		{"column_heading": "Product", "label": "Self-host it", "url": SELF_HOST_ROUTE},
 		{"column_heading": "Product", "label": "Services", "url": SERVICES_ROUTE},
+		{"column_heading": "Product", "label": "vs frappe_docker", "url": VS_FRAPPE_DOCKER_ROUTE},
 		{"column_heading": "Product", "label": "Pipeline", "url": "/#how"},
 		{"column_heading": "Product", "label": "Console", "url": "/#console"},
 		{"column_heading": "Product", "label": "Templates", "url": "/#top"},

@@ -9,6 +9,7 @@ from benchpress.benchpress.site_content import (
 	REPO_URL,
 	SELF_HOST_ROUTE,
 	SETUP_COMMAND,
+	VS_FRAPPE_DOCKER_ROUTE,
 	canonical_url,
 	chrome_content,
 	preview_tags,
@@ -32,6 +33,8 @@ SELF_HOST_SEED = {
 	"cta_url": DOCS_INSTALL_ROUTE,
 	"cta2_label": "Read the repo",
 	"cta2_url": REPO_URL,
+	"compare_label": "Still comparing? BenchPress and frappe_docker",
+	"compare_url": VS_FRAPPE_DOCKER_ROUTE,
 	# The README leads with this and so does the page. A reader who finds it out later is
 	# entitled to be angry.
 	"warn_title": "Read this first",

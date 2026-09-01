@@ -13,7 +13,16 @@ from benchpress.benchpress.site_content import clear_content_cache
 
 BENCHPRESS_SETTINGS = "BenchPress Settings"
 
-MARKETING_ROUTES = ("/", "/landing", "/about", "/self-host", "/services", "/contact", "/signup")
+MARKETING_ROUTES = (
+	"/",
+	"/landing",
+	"/about",
+	"/self-host",
+	"/services",
+	"/vs/frappe-docker",
+	"/contact",
+	"/signup",
+)
 # `/` resolves to the desk for a System User, so the signed-in view of the page is `/landing`.
 SIGNED_IN_ROUTES = ("/landing", "/about", "/self-host", "/services", "/contact", "/signup")
 LOGIN_ROUTE = "/login"

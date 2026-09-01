@@ -52,16 +52,23 @@ def app_routes() -> list[str]:
 	# No `lastmod`: the framework's generator stamps today on every page, and a date that is
 	# always today is a freshness signal search engines discount.
 	folder = Path(frappe.get_app_path(*WWW))
-	routes = [template.stem for template in folder.glob("*.html") if in_sitemap(folder, template)]
+	routes = [
+		template.relative_to(folder).with_suffix("").as_posix()
+		for template in folder.rglob("*.html")
+		if in_sitemap(template)
+	]
 	return sorted("" if route == "index" else route for route in routes)
 
 
-def in_sitemap(folder: Path, template: Path) -> bool:
-	# Frappe resolves a route's controller by swapping hyphens for underscores.
-	controller = folder / f"{template.stem.replace('-', '_')}.py"
+def in_sitemap(template: Path) -> bool:
+	# Frappe resolves a route's controller by swapping hyphens for underscores, and a page in a
+	# subfolder is a module in a subpackage.
+	controller = template.with_name(f"{template.stem.replace('-', '_')}.py")
 	if not controller.is_file():
 		return False
-	module = importlib.import_module(f"{APP}.www.{controller.stem}")
+	root = Path(frappe.get_app_path(APP)).parent
+	dotted = controller.relative_to(root).with_suffix("").as_posix().replace("/", ".")
+	module = importlib.import_module(dotted)
 	return bool(getattr(module, "sitemap", 0))
 
 

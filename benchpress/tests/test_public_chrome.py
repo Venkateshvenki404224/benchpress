@@ -14,7 +14,17 @@ from benchpress.benchpress.site_content import clear_content_cache
 
 BENCHPRESS_SETTINGS = "BenchPress Settings"
 
-ROUTES = ("/", "/landing", "/signup", "/login", "/about", "/self-host", "/services", "/contact")
+ROUTES = (
+	"/",
+	"/landing",
+	"/signup",
+	"/login",
+	"/about",
+	"/self-host",
+	"/services",
+	"/vs/frappe-docker",
+	"/contact",
+)
 
 # The wiki app serves /docs, and a bench without it has no such route.
 WIKI_PREFIX = "/docs/"
