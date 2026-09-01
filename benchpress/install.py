@@ -23,19 +23,11 @@ def after_install():
 	print("  BenchPress — Running post-install setup")
 	print("=" * 60 + "\n")
 
-	# Fresh installs mark every patch as executed without running it, so the VPN
-	# permissions the desk workspace needs have to be granted here as well.
+	# Fresh installs mark every patch as executed without running it, so everything the seeders
+	# below would have done has to be done here as well.
 	grant_vpn_access()
-
-	# Same reason: seed_credit_config would never fire on a fresh install.
 	seed_defaults()
-
-	# Same reason again: seed_lab_templates would never fire on a fresh install.
 	seed_lab_templates()
-
-	# The five public pages and the six transactional emails. Runs last of the seeders because it
-	# reads `Credit Settings` through the page controllers it imports. Idempotent, and it never
-	# overwrites an operator's copy — see benchpress/public_site/seed.py.
 	seed_public_site()
 	ensure_indexes()
 
@@ -60,16 +52,12 @@ def after_install():
 			print(f"\n[!] Could not run setup.sh: {e}")
 			_print_manual_instructions(site)
 
-	# Create test users in developer mode
 	if frappe.conf.get("developer_mode"):
 		create_test_users()
 
 
 def create_test_users():
-	"""Create test users for BenchPress Admin and BenchPress User roles.
-
-	Safe to call multiple times — skips if users already exist.
-	"""
+	"""Create the two role test users. Skips any that already exist."""
 	test_users = [
 		{
 			"email": "admin@benchpress.local",
@@ -101,7 +89,7 @@ def create_test_users():
 			user.append("roles", {"role": role_name})
 		user.insert(ignore_permissions=True)
 
-		# Set password after insert to bypass strength validation
+		# After insert, so the strength validation on the field is not applied to it.
 		from frappe.utils.password import update_password
 
 		update_password(user_data["email"], "admin")

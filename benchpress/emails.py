@@ -141,7 +141,6 @@ def seed_rows() -> list[dict]:
 
 
 def default_body(template_name: str) -> str:
-	"""The shipped body for one template, read from `templates/emails/`."""
 	_subject, filename = DEFAULTS[template_name]
 	path = frappe.get_app_path("benchpress", "templates", "emails", filename)
 	# nosemgrep -- the filename comes from DEFAULTS, never from a request

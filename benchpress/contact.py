@@ -59,7 +59,6 @@ def submit(name: str, email: str, message: str, topic: str | None = None) -> dic
 
 
 def notify_email() -> str:
-	"""Where a contact notice goes when its topic names no address of its own."""
 	return cstr(frappe.conf.get(NOTIFY_KEY)).strip() or CONTACT_EMAIL
 
 
@@ -69,19 +68,16 @@ def default_topic() -> str:
 
 
 def resolve_topic(label: str | None) -> str:
-	"""A topic the page offered, else the default."""
 	submitted = cstr(label).strip()
 	return submitted if any(row["label"] == submitted for row in TOPICS) else default_topic()
 
 
 def route_for(topic: str) -> str:
-	"""Where a topic's notice goes. A row with no address of its own uses the forwarding one."""
 	routed = next((row["route_to_email"] for row in TOPICS if row["label"] == topic), "")
 	return routed or notify_email()
 
 
 def response_window(topic: str) -> str:
-	"""The window whose subject matches the topic, else the first row's."""
 	matched = next((row["window"] for row in RESPONSE_TIMES if row["subject"] == topic), "")
 	return matched or (RESPONSE_TIMES[0]["window"] if RESPONSE_TIMES else "")
 
@@ -97,7 +93,6 @@ def mark_answered(messages: str | list) -> dict:
 
 
 def close(name: str) -> None:
-	"""Stamp who answered and when."""
 	frappe.db.set_value(
 		DOCTYPE,
 		name,
@@ -127,7 +122,6 @@ def send_quietly(mailer, record) -> None:
 
 
 def require_text(value, error: str) -> str:
-	"""Throw on a blank required field."""
 	text = cstr(value).strip()
 	if not text:
 		frappe.throw(error, frappe.ValidationError)

@@ -1,11 +1,5 @@
-{#-
-  Shared <head> for the five public pages, included from `{% block head_include %}`.
-
-  Context, all optional: asset_version. The link preview comes from `context.metatags`, which the
-  framework renders in its own block; nothing here may emit an og: or twitter: tag.
-
-  Jinja autoescape is off in Frappe, so every interpolation is piped through `| e`.
--#}
+{#- The link preview comes from `context.metatags`, rendered in the framework's own block;
+    nothing here may emit an og: or twitter: tag. -#}
 {%- set v = asset_version or "0" -%}
 
 <meta name="color-scheme" content="dark light">

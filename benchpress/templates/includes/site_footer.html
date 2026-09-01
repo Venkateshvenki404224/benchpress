@@ -1,12 +1,4 @@
-{#-
-  Shared footer for the five public pages, included last inside the `.bp` wrapper.
-
-  Context, all optional — the footer renders against an empty context on the fallback login page:
-  footer_columns ([{heading, links: [{label, url}]}]), footer_tagline, footer_copyright,
-  footer_trademark, asset_version.
-
-  Jinja autoescape is off in Frappe, so every interpolation is piped through `| e`.
--#}
+{#- Every key is optional: the fallback login page renders this against an empty context. -#}
 {%- set v = asset_version or "0" -%}
 {%- set copyright = footer_copyright or "© 2026 BenchPress. AGPL-3.0 licensed." -%}
 {%- set trademark = footer_trademark or "Frappe, ERPNext and Frappe HR are trademarks of Frappe Technologies Pvt. Ltd. BenchPress is an independent project, not affiliated with or endorsed by Frappe Technologies." -%}

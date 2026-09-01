@@ -115,7 +115,6 @@ PENDING_BODY = (
 	"usually within one business day. If it doesn't, you will get a plain answer instead of silence."
 )
 
-# Text Editor field: the template renders it raw.
 SELFHOST_NOTE = (
 	"<p><b>Don't want to wait?</b> Self-hosting needs no account and no approval — clone the repo, "
 	"run <code>./setup.sh</code>, and you are running the same code we host.</p>"

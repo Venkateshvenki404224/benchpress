@@ -1,7 +1,7 @@
 # Copyright (c) 2026, Venkatesh and contributors
 # For license information, please see license.txt
 
-"""The hosted waitlist — the app's only guest-writable endpoint."""
+"""The hosted waitlist: one guest-writable endpoint, and the admin actions that work the queue."""
 
 import frappe
 from frappe import _

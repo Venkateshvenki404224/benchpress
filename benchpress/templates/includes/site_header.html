@@ -1,13 +1,5 @@
-{#-
-  Shared header for the five public pages, included first inside the `.bp` wrapper. Styling and
-  the mobile disclosure live in `site_head.html` and `public/js/bp-site.bundle.js`. The theme
-  toggle sits in `.bp-nav` so the disclosure carries it on mobile, where the row has no space.
-
-  Context: nav_items, signup_route, asset_version, and the session keys
-  is_signed_in / login_route / console_route / logout_method / csrf_token.
-
-  Jinja autoescape is off in Frappe, so every interpolation is piped through `| e`.
--#}
+{#- The theme toggle sits inside `.bp-nav` so the mobile disclosure carries it; the row has no
+    space for it at that width. -#}
 {%- set v = asset_version or "0" -%}
 {%- set links = (nav_items | rejectattr("is_cta") | list) if nav_items else [] -%}
 {%- set cta = (nav_items | selectattr("is_cta") | first) if nav_items else None -%}

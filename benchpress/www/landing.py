@@ -1,8 +1,6 @@
 # Copyright (c) 2026, Venkatesh and contributors
 # For license information, please see license.txt
 
-"""`/landing`: the marketing page under a name the home-page resolver cannot rewrite."""
-
 from benchpress.www import index
 
 no_cache = 1

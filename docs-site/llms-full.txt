@@ -5555,7 +5555,7 @@ One request for hosted access, named by `field:email`. `full_name`, `company`,
 `use_case`, `status`, `approved_on` and `invite_sent_on`.
 
 This is the only DocType a guest can cause to be written. See
-[the guest endpoints](/docs/reference/api#the-two-guest-endpoints).
+[the guest endpoints](/docs/reference/api#the-three-guest-endpoints).
 
 ## Troubleshooting
 
@@ -5635,8 +5635,8 @@ and it does nothing at all while `enable_credits` is `0`.
 |`caps=`|the caller is at a cap — concurrency, size, devices or builds a day|
 |`payer=`|the charge belongs to somebody other than the caller|
 
-Two endpoints answer a guest. They are listed separately in
-[The two guest endpoints](#the-two-guest-endpoints), and both are rate limited.
+Three endpoints answer a guest. They are listed separately in
+[The three guest endpoints](#the-three-guest-endpoints), and each is rate limited.
 
 ## Labs and templates
 
@@ -5888,15 +5888,24 @@ Two methods, both admin-only.
 `post_adjustment` is how a balance is set without a payment. It is the path the
 documentation screenshots used, because the gateway keys are empty on this host.
 
-## The two guest endpoints
+## The three guest endpoints
 
-Two functions carry `allow_guest=True`. They are the whole surface an
-unauthenticated caller can reach, and both are rate limited to the same shape.
+Three functions carry `allow_guest=True`. They are the whole surface an
+unauthenticated caller can reach. All three take POST only, and all three refuse
+unless `benchpress_public_site` is set — see
+[Configuration](/docs/reference/configuration).
 
 |Endpoint|Arguments|Rate limit|Checks|
 |--|--|--|--|
-|`benchpress.waitlist.join`|`email`, `full_name`, `company`, `use_case`|3 an hour for each email and each IP address|none, by design|
-|`benchpress.signup.sign_up`|`email`, `full_name`, `redirect_to`|3 an hour for each email and each IP address|`waitlist_open` and the blocked domain list|
+|`benchpress.waitlist.join`|`email`, `full_name`, `company`, `use_case`|3 an hour|none, by design|
+|`benchpress.signup.sign_up`|`email`, `full_name`, `redirect_to`|3 an hour|`waitlist_open` and the blocked domain list|
+|`benchpress.contact.submit`|`name`, `email`, `message`, `topic`|3 an hour|none, by design|
+
+The 3 an hour counts the address and the submitted email together, so changing
+the email starts a fresh allowance. A flat ceiling of 10 an hour for each address
+sits over it and does not. Each endpoint counts against its own pair of
+counters, so a contact message does not spend a visitor's allowance for
+requesting access.
 
 `waitlist.join` always answers the same way. A caller cannot tell a new address
 from one already on the list, so the endpoint is not an account oracle.
@@ -5904,6 +5913,9 @@ from one already on the list, so the endpoint is not an account oracle.
 `signup.sign_up` answers exactly as Frappe's own signup does, behind two gates
 from `Credit Settings`. Both gates are off on a self-hosted install. See
 [Self-serve signup](/docs/operator/hosted-signup).
+
+`contact.submit` records the message and answers the same way whether or not the
+mail went out.
 
 Two more waitlist functions are admin-only and not guest-reachable.
 

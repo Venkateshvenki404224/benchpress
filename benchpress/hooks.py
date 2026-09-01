@@ -12,13 +12,9 @@ required_apps = ["vpn_management"]
 
 # Fixtures
 #
-# Every entry is filtered to rows this app owns. An unfiltered `dt` exports the site's whole table
-# and re-imports it into the next site, which is how one deployment's operator data ends up in
-# another's.
-#
-# The six public-site mails are not here. `sync_fixtures` imports with `force=True` on every
-# migrate, which no flag can gate and which overwrites an edited body;
-# `benchpress/public_site/seed.py` plants them instead, only when absent.
+# Every entry is filtered to rows this app owns; an unfiltered `dt` carries one deployment's
+# operator data into the next site. The public-site mails are deliberately not here:
+# `sync_fixtures` imports with `force=True` on every migrate and would overwrite an edited body.
 fixtures = [
 	{"dt": "Role", "filters": [["role_name", "in", ["BenchPress Admin", "BenchPress User"]]]},
 ]
@@ -210,26 +206,12 @@ override_whitelisted_methods = {
 # files as Jinja and convert the markdown ones to HTML.
 page_renderer = ["benchpress.docs_assets.DocsAssetRenderer"]
 
-# The public pages are deliberately absent. `/`, `/landing`, `/signup`, `/about` and `/contact`
-# resolve from `benchpress/www/` by filename, and `/login` shadows `frappe/www/login.html` because
-# `TemplatePage.set_template_path` searches `reversed(get_installed_apps())`. A route rule for
-# `/login` would bypass `frappe/www/login.py` and take the signed-in redirect, the `redirect-to`
-# sanitisation and the OAuth paths with it — do not add one.
+# The public routes resolve from `benchpress/www/` by filename and get no `website_route_rules`
+# entry. A rule for `/login` would bypass `frappe/www/login.py` and take the signed-in redirect,
+# the `redirect-to` sanitisation and the OAuth paths with it — do not add one.
 #
-# `/` needs one thing more than a file: `frappe.website.utils.get_home_page` falls back to `login`
-# for a guest when nothing names a home page, so `Website Settings.home_page` has to say `index`.
-# `benchpress.public_site.seed.claim_home_page` writes it once, when it is empty. Not the
-# `home_page` hook: that outranks Website Settings and would take the choice away from Desk.
-#
-# That same field is what `frappe.auth` hands back as the post-login destination, so naming the
-# landing page in it also lands every admin on the marketing page instead of the Desk. The hook
-# below returns `None` for a guest, and for a signed-in visitor only while the stored value is
-# still the landing page — so a home page an operator picks in Desk is never swallowed by a hook
-# that runs ahead of it. See `benchpress/public_site/home.py` — the hook name is Frappe's and is
-# misleading: the method is called for every user, not only a Website User.
-#
-# `/landing` exists because neither `/` nor `/index` names the landing page for a signed-in
-# operator: `path_resolver.resolve_path` sends both through `get_home_page`. See `www/landing.py`.
+# The hook below keeps a signed-in visitor off the marketing page that `Website Settings.home_page`
+# names. Its name is Frappe's and is misleading: it runs for every user, not only a Website User.
 get_website_user_home_page = "benchpress.public_site.home.home_page_for"
 
 website_route_rules = [

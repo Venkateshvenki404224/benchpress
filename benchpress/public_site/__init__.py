@@ -1,8 +1,6 @@
 # Copyright (c) 2026, Venkatesh and contributors
 # For license information, please see license.txt
 
-"""The switch for the hosted marketing site. Absent, and this install serves none of it."""
-
 import frappe
 
 CONFIG_KEY = "benchpress_public_site"

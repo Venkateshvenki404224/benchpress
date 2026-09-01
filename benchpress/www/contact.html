@@ -37,7 +37,7 @@
 
 {% block page_content %}
 <div class="bp" data-mode="{{ mode_default | e }}">
-{% include "templates/includes/public_header.html" %}
+{% include "templates/includes/site_header.html" %}
 
 <main id="bp-content" class="bp-page bp-page--contact">
 
@@ -177,7 +177,6 @@
 					{%- if settings.selfhost_title %}
 					<h2 class="bp-aside__title">{{ settings.selfhost_title | e }}</h2>
 					{%- endif %}
-					{#- Text Editor field: renders raw. -#}
 					{%- if settings.selfhost_body %}
 					<div class="bp-prose bp-prose--small">{{ settings.selfhost_body }}</div>
 					{%- endif %}
@@ -204,7 +203,7 @@
 
 </main>
 
-{% include "templates/includes/public_footer.html" %}
+{% include "templates/includes/site_footer.html" %}
 </div>
 {% endblock %}
 

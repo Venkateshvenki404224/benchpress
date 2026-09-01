@@ -60,6 +60,13 @@ Five pages under `benchpress/www/`, on six routes. Each one resolves by
 filename. None of them has a `website_route_rules` entry, and none may be
 given one.
 
+The whole site is behind one site-config key, `benchpress_public_site`, absent
+by default. `benchpress.public_site.require_public_site` raises
+`PageDoesNotExistError` for every route and every guest endpoint while it is
+unset, and `benchpress.public_site.seed` plants nothing. This site belongs to
+the hosted deployment: a self-hoster who installs the app gets their own home
+page, their own login screen and no marketing pages.
+
 | Route | Template | Controller | Copy lives in |
 |---|---|---|---|
 | `/` | `www/index.html` | `www/index.py` | `site_content.LANDING_SEED` |
@@ -69,7 +76,7 @@ given one.
 | `/about` | `www/about.html` | `www/about.py` | `site_content.ABOUT_SEED` |
 | `/contact` | `www/contact.html` | `www/contact.py` | `www/contact.CONTACT_SEED` |
 
-Ten facts that are easy to break:
+Eleven facts that are easy to break:
 
 - `www/login.html` deliberately shadows `frappe/www/login.html`, because
   `TemplatePage.set_template_path` searches `reversed(get_installed_apps())`.
@@ -77,8 +84,8 @@ Ten facts that are easy to break:
   result. Filename shadowing has no off position, so with `benchpress_public_site`
   unset the controller points `context.template` back at `frappe/www/login.html`.
   `TemplatePage` reads that key after `get_context` returns, so the stock page
-  serves. Keep the context keys and the DOM contract (spec §4.3) in step with the
-  framework on every Frappe upgrade. Re-read `frappe/www/login.py`,
+  serves. Keep the context keys and the DOM contract in step with the framework
+  on every Frappe upgrade. Re-read `frappe/www/login.py`,
   `frappe/templates/includes/login/login.js`, `frappe/templates/signup.html` and
   `frappe/public/scss/login.bundle.scss` when the framework version moves.
 - `/` needs `Website Settings.home_page` to say `index`.
@@ -143,9 +150,12 @@ Ten facts that are easy to break:
   that name lands in the sourcemap the hash covers. Scripts are content-stable.
   Whatever the bundler does not hash — the icons, the manifest, the logos and the hero
   video — takes one `?v=` token from `site_content.asset_version`.
-
-The contract the five pages were built against is
-[internal/public-site-spec.md](internal/public-site-spec.md).
+- Jinja autoescape is off in Frappe, so a template escapes by hand: `| e` on every
+  value a controller passes it. What a template renders raw is shipped HTML, a
+  macro's output or a framework helper's, and carries a comment saying which. The
+  mail bodies in `benchpress/templates/emails/` are the one place guest-typed text
+  reaches a template raw, and `benchpress/emails.py` wraps it in `Markup` on the
+  way. This is the whole of the rule; no template repeats it.
 
 ## Cobalt is the palette of record
 

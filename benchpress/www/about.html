@@ -64,7 +64,7 @@
 
 {% block page_content %}
 <div class="bp" data-mode="{{ mode_default | e }}">
-{% include "templates/includes/public_header.html" %}
+{% include "templates/includes/site_header.html" %}
 
 <main id="bp-content" class="bp-page bp-page--about">
 
@@ -77,7 +77,6 @@
 		{%- if settings.title %}
 		<h1 class="bp-hero__title">{{ settings.title | e }}</h1>
 		{%- endif %}
-		{#- Text Editor field: renders raw. -#}
 		{%- if settings.lede %}
 		<div class="bp-prose bp-hero__lede">{{ settings.lede }}</div>
 		{%- endif %}
@@ -91,7 +90,6 @@
 			{%- if settings.situation_eyebrow %}
 			<h2 class="bp-eyebrow bp-panel__eyebrow">{{ settings.situation_eyebrow | e }}</h2>
 			{%- endif %}
-			{#- Text Editor field: renders raw. -#}
 			{%- if settings.situation_body %}
 			<div class="bp-prose">{{ settings.situation_body }}</div>
 			{%- endif %}
@@ -111,7 +109,6 @@
 			{{ day_column(settings.days_with_title, days_with, "with", asset_version) }}
 			{%- endif %}
 		</div>
-		{#- Text Editor field: renders raw. -#}
 		{%- if settings.days_closing %}
 		<div class="bp-prose bp-days__closing">{{ settings.days_closing }}</div>
 		{%- endif %}
@@ -123,7 +120,6 @@
 <section class="bp-section" id="what-it-is" data-r="sec">
 	<div class="bp-shell" data-r="pad">
 		<h2 class="bp-h2">{{ settings.contrast_title | default("", true) | e }}</h2>
-		{#- Text Editor field: renders raw. -#}
 		{%- if settings.contrast_lede %}
 		<div class="bp-prose bp-section__lede">{{ settings.contrast_lede }}</div>
 		{%- endif %}
@@ -143,7 +139,6 @@
 		</ul>
 		{%- endif %}
 
-		{#- Text Editor field: renders raw. -#}
 		{%- if settings.contrast_closing %}
 		<div class="bp-prose bp-section__closing">{{ settings.contrast_closing }}</div>
 		{%- endif %}
@@ -234,6 +229,6 @@
 
 </main>
 
-{% include "templates/includes/public_footer.html" %}
+{% include "templates/includes/site_footer.html" %}
 </div>
 {% endblock %}

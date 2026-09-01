@@ -25,7 +25,6 @@ LOGIN_SEED = {
 	"login_divider_label": "or email",
 	"login_remember_label": "Keep me signed in on this device",
 	"login_submit_label": "Log in",
-	# Text Editor field: the template renders it raw, and `signup_prompt()` rewrites the anchor.
 	"login_signup_prompt": (
 		'<p>No account yet? <a href="#signup">Request access</a> — approved by hand, usually '
 		"inside a business day. Self-hosting needs no account at all.</p>"

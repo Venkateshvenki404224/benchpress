@@ -41,7 +41,7 @@
 
 {% block page_content %}
 <div class="bp" data-mode="{{ mode_default | e }}">
-{% include "templates/includes/public_header.html" %}
+{% include "templates/includes/site_header.html" %}
 
 <main id="bp-content">
 
@@ -73,7 +73,6 @@
 			</ol>
 			{%- endif %}
 
-			{#- Text Editor field: renders raw. -#}
 			{%- if settings.selfhost_note %}
 			<div class="bp-note">{{ settings.selfhost_note }}</div>
 			{%- endif %}
@@ -215,7 +214,7 @@
 
 </main>
 
-{% include "templates/includes/public_footer.html" %}
+{% include "templates/includes/site_footer.html" %}
 </div>
 {% endblock %}
 

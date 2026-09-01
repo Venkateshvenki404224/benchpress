@@ -1,8 +1,7 @@
 {#-
   Shadows `frappe/www/login.html`. The framework class and id names below are a contract with
-  `frappe/templates/includes/login/login.js`; check `internal/public-site-spec.md` §4.3 before
-  renaming one. `.page-card-actions` is left out deliberately — `login.bundle.css` hangs its
-  whole button skin off it.
+  `frappe/templates/includes/login/login.js`; re-read it before renaming one. `.page-card-actions`
+  is left out deliberately — `login.bundle.css` hangs its whole button skin off it.
 -#}
 {% extends "templates/web.html" %}
 
@@ -143,8 +142,7 @@
 		{{ email_login_body() }}
 	</form>
 
-	{#- Text Editor field: renders raw. `login.py` re-points its `#signup` anchor on an
-	    invite-only site. -#}
+	{#- Shipped HTML, rendered raw; `login.py` re-points its `#signup` anchor on an invite-only site. -#}
 	<div class="bp-prompt">{{ signup_prompt }}</div>
 </div>
 {%- endmacro -%}

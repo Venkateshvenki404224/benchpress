@@ -30,7 +30,6 @@ def sign_up(email: str, full_name: str, redirect_to: str = "") -> tuple[int, str
 
 
 def require_signup_open() -> None:
-	"""Refuse while hosted access is still invite-only."""
 	if config.waitlist_open():
 		frappe.throw(
 			_("Hosted access is invite-only for now. Join the waitlist and we'll email you a login."),
@@ -39,7 +38,6 @@ def require_signup_open() -> None:
 
 
 def reject_blocked_domain(email: str) -> None:
-	"""Refuse a throwaway domain, and name the rule."""
 	if domain_of(email) in config.blocked_email_domains():
 		frappe.throw(
 			_("That email domain isn't accepted. Use an address you own, or sign in with GitHub."),

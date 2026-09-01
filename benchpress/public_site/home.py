@@ -1,12 +1,6 @@
 # Copyright (c) 2026, Venkatesh and contributors
 # For license information, please see license.txt
 
-"""Who `/` is for. A guest gets the landing page; a signed-in visitor gets their own app."""
-
-# Wired to the `get_website_user_home_page` hook, which despite the name runs for every user.
-# `get_home_page_via_hooks` is consulted ahead of Website Settings, so answering unconditionally
-# would take `/` away from Desk; returning `None` falls through to the stored value.
-
 import frappe
 
 from benchpress.public_site import public_site_enabled
@@ -20,7 +14,8 @@ SIGNED_IN_DEFAULT = "me"
 
 
 def home_page_for(user: str) -> str | None:
-	"""Where a signed-in visitor lands. `None` leaves the answer to Website Settings."""
+	# `get_website_user_home_page` runs for every user, not only a Website User, and is consulted
+	# ahead of Website Settings; `None` falls through to whatever an operator chose in Desk.
 	if user == "Guest" or not public_site_enabled():
 		return None
 	chosen = frappe.db.get_single_value(WEBSITE_SETTINGS, "home_page") or ""
