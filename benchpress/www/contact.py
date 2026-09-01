@@ -20,9 +20,20 @@ no_cache = 1
 sitemap = 1
 
 
-def configured_contact_email() -> str:
-	"""Only the site-config value; the shipped fallback is not published as structured data."""
-	return cstr(frappe.conf.get(contact.NOTIFY_KEY)).strip()
+def email_channel() -> list:
+	"""The "Email us" card, present only when a deployment has an address to print."""
+	address = contact.public_email()
+	if not address:
+		return []
+	return [
+		{
+			"icon": "mail",
+			"title": "Email us",
+			"body": "Sales, hosted access, quotes for setup or app work. A human replies.",
+			"meta_label": address,
+			"url": f"mailto:{address}",
+		}
+	]
 
 
 def get_context(context):
@@ -51,7 +62,8 @@ def get_context(context):
 	context.og_image = settings.og_image
 	context.title = context.meta_title
 	context.metatags = preview_tags(context.title, context.meta_description, context.og_image)
-	context.bp_schema = structured_data.contact(context.meta_description, configured_contact_email())
+	context.channels = [*email_channel(), *context.channels]
+	context.bp_schema = structured_data.contact(context.meta_description, contact.public_email())
 	return context
 
 
@@ -127,13 +139,6 @@ CONTACT_SEED = {
 	"intro_body": INTRO_BODY,
 	"channels": [
 		{
-			"icon": "mail",
-			"title": "Email us",
-			"body": "Sales, hosted access, quotes for setup or app work. A human replies.",
-			"meta_label": contact.CONTACT_EMAIL,
-			"url": f"mailto:{contact.CONTACT_EMAIL}",
-		},
-		{
 			"icon": "github",
 			"title": "GitHub issues",
 			"body": "Bugs, feature requests and self-hosting questions, answered in public.",
@@ -152,7 +157,7 @@ CONTACT_SEED = {
 	"response_times": [dict(row) for row in contact.RESPONSE_TIMES],
 	"selfhost_title": "Self-hosting a question",
 	"selfhost_body": SELFHOST_BODY,
-	"selfhost_links": f"github.com/Venkateshvenki404224/benchpress\n{contact.CONTACT_EMAIL}",
+	"selfhost_links": "github.com/Venkateshvenki404224/benchpress",
 	"meta_title": DEFAULT_TITLE,
 	"meta_description": (
 		"Talk to the people who wrote BenchPress — email or GitHub issues, "
