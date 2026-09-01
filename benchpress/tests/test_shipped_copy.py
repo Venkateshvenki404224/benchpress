@@ -1,32 +1,25 @@
 # Copyright (c) 2026, Venkatesh and Contributors
 # See license.txt
 
-"""Every public page renders its shipped copy, with nothing behind it in the database."""
+"""Every public page renders the copy the app ships, on the routes a visitor reaches it by."""
 
 import frappe
 from frappe.tests import IntegrationTestCase
 from frappe.utils import get_html_for_route
 
 from benchpress.benchpress.site_content import (
-	ABOUT_DOCTYPE,
 	ABOUT_SEED,
-	LANDING_DOCTYPE,
 	LANDING_SEED,
 	about_content,
 	clear_content_cache,
 	landing_content,
 	shipped,
 )
-from benchpress.benchpress.tests.test_site_content import empty_single
 from benchpress.www.contact import CONTACT_SEED
 from benchpress.www.login import LOGIN_SEED
 from benchpress.www.signup import SIGNUP_SEED
 
 BENCHPRESS_SETTINGS = "BenchPress Settings"
-CONTACT_DOCTYPE = "Contact Page Settings"
-SIGNUP_DOCTYPE = "Signup Page Settings"
-
-PAGE_DOCTYPES = (LANDING_DOCTYPE, ABOUT_DOCTYPE, CONTACT_DOCTYPE, SIGNUP_DOCTYPE)
 
 # One distinctive line per route, so a test fails when copy is lost, not when it is reworded.
 SHIPPED_COPY = (
@@ -51,8 +44,7 @@ class TestShippedCopy(IntegrationTestCase):
 
 	def forget_writes(self) -> None:
 		frappe.db.rollback()
-		for doctype in (*PAGE_DOCTYPES, BENCHPRESS_SETTINGS):
-			frappe.clear_document_cache(doctype, doctype)
+		frappe.clear_document_cache(BENCHPRESS_SETTINGS, BENCHPRESS_SETTINGS)
 		clear_content_cache()
 
 	def set_credits(self, value: int) -> None:
@@ -63,10 +55,7 @@ class TestShippedCopy(IntegrationTestCase):
 		frappe.set_user("Guest")
 		return get_html_for_route(route)
 
-	def test_every_page_ships_its_copy_with_no_row_behind_it(self):
-		for doctype in PAGE_DOCTYPES:
-			empty_single(doctype)
-
+	def test_every_route_renders_its_shipped_copy(self):
 		for route, copy in SHIPPED_COPY:
 			with self.subTest(route=route):
 				self.assertIn(copy, self.render(route))
@@ -78,12 +67,3 @@ class TestShippedCopy(IntegrationTestCase):
 			about_content()
 			shipped(CONTACT_SEED)
 			shipped(SIGNUP_SEED)
-
-	def test_an_edit_in_desk_no_longer_reaches_a_page(self):
-		frappe.db.set_single_value(LANDING_DOCTYPE, "hero_subhead", "Edited in Desk.")
-		frappe.clear_document_cache(LANDING_DOCTYPE, LANDING_DOCTYPE)
-
-		html = self.render("/")
-
-		self.assertIn(LANDING_SEED["hero_subhead"], html)
-		self.assertNotIn("Edited in Desk.", html)

@@ -48,8 +48,9 @@ the back.
 - **Doctypes:** `Lab`, `Bench Instance`, `Bench Site`, `Bench App`, `Database
   Server`, `Credit Account` / `Credit Ledger Entry` / `Credit Pack`, `Deploy Log`,
   `Build Log` — under `benchpress/benchpress/doctype/`. The public site adds
-  `Waitlist Entry` and `Contact Message`. The four page-settings Singles and
-  their child tables are still in the app but nothing reads them.
+  `Waitlist Entry` and `Contact Message`. The thirty doctypes that once modelled
+  page copy are gone — `benchpress.patches.drop_page_content_doctypes` deletes
+  them from a site that still has them.
 - **Depends on** `vpn_management` (`required_apps` in `hooks.py`) for the WireGuard
   side.
 
@@ -104,17 +105,17 @@ Seven facts that are easy to break:
   `csrf_token`. All five pages must offer the same door: never re-resolve any of
   them in a page controller. Sign-out is a form, not a link — both of Frappe's
   logout endpoints are POST-only.
-- Every page renders from its constant and reads nothing at render time. A
-  section that should not appear is absent from the template, not switched off
-  in Desk. The constants are still what `benchpress.public_site.seed` plants in
-  Desk, but no page reads those rows back.
+- Every page renders from its constant and reads nothing at render time. There is
+  nothing behind a page in Desk any more, so a section that should not appear is
+  absent from the template rather than switched off.
 - The contact form's routing is constants too, in `benchpress/contact.py`:
   `TOPICS` (first row is the default), `RESPONSE_TIMES` and `ACKNOWLEDGE_SENDER`.
   Only the forwarding address is per-deployment — the `benchpress_contact_email`
   site-config key, falling back to `CONTACT_EMAIL`.
-- The six `Email Template` rows are seeded the same way, and are deliberately not
-  a `fixtures` entry: `sync_fixtures` imports with `force=True` on every
-  `bench migrate`, which no flag can gate and which overwrites an edited body.
+- The six `Email Template` rows are the one thing `benchpress.public_site.seed`
+  still plants, and they are deliberately not a `fixtures` entry: `sync_fixtures`
+  imports with `force=True` on every `bench migrate`, which no flag can gate and
+  which overwrites an edited body.
 
 The contract the five pages were built against is
 [internal/public-site-spec.md](internal/public-site-spec.md).

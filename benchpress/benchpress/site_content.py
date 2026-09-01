@@ -9,9 +9,6 @@ from frappe.utils import cint
 from benchpress.credits.config import SIGNUP_ROUTE, credits_enabled, waitlist_open
 from benchpress.request_cache import clear_local_cache, local_cache
 
-LANDING_DOCTYPE = "Landing Page Settings"
-ABOUT_DOCTYPE = "About Page Settings"
-
 LANDING_ATTRIBUTE = "benchpress_landing_content"
 ABOUT_ATTRIBUTE = "benchpress_about_content"
 
@@ -31,9 +28,6 @@ LOGOUT_METHOD = "frappe.handler.web_logout"
 
 WITHOUT_COLUMN = "Without BenchPress"
 WITH_COLUMN = "With BenchPress"
-
-# Steps point at their phase by string, so neither table may be seeded without the other.
-PIPELINE_TABLES = ("pipeline_phases", "pipeline_steps")
 
 SITE_NAME = "BenchPress"
 OG_TYPE = "website"
@@ -128,13 +122,6 @@ def clear_content_cache() -> None:
 	clear_local_cache(ABOUT_ATTRIBUTE)
 
 
-def seed_page_content() -> None:
-	"""Plant the shipped copy. Idempotent, and never overwrites an edited value."""
-	seed_single(LANDING_DOCTYPE, LANDING_SEED)
-	seed_single(ABOUT_DOCTYPE, ABOUT_SEED)
-	clear_content_cache()
-
-
 def build_landing_content() -> dict:
 	settings = shipped(LANDING_SEED)
 	for card in settings.service_cards:
@@ -227,35 +214,7 @@ def phase_key(row) -> str:
 	return (row.phase_key or "").strip()
 
 
-def seed_single(doctype: str, seed: dict) -> None:
-	"""Fill every empty field on a Single, and any child table still empty."""
-	doc = frappe.get_doc(doctype)
-	# Read before appending: a table this run fills must not look operator-filled to the next one.
-	filled = {name for name, value in seed.items() if isinstance(value, list) and doc.get(name)}
-	changed = False
-	for fieldname, value in seed.items():
-		if isinstance(value, list):
-			changed = seed_table(doc, fieldname, value, filled) or changed
-		# Emptiness decides, not whether the Single was ever saved: Frappe writes its own
-		# bookkeeping row, and a mandatory field left empty then fails validation on save.
-		elif doc.get(fieldname) in (None, ""):
-			doc.set(fieldname, value)
-			changed = True
-	if changed:
-		doc.save(ignore_permissions=True)
-
-
-def seed_table(doc, fieldname: str, rows: list[dict], filled: set[str]) -> bool:
-	"""Append seed rows only into a table nobody has filled. Returns whether it wrote."""
-	blocked = PIPELINE_TABLES if fieldname in PIPELINE_TABLES else (fieldname,)
-	if not rows or filled.intersection(blocked):
-		return False
-	for row in rows:
-		doc.append(fieldname, dict(row))
-	return True
-
-
-# Seed content: what the seeder writes, and what an unset field falls back to at render time.
+# The shipped copy: the only thing any public page renders.
 
 HERO_SUBHEAD = (
 	"Pick a version and an app set. Press deploy. BenchPress builds an isolated Docker "

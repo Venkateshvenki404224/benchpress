@@ -13,10 +13,8 @@ import frappe
 from frappe.tests import IntegrationTestCase
 
 from benchpress.benchpress.site_content import (
-	ABOUT_DOCTYPE,
 	ABOUT_SEED,
 	CONSOLE_ROUTE,
-	LANDING_DOCTYPE,
 	LANDING_SEED,
 	LOGIN_ROUTE,
 	WAITLIST_ROUTE,
@@ -26,7 +24,6 @@ from benchpress.benchpress.site_content import (
 	chrome_content,
 	clear_content_cache,
 	landing_content,
-	seed_page_content,
 )
 from benchpress.credits.config import BENCHPRESS_SETTINGS, SIGNUP_ROUTE
 from benchpress.credits.config import SETTINGS as CREDIT_SETTINGS
@@ -41,22 +38,11 @@ class TestSiteContent(IntegrationTestCase):
 	def setUpClass(cls):
 		super().setUpClass()
 		frappe.set_user("Administrator")
-		# The test site predates these doctypes, so the install hook that seeds them never ran.
-		# Seeding here is idempotent and doubles as a test of the seeder.
-		seed_page_content()
-		frappe.db.commit()  # nosemgrep
 
 	def setUp(self):
 		super().setUp()
 		clear_content_cache()
-		self.addCleanup(self.restore_singles)
-
-	def restore_singles(self):
-		"""`IntegrationTestCase` rolls back once per class, so each test undoes its own writes."""
-		frappe.db.rollback()
-		frappe.clear_document_cache(LANDING_DOCTYPE, LANDING_DOCTYPE)
-		frappe.clear_document_cache(ABOUT_DOCTYPE, ABOUT_DOCTYPE)
-		clear_content_cache()
+		self.addCleanup(clear_content_cache)
 
 	# ------------------------------------------------------------------ completeness
 
@@ -81,20 +67,6 @@ class TestSiteContent(IntegrationTestCase):
 		self.assertEqual(len(content["footer_columns"]), 4)
 		self.assertEqual(len(content["hosted_points"]), 3)
 		self.assertEqual(len(content["self_points"]), 3)
-
-	def test_the_seeder_fills_mandatory_copy_over_a_bookkeeping_only_single(self):
-		"""A fresh install failed here: Frappe's own row made the Single look already seeded."""
-		empty_single(LANDING_DOCTYPE)
-		frappe.db.set_single_value(LANDING_DOCTYPE, "og_image", "")
-		frappe.clear_document_cache(LANDING_DOCTYPE, LANDING_DOCTYPE)
-		self.assertTrue(frappe.db.get_singles_dict(LANDING_DOCTYPE))
-
-		seed_page_content()
-
-		self.assertEqual(
-			frappe.db.get_single_value(LANDING_DOCTYPE, "hero_headline"),
-			LANDING_SEED["hero_headline"],
-		)
 
 	# ------------------------------------------------------------------ shaping
 
@@ -206,44 +178,3 @@ class TestSiteContent(IntegrationTestCase):
 		rows = landing_content()["settings"].hero_assurances
 		self.assertTrue(all(isinstance(row, dict) for row in rows))
 		self.assertIsNot(rows[0], LANDING_SEED["hero_assurances"][0])
-
-	# ------------------------------------------------------------------ seeding
-
-	def test_seeding_twice_adds_no_rows(self):
-		before = frappe.db.count("Landing Pipeline Step", {"parent": LANDING_DOCTYPE})
-		seed_page_content()
-		self.assertEqual(frappe.db.count("Landing Pipeline Step", {"parent": LANDING_DOCTYPE}), before)
-
-	def test_seeding_never_overwrites_an_edited_value(self):
-		settings = frappe.get_doc(LANDING_DOCTYPE)
-		settings.hero_headline = "Edited by an operator"
-		settings.save(ignore_permissions=True)
-		seed_page_content()
-		self.assertEqual(frappe.get_doc(LANDING_DOCTYPE).hero_headline, "Edited by an operator")
-
-	def test_seeding_never_refills_an_edited_child_table(self):
-		settings = frappe.get_doc(LANDING_DOCTYPE)
-		settings.faq_items = []
-		settings.append("faq_items", {"question": "Only mine?", "answer": "Yes."})
-		settings.save(ignore_permissions=True)
-		seed_page_content()
-		self.assertEqual(len(frappe.get_doc(LANDING_DOCTYPE).faq_items), 1)
-
-	# ------------------------------------------------------------------ validation
-
-	def test_a_step_naming_an_unknown_phase_is_rejected(self):
-		settings = frappe.get_doc(LANDING_DOCTYPE)
-		settings.append(
-			"pipeline_steps",
-			{"phase_key": "no-such-phase", "step_number": 12, "title": "Orphan"},
-		)
-		self.assertRaises(frappe.ValidationError, settings.save)
-
-
-def empty_single(doctype: str) -> None:
-	"""Put a Single back to the state a fresh install leaves it in. Rolled back with the test."""
-	for table in frappe.get_meta(doctype).get_table_fields():
-		frappe.db.delete(table.options, {"parent": doctype, "parenttype": doctype})
-	frappe.db.delete("Singles", {"doctype": doctype})
-	frappe.clear_document_cache(doctype, doctype)
-	clear_content_cache()
