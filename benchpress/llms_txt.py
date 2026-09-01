@@ -99,6 +99,12 @@ def page_links() -> str:
 			"What it takes to run BenchPress yourself: the six preconditions, the commands, the "
 			"measured disk floor, and what breaks.",
 		),
+		(
+			"Services",
+			site_content.SERVICES_ROUTE,
+			"The four engagements — managed hosting, setup on your server, custom Frappe apps "
+			"and half-day training — with what each includes and what it does not.",
+		),
 		("About", "/about", about["meta_description"]),
 		("Contact", "/contact", "Reach the people who build it, by topic."),
 		("Hosted access", site_content.signup_route(), "Ask for access to the hosted build."),
