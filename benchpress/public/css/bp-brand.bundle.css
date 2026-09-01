@@ -569,7 +569,7 @@ body {
  *   data-r="float"  floating badge
  * --------------------------------------------------------------------------------------- */
 
-@media (max-width: 1139px) {
+@media (max-width: 1259px) {
 	:root {
 		--m-header-height: 70px;
 	}
