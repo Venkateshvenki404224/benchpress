@@ -11,6 +11,7 @@ from frappe.utils import cint, cstr, get_url, now_datetime
 from benchpress.benchpress.doctype.waitlist_entry.waitlist_entry import derive_reference, send_notice
 from benchpress.credits import config
 from benchpress.permissions import require_admin
+from benchpress.public_site import require_public_site
 from benchpress.throttle import public_form
 
 DOCTYPE = "Waitlist Entry"
@@ -36,6 +37,7 @@ def join(
 	source: str | None = None,
 ) -> dict:
 	"""Record an interest in hosted access. Always answers the same way."""
+	require_public_site()
 	require_waitlist_open()
 	entry = frappe.new_doc(DOCTYPE)
 	entry.update(

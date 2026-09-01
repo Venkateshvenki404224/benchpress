@@ -6,6 +6,7 @@ import os
 import frappe
 
 from benchpress.benchpress.site_content import about_content, chrome_content, preview_tags
+from benchpress.public_site import require_public_site
 
 DEFAULT_TITLE = "About BenchPress"
 
@@ -21,6 +22,8 @@ no_cache = 1
 
 
 def get_context(context):
+	require_public_site()
+
 	context.no_cache = 1
 	context.full_width = 1
 	context.body_class = "bp-body"

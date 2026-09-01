@@ -9,6 +9,8 @@
 
 import frappe
 
+from benchpress.public_site import public_site_enabled
+
 WEBSITE_SETTINGS = "Website Settings"
 
 LANDING_PAGE = "index"
@@ -19,7 +21,7 @@ SIGNED_IN_DEFAULT = "me"
 
 def home_page_for(user: str) -> str | None:
 	"""Where a signed-in visitor lands. `None` leaves the answer to Website Settings."""
-	if user == "Guest":
+	if user == "Guest" or not public_site_enabled():
 		return None
 	chosen = frappe.db.get_single_value(WEBSITE_SETTINGS, "home_page") or ""
 	return SIGNED_IN_DEFAULT if chosen.strip("/") == LANDING_PAGE else None

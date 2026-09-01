@@ -12,6 +12,7 @@ from benchpress.benchpress.site_content import (
 	preview_tags,
 )
 from benchpress.credits.config import credits_enabled, waitlist_open
+from benchpress.public_site import require_public_site
 
 REPO_URL = "https://github.com/Venkateshvenki404224/benchpress"
 DEFAULT_TITLE = "BenchPress — a Frappe environment in one click"
@@ -39,6 +40,8 @@ NO_COMMERCE = {
 
 
 def get_context(context):
+	require_public_site()
+
 	context.no_cache = 1
 	context.full_width = 1
 	context.body_class = "bp-body"

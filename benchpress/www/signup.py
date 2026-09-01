@@ -9,6 +9,7 @@ from frappe.utils import cint, cstr, strip_html
 from benchpress import waitlist
 from benchpress.benchpress.site_content import chrome_content, merged, preview_tags
 from benchpress.credits.config import SIGNUP_ROUTE, credits_enabled, waitlist_open
+from benchpress.public_site import require_public_site
 
 DOCTYPE = "Signup Page Settings"
 WAITLIST_DOCTYPE = "Waitlist Entry"
@@ -38,6 +39,8 @@ no_cache = 1
 
 
 def get_context(context):
+	require_public_site()
+
 	# One front door at a time: with self-serve signup live, the queue this page feeds is gone.
 	if credits_enabled() and not waitlist_open():
 		frappe.local.flags.redirect_location = SIGNUP_ROUTE

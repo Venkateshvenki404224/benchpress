@@ -8,6 +8,7 @@ from frappe.utils import cstr, strip_html
 
 from benchpress import contact
 from benchpress.benchpress.site_content import chrome_content, merged, preview_tags
+from benchpress.public_site import require_public_site
 
 DOCTYPE = "Contact Page Settings"
 
@@ -33,6 +34,8 @@ no_cache = 1
 
 
 def get_context(context):
+	require_public_site()
+
 	context.no_cache = 1
 	context.full_width = 1
 	context.body_class = "bp-body"

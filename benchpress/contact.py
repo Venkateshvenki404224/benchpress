@@ -10,6 +10,7 @@ from frappe.utils import cstr, now_datetime
 from benchpress.benchpress.doctype.contact_message.contact_message import ANSWERED
 from benchpress.benchpress.doctype.waitlist_entry.waitlist_entry import normalise_email
 from benchpress.permissions import require_admin
+from benchpress.public_site import require_public_site
 from benchpress.throttle import public_form
 
 DOCTYPE = "Contact Message"
@@ -25,6 +26,7 @@ MAIL_ERROR_TITLE = "BenchPress contact mail failed"
 @public_form(limit=MESSAGES_PER_HOUR)
 def submit(name: str, email: str, message: str, topic: str | None = None) -> dict:
 	"""Record one contact message. Always answers the same way."""
+	require_public_site()
 	settings = page_settings()
 	record = frappe.new_doc(DOCTYPE)
 	record.update(

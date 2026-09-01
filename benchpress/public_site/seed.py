@@ -10,6 +10,7 @@ import frappe
 
 from benchpress import emails
 from benchpress.benchpress.site_content import seed_page_content, seed_single
+from benchpress.public_site import public_site_enabled
 from benchpress.public_site.home import LANDING_PAGE, WEBSITE_SETTINGS
 from benchpress.www.contact import CONTACT_SEED
 from benchpress.www.login import LOGIN_SEED
@@ -25,6 +26,8 @@ FORMER_HOME_PAGE = "home"
 
 def seed_public_site() -> None:
 	"""Seed the page Singles, the mail templates and the site's home page. Idempotent."""
+	if not public_site_enabled():
+		return
 	seed_page_content()
 	seed_single(CONTACT_DOCTYPE, CONTACT_SEED)
 	# `/login` has no Single of its own: its `login_*` fields ride on the signup one.

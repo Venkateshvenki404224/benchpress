@@ -9,6 +9,7 @@ import frappe
 from benchpress.credits.seed import seed_defaults
 from benchpress.indexes import ensure_indexes
 from benchpress.lab_templates import seed_lab_templates
+from benchpress.public_site import CONFIG_KEY
 from benchpress.public_site.seed import seed_public_site
 from benchpress.vpn_access import grant_vpn_access
 
@@ -112,7 +113,9 @@ def create_test_users():
 
 
 def before_tests() -> None:
-	"""Give the test site an outgoing account: the queue resolves one even in test mode."""
+	"""Prepare the test site: an outgoing mail account, and the public site switched on."""
+	# The suite covers the hosted deployment, so the flag is on unless a test turns it off.
+	frappe.conf[CONFIG_KEY] = 1
 	if frappe.db.exists("Email Account", {"default_outgoing": 1}):
 		return
 	frappe.get_doc(

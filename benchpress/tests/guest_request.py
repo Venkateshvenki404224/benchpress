@@ -8,6 +8,7 @@ from werkzeug.test import EnvironBuilder
 from werkzeug.wrappers import Request
 
 ADDRESS = "127.0.0.1"
+MISSING = object()
 
 
 class as_request:
@@ -16,10 +17,15 @@ class as_request:
 		self.path = path
 
 	def __enter__(self):
+		self.previous = getattr(frappe.local, "request", MISSING)
 		frappe.local.request = Request(EnvironBuilder(path=self.path, method="POST").get_environ())
 		frappe.local.request_ip = self.address
 		return self
 
 	def __exit__(self, *exception):
-		frappe.local.request = None
+		# Restored, not nulled: a `None` request crashes the framework's not-found renderer.
+		if self.previous is MISSING:
+			del frappe.local.request
+		else:
+			frappe.local.request = self.previous
 		return False
