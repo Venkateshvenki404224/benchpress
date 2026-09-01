@@ -6,7 +6,6 @@
 import frappe
 from frappe.utils import cint, get_build_version
 
-from benchpress.analytics import tracker
 from benchpress.credits.config import SIGNUP_ROUTE, credits_enabled, waitlist_open
 from benchpress.request_cache import clear_local_cache, local_cache
 
@@ -78,7 +77,6 @@ def chrome_content() -> dict:
 		"logout_method": LOGOUT_METHOD,
 		"csrf_token": session_csrf_token(),
 		"asset_version": asset_version(),
-		"analytics": tracker(),
 	}
 
 

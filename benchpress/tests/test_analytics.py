@@ -4,6 +4,7 @@
 """The analytics gate and the GitHub traffic collector. No network, no container."""
 
 import unittest
+from typing import ClassVar
 from unittest.mock import patch
 
 import frappe
@@ -33,6 +34,45 @@ class TestAnalyticsGate(unittest.TestCase):
 	def test_blank_strings_do_not_count_as_configured(self):
 		with patch.dict(frappe.conf, {analytics.SCRIPT_KEY: "  ", analytics.DOMAIN_KEY: "  "}):
 			self.assertEqual(analytics.tracker(), {})
+
+
+class TestTrackerSnippet(unittest.TestCase):
+	CONFIGURED: ClassVar[dict] = {
+		analytics.SCRIPT_KEY: "https://analytics.benchpress.cloud/script.js",
+		analytics.DOMAIN_KEY: "abc-123",
+	}
+
+	def test_no_snippet_without_config(self):
+		with patch.dict(frappe.conf, {}, clear=False):
+			frappe.conf.pop(analytics.SCRIPT_KEY, None)
+			frappe.conf.pop(analytics.DOMAIN_KEY, None)
+			self.assertEqual(analytics.script_tag(), "")
+			self.assertEqual(analytics.website_context(frappe._dict()), {})
+
+	def test_snippet_carries_both_values(self):
+		with patch.dict(frappe.conf, self.CONFIGURED):
+			tag = analytics.script_tag()
+			self.assertIn('src="https://analytics.benchpress.cloud/script.js"', tag)
+			self.assertIn('data-website-id="abc-123"', tag)
+			self.assertIn("defer", tag)
+
+	def test_attributes_are_escaped(self):
+		values = {analytics.SCRIPT_KEY: 'https://x/s.js"><b>', analytics.DOMAIN_KEY: "a<b"}
+		with patch.dict(frappe.conf, values):
+			tag = analytics.script_tag()
+			self.assertNotIn("<b>", tag)
+			self.assertIn("&lt;b", tag)
+
+	def test_context_appends_rather_than_replaces(self):
+		with patch.dict(frappe.conf, self.CONFIGURED):
+			result = analytics.website_context(frappe._dict({"head_html": "<meta name=x>"}))
+			self.assertTrue(result["head_html"].startswith("<meta name=x>"))
+			self.assertIn("data-website-id", result["head_html"])
+
+	def test_context_handles_absent_head_html(self):
+		with patch.dict(frappe.conf, self.CONFIGURED):
+			result = analytics.website_context(frappe._dict())
+			self.assertTrue(result["head_html"].startswith("<script"))
 
 
 class TestGitHubTrafficParsing(unittest.TestCase):
@@ -96,6 +136,18 @@ class TestGitHubTrafficRows(unittest.TestCase):
 		self.assertEqual([str(row.snapshot_date) for row in rows], ["2026-08-20", "2026-08-21"])
 		self.assertEqual([row.clone_uniques for row in rows], [4, 2])
 		self.assertEqual([row.view_uniques for row in rows], [11, 0])
+
+	def test_point_in_time_counts_land_on_the_newest_row(self):
+		self.client().write_snapshots()
+		rows = frappe.get_all(
+			github_traffic.DOCTYPE,
+			filters={"repository": self.REPO},
+			fields=["snapshot_date", "stars", "forks", "top_referrer"],
+			order_by="snapshot_date asc",
+		)
+		self.assertEqual([r.stars for r in rows], [0, 7])
+		self.assertEqual([r.forks for r in rows], [0, 3])
+		self.assertEqual([r.top_referrer or "" for r in rows], ["", "news.ycombinator.com"])
 
 	def test_write_snapshots_is_idempotent(self):
 		self.client().write_snapshots()

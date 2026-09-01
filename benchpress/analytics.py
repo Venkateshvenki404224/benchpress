@@ -3,6 +3,8 @@
 
 """The analytics gate. No config, no tracker, no third-party request."""
 
+from html import escape
+
 import frappe
 from frappe.utils import cstr
 
@@ -17,3 +19,20 @@ def tracker() -> dict:
 	if not script or not website_id:
 		return {}
 	return {"script": script, "website_id": website_id}
+
+
+def website_context(context) -> dict:
+	"""Every website route, docs included — the wiki renders through the same context."""
+	snippet = script_tag()
+	if not snippet:
+		return {}
+	return {"head_html": (context.get("head_html") or "") + snippet}
+
+
+def script_tag() -> str:
+	values = tracker()
+	if not values:
+		return ""
+	return '<script defer src="{0}" data-website-id="{1}"></script>'.format(
+		escape(values["script"], quote=True), escape(values["website_id"], quote=True)
+	)

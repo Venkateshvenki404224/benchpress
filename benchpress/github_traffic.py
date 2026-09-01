@@ -6,7 +6,7 @@
 import requests
 
 import frappe
-from frappe.utils import cstr, today
+from frappe.utils import cstr
 
 DOCTYPE = "GitHub Traffic Snapshot"
 REPO_KEY = "benchpress_github_repo"
@@ -37,12 +37,17 @@ class GitHubTraffic:
 		repository = self.get("")
 		referrer = top_referrer(self.get("/traffic/popular/referrers"))
 
+		days = sorted(set(clones) | set(views))
+		# The traffic window usually ends yesterday, so the point-in-time counts go on its last day.
+		newest = days[-1] if days else None
 		return [
-			self.upsert(day, clones.get(day, {}), views.get(day, {}), repository, referrer)
-			for day in sorted(set(clones) | set(views))
+			self.upsert(day, clones.get(day, {}), views.get(day, {}), repository, referrer, day == newest)
+			for day in days
 		]
 
-	def upsert(self, day: str, clones: dict, views: dict, repository: dict, referrer: str) -> str:
+	def upsert(
+		self, day: str, clones: dict, views: dict, repository: dict, referrer: str, newest: bool
+	) -> str:
 		doc = self.row_for(day)
 		doc.update(
 			{
@@ -54,8 +59,8 @@ class GitHubTraffic:
 				"view_count": views.get("count") or 0,
 			}
 		)
-		# Stars, forks and the referrer are read at this instant, so only today's row can carry them.
-		if day == today():
+		# Stars, forks and the referrer are read at this instant, so only the newest row carries them.
+		if newest:
 			doc.stars = repository.get("stargazers_count") or 0
 			doc.forks = repository.get("forks_count") or 0
 			doc.top_referrer = referrer

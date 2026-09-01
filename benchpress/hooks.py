@@ -220,6 +220,9 @@ page_renderer = ["benchpress.docs_assets.DocsAssetRenderer"]
 # names. Its name is Frappe's and is misleading: it runs for every user, not only a Website User.
 get_website_user_home_page = "benchpress.public_site.home.home_page_for"
 
+# The tracker rides the framework's own `head_html`, so it reaches the wiki docs too.
+update_website_context = "benchpress.analytics.website_context"
+
 website_route_rules = [
 	{"from_route": "/frontend/<path:app_path>", "to_route": "frontend"},
 ]
