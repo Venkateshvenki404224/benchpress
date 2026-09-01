@@ -1,6 +1,7 @@
 # Copyright (c) 2026, Venkatesh and contributors
 # For license information, please see license.txt
 
+from benchpress import structured_data
 from benchpress.benchpress.site_content import about_content, canonical_url, chrome_content, preview_tags
 from benchpress.public_site import require_public_site
 
@@ -26,4 +27,5 @@ def get_context(context):
 	context.meta_title = context.meta_title or DEFAULT_TITLE
 	context.title = context.meta_title
 	context.metatags = preview_tags(context.title, context.meta_description, context.og_image)
+	context.bp_schema = structured_data.about(context.meta_description)
 	return context

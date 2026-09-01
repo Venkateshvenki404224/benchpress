@@ -4,7 +4,7 @@
 import frappe
 from frappe.utils import cstr, strip_html
 
-from benchpress import contact
+from benchpress import contact, structured_data
 from benchpress.benchpress.site_content import canonical_url, chrome_content, preview_tags, shipped
 from benchpress.public_site import require_public_site
 
@@ -18,6 +18,11 @@ FORM_FIELDS = ("name", "email", "message", "topic")
 
 no_cache = 1
 sitemap = 1
+
+
+def configured_contact_email() -> str:
+	"""Only the site-config value; the shipped fallback is not published as structured data."""
+	return cstr(frappe.conf.get(contact.NOTIFY_KEY)).strip()
 
 
 def get_context(context):
@@ -46,6 +51,7 @@ def get_context(context):
 	context.og_image = settings.og_image
 	context.title = context.meta_title
 	context.metatags = preview_tags(context.title, context.meta_description, context.og_image)
+	context.bp_schema = structured_data.contact(context.meta_description, configured_contact_email())
 	return context
 
 

@@ -13,6 +13,12 @@
 <meta name="robots" content="noindex,follow">
 {%- endif %}
 
+{#- Raw on purpose: `structured_data.encode` produces JSON and escapes `<` so a value
+    cannot close the block. Never interpolate anything else into it. -#}
+{%- if bp_schema %}
+<script type="application/ld+json">{{ bp_schema }}</script>
+{%- endif %}
+
 <link rel="icon" type="image/svg+xml" href="/assets/benchpress/images/logo/favicon.svg?v={{ v | e }}">
 <link rel="icon" type="image/png" sizes="32x32" href="/assets/benchpress/images/logo/favicon-32.png?v={{ v | e }}">
 <link rel="icon" type="image/png" sizes="96x96" href="/assets/benchpress/images/logo/favicon-96x96.png?v={{ v | e }}">

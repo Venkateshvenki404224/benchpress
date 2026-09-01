@@ -5,6 +5,7 @@ import os
 
 import frappe
 
+from benchpress import structured_data
 from benchpress.benchpress.site_content import (
 	about_content,
 	canonical_url,
@@ -52,6 +53,7 @@ def get_context(context):
 
 	context.title = context.meta_title or DEFAULT_TITLE
 	context.metatags = preview_tags(context.title, context.meta_description, context.og_image)
+	context.bp_schema = structured_data.landing(context.meta_description, context.settings.faq_items)
 	context.repo_url = REPO_URL
 	context.hero_media = hero_media(context.asset_version)
 	return context
