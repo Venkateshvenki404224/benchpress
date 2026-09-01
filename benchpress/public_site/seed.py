@@ -4,6 +4,7 @@
 import re
 
 import frappe
+from frappe import _
 
 from benchpress import emails
 from benchpress.public_site import public_site_enabled
@@ -65,5 +66,5 @@ def _shipped_logo_block() -> str:
 	# Taken from the shipped body so the markup lives in the templates and nowhere else.
 	found = LOGO_BLOCK.search(emails.default_body(emails.ACCESS_APPROVED))
 	if not found:
-		frappe.throw("The shipped email header no longer carries the logo block")
+		frappe.throw(_("The shipped email header no longer carries the logo block"))
 	return found.group(0)
