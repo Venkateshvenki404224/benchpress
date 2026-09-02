@@ -53,6 +53,34 @@ PROJECT_FACTS = (
 )
 
 
+# One note per page, out here rather than inside the table in `page_links`: two adjacent strings
+# in a list literal read as a missing comma, to a linter and to a person.
+SELF_HOST_NOTE = (
+	"What it takes to run BenchPress yourself: the six preconditions, the commands, the "
+	"measured disk floor, and what breaks."
+)
+
+SERVICES_NOTE = (
+	"The four engagements — managed hosting, setup on your server, custom Frappe apps "
+	"and half-day training — with what each includes and what it does not."
+)
+
+VS_FRAPPE_DOCKER_NOTE = (
+	"An honest comparison with the official Docker setup, including the rows "
+	"frappe_docker wins. BenchPress is a layer above it, not a replacement."
+)
+
+VS_FRAPPE_MANAGER_NOTE = (
+	"Per developer against per team. Frappe Manager gives one developer a bench on their "
+	"own machine; BenchPress hands one to each person who needs it."
+)
+
+VS_FRAPPE_PILOT_NOTE = (
+	"A server manager against disposable environments. Pilot keeps one bench and its "
+	"sites alive; BenchPress makes an environment per person and destroys it after."
+)
+
+
 def build() -> str:
 	blocks = [
 		f"# {site_content.SITE_NAME}",
@@ -93,36 +121,11 @@ def page_links() -> str:
 	about = site_content.ABOUT_SEED
 	rows = [
 		("Home", "/", landing["meta_description"]),
-		(
-			"Self-host it",
-			site_content.SELF_HOST_ROUTE,
-			"What it takes to run BenchPress yourself: the six preconditions, the commands, the "
-			"measured disk floor, and what breaks.",
-		),
-		(
-			"Services",
-			site_content.SERVICES_ROUTE,
-			"The four engagements — managed hosting, setup on your server, custom Frappe apps "
-			"and half-day training — with what each includes and what it does not.",
-		),
-		(
-			"BenchPress and frappe_docker",
-			site_content.VS_FRAPPE_DOCKER_ROUTE,
-			"An honest comparison with the official Docker setup, including the rows "
-			"frappe_docker wins. BenchPress is a layer above it, not a replacement.",
-		),
-		(
-			"BenchPress and Frappe Manager",
-			site_content.VS_FRAPPE_MANAGER_ROUTE,
-			"Per developer against per team. Frappe Manager gives one developer a bench on their "
-			"own machine; BenchPress hands one to each person who needs it.",
-		),
-		(
-			"BenchPress and Frappe Pilot",
-			site_content.VS_FRAPPE_PILOT_ROUTE,
-			"A server manager against disposable environments. Pilot keeps one bench and its "
-			"sites alive; BenchPress makes an environment per person and destroys it after.",
-		),
+		("Self-host it", site_content.SELF_HOST_ROUTE, SELF_HOST_NOTE),
+		("Services", site_content.SERVICES_ROUTE, SERVICES_NOTE),
+		("BenchPress and frappe_docker", site_content.VS_FRAPPE_DOCKER_ROUTE, VS_FRAPPE_DOCKER_NOTE),
+		("BenchPress and Frappe Manager", site_content.VS_FRAPPE_MANAGER_ROUTE, VS_FRAPPE_MANAGER_NOTE),
+		("BenchPress and Frappe Pilot", site_content.VS_FRAPPE_PILOT_ROUTE, VS_FRAPPE_PILOT_NOTE),
 		("About", "/about", about["meta_description"]),
 		("Contact", "/contact", "Reach the people who build it, by topic."),
 		("Hosted access", site_content.signup_route(), "Ask for access to the hosted build."),
