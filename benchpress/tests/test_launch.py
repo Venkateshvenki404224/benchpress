@@ -10,6 +10,7 @@ from frappe.tests import IntegrationTestCase
 
 from benchpress import deploy_pipeline, image_cache, launch, lifecycle
 from benchpress.credits import admission
+from benchpress.tests.fixtures import drop
 from benchpress.tests.test_deploy_manager import _fresh_bench, _make_lab
 
 ADMISSION = "Bench Admission"
@@ -44,6 +45,7 @@ class TestRunLaunch(IntegrationTestCase):
 		frappe.db.delete("Build Log", {"lab": cls.lab.name})
 		cls.lab.delete(ignore_permissions=True)
 		frappe.db.commit()
+		drop("User", LAB_AUTHOR)
 		super().tearDownClass()
 
 	def setUp(self):

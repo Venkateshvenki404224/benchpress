@@ -81,6 +81,9 @@ class TestLeaseDrain(IntegrationTestCase):
 		frappe.set_user("Administrator")
 		self.reset_benches()
 		self.set_credits_enabled(1)
+		# Reclaim and parking are asserted against the default attempt limit, not against whatever
+		# the site this runs on has configured. The live site sets it to 1.
+		self.set_credit_setting("lease_max_attempts", lease.DEFAULT_MAX_ATTEMPTS)
 		frappe.cache().delete_value(drain.OVERFLOW_STREAK_KEY)
 
 	# --- Fixtures -------------------------------------------------------------

@@ -204,6 +204,9 @@ class TestLease(IntegrationTestCase):
 		self.reset_labs()
 		self.reset_benches()
 		self.set_credit_setting("default_lease_plan", self.short_plan)
+		# Retry behaviour is asserted against the default, not against whatever the site it runs
+		# on has configured. The live site sets this to 1, which parks on the first failure.
+		self.set_credit_setting("lease_max_attempts", lease.DEFAULT_MAX_ATTEMPTS)
 
 	def tearDown(self):
 		frappe.set_user("Administrator")

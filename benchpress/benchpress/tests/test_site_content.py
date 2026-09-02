@@ -17,6 +17,8 @@ from benchpress.benchpress.site_content import (
 	CONSOLE_ROUTE,
 	LANDING_SEED,
 	LOGIN_ROUTE,
+	SELF_HOST_ROUTE,
+	SELFHOST_CTA_LABEL,
 	WAITLIST_CTA_LABEL,
 	WAITLIST_ROUTE,
 	WITH_COLUMN,
@@ -65,7 +67,7 @@ class TestSiteContent(IntegrationTestCase):
 		content = landing_content()
 		self.assertEqual(len(content["phases"]), 4)
 		self.assertEqual(sum(len(phase["steps"]) for phase in content["phases"]), 11)
-		self.assertEqual(len(content["footer_columns"]), 4)
+		self.assertEqual(len(content["footer_columns"]), 3)
 		self.assertEqual(len(content["hosted_points"]), 3)
 		self.assertEqual(len(content["self_points"]), 3)
 
@@ -83,11 +85,8 @@ class TestSiteContent(IntegrationTestCase):
 
 	def test_footer_links_group_by_heading_in_first_seen_order(self):
 		columns = landing_content()["footer_columns"]
-		self.assertEqual(
-			[column["heading"] for column in columns],
-			["Product", "Developers", "Services", "Company"],
-		)
-		self.assertEqual(columns[0]["links"][0], {"label": "Pipeline", "url": "/#how"})
+		self.assertEqual([column["heading"] for column in columns], ["Product", "Developers", "Company"])
+		self.assertEqual(columns[0]["links"][0], {"label": "Self-host it", "url": SELF_HOST_ROUTE})
 
 	def test_about_days_split_by_column_preserving_order(self):
 		content = about_content()
@@ -106,16 +105,17 @@ class TestSiteContent(IntegrationTestCase):
 
 	def test_chrome_is_shared_by_every_page(self):
 		chrome = chrome_content()
-		self.assertEqual(next(item.label for item in chrome["nav_items"]), "Hosted or self-host")
+		self.assertEqual(next(item.label for item in chrome["nav_items"]), "Self-host")
 		self.assertTrue(chrome["footer_trademark"])
 
 	def test_the_chrome_names_the_about_and_contact_pages(self):
-		anchors = [item.anchor for item in chrome_content()["nav_items"]]
-		self.assertIn("/about", anchors)
-		self.assertIn("/contact", anchors)
+		# The header carries pages only and `/contact` is not one of the five, so the footer is
+		# where it has to be reachable from.
+		self.assertIn("/about", [item.anchor for item in chrome_content()["nav_items"]])
 
 		columns = {column["heading"] for column in chrome_content()["footer_columns"]}
 		self.assertIn("Company", columns)
+		self.assertIn("/contact", [link["url"] for link in self.footer_links()])
 
 	def test_the_chrome_carries_the_session_state_the_header_renders(self):
 		chrome = chrome_content()
@@ -128,27 +128,43 @@ class TestSiteContent(IntegrationTestCase):
 		self.assertFalse(chrome_content()["is_signed_in"])
 		self.assertEqual(chrome_content()["csrf_token"], "")
 
-	def test_the_header_cta_follows_the_switches(self):
-		"""One door, on all five pages. `/` enforced this alone once, and the other four disagreed."""
+	def test_the_header_button_is_always_self_host(self):
+		"""1.1 inverted the hierarchy: the one button is the goal, whatever the hosted switches say."""
+		for credits, waitlist in ((1, 1), (1, 0), (0, 1), (0, 0)):
+			with self.subTest(credits=credits, waitlist=waitlist):
+				self.set_switches(credits=credits, waitlist=waitlist)
+				self.assertEqual(self.cta(), (SELFHOST_CTA_LABEL, SELF_HOST_ROUTE))
+
+	def test_the_hosted_door_is_a_plain_link_that_follows_the_switches(self):
 		self.set_switches(credits=1, waitlist=1)
-		self.assertEqual(self.cta(), (WAITLIST_CTA_LABEL, WAITLIST_ROUTE))
+		self.assertEqual(self.hosted_link(), (WAITLIST_CTA_LABEL, WAITLIST_ROUTE))
 		self.assertEqual(chrome_content()["signup_route"], WAITLIST_ROUTE)
 
 		self.set_switches(credits=1, waitlist=0)
-		self.assertEqual(self.cta(), ("Start free", SIGNUP_ROUTE))
+		self.assertEqual(self.hosted_link(), ("Start free", SIGNUP_ROUTE))
 		self.assertEqual(chrome_content()["signup_route"], SIGNUP_ROUTE)
 
 		# No hosted product at all: the header may not offer an account that cannot exist.
 		self.set_switches(credits=0, waitlist=1)
-		self.assertEqual(
-			self.cta(), (LANDING_SEED["paths_self_cta_label"], LANDING_SEED["paths_self_cta_url"])
-		)
+		self.assertIsNone(self.hosted_link())
 
 	def cta(self) -> tuple[str, str]:
 		"""The one primary button in the shared header, as `(label, url)`."""
 		rows = [row for row in chrome_content()["nav_items"] if row.is_cta]
 		self.assertEqual(len(rows), 1, "the header carries exactly one primary button")
 		return rows[0].label, rows[0].anchor
+
+	def hosted_link(self) -> tuple[str, str] | None:
+		"""The secondary door, which is a plain row and never the button."""
+		rows = [row for row in chrome_content()["nav_items"] if row.anchor in (WAITLIST_ROUTE, SIGNUP_ROUTE)]
+		if not rows:
+			return None
+		self.assertEqual(len(rows), 1, "one hosted door, or none")
+		self.assertFalse(rows[0].is_cta, "the hosted door is a link, never the button")
+		return rows[0].label, rows[0].anchor
+
+	def footer_links(self) -> list:
+		return [link for column in chrome_content()["footer_columns"] for link in column["links"]]
 
 	def set_switches(self, credits: int, waitlist: int) -> None:
 		frappe.db.set_single_value(BENCHPRESS_SETTINGS, "enable_credits", credits)

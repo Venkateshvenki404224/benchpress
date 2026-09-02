@@ -15,6 +15,7 @@ from frappe.tests import IntegrationTestCase
 import benchpress
 from benchpress import api, contact, waitlist
 from benchpress.benchpress.doctype.bench_instance import get_instance_id
+from benchpress.tests.fixtures import drop, drop_all
 
 GUEST_WAITLIST_EMAIL = "authz-guest-waitlist@example.com"
 GUEST_CONTACT_EMAIL = "authz-guest-contact@example.com"
@@ -149,8 +150,11 @@ class TestApiAuthorization(IntegrationTestCase):
 		frappe.delete_doc("Bench Instance", cls.bench.name, force=True, ignore_permissions=True)
 		frappe.delete_doc("Lab", cls.lab.name, force=True, ignore_permissions=True)
 		for email in (cls.user_a, cls.user_b, cls.admin_user, cls.norole_user):
-			if frappe.db.exists("User", email):
-				frappe.delete_doc("User", email, force=True, ignore_permissions=True)
+			# The ledger and the account outlive the user, and an account left holding a balance
+			# whose entries are gone fails the ledger-sums invariant for every later run.
+			drop_all("Credit Ledger Entry", {"account": email})
+			drop("Credit Account", email)
+			drop("User", email)
 		frappe.db.commit()
 		super().tearDownClass()
 
