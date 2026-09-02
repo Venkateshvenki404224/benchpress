@@ -210,7 +210,15 @@ override_whitelisted_methods = {
 # Website route rules
 # Runs ahead of frappe's TemplatePage, which would otherwise compile these
 # files as Jinja and convert the markdown ones to HTML.
-page_renderer = ["benchpress.docs_assets.DocsAssetRenderer"]
+page_renderer = [
+	# `/llms.txt` is composed: the product first, then the generated docs index. It comes before
+	# the static server, which still serves that index verbatim on an install with no public site.
+	"benchpress.llms_txt.LlmsTxtRenderer",
+	# The generated sitemap holds the docs and nothing else, so on its own it hides every
+	# marketing route from a crawler that reads only this file.
+	"benchpress.sitemap_xml.SitemapRenderer",
+	"benchpress.docs_assets.DocsAssetRenderer",
+]
 
 # The public routes resolve from `benchpress/www/` by filename and get no `website_route_rules`
 # entry. A rule for `/login` would bypass `frappe/www/login.py` and take the signed-in redirect,
@@ -219,6 +227,9 @@ page_renderer = ["benchpress.docs_assets.DocsAssetRenderer"]
 # The hook below keeps a signed-in visitor off the marketing page that `Website Settings.home_page`
 # names. Its name is Frappe's and is misleading: it runs for every user, not only a Website User.
 get_website_user_home_page = "benchpress.public_site.home.home_page_for"
+
+# The tracker rides the framework's own `head_html`, so it reaches the wiki docs too.
+update_website_context = "benchpress.analytics.website_context"
 
 website_route_rules = [
 	{"from_route": "/frontend/<path:app_path>", "to_route": "frontend"},

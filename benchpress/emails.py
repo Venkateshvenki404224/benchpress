@@ -70,7 +70,9 @@ def notify_admins_of_access_request(entry) -> None:
 	context = _request_context(entry)
 	context["desk_url"] = get_url_to_form(WAITLIST, entry.name)
 	context["submitted_on"] = _timestamp(entry.get("creation"))
-	_send(ACCESS_FILED, [contact.notify_email()], context, WAITLIST, entry.name)
+	address = contact.notify_email()
+	if address:
+		_send(ACCESS_FILED, [address], context, WAITLIST, entry.name)
 
 
 @best_effort

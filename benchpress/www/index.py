@@ -5,8 +5,10 @@ import os
 
 import frappe
 
+from benchpress import structured_data
 from benchpress.benchpress.site_content import (
 	about_content,
+	canonical_url,
 	chrome_content,
 	landing_content,
 	preview_tags,
@@ -16,13 +18,14 @@ from benchpress.credits.config import credits_enabled, waitlist_open
 from benchpress.public_site import require_public_site
 
 REPO_URL = "https://github.com/Venkateshvenki404224/benchpress"
-DEFAULT_TITLE = "BenchPress — a Frappe environment in one click"
+DEFAULT_TITLE = "BenchPress — Frappe dev environments your team can deploy themselves"
 
 VIDEO_DIRECTORY = ("public", "videos")
 HERO_VIDEO = "hero.mp4"
 HERO_POSTER = "hero-poster.jpg"
 
 no_cache = 1
+sitemap = 1
 
 NO_COMMERCE = {
 	"credits_enabled": False,
@@ -34,6 +37,7 @@ def get_context(context):
 	require_public_site()
 
 	context.no_cache = 1
+	context.bp_canonical = canonical_url("/")
 	context.body_class = "bp-body"
 	context.mode_default = "dark"
 
@@ -44,11 +48,12 @@ def get_context(context):
 	# The numbers in the About teaser live with the page they came from.
 	context.about_stats = about_content()["settings"].stats
 
-	for field in ("hero_cta_primary_label", "paths_hosted_cta_label"):
+	for field in ("hero_cta_hosted_label", "paths_hosted_cta_label"):
 		context.settings[field] = signup_cta_label(context.settings[field])
 
 	context.title = context.meta_title or DEFAULT_TITLE
 	context.metatags = preview_tags(context.title, context.meta_description, context.og_image)
+	context.bp_schema = structured_data.landing(context.meta_description, context.settings.faq_items)
 	context.repo_url = REPO_URL
 	context.hero_media = hero_media(context.asset_version)
 	return context

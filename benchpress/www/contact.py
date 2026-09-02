@@ -4,8 +4,8 @@
 import frappe
 from frappe.utils import cstr, strip_html
 
-from benchpress import contact
-from benchpress.benchpress.site_content import chrome_content, preview_tags, shipped
+from benchpress import contact, structured_data
+from benchpress.benchpress.site_content import canonical_url, chrome_content, preview_tags, shipped
 from benchpress.public_site import require_public_site
 
 ROUTE = "/contact"
@@ -17,12 +17,32 @@ DEFAULT_TITLE = "Contact BenchPress"
 FORM_FIELDS = ("name", "email", "message", "topic")
 
 no_cache = 1
+sitemap = 1
+
+
+def email_channel() -> list:
+	"""The "Email us" card, present only when a deployment has an address to print."""
+	address = contact.public_email()
+	if not address:
+		return []
+	return [
+		frappe._dict(
+			{
+				"icon": "mail",
+				"title": "Email us",
+				"body": "Sales, hosted access, quotes for setup or app work. A human replies.",
+				"meta_label": address,
+				"url": f"mailto:{address}",
+			}
+		)
+	]
 
 
 def get_context(context):
 	require_public_site()
 
 	context.no_cache = 1
+	context.bp_canonical = canonical_url("/contact")
 	context.body_class = "bp-body"
 	context.mode_default = "dark"
 
@@ -30,7 +50,7 @@ def get_context(context):
 	context.update(chrome_content())
 	context.update(submission())
 	context.settings = settings
-	context.channels = channel_rows(settings.channels)
+	context.channels = channel_rows([*email_channel(), *settings.channels])
 	context.topics = settings.topics
 	context.response_times = settings.response_times
 	context.default_topic = contact.default_topic()
@@ -44,6 +64,7 @@ def get_context(context):
 	context.og_image = settings.og_image
 	context.title = context.meta_title
 	context.metatags = preview_tags(context.title, context.meta_description, context.og_image)
+	context.bp_schema = structured_data.contact(context.meta_description, contact.public_email())
 	return context
 
 
@@ -119,13 +140,6 @@ CONTACT_SEED = {
 	"intro_body": INTRO_BODY,
 	"channels": [
 		{
-			"icon": "mail",
-			"title": "Email us",
-			"body": "Sales, hosted access, quotes for setup or app work. A human replies.",
-			"meta_label": contact.CONTACT_EMAIL,
-			"url": f"mailto:{contact.CONTACT_EMAIL}",
-		},
-		{
 			"icon": "github",
 			"title": "GitHub issues",
 			"body": "Bugs, feature requests and self-hosting questions, answered in public.",
@@ -144,7 +158,7 @@ CONTACT_SEED = {
 	"response_times": [dict(row) for row in contact.RESPONSE_TIMES],
 	"selfhost_title": "Self-hosting a question",
 	"selfhost_body": SELFHOST_BODY,
-	"selfhost_links": f"github.com/Venkateshvenki404224/benchpress\n{contact.CONTACT_EMAIL}",
+	"selfhost_links": "github.com/Venkateshvenki404224/benchpress",
 	"meta_title": DEFAULT_TITLE,
 	"meta_description": (
 		"Talk to the people who wrote BenchPress — email or GitHub issues, "

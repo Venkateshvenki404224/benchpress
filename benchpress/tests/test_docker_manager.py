@@ -28,6 +28,7 @@ from benchpress.docker_manager import (
 )
 from benchpress.request_cache import clear_local_cache
 from benchpress.tests.fakes import FakeDockerMixin
+from benchpress.tests.fixtures import drop
 
 
 def _client_returning(status, health=None):
@@ -303,7 +304,7 @@ class TestDockerManagerBlockIO(FakeDockerMixin, IntegrationTestCase):
 	def test_no_volume_is_mounted_over_the_bench(self):
 		"""A named volume over /home/frappe forces a full bench copy on every create."""
 		lab = _make_lab("no-volume")
-		self.addCleanup(frappe.delete_doc, "Lab", lab.name, force=True, ignore_permissions=True)
+		self.addCleanup(drop, "Lab", lab.name)
 
 		kwargs = self._container_create_kwargs(lab)
 
@@ -311,7 +312,7 @@ class TestDockerManagerBlockIO(FakeDockerMixin, IntegrationTestCase):
 
 	def test_the_container_is_given_the_bench_healthcheck(self):
 		lab = _make_lab("healthcheck-on")
-		self.addCleanup(frappe.delete_doc, "Lab", lab.name, force=True, ignore_permissions=True)
+		self.addCleanup(drop, "Lab", lab.name)
 		probe = {"Test": ["CMD-SHELL", "curl -fsS -m 5 http://localhost:8000/api/method/ping || exit 1"]}
 
 		with patch("benchpress.docker_manager.bench_healthcheck", return_value=probe):
@@ -322,7 +323,7 @@ class TestDockerManagerBlockIO(FakeDockerMixin, IntegrationTestCase):
 	def test_the_switch_off_leaves_the_key_off_the_create(self):
 		"""Not an empty healthcheck: the daemon reads one as a healthcheck that always fails."""
 		lab = _make_lab("healthcheck-off")
-		self.addCleanup(frappe.delete_doc, "Lab", lab.name, force=True, ignore_permissions=True)
+		self.addCleanup(drop, "Lab", lab.name)
 
 		with patch("benchpress.docker_manager.bench_healthcheck", return_value=None):
 			kwargs = self._container_create_kwargs(lab)
@@ -332,7 +333,7 @@ class TestDockerManagerBlockIO(FakeDockerMixin, IntegrationTestCase):
 	def test_the_container_is_stamped_with_the_managed_labels(self):
 		"""`containers.list` filtering and every reconcile pass key off these."""
 		lab = _make_lab("labels")
-		self.addCleanup(frappe.delete_doc, "Lab", lab.name, force=True, ignore_permissions=True)
+		self.addCleanup(drop, "Lab", lab.name)
 
 		kwargs = self._container_create_kwargs(lab)
 
@@ -342,7 +343,7 @@ class TestDockerManagerBlockIO(FakeDockerMixin, IntegrationTestCase):
 
 	def test_lab_block_io_limits_passed_to_container(self):
 		lab = _make_lab("blockio-custom", iops_limit=500, bps_limit=2 * 1024 * 1024)
-		self.addCleanup(frappe.delete_doc, "Lab", lab.name, force=True, ignore_permissions=True)
+		self.addCleanup(drop, "Lab", lab.name)
 
 		kwargs = self._container_create_kwargs(lab)
 
@@ -354,7 +355,7 @@ class TestDockerManagerBlockIO(FakeDockerMixin, IntegrationTestCase):
 	def test_unset_block_io_limits_fall_back_to_defaults(self):
 		# iops_limit / bps_limit default to 0, which means "use the default".
 		lab = _make_lab("blockio-default")
-		self.addCleanup(frappe.delete_doc, "Lab", lab.name, force=True, ignore_permissions=True)
+		self.addCleanup(drop, "Lab", lab.name)
 
 		kwargs = self._container_create_kwargs(lab)
 
@@ -363,7 +364,7 @@ class TestDockerManagerBlockIO(FakeDockerMixin, IntegrationTestCase):
 
 	def test_lab_pids_limit_passed_to_container(self):
 		lab = _make_lab("pids-custom", pids_limit=250)
-		self.addCleanup(frappe.delete_doc, "Lab", lab.name, force=True, ignore_permissions=True)
+		self.addCleanup(drop, "Lab", lab.name)
 
 		kwargs = self._container_create_kwargs(lab)
 
@@ -372,7 +373,7 @@ class TestDockerManagerBlockIO(FakeDockerMixin, IntegrationTestCase):
 	def test_unset_pids_limit_falls_back_to_default(self):
 		# pids_limit defaults to 0, which means "use the default".
 		lab = _make_lab("pids-default")
-		self.addCleanup(frappe.delete_doc, "Lab", lab.name, force=True, ignore_permissions=True)
+		self.addCleanup(drop, "Lab", lab.name)
 
 		kwargs = self._container_create_kwargs(lab)
 
@@ -380,7 +381,7 @@ class TestDockerManagerBlockIO(FakeDockerMixin, IntegrationTestCase):
 
 	def test_the_container_is_created_on_the_bench_own_network(self):
 		lab = _make_lab("network-family")
-		self.addCleanup(frappe.delete_doc, "Lab", lab.name, force=True, ignore_permissions=True)
+		self.addCleanup(drop, "Lab", lab.name)
 
 		kwargs = self._container_create_kwargs(lab, bridge_network="benchpress-1")
 
@@ -389,7 +390,7 @@ class TestDockerManagerBlockIO(FakeDockerMixin, IntegrationTestCase):
 	def test_a_bench_with_no_network_falls_back_to_the_legacy_one(self):
 		"""A row the backfill has not reached must not be sent to a bridge it is not on."""
 		lab = _make_lab("network-legacy")
-		self.addCleanup(frappe.delete_doc, "Lab", lab.name, force=True, ignore_permissions=True)
+		self.addCleanup(drop, "Lab", lab.name)
 
 		kwargs = self._container_create_kwargs(lab, bridge_network="")
 
@@ -398,7 +399,7 @@ class TestDockerManagerBlockIO(FakeDockerMixin, IntegrationTestCase):
 	def test_runc_passes_no_runtime_kwarg(self):
 		"""A runc bench must produce the call it produced before runtimes existed."""
 		lab = _make_lab("runtime-runc")
-		self.addCleanup(frappe.delete_doc, "Lab", lab.name, force=True, ignore_permissions=True)
+		self.addCleanup(drop, "Lab", lab.name)
 
 		kwargs = self._container_create_kwargs(lab, runtime="runc")
 
@@ -406,7 +407,7 @@ class TestDockerManagerBlockIO(FakeDockerMixin, IntegrationTestCase):
 
 	def test_sysbox_passes_the_registered_runtime_name(self):
 		lab = _make_lab("runtime-sysbox")
-		self.addCleanup(frappe.delete_doc, "Lab", lab.name, force=True, ignore_permissions=True)
+		self.addCleanup(drop, "Lab", lab.name)
 
 		kwargs = self._container_create_kwargs(lab, runtime="sysbox")
 
@@ -414,7 +415,7 @@ class TestDockerManagerBlockIO(FakeDockerMixin, IntegrationTestCase):
 
 	def test_unknown_runtime_is_refused_before_docker(self):
 		lab = _make_lab("runtime-unknown")
-		self.addCleanup(frappe.delete_doc, "Lab", lab.name, force=True, ignore_permissions=True)
+		self.addCleanup(drop, "Lab", lab.name)
 
 		with self.assertRaises(frappe.ValidationError):
 			self._container_create_kwargs(lab, runtime="gvisor")
@@ -585,7 +586,7 @@ class TestDockerManagerTierKnobs(FakeDockerMixin, IntegrationTestCase):
 	def setUp(self):
 		super().setUp()
 		self.lab = _make_lab("tier-knobs")
-		self.addCleanup(frappe.delete_doc, "Lab", self.lab.name, force=True, ignore_permissions=True)
+		self.addCleanup(drop, "Lab", self.lab.name)
 
 	def _create(self, size, *, cpu_count=2, disk_quota=False):
 		"""Create against the fake and return what came back beside the create kwargs."""

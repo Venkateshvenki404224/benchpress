@@ -4,9 +4,8 @@
 """The read side of the public site: the shipped copy, shaped the way each template reads it."""
 
 import frappe
-from frappe.utils import cint, get_build_version
+from frappe.utils import cint, get_build_version, get_url
 
-from benchpress.analytics import tracker
 from benchpress.credits.config import SIGNUP_ROUTE, credits_enabled, waitlist_open
 from benchpress.request_cache import clear_local_cache, local_cache
 
@@ -14,6 +13,7 @@ LANDING_ATTRIBUTE = "benchpress_landing_content"
 ABOUT_ATTRIBUTE = "benchpress_about_content"
 
 REPO_URL = "https://github.com/Venkateshvenki404224/benchpress"
+VPN_REPO_URL = "https://github.com/Venkateshvenki404224/vpn_management"
 
 FORUM_URL = (
 	"https://discuss.frappe.io/t/introducing-benchpress-self-hosted-frappe-cloud-alternative"
@@ -25,18 +25,43 @@ FORUM_REPLIES = 20
 # The branded access-request page; `SIGNUP_ROUTE` is Frappe's own login page. Never both open.
 WAITLIST_ROUTE = "/signup"
 
-# A nav CTA aimed at either follows the switch; one aimed anywhere else is left alone.
-SIGNUP_DOORS = (WAITLIST_ROUTE, SIGNUP_ROUTE)
-
 LOGIN_ROUTE = "/login"
 CONSOLE_ROUTE = "/frontend"
 DOCS_ROUTE = "/docs/index"
 DOCS_INSTALL_ROUTE = "/docs/operator/install"
+DOCS_PREREQ_ROUTE = "/docs/operator/prerequisites"
+
+# The self-host page carries the primary business goal, so it owns the primary CTA. It ends in
+# the install guide rather than repeating it.
+SELF_HOST_ROUTE = "/self-host"
+SERVICES_ROUTE = "/services"
+
+# Comparison pages. `/vs/<slug>` is the reserved namespace; the frame is a different layer,
+# never a cheaper substitute.
+VS_FRAPPE_DOCKER_ROUTE = "/vs/frappe-docker"
+VS_FRAPPE_MANAGER_ROUTE = "/vs/frappe-manager"
+VS_FRAPPE_PILOT_ROUTE = "/vs/frappe-pilot"
+
+# Verbatim from /docs/operator/install. BenchPress installs into a bench you already run, so
+# there is no `git clone` path — every public surface that shows commands shows these.
+INSTALL_COMMANDS = (
+	"cd /path/to/your/frappe-bench\n"
+	f"bench get-app {VPN_REPO_URL} --branch version-16\n"
+	f"bench get-app {REPO_URL} --branch version-16\n"
+	"bench pip install docker\n"
+	"bench --site <site> install-app benchpress\n"
+	"bench --site <site> migrate"
+)
+
+SETUP_COMMAND = "bash apps/benchpress/setup.sh <site> --strict"
 
 AWARD_URL = "https://fossunited.org/hack/fosshack26/p/f5fk2d9gqd"
 
 # A waitlist is not a free start, so the hosted CTA is named for whichever door is open.
 WAITLIST_CTA_LABEL = "Request access"
+
+# The primary door. The install guide converts better than the repo for someone still deciding.
+SELFHOST_CTA_LABEL = "Install it on your server"
 
 # Both logout endpoints are POST-only, so the header signs out through a form, not a link.
 LOGOUT_METHOD = "frappe.handler.web_logout"
@@ -78,8 +103,12 @@ def chrome_content() -> dict:
 		"logout_method": LOGOUT_METHOD,
 		"csrf_token": session_csrf_token(),
 		"asset_version": asset_version(),
-		"analytics": tracker(),
 	}
+
+
+def canonical_url(route: str) -> str:
+	"""The one address a page should be indexed under. `/landing` names `/`, not itself."""
+	return get_url(route)
 
 
 def preview_tags(title: str, description: str, image: str = "") -> dict:
@@ -117,28 +146,16 @@ def signup_cta_label(seed_label: str) -> str:
 
 
 def nav_items(items: list, settings, route: str) -> list:
-	"""The header's link rows, with the CTA pointed at whichever door is actually open."""
-	if not credits_enabled():
-		return [*(row for row in items if not cint(row.is_cta)), selfhost_cta(settings)]
-	return [repointed(row, route) if cint(row.is_cta) else row for row in items]
-
-
-def repointed(row, route: str):
-	"""One nav row, aimed at `route` and named for whichever door that is."""
-	if row.anchor not in SIGNUP_DOORS:
-		return row
-	return frappe._dict({**row, "anchor": route, "label": signup_cta_label(row.label)})
+	"""The header's rows. The one button is always self-host; hosted is a plain link beside it."""
+	rows = [row for row in items if not cint(row.is_cta)]
+	if credits_enabled():
+		rows.append(frappe._dict({"label": signup_cta_label("Start free"), "anchor": route, "is_cta": 0}))
+	return [*rows, selfhost_cta(settings)]
 
 
 def selfhost_cta(settings):
-	"""The header CTA when credits are off: there is no hosted account to sign up for."""
-	return frappe._dict(
-		{
-			"label": settings.paths_self_cta_label or "Read the repo",
-			"anchor": settings.paths_self_cta_url or REPO_URL,
-			"is_cta": 1,
-		}
-	)
+	"""The header CTA. Self-hosting is the goal, so it owns the one button that stands out."""
+	return frappe._dict({"label": SELFHOST_CTA_LABEL, "anchor": SELF_HOST_ROUTE, "is_cta": 1})
 
 
 def clear_content_cache() -> None:
@@ -242,9 +259,9 @@ def phase_key(row) -> str:
 # The shipped copy: the only thing any public page renders.
 
 HERO_SUBHEAD = (
-	"Pick a version and an app set. Press deploy. BenchPress builds an isolated Docker "
-	"environment with its own site, database and browser VS Code, and puts it on your "
-	"private WireGuard mesh. No bench commands, no SSH, no ticket to the one person who knows."
+	"Describe a lab once — a Frappe version and an app list. Anyone on the team deploys it "
+	"in a click, works in it over SSH or browser VS Code, and destroys it when the task is "
+	"done. Self-hosted on one box, on your own private network."
 )
 
 FOOTER_TRADEMARK = (
@@ -260,17 +277,17 @@ LANDING_SEED = {
 	"hero_badge_version": "v16",
 	"hero_award_text": "FOSS Hack 2026 winner",
 	"hero_award_url": AWARD_URL,
-	"hero_headline": "A Frappe environment in the time it takes to read this line.",
-	"hero_headline_accent": "read this line.",
+	"hero_headline": "Frappe dev environments your team can deploy themselves.",
+	"hero_headline_accent": "deploy themselves.",
 	"hero_subhead": HERO_SUBHEAD,
-	"hero_cta_primary_label": "Start free",
-	"hero_cta_primary_url": "/signup",
-	"hero_cta_secondary_label": "Self-host it instead",
-	"hero_cta_secondary_url": "#paths",
+	"hero_cta_hosted_label": "Start free",
+	"hero_cta_hosted_url": "/signup",
+	"hero_cta_selfhost_label": SELFHOST_CTA_LABEL,
+	"hero_cta_selfhost_url": SELF_HOST_ROUTE,
 	"hero_assurances": [
-		{"label": "No card required"},
-		{"label": "Bring your own server"},
-		{"label": "Failed builds are free"},
+		{"label": "One box, Docker"},
+		{"label": "No account, no telemetry"},
+		{"label": "Your data stays on your host"},
 	],
 	# templates marquee
 	"templates_eyebrow": "Templates",
@@ -301,12 +318,12 @@ LANDING_SEED = {
 		"in-house. No account, no telemetry, no ceiling on labs."
 	),
 	"paths_self_terminal": (
-		"$ git clone github.com/Venkateshvenki404224/benchpress\n$ cd benchpress && ./setup.sh"
+		"$ bench --site <site> install-app benchpress\n$ bash apps/benchpress/setup.sh <site>"
 	),
 	"paths_self_cta_label": "Read the repo",
 	"paths_self_cta_url": REPO_URL,
 	"paths_self_cta2_label": "Have us install it",
-	"paths_self_cta2_url": "#services",
+	"paths_self_cta2_url": SERVICES_ROUTE,
 	"paths_footnote": "Same code either way — the hosted build is this repo with billing attached.",
 	"path_points": [
 		{
@@ -700,7 +717,7 @@ LANDING_SEED = {
 			"title": "Managed hosting",
 			"body": (
 				"We run the host, the mesh and the upgrades. You get a console, a credit "
-				"balance and someone to call."
+				"balance and someone to call in business hours."
 			),
 			"meta_label": "Hosted · monthly",
 		},
@@ -732,7 +749,7 @@ LANDING_SEED = {
 				"Half a day on bench, labs and the deploy pipeline, so the next new joiner "
 				"onboards themselves."
 			),
-			"meta_label": "Remote or on-site",
+			"meta_label": "Remote",
 		},
 	],
 	"services_cta_title": "Not sure which door is yours?",
@@ -740,8 +757,8 @@ LANDING_SEED = {
 		"Tell us the team size, the server you have and what breaks today. We will say "
 		"plainly whether you need us at all."
 	),
-	"services_cta_label": "Book a 20-minute call",
-	"services_cta_url": "/contact",
+	"services_cta_label": "What each engagement includes",
+	"services_cta_url": SERVICES_ROUTE,
 	# about — a teaser for `/about`; the numbers below it come from `ABOUT_SEED`.
 	"about_eyebrow": "About",
 	"about_title": "We built this because onboarding cost us half a day, every time.",
@@ -764,55 +781,99 @@ LANDING_SEED = {
 	"forum_link_url": FORUM_URL,
 	# faq
 	"faq_title": "Questions",
+	# Every answer names its subject in the first clause: an assistant quotes the answer without
+	# the question, and "No." on its own carries nothing.
 	"faq_items": [
 		{
-			"question": "Do I need to know bench or Docker?",
+			"question": "What is BenchPress?",
 			"answer": (
-				"No. Deploying a template needs a name and a click. Bench commands only show "
-				"up in the log, and only if you expand it."
+				"BenchPress is a self-hosted tool for handing out Frappe development "
+				"environments. Someone describes a lab once — a Frappe version and an app list "
+				"— and anyone on the team deploys it in a click, works in it over SSH or "
+				"browser VS Code, and destroys it when the task is done."
 			),
 			"default_open": 1,
 		},
 		{
+			"question": "Do I need to know bench or Docker?",
+			"answer": (
+				"No. Deploying a BenchPress template needs a name and a click. The bench "
+				"commands run inside the container and only appear in the deploy log, if you "
+				"expand it. Docker matters for whoever installs BenchPress on the server, not "
+				"for the people using it."
+			),
+			"default_open": 0,
+		},
+		{
+			"question": "Is BenchPress free and open source?",
+			"answer": (
+				"Yes. BenchPress is published under AGPL-3.0 and won FOSS Hack 2026. "
+				"Self-hosting it costs nothing, needs no account and sends no telemetry. The "
+				"hosted build is the same repository with billing attached."
+			),
+			"default_open": 0,
+		},
+		{
 			"question": "What is the difference between hosted and self-hosted?",
 			"answer": (
-				"The code — there isn't any. The hosted build is this repo with billing "
-				"attached. Hosted means we run the server, the mesh and the upgrades; "
-				"self-hosted means you do, for free, forever."
+				"There is no difference in the code: the hosted build of BenchPress is this "
+				"repository with billing attached. Hosted means we run the server, the mesh and "
+				"the upgrades. Self-hosted means you run them, for free, forever."
+			),
+			"default_open": 0,
+		},
+		{
+			"question": "What do I need to self-host BenchPress?",
+			"answer": (
+				"BenchPress needs a Linux server with Docker, an existing Frappe v16 bench and a "
+				"domain you control. Disk is the binding constraint: lab images measured 5.5 GB "
+				"to 19.7 GB here, so provision 100 GB free for one image and 250 GB for a "
+				"catalog. A 20 GB VPS disk fails mid-build."
 			),
 			"default_open": 0,
 		},
 		{
 			"question": "Where do the environments actually run?",
 			"answer": (
-				"As Docker containers on a server — ours on the hosted build, or one you "
-				"connect: your VPS, your bare metal, a machine in the office. BenchPress "
-				"orchestrates; it doesn't hold your data."
+				"BenchPress environments run as Docker containers on a server — ours on the "
+				"hosted build, or one you connect: your VPS, your bare metal, a machine in the "
+				"office. BenchPress orchestrates the containers; it doesn't hold your data."
+			),
+			"default_open": 0,
+		},
+		{
+			"question": "Is BenchPress a hosting platform for client sites?",
+			"answer": (
+				"No. BenchPress runs development and demo environments, disposable on purpose "
+				"and removed when the work is done. It is not a production hosting platform, and "
+				"a live client site does not belong on it."
 			),
 			"default_open": 0,
 		},
 		{
 			"question": "Can an agent spin environments up and down on its own?",
 			"answer": (
-				"Yes. Issue a scoped API key with a credit ceiling and a TTL. The agent "
-				"deploys, works, reads logs and destroys the instance; the ceiling stops a "
-				"runaway loop."
+				"Yes. A BenchPress API key can be scoped with a credit ceiling and a TTL: the "
+				"agent deploys, works, reads logs and destroys the instance. The ceiling stops a "
+				"runaway loop, and both limits are enforced server-side."
 			),
 			"default_open": 0,
 		},
 		{
 			"question": "What happens to credits if a build fails?",
 			"answer": (
-				"Nothing is charged. Failed builds and stopped instances are free; the ledger "
-				"in Settings shows every line so you can check."
+				"Nothing is charged when a build fails. Failed builds and stopped instances are "
+				"free on BenchPress; the ledger in Settings shows every line, so you can check "
+				"what was metered."
 			),
 			"default_open": 0,
 		},
 		{
 			"question": "Is the VPN optional?",
 			"answer": (
-				"On the hosted build, no — it's the access path. Self-hosted, you can expose "
-				"sites yourself, but the default assumes private."
+				"On the hosted build the WireGuard mesh is the access path, so it is not "
+				"optional. Self-hosted, you can expose sites yourself, but BenchPress defaults "
+				"to private: every environment answers on a mesh address, one key per device."
 			),
 			"default_open": 0,
 		},
@@ -827,32 +888,34 @@ LANDING_SEED = {
 		"GitHub sign-in is one click and needs no email verification. Self-hosting needs no account at all."
 	),
 	# chrome
+	# Pages only. An on-page anchor cannot be linked from anywhere off the page, and nine items
+	# read as a table of contents rather than a site — the landing sections are reachable from
+	# the footer instead. `/guides` joins this list when the wiki space exists.
 	"nav_items": [
-		{"label": "Hosted or self-host", "anchor": "/#paths", "is_cta": 0},
+		{"label": "Self-host", "anchor": SELF_HOST_ROUTE, "is_cta": 0},
 		{"label": "Docs", "anchor": DOCS_ROUTE, "is_cta": 0},
-		{"label": "Pipeline", "anchor": "/#how", "is_cta": 0},
-		{"label": "Console", "anchor": "/#console", "is_cta": 0},
-		{"label": "Agents", "anchor": "/#agents", "is_cta": 0},
-		{"label": "Services", "anchor": "/#services", "is_cta": 0},
+		{"label": "Services", "anchor": SERVICES_ROUTE, "is_cta": 0},
 		{"label": "About", "anchor": "/about", "is_cta": 0},
-		{"label": "Contact", "anchor": "/contact", "is_cta": 0},
 		{"label": "Start free", "anchor": "/signup", "is_cta": 1},
 	],
 	"footer_tagline": (
 		"Isolated Frappe environments, deployed in one click and kept on your private network."
 	),
+	# Three columns, and no two rows share a URL. The landing page's own sections live here,
+	# because the header carries pages only.
 	"footer_links": [
+		{"column_heading": "Product", "label": "Self-host it", "url": SELF_HOST_ROUTE},
+		{"column_heading": "Product", "label": "Services", "url": SERVICES_ROUTE},
+		{"column_heading": "Product", "label": "vs frappe_docker", "url": VS_FRAPPE_DOCKER_ROUTE},
+		{"column_heading": "Product", "label": "vs Frappe Manager", "url": VS_FRAPPE_MANAGER_ROUTE},
+		{"column_heading": "Product", "label": "vs Frappe Pilot", "url": VS_FRAPPE_PILOT_ROUTE},
 		{"column_heading": "Product", "label": "Pipeline", "url": "/#how"},
 		{"column_heading": "Product", "label": "Console", "url": "/#console"},
 		{"column_heading": "Product", "label": "Templates", "url": "/#top"},
-		{"column_heading": "Developers", "label": "Agent API", "url": "/#agents"},
 		{"column_heading": "Developers", "label": "Documentation", "url": DOCS_ROUTE},
 		{"column_heading": "Developers", "label": "Self-hosting guide", "url": DOCS_INSTALL_ROUTE},
+		{"column_heading": "Developers", "label": "Agent API", "url": "/#agents"},
 		{"column_heading": "Developers", "label": "GitHub", "url": REPO_URL},
-		{"column_heading": "Services", "label": "Managed hosting", "url": "/#services"},
-		{"column_heading": "Services", "label": "Setup on your server", "url": "/#services"},
-		{"column_heading": "Services", "label": "App development", "url": "/#services"},
-		{"column_heading": "Services", "label": "Training", "url": "/#services"},
 		{"column_heading": "Company", "label": "About us", "url": "/about"},
 		{"column_heading": "Company", "label": "Contact", "url": "/contact"},
 		{"column_heading": "Company", "label": "Sign in", "url": LOGIN_ROUTE},
@@ -860,8 +923,12 @@ LANDING_SEED = {
 	"footer_copyright": "© 2026 BenchPress. AGPL-3.0 licensed.",
 	"footer_trademark": FOOTER_TRADEMARK,
 	# seo
-	"meta_title": "BenchPress — a Frappe environment in one click",
-	"meta_description": HERO_SUBHEAD,
+	"meta_title": "BenchPress — Frappe dev environments your team can deploy themselves",
+	# Its own line, not the subhead: a search result truncates near 160 characters.
+	"meta_description": (
+		"Self-hosted Frappe dev environments. Describe a lab once — a version and an app "
+		"list — and anyone on the team deploys it in a click. Open source, AGPL-3.0."
+	),
 	"og_image": "",
 }
 

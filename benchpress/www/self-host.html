@@ -1,0 +1,184 @@
+{% extends "benchpress/templates/public_base.html" %}
+
+{#- lucide 0.451.0 path data; sizing is CSS, never a width/height attribute. -#}
+{%- macro svg(body, klass) -%}
+<svg class="{{ klass | e }}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">{{ body }}</svg>
+{%- endmacro -%}
+
+{%- macro arrow_right(klass="") -%}{{ svg('<path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>', klass) }}{%- endmacro -%}
+{%- macro clock(klass="") -%}{{ svg('<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>', klass) }}{%- endmacro -%}
+{%- macro eye(klass="") -%}{{ svg('<path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/>', klass) }}{%- endmacro -%}
+{%- macro github(klass="") -%}{{ svg('<path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/>', klass) }}{%- endmacro -%}
+{%- macro lock(klass="") -%}{{ svg('<rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>', klass) }}{%- endmacro -%}
+{%- macro server(klass="") -%}{{ svg('<rect width="20" height="8" x="2" y="2" rx="2" ry="2"/><rect width="20" height="8" x="2" y="14" rx="2" ry="2"/><line x1="6" x2="6.01" y1="6" y2="6"/><line x1="6" x2="6.01" y1="18" y2="18"/>', klass) }}{%- endmacro -%}
+{%- macro shield(klass="") -%}{{ svg('<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/>', klass) }}{%- endmacro -%}
+{%- macro terminal(klass="") -%}{{ svg('<polyline points="4 17 10 11 4 5"/><line x1="12" x2="20" y1="19" y2="19"/>', klass) }}{%- endmacro -%}
+{%- macro triangle_alert(klass="") -%}{{ svg('<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>', klass) }}{%- endmacro -%}
+{%- macro users(klass="") -%}{{ svg('<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>', klass) }}{%- endmacro -%}
+{%- macro dot_icon(klass="") -%}{{ svg('<circle cx="12" cy="12" r="9"/>', klass) }}{%- endmacro -%}
+
+{%- macro icon_by_name(name, klass="") -%}
+{%- if name == "server" -%}{{ server(klass) }}
+{%- elif name == "terminal" -%}{{ terminal(klass) }}
+{%- elif name == "shield" -%}{{ shield(klass) }}
+{%- elif name == "lock" -%}{{ lock(klass) }}
+{%- elif name == "users" -%}{{ users(klass) }}
+{%- elif name == "clock" -%}{{ clock(klass) }}
+{%- elif name == "eye" -%}{{ eye(klass) }}
+{%- else -%}{{ dot_icon(klass) }}
+{%- endif -%}
+{%- endmacro -%}
+
+{%- macro card_list(cards) -%}
+<ul class="bp-cards">
+	{%- for card in cards %}
+	<li class="bp-card">
+		{{ icon_by_name(card.icon, "bp-card__icon") }}
+		<h3 class="bp-card__title">{{ card.title | default("", true) | e }}</h3>
+		{%- if card.body %}
+		<p class="bp-card__body">{{ card.body | e }}</p>
+		{%- endif %}
+	</li>
+	{%- endfor %}
+</ul>
+{%- endmacro -%}
+
+{% block title %}{{ (meta_title or title) | e }}{% endblock %}
+
+{% block head_include %}
+{{ include_style('bp-pages.bundle.css') }}
+{% endblock %}
+
+{% block page_content %}
+<div class="bp" data-mode="{{ mode_default | e }}">
+{% include "templates/includes/site_header.html" %}
+
+<main id="bp-content" class="bp-page bp-page--self-host">
+
+<section class="bp-hero" id="self-host" data-r="sec">
+	<div class="bp-hero__dots" aria-hidden="true"></div>
+	<div class="bp-shell bp-hero__inner" data-r="pad hero">
+		{%- if settings.eyebrow %}
+		<p class="bp-eyebrow">{{ settings.eyebrow | e }}</p>
+		{%- endif %}
+		<h1 class="bp-hero__title">{{ settings.title | e }}</h1>
+		{%- if settings.lede %}
+		{#- Shipped HTML, not input: the seed in `www/self_host.py` is the only source. -#}
+		<div class="bp-prose bp-hero__lede">{{ settings.lede }}</div>
+		{%- endif %}
+		<div class="bp-hero__actions">
+			<a class="bp-btn bp-btn--lg bp-btn--primary" href="{{ settings.cta_url | e }}">{{ settings.cta_label | e }}{{ arrow_right("bp-btn__icon") }}</a>
+			<a class="bp-btn bp-btn--lg" href="{{ settings.cta2_url | e }}">{{ github("bp-btn__icon") }}{{ settings.cta2_label | e }}</a>
+		</div>
+		<p class="bp-prose bp-prose--small bp-hero__aside">
+			<a class="bp-morelink" href="{{ settings.compare_url | e }}">{{ settings.compare_label | e }}{{ arrow_right("bp-btn__icon") }}</a>
+		</p>
+	</div>
+</section>
+
+<section class="bp-section bp-section--tight" id="warning">
+	<div class="bp-shell" data-r="pad">
+		<div class="bp-panel bp-panel--warn">
+			<h2 class="bp-eyebrow bp-panel__eyebrow">{{ triangle_alert("bp-panel__icon") }}{{ settings.warn_title | e }}</h2>
+			{#- Shipped HTML. -#}
+			<div class="bp-prose">{{ settings.warn_body }}</div>
+		</div>
+	</div>
+</section>
+
+<section class="bp-section" id="requirements" data-r="sec">
+	<div class="bp-shell" data-r="pad">
+		<h2 class="bp-h2">{{ settings.reqs_title | e }}</h2>
+		{#- Shipped HTML. -#}
+		<div class="bp-prose bp-section__lede">{{ settings.reqs_lede }}</div>
+		{{ card_list(settings.req_cards) }}
+		<p class="bp-prose bp-prose--small bp-section__closing">
+			<a class="bp-morelink" href="{{ settings.reqs_note_url | e }}">{{ settings.reqs_note_label | e }}{{ arrow_right("bp-btn__icon") }}</a>
+		</p>
+	</div>
+</section>
+
+<section class="bp-section bp-section--tight" id="sizing" data-r="sec">
+	<div class="bp-shell" data-r="pad">
+		<h2 class="bp-h2">{{ settings.sizing_title | e }}</h2>
+		{#- Shipped HTML. -#}
+		<div class="bp-prose bp-section__lede">{{ settings.sizing_lede }}</div>
+		<ul class="bp-stats">
+			{%- for stat in settings.sizing_stats %}
+			<li class="bp-stat">
+				<b class="bp-stat__value">{{ stat.value | e }}</b>
+				<span class="bp-stat__label">{{ stat.label | e }}</span>
+			</li>
+			{%- endfor %}
+		</ul>
+	</div>
+</section>
+
+<section class="bp-section" id="install" data-r="sec">
+	<div class="bp-shell" data-r="pad">
+		<h2 class="bp-h2">{{ settings.install_title | e }}</h2>
+		{#- Shipped HTML. -#}
+		<div class="bp-prose bp-section__lede">{{ settings.install_lede }}</div>
+		<ol class="bp-steps">
+			{%- for step in settings.install_steps %}
+			<li class="bp-step">
+				<span class="bp-step__n" aria-hidden="true">{{ step.number | e }}</span>
+				<div class="bp-step__body">
+					<h3 class="bp-step__title">{{ step.title | e }}</h3>
+					<p class="bp-step__text">{{ step.body | e }}</p>
+					{%- if step.command %}
+					<pre class="bp-cmd" tabindex="0" data-ondark><code>{{ step.command | e }}</code></pre>
+					{%- endif %}
+				</div>
+			</li>
+			{%- endfor %}
+		</ol>
+	</div>
+</section>
+
+<section class="bp-section" id="after" data-r="sec">
+	<div class="bp-shell" data-r="pad">
+		<h2 class="bp-h2">{{ settings.next_title | e }}</h2>
+		{{ card_list(settings.next_cards) }}
+	</div>
+</section>
+
+<section class="bp-section" id="breaks" data-r="sec">
+	<div class="bp-shell" data-r="pad">
+		<h2 class="bp-h2">{{ settings.breaks_title | e }}</h2>
+		{#- Shipped HTML. -#}
+		<div class="bp-prose bp-section__lede">{{ settings.breaks_lede }}</div>
+		<dl class="bp-breaks">
+			{%- for row in settings.breaks %}
+			<div class="bp-break">
+				<dt class="bp-break__symptom">{{ row.symptom | e }}</dt>
+				<dd class="bp-break__meaning">{{ row.meaning | e }}</dd>
+			</div>
+			{%- endfor %}
+		</dl>
+		<p class="bp-prose bp-prose--small bp-section__closing">
+			<a class="bp-morelink" href="{{ settings.breaks_note_url | e }}">{{ settings.breaks_note_label | e }}{{ arrow_right("bp-btn__icon") }}</a>
+		</p>
+	</div>
+</section>
+
+<section class="bp-section bp-section--last" id="services" data-r="sec">
+	<div class="bp-shell" data-r="pad">
+		<div class="bp-cta-panel">
+			<div class="bp-cta-panel__text">
+				<h2 class="bp-cta-panel__title">{{ settings.closing_title | e }}</h2>
+				<p class="bp-cta-panel__body">{{ settings.closing_body | e }}</p>
+			</div>
+			<div class="bp-hero__actions">
+				<a class="bp-btn bp-btn--lg bp-btn--primary" href="{{ settings.closing_cta_url | e }}">{{ settings.closing_cta_label | e }}{{ arrow_right("bp-btn__icon") }}</a>
+				<a class="bp-btn bp-btn--lg" href="{{ settings.closing_cta2_url | e }}">{{ settings.closing_cta2_label | e }}</a>
+			</div>
+		</div>
+	</div>
+</section>
+
+</main>
+
+{% include "templates/includes/site_footer.html" %}
+</div>
+{% endblock %}

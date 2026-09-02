@@ -23,6 +23,12 @@ JOIN_SENDER = "benchpress.waitlist.send_notice"
 DECISION_SENDER = "benchpress.benchpress.doctype.waitlist_entry.waitlist_entry.send_notice"
 
 
+def _app_roles(user_doc) -> list[str]:
+	# Only the roles this app grants. Another installed app appending its own is not a failure
+	# here — the wiki app gives every new user `Wiki User`.
+	return [row.role for row in user_doc.roles if row.role.startswith("BenchPress")]
+
+
 def _delete_entry(email):
 	if frappe.db.exists("Waitlist Entry", email):
 		frappe.delete_doc("Waitlist Entry", email, force=True, ignore_permissions=True)
@@ -163,7 +169,7 @@ class TestWaitlist(IntegrationTestCase):
 
 		self.assertEqual(result["approved"], 1)
 		user = frappe.get_doc("User", EMAIL)
-		self.assertEqual([row.role for row in user.roles], [ACCESS_ROLE])
+		self.assertEqual(_app_roles(user), [ACCESS_ROLE])
 		entry = frappe.get_doc("Waitlist Entry", EMAIL)
 		self.assertEqual(entry.status, "Approved")
 		self.assertIsNotNone(entry.approved_on)
@@ -194,7 +200,7 @@ class TestWaitlist(IntegrationTestCase):
 		waitlist.approve([EMAIL])
 		waitlist.approve([EMAIL])
 
-		self.assertEqual([row.role for row in frappe.get_doc("User", EMAIL).roles], [ACCESS_ROLE])
+		self.assertEqual(_app_roles(frappe.get_doc("User", EMAIL)), [ACCESS_ROLE])
 
 	def test_approval_is_denied_to_a_non_admin(self):
 		waitlist.join(EMAIL)

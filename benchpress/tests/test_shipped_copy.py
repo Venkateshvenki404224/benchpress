@@ -17,7 +17,12 @@ from benchpress.benchpress.site_content import (
 )
 from benchpress.www.contact import CONTACT_SEED
 from benchpress.www.login import LOGIN_SEED
+from benchpress.www.self_host import SELF_HOST_SEED
+from benchpress.www.services import SERVICES_SEED
 from benchpress.www.signup import SIGNUP_SEED
+from benchpress.www.vs.frappe_docker import COMPARISON_SEED as DOCKER_SEED
+from benchpress.www.vs.frappe_manager import COMPARISON_SEED as MANAGER_SEED
+from benchpress.www.vs.frappe_pilot import COMPARISON_SEED as PILOT_SEED
 
 BENCHPRESS_SETTINGS = "BenchPress Settings"
 
@@ -26,6 +31,11 @@ SHIPPED_COPY = (
 	("/", LANDING_SEED["hero_subhead"]),
 	("/landing", LANDING_SEED["hero_subhead"]),
 	("/about", ABOUT_SEED["situation_eyebrow"]),
+	("/self-host", SELF_HOST_SEED["reqs_title"]),
+	("/services", SERVICES_SEED["offers_title"]),
+	("/vs/frappe-docker", DOCKER_SEED["credit_title"]),
+	("/vs/frappe-manager", MANAGER_SEED["credit_title"]),
+	("/vs/frappe-pilot", PILOT_SEED["credit_title"]),
 	("/contact", CONTACT_SEED["title"]),
 	("/signup", SIGNUP_SEED["title"]),
 	("/login", LOGIN_SEED["login_panel_title"]),
@@ -59,6 +69,16 @@ class TestShippedCopy(IntegrationTestCase):
 		for route, copy in SHIPPED_COPY:
 			with self.subTest(route=route):
 				self.assertIn(copy, self.render(route))
+
+	def test_the_public_site_shows_the_commands_that_actually_run(self):
+		# BenchPress installs into a bench you already run. A clone-and-run pair reads well and
+		# has never worked, so no public surface may carry one.
+		self_host = self.render("/self-host")
+		self.assertIn("bench get-app", self_host)
+		self.assertIn("apps/benchpress/setup.sh", self_host)
+		for route in ("/self-host", "/"):
+			with self.subTest(route=route):
+				self.assertNotIn("git clone", self.render(route))
 
 	def test_no_page_pays_a_query_for_its_copy(self):
 		clear_content_cache()

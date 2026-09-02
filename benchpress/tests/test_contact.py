@@ -177,10 +177,25 @@ class TestContactConfig(IntegrationTestCase):
 		)
 		with patch.object(contact, "TOPICS", routed):
 			self.assertEqual(contact.route_for("Bug"), "bugs@benchpress.example")
-			self.assertEqual(contact.route_for("Sales"), contact.CONTACT_EMAIL)
+			self.assertEqual(contact.route_for("Sales"), contact.notify_email())
 
-	def test_the_forwarding_address_ships_with_the_app(self):
-		self.assertEqual(contact.notify_email(), contact.CONTACT_EMAIL)
+	def test_no_forwarding_address_ships_with_the_app(self):
+		"""A shipped default once pointed at a domain the project does not own."""
+		with patch.dict(frappe.conf, {}, clear=False):
+			frappe.conf.pop(contact.NOTIFY_KEY, None)
+			self.assertEqual(contact.notify_email(), "")
+
+	def test_the_public_address_is_not_the_forwarding_address(self):
+		values = {contact.NOTIFY_KEY: "ops@benchpress.example"}
+		with patch.dict(frappe.conf, values):
+			frappe.conf.pop(contact.PUBLIC_KEY, None)
+			# An operator's inbox is not printed on the page just because mail goes there.
+			self.assertEqual(contact.notify_email(), "ops@benchpress.example")
+			self.assertEqual(contact.public_email(), "")
+
+	def test_the_public_address_has_its_own_key(self):
+		with patch.dict(frappe.conf, {contact.PUBLIC_KEY: "hello@benchpress.example"}):
+			self.assertEqual(contact.public_email(), "hello@benchpress.example")
 
 	def test_a_site_config_key_overrides_the_forwarding_address(self):
 		with patch.dict(frappe.conf, {contact.NOTIFY_KEY: "ops@benchpress.example"}):

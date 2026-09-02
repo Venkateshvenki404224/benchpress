@@ -18,8 +18,11 @@ MESSAGES_PER_HOUR = 3
 SUCCESS_BODY = "Thanks — it is in front of a person, not a queue. You will hear back within one business day."
 MAIL_ERROR_TITLE = "BenchPress contact mail failed"
 
-CONTACT_EMAIL = "hello@benchpress.dev"
+# Two different addresses. `NOTIFY_KEY` is where submissions are forwarded and is never shown;
+# `PUBLIC_KEY` is what the page prints and the JSON-LD publishes. Conflating them puts an
+# operator's personal inbox on a public page.
 NOTIFY_KEY = "benchpress_contact_email"
+PUBLIC_KEY = "benchpress_public_email"
 
 ACKNOWLEDGE_SENDER = True
 
@@ -59,7 +62,13 @@ def submit(name: str, email: str, message: str, topic: str | None = None) -> dic
 
 
 def notify_email() -> str:
-	return cstr(frappe.conf.get(NOTIFY_KEY)).strip() or CONTACT_EMAIL
+	"""Where a submission is forwarded. Empty means nobody has said, so nothing is sent."""
+	return cstr(frappe.conf.get(NOTIFY_KEY)).strip()
+
+
+def public_email() -> str:
+	"""The address the page prints. Empty means the site offers the form and GitHub instead."""
+	return cstr(frappe.conf.get(PUBLIC_KEY)).strip()
 
 
 def default_topic() -> str:

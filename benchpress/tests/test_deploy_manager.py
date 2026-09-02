@@ -18,6 +18,7 @@ from benchpress import deploy_manager, ingress, lifecycle
 from benchpress.benchpress.doctype.bench_instance import get_instance_id
 from benchpress.docker_manager import CreatedContainer
 from benchpress.tests.fakes import FakeDockerMixin, sql_of
+from benchpress.tests.fixtures import drop, drop_all
 from benchpress.tests.test_docker_manager import exec_commands, exec_environments
 
 # Any dotted quad, anywhere in the rendered file. The property routes must hold is that no
@@ -1064,6 +1065,9 @@ class TestTerminalStateNotifications(IntegrationTestCase):
 			frappe.delete_doc("Database Server", cls.db_server_name, force=True, ignore_permissions=True)
 		cls.lab.delete(ignore_permissions=True)
 		frappe.db.commit()
+		drop_all("Credit Ledger Entry", {"account": cls.owner})
+		drop("Credit Account", cls.owner)
+		drop("User", cls.owner)
 		super().tearDownClass()
 
 	def _owned_bench(self):
