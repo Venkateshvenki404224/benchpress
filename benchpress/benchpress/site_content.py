@@ -717,7 +717,7 @@ LANDING_SEED = {
 			"title": "Managed hosting",
 			"body": (
 				"We run the host, the mesh and the upgrades. You get a console, a credit "
-				"balance and someone to call."
+				"balance and someone to call in business hours."
 			),
 			"meta_label": "Hosted · monthly",
 		},
@@ -749,7 +749,7 @@ LANDING_SEED = {
 				"Half a day on bench, labs and the deploy pipeline, so the next new joiner "
 				"onboards themselves."
 			),
-			"meta_label": "Remote or on-site",
+			"meta_label": "Remote",
 		},
 	],
 	"services_cta_title": "Not sure which door is yours?",

@@ -15,8 +15,8 @@ from benchpress.public_site import require_public_site
 no_cache = 1
 sitemap = 1
 
-# No price, no rate and no response window: pricing is not decided, and a number on this page
-# would be the only one on the site.
+# No price and no rate: pricing is not decided, and a number on this page would be the only
+# one on the site.
 SERVICES_SEED = {
 	"eyebrow": "Done for you",
 	"title": "Have us do the parts you would rather not.",
@@ -49,9 +49,9 @@ SERVICES_SEED = {
 				"a credit balance and a ledger that shows every line."
 			),
 			"includes": [
-				"A host we run, patch and watch",
+				"A host we run and patch, watched in business hours",
 				"Per-device WireGuard keys, revocable in a click",
-				"Nightly database dumps, and the restore path tested",
+				"Nightly database dumps, and a documented restore",
 				"Upgrades, including the lab images",
 			],
 			"excludes": (
@@ -66,20 +66,26 @@ SERVICES_SEED = {
 			"title": "Setup on your server",
 			"meta_label": "One-time, fixed scope",
 			"body": (
-				"One engagement, on your machine, ending in a deploy you watched succeed. The "
-				"same six steps the guide describes, done by someone who has done them before."
+				"One engagement, on your machine, ending in a deploy you watched succeed. The six "
+				"steps the guide describes and the runtime it asks for first, done by someone who "
+				"has done them before."
 			),
 			"includes": [
 				"The preconditions checked on the host before anything is installed",
+				"sysbox-runc registered with Docker, so a lab's root is not your host's root",
 				"Both apps installed, the setup script run under --strict",
 				"WireGuard configured and your first device enrolled",
 				"Your lab templates seeded, and a first deploy proven green",
 				"The twelve diagnostics run in front of you, and the keys handed over",
 			],
-			"excludes": "Not buying, sizing or hardening the server. That stays yours.",
+			"excludes": (
+				"Not buying or sizing the server, and no hardening past the container runtime. "
+				"That stays yours."
+			),
 			"needs": (
-				"Shell access to a host that meets the prerequisites, and a domain you control "
-				"for the base domain."
+				"Root shell access to a host that meets the prerequisites, apart from the "
+				"container runtime, which we register. An existing Frappe v16 bench, 44556/UDP "
+				"open at your cloud firewall, and a domain you control for the base domain."
 			),
 		},
 		{
@@ -93,7 +99,7 @@ SERVICES_SEED = {
 			),
 			"includes": [
 				"A lab template pinned to the versions you run",
-				"The app, its tests and its documentation",
+				"The app, its tests and a handover document",
 				"A review at the end of each sprint, on a live environment you can open",
 			],
 			"excludes": "Not hosting the result. Deploy it wherever your production lives.",
@@ -103,7 +109,7 @@ SERVICES_SEED = {
 			"number": "04",
 			"icon": "layout-template",
 			"title": "Team training",
-			"meta_label": "Half a day, remote or on-site",
+			"meta_label": "Half a day, remote",
 			"body": (
 				"So the next new joiner onboards themselves, and nobody senior is the "
 				"environment help desk any more."
@@ -141,8 +147,8 @@ SERVICES_SEED = {
 			"title": "The work, then a handover",
 			"body": (
 				"Fixed scope for a setup, by sprint for app work, monthly for hosting. Every "
-				"engagement ends with the credentials, the documentation and a working deploy in "
-				"your hands."
+				"engagement ends with the credentials, a handover document and a working deploy "
+				"in your hands."
 			),
 		},
 	],
