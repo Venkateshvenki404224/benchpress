@@ -5,24 +5,24 @@
 This repo has 1450 Python tests, 153 SPA unit tests and a Playwright suite, and it runs six CI
 jobs across two workflows — but `version-16` carries no branch protection and no rulesets, so
 every one of those checks is advisory and a red run can still merge. That makes the local gate the
-real gate. Claude runs the checks before pushing rather than after, because nothing downstream
+real gate. Benchpress runs the checks before pushing rather than after, because nothing downstream
 will stop a mistake.
 
-The test before pushing: **which of these six jobs would this change turn red, and has Claude
+The test before pushing: **which of these six jobs would this change turn red, and has Benchpress
 actually run that one?**
 
 ## the_suites
 
 - Python tests run under Frappe's own runner — `bench --site <site> run-tests --app benchpress` —
   which is unittest, not pytest, so a pytest-only fixture or a bare `assert` idiom will not run.
-- Claude never names `frontend` as the test site. That site carries no `allow_tests`, and an
+- Benchpress never names `frontend` as the test site. That site carries no `allow_tests`, and an
   interrupted run leaves its scheduler disabled from a value the runner held in memory — a site
   with the scheduler off composes mail and never sends it, silently.
 - The site to use is `bp_test_site` locally and `test_site` in CI, where `ci.yml` sets
   `allow_tests true` before the run.
 - 72 test files hold the 1450 tests, and they mirror the module under test —
-  `benchpress/tests/test_docker_manager.py` for `benchpress/docker_manager.py`. Claude adds a test
-  to the mirror file rather than starting a new one.
+  `benchpress/tests/test_docker_manager.py` for `benchpress/docker_manager.py`. Benchpress adds a
+  test to the mirror file rather than starting a new one.
 - The SPA suite is `cd frontend && yarn test:run` — vitest over `src/**/*.spec.js`, 13 files.
   `yarn build` only proves the bundle compiles, which is why `ci.yml` runs both.
 - Playwright lives in `e2e/` with its own config; `cd e2e && npx playwright test` is the only
@@ -35,15 +35,15 @@ actually run that one?**
 
 - One command runs the Python and JavaScript gates together: `uvx pre-commit@4.3.0 run
   --all-files`, which is exactly what the `Frappe Linter` job runs.
-- Claude never runs `yarn lint`. That script is biome, a style this repo has never used, and it
+- Benchpress never runs `yarn lint`. That script is biome, a style this repo has never used, and it
   rewrites every file under `frontend/`.
 - ruff is configured at `pyproject.toml:26-27` with `line-length = 110` and
   `target-version = "py314"`, and it runs three times in pre-commit — import sorter, linter,
   formatter.
 - `E501` sits in the ignore list, so ruff does **not** enforce that 110-character limit; it is a
-  formatter target and a convention, and Claude honours it by hand.
+  formatter target and a convention, and Benchpress honours it by hand.
 - The formatter uses tabs and double quotes (`[tool.ruff.format]`), which is why the Python in
-  this tree is tab-indented — Claude matches it rather than reformatting a file it touched.
+  this tree is tab-indented — Benchpress matches it rather than reformatting a file it touched.
 - Nothing in this repo typechecks. There is no tracked `tsconfig.json`, the SPA is plain
   JavaScript, and the 23 `.ts` files are Playwright specs that only the ungated e2e run compiles.
 - Docstrings are capped at two lines by a `PostToolUse` hook,
@@ -64,7 +64,7 @@ actually run that one?**
   comment at `ci.yml:24-26` still describes `Server` and `Frontend` as required checks; the
   branch-protection API answers "Branch not protected", and the ruleset list is empty.
 - The path filter excludes `docs/`, `docs-site/`, `docs-bundle/`, `internal/` and every `.md` and
-  `.mdx`, so a docs-only change never wakes the 60-minute `Server` job — Claude does not add a
+  `.mdx`, so a docs-only change never wakes the 60-minute `Server` job — Benchpress does not add a
   code path to those exclusions.
 - Semgrep runs on pull requests only, deliberately: `semgrep ci` full-scans on push and would fail
   on findings no pull request has seen.
@@ -73,7 +73,7 @@ actually run that one?**
 
 ## commits_and_branches
 
-- `version-16` is the only trunk. Claude branches from it and targets it — `main` and `develop`
+- `version-16` is the only trunk. Benchpress branches from it and targets it — `main` and `develop`
   were abandoned at the 0.1.0 release, as `CONTRIBUTING.md:70-72` records, whatever
   `CLAUDE.md:232` still says.
 - A branch takes its commit type as a prefix: `feat/<name>`, `fix/<name>`, `docs/<name>`,

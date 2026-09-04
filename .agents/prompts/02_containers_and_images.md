@@ -17,7 +17,7 @@ operator's own machine, what could it reach that it does not own?**
   `benchpress.bench_name`, `benchpress.lab` — defined once at `docker_manager.py:50-52`, because
   `list_benches` (`docker_manager.py:619`) and the event stream (`docker_events.py:23`) both
   filter on `benchpress.managed=true` and an unlabelled container becomes invisible and immortal.
-- Claude never passes `privileged=True`. The tree contains zero uses, and
+- Benchpress never passes `privileged=True`. The tree contains zero uses, and
   `docker_manager.py:342-350` records the chain it would open: in-container root → host root →
   `docker exec benchpress-mariadb` → every tenant's database.
 - Capabilities are added one at a time and named: `cap_add=["NET_ADMIN"]` at
@@ -29,7 +29,7 @@ operator's own machine, what could it reach that it does not own?**
   on a shared host is a denial of service against every other bench.
 - A limit the host cannot enforce is reported, not silently dropped — `_storage_opt` returns a
   `disk_skipped` reason and `CreatedContainer.skipped` carries it to the operator.
-- Claude does not mount a named volume over `/home/frappe`; the comment at
+- Benchpress does not mount a named volume over `/home/frappe`; the comment at
   `docker_manager.py:359-360` measured the cost — a full bench copy on every create.
 
 ## healthchecks_and_runtime
@@ -39,11 +39,11 @@ operator's own machine, what could it reach that it does not own?**
   reports the wrong value back as if it were right.
 - The probe targets `localhost` inside the container (`BENCH_HEALTH_PROBE`), not the bridge, so it
   tests the server rather than the network path.
-- `starting` is neither healthy nor unhealthy — `HEALTH_LABELS` maps it to `Unknown`, and Claude
+- `starting` is neither healthy nor unhealthy — `HEALTH_LABELS` maps it to `Unknown`, and Benchpress
   keeps that third state rather than collapsing it into a failure.
 - A runtime is proven, not assumed: `preflight_runtime` runs a throwaway `alpine` container,
   because a broken runtime stays listed in `docker info` with its unit active.
-- Claude reads back what the daemon actually did — `container_runtime` and `container_network`
+- Benchpress reads back what the daemon actually did — `container_runtime` and `container_network`
   inspect `HostConfig` rather than trusting the value that was requested.
 
 ## images_and_the_build
@@ -51,28 +51,28 @@ operator's own machine, what could it reach that it does not own?**
 - An image tag is the content hash of its build spec (`image_cache.cache_tag`), never the lab id,
   so two labs with the same recipe share one image instead of each holding a private copy.
 - The Dockerfile's six layers are ordered cheapest-changing-last on purpose
-  (`benchpress/lab-templates/Dockerfile:10-64`); Claude adds a new step at the layer its inputs
+  (`benchpress/lab-templates/Dockerfile:10-64`); Benchpress adds a new step at the layer its inputs
   belong to, since a `COPY` moved upward invalidates `bench init` and the app clone beneath it.
 - Every `apt-get install` uses `--no-install-recommends` and ends with
   `rm -rf /var/lib/apt/lists/*` in the same `RUN`, because a cleanup in a later layer removes
   nothing from the image.
 - The build context is `benchpress/lab-templates/`, which holds only `Dockerfile` and `scripts/`.
-  There is no `.dockerignore`, so a file dropped into that directory ships to the daemon — Claude
-  adds one before adding anything else to that folder.
+  There is no `.dockerignore`, so a file dropped into that directory ships to the daemon —
+  Benchpress adds one before adding anything else to that folder.
 - `api_client.build(..., network_mode="host")` at `docker_manager.py:193-201` is an undocumented
-  deviation from the default bridge; Claude does not copy it elsewhere, and the team must confirm
-  whether the app clone still needs it.
+  deviation from the default bridge; Benchpress does not copy it elsewhere, and the team must
+  confirm whether the app clone still needs it.
 - Image tags across the tree float rather than pin: `frappe/build:${FRAPPE_BRANCH}`,
   `mariadb:${MARIADB_VERSION:-10.6}`, `valkey/valkey:8-alpine` and a default of
   `benchpress:latest` in `benchpress/config/docker-compose.yml:55`. A new service pins a version;
   `:latest` is never an acceptable default.
 - The image ends on `USER root` (`Dockerfile:58`) because sshd and code-server need it — that is a
   deliberate alpha trade recorded in the repository README (`README.md:51-64`), not a pattern
-  Claude extends to a new image.
+  Benchpress extends to a new image.
 
 ## removal_and_reconciliation
 
-- Claude removes a container only after confirming the `benchpress.managed` label, because the
+- Benchpress removes a container only after confirming the `benchpress.managed` label, because the
   reconciler runs unattended and a filter mistake deletes an operator's own workload.
 - `list_benches` includes stopped containers deliberately — an exited orphan still holds its
   writable layer, and a sweep that only saw running ones would never reclaim the disk.

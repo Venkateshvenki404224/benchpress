@@ -22,7 +22,7 @@ them asking for a row that is not theirs?**
 ## credentials
 
 - `get_bench_credentials` (`api.py:729`) and `get_code_server_credentials` (`api.py:715`) both open
-  with `require_bench_access(bench_name)` before decrypting anything — Claude keeps that call as
+  with `require_bench_access(bench_name)` before decrypting anything — Benchpress keeps that call as
   the first statement, because a check after a read has already done the read.
 - A stored password is read with `frappe.utils.password.get_decrypted_password`, never from a
   plain field, since the encrypted store is the only place these values legitimately live.
@@ -31,7 +31,7 @@ them asking for a row that is not theirs?**
 - `benchpress/config/.env.example` is the only credential-shaped file tracked, and it holds
   placeholders. A real value that reaches this repo is rotated first and stripped second —
   stripping alone leaves it in the history and in every clone.
-- Claude reports the location of a leaked secret as `path:line` and never reproduces the value,
+- Benchpress reports the location of a leaked secret as `path:line` and never reproduces the value,
   because a report that quotes a key spreads it into logs and chat.
 - SQL sent to a bench database is piped in base64 (`mariadb_manager.execute_sql`) so nothing is
   shell-interpolated, and it leaves no temp file behind on the failure path.
@@ -46,7 +46,7 @@ them asking for a row that is not theirs?**
 - A tenant-scoped doctype needs **both** halves of its rule: a `permission_query_conditions` entry
   and a `has_permission` entry, registered together at `hooks.py:142` and `hooks.py:152`. Query
   conditions reach only the list engine, so a doc read past one is unguarded.
-- Claude reuses `get_bench_owner_filter()` rather than writing `{"owner": frappe.session.user}`
+- Benchpress reuses `get_bench_owner_filter()` rather than writing `{"owner": frappe.session.user}`
   inline — ownership, not the role, decides which benches a person sees, and one function owns it.
 - A guest endpoint is `allow_guest=True` **and** `methods=["POST"]` **and** rate-limited. All three
   of them are — `benchpress/contact.py:45`, `benchpress/waitlist.py:26` and
@@ -56,18 +56,18 @@ them asking for a row that is not theirs?**
   alone is defeated by changing the email.
 - The whole public site is gated by `benchpress.public_site.require_public_site`, which raises
   `PageDoesNotExistError` while `benchpress_public_site` is unset. A self-hoster gets no
-  marketing pages, and Claude does not add a route that escapes that gate.
+  marketing pages, and Benchpress does not add a route that escapes that gate.
 
 ## output_escaping
 
 - Jinja autoescape is off in Frappe, so every template escapes by hand — there are 429 `| e`
   filters across `benchpress/www/` and `benchpress/templates/`, and a new value gets one.
 - A value rendered raw carries a comment saying what it is, as at `www/services.html:43-44`:
-  shipped HTML from a Python seed, a macro's output, or a framework helper's. Claude writes that
+  shipped HTML from a Python seed, a macro's output, or a framework helper's. Benchpress writes that
   comment or adds `| e`; there is no third option.
 - Guest-typed text reaches a mail template only through `benchpress/emails.py`, which wraps it in
-  `Markup` on the way — that is the one path, and Claude does not open another.
-- The SPA has zero `v-html` and zero `innerHTML` uses. Claude keeps both at zero, because Vue's
+  `Markup` on the way — that is the one path, and Benchpress does not open another.
+- The SPA has zero `v-html` and zero `innerHTML` uses. Benchpress keeps both at zero, because Vue's
   default interpolation already escapes and an exception here is an XSS sink by definition.
 
 ## client_side_state
@@ -80,7 +80,7 @@ them asking for a row that is not theirs?**
 - Requests from the public pages send `credentials: "same-origin"` and a CSRF header taken from
   `data-csrf-token` on the body — the marketing templates emit no boot payload, so the token has
   no other source.
-- Claude does not log a response or an error object wholesale; the 36 `frappe.log_error` sites
+- Benchpress does not log a response or an error object wholesale; the 36 `frappe.log_error` sites
   pass a title and either a traceback or a formatted string, never a raw payload.
 
 ## what_not_to_do

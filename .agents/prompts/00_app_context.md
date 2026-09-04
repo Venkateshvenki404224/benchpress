@@ -5,7 +5,7 @@
 BenchPress is a Frappe app that drives the Docker daemon on the host it is installed on, so a
 careless change here costs a host rather than a page. It is alpha software with one live public
 deployment, and its control plane holds every tenant's bench credentials in plain reach of a
-whitelisted endpoint. Claude reads this file first and then the axis file that matches the work.
+whitelisted endpoint. Benchpress reads this file first and then the axis file that matches the work.
 
 The test before touching any file in this repo: **does this change still hold on a host somebody
 else runs, with somebody else's benches on it?**
@@ -49,7 +49,7 @@ else runs, with somebody else's benches on it?**
 - Behavior hides in `benchpress/hooks.py` — `doc_events`, `permission_query_conditions`,
   `has_permission`, `override_whitelisted_methods` and 11 scheduler entries all live there.
 - No duplicated-concept folders exist: there is one `utils/` in the SPA and no `helpers/` twin,
-  and Claude does not create one.
+  and Benchpress does not create one.
 
 ## known_live_defects
 
