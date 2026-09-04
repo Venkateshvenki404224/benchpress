@@ -278,6 +278,20 @@ clutter: test users have been found on the live site still holding
 - **Docs, commit messages, PR descriptions, the README** → `technical-writing`.
 - **New or changed doctype forms/list views** → `ui-design`.
 
+## Working prompts (read before you code)
+
+Six standing prompts under [.agents/prompts/](.agents/prompts/), measured on this repository.
+Read `00` once per session, then the axis that matches the task.
+
+| File | Read it when |
+|---|---|
+| [00_app_context.md](.agents/prompts/00_app_context.md) | Always first — what the app is, how it is shaped, the live defects not to add to |
+| [01_use_the_framework_first.md](.agents/prompts/01_use_the_framework_first.md) | Adding a library, a client, a query or a helper |
+| [02_containers_and_images.md](.agents/prompts/02_containers_and_images.md) | Touching Docker — image builds, container options, labels, removal |
+| [03_security_and_credentials.md](.agents/prompts/03_security_and_credentials.md) | Writing an endpoint, a permission rule or a template that renders a value |
+| [04_data_access_and_cost.md](.agents/prompts/04_data_access_and_cost.md) | Writing a query, a loop or a component, or changing the build |
+| [05_verification_gates.md](.agents/prompts/05_verification_gates.md) | Before running tests, linting, committing or pushing |
+
 ## Agent skills
 
 ### Issue tracker
