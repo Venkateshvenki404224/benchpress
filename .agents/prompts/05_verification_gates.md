@@ -75,7 +75,7 @@ actually run that one?**
 
 - `version-16` is the only trunk. Benchpress branches from it and targets it — `main` and `develop`
   were abandoned at the 0.1.0 release, as `CONTRIBUTING.md:70-72` records, whatever
-  `CLAUDE.md:232` still says.
+  `CLAUDE.md:241` still says.
 - A branch takes its commit type as a prefix: `feat/<name>`, `fix/<name>`, `docs/<name>`,
   `refactor/<name>`, `test/<name>`, `chore/<name>`.
 - Conventional Commits are the rule and nothing enforces them — 51 of the last 200 non-merge
