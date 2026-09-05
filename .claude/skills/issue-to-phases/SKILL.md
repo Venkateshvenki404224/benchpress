@@ -207,9 +207,10 @@ completed.
   Frappe resolves scheduled and enqueued jobs from strings at run time, so moving
   a function they name breaks them while every import still works. Rewrite every
   string in the same commit, run
-  `docker compose exec backend bench --site frontend migrate`, and restart the
+  `docker compose exec backend bench --site bp_test_site migrate`, and restart the
   workers **after** — the other order leaves a `Scheduled Job Type` row pointing
-  at nothing, and that fails in complete silence. Job ids never change during a
+  at nothing, and that fails in complete silence. That table is per site, so it
+  repairs the test site alone; the deployment's rows wait for the deploy migrate. Job ids never change during a
   move, and a re-export shim is not a fallback: see
   [Moving code that a string names](references/ralph-loop.md#moving-code-that-a-string-names).
 - One subfolder per feature, always inside a status bucket — never loose in

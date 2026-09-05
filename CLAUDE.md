@@ -205,7 +205,7 @@ surface uses those tokens and never a raw hex value.
 
 ```bash
 docker compose exec backend bench --site frontend migrate
-docker compose exec backend bench --site frontend run-tests --app benchpress
+docker compose exec backend bench --site bp_test_site run-tests --app benchpress
 docker compose exec backend bench build --app benchpress   # after frontend changes, then:
 docker compose restart backend frontend
 
