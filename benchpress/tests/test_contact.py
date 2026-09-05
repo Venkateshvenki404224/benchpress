@@ -202,11 +202,18 @@ class TestContactConfig(IntegrationTestCase):
 			self.assertEqual(contact.notify_email(), "ops@benchpress.example")
 			self.assertEqual(contact.route_for("Hosted access"), "ops@benchpress.example")
 
-	def test_the_response_window_falls_back_to_the_first_row(self):
-		windows = (
-			{"subject": "Sales", "window": "1 business day"},
-			{"subject": "Bug", "window": "3 days"},
+	def test_a_bug_report_is_not_promised_the_sales_turnaround(self):
+		"""The windows once sat in a second constant whose subjects named no topic."""
+		self.assertEqual(contact.response_window("Bug or issue"), "2\u20133 days")
+		self.assertNotEqual(
+			contact.response_window("Bug or issue"), contact.response_window(contact.default_topic())
 		)
-		with patch.object(contact, "RESPONSE_TIMES", windows):
-			self.assertEqual(contact.response_window("Bug"), "3 days")
-			self.assertEqual(contact.response_window("Anything else"), "1 business day")
+
+	def test_every_shipped_topic_carries_a_window(self):
+		for row in contact.TOPICS:
+			with self.subTest(topic=row["label"]):
+				self.assertTrue(row["window"], "a topic with no window promises the first row's day")
+				self.assertEqual(contact.response_window(row["label"]), row["window"])
+
+	def test_the_response_window_falls_back_to_the_default_chip(self):
+		self.assertEqual(contact.response_window("Never offered"), contact.TOPICS[0]["window"])

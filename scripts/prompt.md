@@ -61,6 +61,10 @@ bundle at seam one instead.
 - The test site is `bp_test_site`. One module while working:
   `bench --site bp_test_site run-tests --app benchpress --module <module.path>`.
   Whole app suite once before you commit: `... run-tests --app benchpress`.
+- **Read the exit code, not the last line of output.** The runner prints one summary per test
+  category (integration and unit), so the last line always reads `OK` even when an earlier
+  category failed. The exit code (`$?`) is the only reliable signal: 0 = all passed, 1 = any failed.
+  Never use `grep -q OK`, `tail -1`, or output inspection to decide pass/fail.
 - **Never name `frontend` in a `run-tests` command.** It carries no `allow_tests`, so the runner
   refuses it, and an interrupted run leaves its scheduler off from a value the runner held in
   memory. A site with the scheduler off composes mail and never sends it, with nothing in any log

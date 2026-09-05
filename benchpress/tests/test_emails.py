@@ -141,6 +141,16 @@ class TestEmails(IntegrationTestCase):
 		self.assertEqual(self.sent["recipients"], [SENDER])
 		self.assertEqual(self.sent["subject"], "We got your message")
 
+	def test_the_acknowledgement_names_the_window_for_the_topic(self):
+		default_window = contact.TOPICS[0]["window"]
+		slower = next((row for row in contact.TOPICS if row["window"] != default_window), None)
+		self.assertIsNotNone(slower, "no shipped topic differs from the first, so nothing is proven")
+
+		emails.send_contact_received(_message(topic=slower["label"]))
+
+		self.assertIn(slower["window"], self.sent["message"])
+		self.assertNotIn(default_window, self.sent["message"])
+
 	def test_the_contact_notice_is_subjected_by_topic_and_replies_to_the_sender(self):
 		with patch.object(contact, "TOPICS", ROUTED_TO_ADMIN):
 			emails.notify_admins_of_contact(_message())

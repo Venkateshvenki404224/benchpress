@@ -15,6 +15,7 @@ from benchpress.benchpress.site_content import (
 	landing_content,
 	shipped,
 )
+from benchpress.contact import TOPICS
 from benchpress.www.contact import CONTACT_SEED
 from benchpress.www.login import LOGIN_SEED
 from benchpress.www.self_host import SELF_HOST_SEED
@@ -37,6 +38,8 @@ SHIPPED_COPY = (
 	("/vs/frappe-manager", MANAGER_SEED["credit_title"]),
 	("/vs/frappe-pilot", PILOT_SEED["credit_title"]),
 	("/contact", CONTACT_SEED["title"]),
+	# The response-time panel prints a window per topic; every row once said the same day.
+	("/contact", TOPICS[-1]["window"]),
 	("/signup", SIGNUP_SEED["title"]),
 	("/login", LOGIN_SEED["login_panel_title"]),
 )
