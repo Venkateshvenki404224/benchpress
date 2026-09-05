@@ -5,6 +5,7 @@ import re
 import ssl
 import tempfile
 import unittest
+import uuid
 from contextlib import contextmanager, nullcontext
 from pathlib import Path
 from types import SimpleNamespace
@@ -150,18 +151,28 @@ class TestDeployManager(FakeDockerMixin, IntegrationTestCase):
 		super().setUpClass()
 		frappe.set_user("Administrator")
 		cls.lab = _make_lab()
-		if not frappe.db.exists("Database Server", "test-db-server"):
-			frappe.get_doc(
-				{
-					"doctype": "Database Server",
-					"container_name": "test-db-server",
-					"mariadb_version": "10.6",
-					"status": "Active",
-					"mariadb_root_password": "test-root-password",
-				}
-			).insert(ignore_permissions=True)
-		cls.db_server_name = frappe.db.get_value(
-			"Database Server", {"container_name": "test-db-server"}, "name"
+		cls.addClassCleanup(cls.lab.delete, ignore_permissions=True)
+		cls.addClassCleanup(frappe.db.commit)
+		# Per-run unique container_name prevents collisions between concurrent runs or
+		# interrupted runs that left a stale row behind (#362). addClassCleanup registers
+		# teardown at insert time, so a setUpClass failure cannot skip it.
+		container_name = f"test-db-server-{uuid.uuid4().hex[:8]}"
+		db_server = frappe.get_doc(
+			{
+				"doctype": "Database Server",
+				"container_name": container_name,
+				"mariadb_version": "10.6",
+				"status": "Active",
+				"mariadb_root_password": "test-root-password",
+			}
+		).insert(ignore_permissions=True)
+		cls.db_server_name = db_server.name
+		cls.addClassCleanup(
+			lambda n=cls.db_server_name: (
+				frappe.delete_doc("Database Server", n, force=True, ignore_permissions=True)
+				if frappe.db.exists("Database Server", n)
+				else None
+			)
 		)
 		frappe.db.commit()
 
@@ -170,10 +181,6 @@ class TestDeployManager(FakeDockerMixin, IntegrationTestCase):
 		frappe.set_user("Administrator")
 		for name in frappe.get_all("Bench Instance", filters={"lab": cls.lab.name}, pluck="name"):
 			frappe.delete_doc("Bench Instance", name, force=True, ignore_permissions=True)
-		if cls.db_server_name and frappe.db.exists("Database Server", cls.db_server_name):
-			frappe.delete_doc("Database Server", cls.db_server_name, force=True, ignore_permissions=True)
-		cls.lab.delete(ignore_permissions=True)
-		frappe.db.commit()
 		super().tearDownClass()
 
 	def _fresh_bench(self):
@@ -461,16 +468,25 @@ class TestDeployStepMarkers(IntegrationTestCase):
 		super().setUpClass()
 		frappe.set_user("Administrator")
 		cls.lab = _make_lab("test-lab-steps")
-		if not frappe.db.exists("Database Server", "test-db-steps"):
-			frappe.get_doc(
-				{
-					"doctype": "Database Server",
-					"container_name": "test-db-steps",
-					"mariadb_version": "10.6",
-				}
-			).insert(ignore_permissions=True)
-		cls.db_server_name = frappe.db.get_value(
-			"Database Server", {"container_name": "test-db-steps"}, "name"
+		cls.addClassCleanup(cls.lab.delete, ignore_permissions=True)
+		cls.addClassCleanup(frappe.db.commit)
+		# Per-run unique container_name prevents collisions between concurrent or
+		# interrupted runs that left a stale row behind (#362).
+		container_name = f"test-db-steps-{uuid.uuid4().hex[:8]}"
+		db_server = frappe.get_doc(
+			{
+				"doctype": "Database Server",
+				"container_name": container_name,
+				"mariadb_version": "10.6",
+			}
+		).insert(ignore_permissions=True)
+		cls.db_server_name = db_server.name
+		cls.addClassCleanup(
+			lambda n=cls.db_server_name: (
+				frappe.delete_doc("Database Server", n, force=True, ignore_permissions=True)
+				if frappe.db.exists("Database Server", n)
+				else None
+			)
 		)
 		frappe.db.commit()
 
@@ -481,10 +497,6 @@ class TestDeployStepMarkers(IntegrationTestCase):
 			frappe.db.delete("Deploy Log", {"bench": name})
 			_delete_bench_sites(name)
 			frappe.delete_doc("Bench Instance", name, force=True, ignore_permissions=True)
-		if cls.db_server_name and frappe.db.exists("Database Server", cls.db_server_name):
-			frappe.delete_doc("Database Server", cls.db_server_name, force=True, ignore_permissions=True)
-		cls.lab.delete(ignore_permissions=True)
-		frappe.db.commit()
 		super().tearDownClass()
 
 	def _bench(self):
@@ -1043,16 +1055,25 @@ class TestTerminalStateNotifications(IntegrationTestCase):
 		frappe.set_user("Administrator")
 		cls.lab = _make_lab("test-lab-notify")
 		cls.owner = _ensure_owner("notify-owner@example.com")
-		if not frappe.db.exists("Database Server", "test-db-notify"):
-			frappe.get_doc(
-				{
-					"doctype": "Database Server",
-					"container_name": "test-db-notify",
-					"mariadb_version": "10.6",
-				}
-			).insert(ignore_permissions=True)
-		cls.db_server_name = frappe.db.get_value(
-			"Database Server", {"container_name": "test-db-notify"}, "name"
+		cls.addClassCleanup(cls.lab.delete, ignore_permissions=True)
+		cls.addClassCleanup(frappe.db.commit)
+		# Per-run unique container_name prevents collisions between concurrent or
+		# interrupted runs that left a stale row behind (#362).
+		container_name = f"test-db-notify-{uuid.uuid4().hex[:8]}"
+		db_server = frappe.get_doc(
+			{
+				"doctype": "Database Server",
+				"container_name": container_name,
+				"mariadb_version": "10.6",
+			}
+		).insert(ignore_permissions=True)
+		cls.db_server_name = db_server.name
+		cls.addClassCleanup(
+			lambda n=cls.db_server_name: (
+				frappe.delete_doc("Database Server", n, force=True, ignore_permissions=True)
+				if frappe.db.exists("Database Server", n)
+				else None
+			)
 		)
 		frappe.db.commit()
 
@@ -1061,10 +1082,6 @@ class TestTerminalStateNotifications(IntegrationTestCase):
 		frappe.set_user("Administrator")
 		for name in frappe.get_all("Bench Instance", filters={"lab": cls.lab.name}, pluck="name"):
 			frappe.delete_doc("Bench Instance", name, force=True, ignore_permissions=True)
-		if cls.db_server_name and frappe.db.exists("Database Server", cls.db_server_name):
-			frappe.delete_doc("Database Server", cls.db_server_name, force=True, ignore_permissions=True)
-		cls.lab.delete(ignore_permissions=True)
-		frappe.db.commit()
 		drop_all("Credit Ledger Entry", {"account": cls.owner})
 		drop("Credit Account", cls.owner)
 		drop("User", cls.owner)
