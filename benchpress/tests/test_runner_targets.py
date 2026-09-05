@@ -30,20 +30,30 @@ RUNNER_FILES = (
 	".claude/skills/issue-to-phases/references/ralph-loop.md",
 )
 
+# What a person reads before typing a command. `CLAUDE.md` is loaded by every agent session
+# and the reference page is published, so a self-hoster runs what it prints.
+DOC_FILES = (
+	"CLAUDE.md",
+	"docs/reference/cli-and-scripts.mdx",
+)
+
 BENCH_ON_FRONTEND = re.compile(r"bench\s+--site\s+frontend\b")
+
+# A person migrates, clears and inspects their own site; only the test command is wrong here.
+RUN_TESTS_ON_FRONTEND = re.compile(r"bench\s+--site\s+frontend\s+run-tests\b")
 
 # `${BP_TEST_URL:-https://...}` and `${BP_TEST_PASSWORD:-admin}`, but not the empty
 # `${BP_TEST_URL:-}` the guard reads with.
 CREDENTIAL_DEFAULT = re.compile(r"\$\{(BP_TEST_URL|BP_TEST_PASSWORD):[-=][^}]")
 
 
-def _present() -> list[Path]:
-	return [REPO / name for name in RUNNER_FILES if (REPO / name).exists()]
+def _present(names: tuple[str, ...]) -> list[Path]:
+	return [REPO / name for name in names if (REPO / name).exists()]
 
 
-def _hits(pattern: re.Pattern) -> list[str]:
+def _hits(pattern: re.Pattern, names: tuple[str, ...]) -> list[str]:
 	found = []
-	for path in _present():
+	for path in _present(names):
 		for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
 			if pattern.search(line):
 				found.append(f"{path.relative_to(REPO)}:{number}: {line.strip()}")
@@ -51,12 +61,16 @@ def _hits(pattern: re.Pattern) -> list[str]:
 
 
 class TestRunnerTargets(unittest.TestCase):
-	def test_the_runner_surface_is_all_present(self):
+	def test_the_scanned_surface_is_all_present(self):
 		"""A renamed file would make every other assertion here vacuous."""
-		self.assertEqual(len(_present()), len(RUNNER_FILES))
+		names = RUNNER_FILES + DOC_FILES
+		self.assertEqual(len(_present(names)), len(names))
 
 	def test_no_runner_instruction_names_the_deployment_site(self):
-		self.assertEqual(_hits(BENCH_ON_FRONTEND), [], "a runner is pointed at `frontend`")
+		self.assertEqual(_hits(BENCH_ON_FRONTEND, RUNNER_FILES), [], "a runner is pointed at `frontend`")
+
+	def test_no_document_offers_a_test_command_on_the_deployment_site(self):
+		self.assertEqual(_hits(RUN_TESTS_ON_FRONTEND, DOC_FILES), [], "a document tests `frontend`")
 
 	def test_the_runner_names_the_test_site(self):
 		"""`assertIn` would print the whole prompt into a log a loop has to read."""
@@ -67,4 +81,6 @@ class TestRunnerTargets(unittest.TestCase):
 		)
 
 	def test_the_browser_credentials_carry_no_default(self):
-		self.assertEqual(_hits(CREDENTIAL_DEFAULT), [], "a browser credential still has a default")
+		self.assertEqual(
+			_hits(CREDENTIAL_DEFAULT, RUNNER_FILES), [], "a browser credential still has a default"
+		)

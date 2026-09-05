@@ -68,8 +68,6 @@ else runs, with somebody else's benches on it?**
 - The SPA holds **zero** `AbortController` uses, so no in-flight request is ever cancelled.
 - `CLAUDE.md:232` still says to branch from `develop`; `CONTRIBUTING.md:70-72` records that
   `develop` was abandoned at the 0.1.0 release. `version-16` is the only trunk.
-- `CLAUDE.md:208` names `--site frontend` in a `run-tests` command — that site has no
-  `allow_tests` and an interrupted run leaves its scheduler off, which silently stops all mail.
 - `CLAUDE.md:59` counts eight public pages; `benchpress/www/vs/` has held three comparison pages
   since `e6e8d32`, so the count and the routing table under it are both short.
 

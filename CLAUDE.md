@@ -205,7 +205,7 @@ surface uses those tokens and never a raw hex value.
 
 ```bash
 docker compose exec backend bench --site frontend migrate
-docker compose exec backend bench --site frontend run-tests --app benchpress
+docker compose exec backend bench --site bp_test_site run-tests --app benchpress
 docker compose exec backend bench build --app benchpress   # after frontend changes, then:
 docker compose restart backend frontend
 
@@ -216,6 +216,14 @@ cd e2e && npx playwright test  # has its own config — running from the app roo
 
 npm run docs:build && npm run docs:lint && npm run docs:score && npm run docs:links
 ```
+
+**Never name `frontend` in a `run-tests` command.** That site carries no
+`allow_tests`, so the runner refuses it — but only after disabling its scheduler
+from a value it holds in memory and restores on a clean exit. A site with the
+scheduler off composes mail and never sends it, and no log says so.
+`bp_test_site` is the site that exists to be tested; CI uses `test_site`. The
+`migrate` line above is right as it stands: migrating your own site is what a
+person does.
 
 ## Documentation source
 
