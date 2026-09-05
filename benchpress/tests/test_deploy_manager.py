@@ -81,6 +81,11 @@ def _fresh_bench(case, lab_name):
 		frappe.delete_doc("Bench Instance", existing, force=True, ignore_permissions=True)
 		frappe.db.commit()
 	bench = _make_bench(lab_name)
+	# Cleanup order matters: register commit FIRST so it runs LAST (addCleanup is LIFO).
+	# The deletes must happen before the commit, or the IntegrationTestCase rollback undoes
+	# them and the committed Bench Site rows survive into the next test, causing a
+	# FOR UPDATE NOWAIT lock collision (#361).
+	case.addCleanup(frappe.db.commit)
 	case.addCleanup(
 		lambda n=bench.name: (
 			frappe.delete_doc("Bench Instance", n, force=True, ignore_permissions=True)
@@ -89,7 +94,6 @@ def _fresh_bench(case, lab_name):
 		)
 	)
 	case.addCleanup(lambda n=bench.name: _delete_bench_sites(n))
-	case.addCleanup(frappe.db.commit)
 	return bench
 
 
