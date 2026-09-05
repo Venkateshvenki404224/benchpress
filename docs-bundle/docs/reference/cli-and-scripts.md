@@ -3,7 +3,7 @@ title: CLI and scripts
 description: Every command that drives BenchPress from a shell — entry.py, the
   bench commands, setup.sh and upgrade.sh, the four repository scripts and the
   documentation pipeline.
-lastModified: "2026-08-31T14:24:45-04:00"
+lastModified: "2026-09-05T14:27:54-04:00"
 lastAuthor: Venkatesh
 ---
 # CLI and scripts
@@ -60,13 +60,24 @@ Ordinary Frappe commands, run inside the `backend` container.
 docker compose exec backend bench --site frontend migrate
 docker compose exec backend bench --site frontend clear-cache
 docker compose exec backend bench --site frontend console
-docker compose exec backend bench --site frontend run-tests --app benchpress
+docker compose exec backend bench --site bp_test_site run-tests --app benchpress
 docker compose exec backend bench build --app benchpress
 ```
 
 After a Python change, restart `backend` and any worker that imports the
 changed module. After a frontend change, run `bench build --app benchpress`,
 then restart `backend` and `frontend`.
+
+**Never name `frontend` in a `run-tests` command.** That site carries no
+`allow_tests`, so the runner refuses it. It refuses after it disables that
+site's scheduler. The runner holds the old value in memory and puts it back only
+on a clean exit. A site with the scheduler off composes mail and never sends it,
+and no log says so.
+
+Test against a site made for it, such as `bp_test_site`. Create one with
+`bench new-site`, then set `allow_tests` in its site config. The `migrate`,
+`clear-cache` and `console` lines above name `frontend` correctly. That is your
+own site.
 
 **A multi-line block piped to `bench console` fails silently.** The console is
 IPython. A block arriving on a pipe is auto-indented until it no longer parses,
