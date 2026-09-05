@@ -15,7 +15,10 @@ from benchpress.throttle import public_form
 
 DOCTYPE = "Contact Message"
 MESSAGES_PER_HOUR = 3
-SUCCESS_BODY = "Thanks — it is in front of a person, not a queue. You will hear back within one business day."
+# The mail names the window for the topic; the page says nothing narrower than every topic keeps.
+SUCCESS_BODY = (
+	"Thanks — it is in front of a person, not a queue. Most messages get an answer within one business day."
+)
 MAIL_ERROR_TITLE = "BenchPress contact mail failed"
 
 # Two different addresses. `NOTIFY_KEY` is where submissions are forwarded and is never shown;
@@ -26,17 +29,13 @@ PUBLIC_KEY = "benchpress_public_email"
 
 ACKNOWLEDGE_SENDER = True
 
+# One row per chip the form offers: the label, where the message goes, and the window the
+# acknowledgement promises. Held together so a label cannot drift from its window.
 TOPICS = (
-	{"label": "Hosted access", "route_to_email": ""},
-	{"label": "Setup or migration", "route_to_email": ""},
-	{"label": "Custom app work", "route_to_email": ""},
-	{"label": "Bug or issue", "route_to_email": ""},
-)
-
-RESPONSE_TIMES = (
-	{"subject": "Hosted access requests", "window": "1 business day"},
-	{"subject": "Sales and quotes", "window": "1 business day"},
-	{"subject": "GitHub issues", "window": "2–3 days"},  # noqa: RUF001 -- verbatim spec copy
+	{"label": "Hosted access", "route_to_email": "", "window": "1 business day"},
+	{"label": "Setup or migration", "route_to_email": "", "window": "1 business day"},
+	{"label": "Custom app work", "route_to_email": "", "window": "1 business day"},
+	{"label": "Bug or issue", "route_to_email": "", "window": "2–3 days"},  # noqa: RUF001 -- verbatim spec copy
 )
 
 
@@ -82,13 +81,12 @@ def resolve_topic(label: str | None) -> str:
 
 
 def route_for(topic: str) -> str:
-	routed = next((row["route_to_email"] for row in TOPICS if row["label"] == topic), "")
-	return routed or notify_email()
+	return topic_row(topic).get("route_to_email") or notify_email()
 
 
 def response_window(topic: str) -> str:
-	matched = next((row["window"] for row in RESPONSE_TIMES if row["subject"] == topic), "")
-	return matched or (RESPONSE_TIMES[0]["window"] if RESPONSE_TIMES else "")
+	"""What the acknowledgement promises. A topic no longer offered reads the default chip."""
+	return topic_row(topic).get("window") or topic_row(default_topic()).get("window", "")
 
 
 @frappe.whitelist()
@@ -128,6 +126,11 @@ def send_quietly(mailer, record) -> None:
 		mailer(record)
 	except Exception:
 		frappe.log_error(title=MAIL_ERROR_TITLE, message=frappe.get_traceback())
+
+
+def topic_row(label: str) -> dict:
+	"""The row behind a chip, empty when the form no longer offers that label."""
+	return next((row for row in TOPICS if row["label"] == label), {})
 
 
 def require_text(value, error: str) -> str:

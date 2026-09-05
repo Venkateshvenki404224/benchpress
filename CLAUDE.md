@@ -133,7 +133,11 @@ Fifteen facts that are easy to break:
   nothing behind a page in Desk any more, so a section that should not appear is
   absent from the template rather than switched off.
 - The contact form's routing is constants too, in `benchpress/contact.py`:
-  `TOPICS` (first row is the default), `RESPONSE_TIMES` and `ACKNOWLEDGE_SENDER`.
+  `TOPICS` (first row is the default) and `ACKNOWLEDGE_SENDER`. One `TOPICS` row
+  carries the label, the address it routes to and the window the acknowledgement
+  promises, and the page's response-time panel renders those same rows. The window
+  had its own constant once, keyed by subjects that matched no label, so every
+  sender was told the same day.
   Only the forwarding address is per-deployment — the `benchpress_contact_email`
   site-config key, falling back to `CONTACT_EMAIL`.
 - The seven `Email Template` rows are the one thing `benchpress.public_site.seed`

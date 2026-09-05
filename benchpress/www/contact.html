@@ -158,13 +158,13 @@
 
 			<div class="bp-aside">
 
-				{%- if response_times %}
+				{%- if topics %}
 				<div class="bp-panel bp-panel--aside">
 					<h2 class="bp-aside__title">{{ settings.sla_title | default("", true) | e }}</h2>
 					<dl class="bp-sla">
-						{%- for row in response_times %}
+						{%- for row in topics %}
 						<div class="bp-sla__row">
-							<dt class="bp-sla__subject"><span class="bp-sla__dot" aria-hidden="true"></span>{{ row.subject | default("", true) | e }}</dt>
+							<dt class="bp-sla__subject"><span class="bp-sla__dot" aria-hidden="true"></span>{{ row.label | default("", true) | e }}</dt>
 							<dd class="bp-sla__window">{{ row.window | default("", true) | e }}</dd>
 						</div>
 						{%- endfor %}

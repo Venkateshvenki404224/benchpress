@@ -52,7 +52,6 @@ def get_context(context):
 	context.settings = settings
 	context.channels = channel_rows([*email_channel(), *settings.channels])
 	context.topics = settings.topics
-	context.response_times = settings.response_times
 	context.default_topic = contact.default_topic()
 	context.selfhost_links = link_lines(settings.selfhost_links)
 
@@ -148,21 +147,21 @@ CONTACT_SEED = {
 		},
 	],
 	"form_title": "Send a message",
-	"form_subtitle": "We answer every message within one business day.",
+	"form_subtitle": "A person answers every message, most within one business day.",
 	"form_topic_label": "Topic",
 	"topics": [dict(row) for row in contact.TOPICS],
 	"form_submit_label": "Send message",
 	"form_success_title": "Message sent",
 	"form_success_body": contact.SUCCESS_BODY,
+	# The panel renders the same rows, so it cannot promise a day the acknowledgement does not.
 	"sla_title": "Response times",
-	"response_times": [dict(row) for row in contact.RESPONSE_TIMES],
 	"selfhost_title": "Self-hosting a question",
 	"selfhost_body": SELFHOST_BODY,
 	"selfhost_links": "github.com/Venkateshvenki404224/benchpress",
 	"meta_title": DEFAULT_TITLE,
 	"meta_description": (
 		"Talk to the people who wrote BenchPress — email or GitHub issues, "
-		"answered by a person within one business day."
+		"answered by a person, usually within one business day."
 	),
 	"og_image": "",
 }
