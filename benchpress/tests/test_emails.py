@@ -5,8 +5,10 @@ from unittest.mock import patch
 
 import frappe
 from frappe.tests import IntegrationTestCase
+from frappe.utils import get_url
 
 from benchpress import contact, emails
+from benchpress.public_site.seed import relogo_email_templates
 
 REQUESTER = "emails-requester@example.com"
 SENDER = "emails-sender@example.com"
@@ -15,6 +17,17 @@ ADMIN_ROLE = "BenchPress Admin"
 
 # `_message()` files under "Sales"; routing it at the admin pins who the notice reaches.
 ROUTED_TO_ADMIN = ({"label": "Sales", "route_to_email": ADMIN},)
+
+# A row as the seed planted it before the logo existed, with a line of operator copy under it.
+FAUX_LOGO_BODY = """<td style="padding:20px 28px;background-color:#0A1024;border-radius:13px 13px 0 0;">
+	<table role="presentation" cellpadding="0" cellspacing="0" border="0">
+		<tr>
+			<td width="10" bgcolor="#4E8BFB" style="width:10px;height:10px;">&nbsp;</td>
+			<td style="font-size:17px;color:#FFFFFF;">BENCHPRESS</td>
+		</tr>
+	</table>
+</td>
+<p>Hosted access is invite-only.</p>"""
 
 
 def _entry(**overrides) -> frappe._dict:
@@ -148,8 +161,21 @@ class TestEmails(IntegrationTestCase):
 			emails.send_access_request_received(_entry())
 
 		self.assertEqual(self.sent["subject"], "Your BenchPress access request — REQ-A1B2-C3D4")
-		self.assertIn("BENCH", self.sent["message"], "the shipped body did not render")
+		self.assertIn(emails.LOGO_PATH, self.sent["message"], "the shipped body did not render")
 		self.assertNotIn("{{", self.sent["message"], "an interpolation was left unrendered")
+
+	def test_every_shipped_body_carries_the_logo_over_an_absolute_url(self):
+		"""A mail client resolves nothing relative, so the header src must arrive absolute."""
+		patch.object(emails, "admin_recipients", return_value=[ADMIN]).start()
+		patch.object(contact, "TOPICS", ROUTED_TO_ADMIN).start()
+
+		with patch.object(frappe.db, "exists", return_value=False):
+			for send, row in self._every_send():
+				self.mailer.reset_mock()
+				send(row)
+				with self.subTest(send=send.__name__):
+					self.assertIn(f'src="{get_url(emails.LOGO_PATH)}?v=', self.sent["message"])
+					self.assertIn('alt="BenchPress"', self.sent["message"])
 
 	def test_an_operator_edit_in_desk_wins_over_the_shipped_body(self):
 		self._install_template(
@@ -175,6 +201,26 @@ class TestEmails(IntegrationTestCase):
 				self.mailer.reset_mock()
 				send(bare)
 				self.assertTrue(self.sent["message"].strip())
+
+	def test_a_row_seeded_before_the_logo_is_re_branded_in_place(self):
+		self._install_template(emails.ACCESS_APPROVED, subject="x", body=FAUX_LOGO_BODY)
+
+		relogo_email_templates()
+
+		body = frappe.db.get_value("Email Template", emails.ACCESS_APPROVED, "response_html")
+		self.assertNotIn("BENCHPRESS", body)
+		self.assertIn('alt="BenchPress"', body)
+		self.assertIn("<p>Hosted access is invite-only.</p>", body, "the operator's copy was lost")
+
+	def test_re_branding_a_row_that_already_carries_the_logo_changes_nothing(self):
+		self._install_template(emails.ACCESS_APPROVED, subject="x", body=FAUX_LOGO_BODY)
+		relogo_email_templates()
+		once = frappe.db.get_value("Email Template", emails.ACCESS_APPROVED, "response_html")
+
+		relogo_email_templates()
+
+		twice = frappe.db.get_value("Email Template", emails.ACCESS_APPROVED, "response_html")
+		self.assertEqual(once, twice)
 
 	# failure containment
 
@@ -224,6 +270,18 @@ class TestEmails(IntegrationTestCase):
 		self.assertNotIn(ADMIN, emails.admin_recipients())
 
 	# helpers
+
+	def _every_send(self) -> tuple:
+		"""One call per shipped body: the four that reach a person and the two that reach the admins."""
+		entry, message = _entry(), _message()
+		return (
+			(emails.send_access_request_received, entry),
+			(emails.notify_admins_of_access_request, entry),
+			(emails.send_access_request_approved, entry),
+			(emails.send_access_request_rejected, entry),
+			(emails.send_contact_received, message),
+			(emails.notify_admins_of_contact, message),
+		)
 
 	def _install_template(self, name: str, subject: str, body: str) -> None:
 		if frappe.db.exists("Email Template", name):

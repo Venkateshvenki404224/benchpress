@@ -10,7 +10,7 @@ from frappe.utils import cint, format_datetime, get_url, get_url_to_form
 from markupsafe import Markup, escape
 
 from benchpress import contact
-from benchpress.benchpress.site_content import REPO_URL
+from benchpress.benchpress.site_content import REPO_URL, asset_version
 from benchpress.credits import config
 from benchpress.permissions import ADMIN_ROLES
 
@@ -25,6 +25,9 @@ CONTACT_RECEIVED = "BenchPress Contact Message Received"
 CONTACT_FILED = "BenchPress Contact Message Filed"
 
 TEMPLATE_DIR = "benchpress/templates/emails"
+
+# The header lockup, in the one variant that reads on the dark bar the templates draw it on.
+LOGO_PATH = "/assets/benchpress/images/logo/wordmark-on-dark.png"
 
 # Template name -> (subject, body file). The file is both the fallback body and the Desk seed.
 DEFAULTS = {
@@ -217,6 +220,7 @@ def _urls() -> dict:
 	return {
 		"site_url": get_url(),
 		"login_url": get_url("/login"),
+		"logo_url": f"{get_url(LOGO_PATH)}?v={asset_version()}",
 		"docs_url": "https://benchpress.cloud/docs",
 		"repo_url": REPO_URL,
 	}
