@@ -160,10 +160,19 @@ drops first when it is concentrating on code, and a shipped feature filed under
 `{{TEST_CMD}}` names the test modules the phase touches, one line each:
 
 ```bash
-docker compose exec backend bench --site frontend run-tests --module benchpress.tests.test_deploy_manager
+docker compose exec backend bench --site bp_test_site run-tests --module benchpress.tests.test_deploy_manager
 ```
 
-Two rules, and each one has cost a real run.
+Three rules, and each one has cost a real run.
+
+**Never `--site frontend`.** `frontend` is the deployment's own site, and on a
+public host it is the one the world reads. It carries no `allow_tests`, so the
+runner refuses it, and the refusal comes after the runner has already disabled
+its scheduler from a value it holds in memory and restores only on a clean exit.
+A site with the scheduler off composes mail and never sends it, with nothing in
+any log to say so. An interrupted iteration is normal in a loop, not
+exceptional, which turns a possible failure into a likely one. Name
+`bp_test_site` locally and `test_site` in CI.
 
 **Never `--app benchpress`.** The whole suite is CI's job. It takes 60 seconds
 against the live site and does not repeat. Three runs of the same tree gave
@@ -229,7 +238,8 @@ stopped.
 1. **Move the code and rewrite every string in the same commit** — call sites,
    `hooks.py`, docstrings, tracked `.md`, and the test assertions that name the
    path. A forgotten test assertion fails loudly, which is the cheapest gate here.
-2. **`docker compose exec backend bench --site frontend migrate`.**
+2. **`docker compose exec backend bench --site bp_test_site migrate`.** Migrating
+   `frontend` is a deploy step a person runs by hand, never part of a loop.
 3. **`docker compose restart backend queue-long queue-short scheduler websocket`.**
 
 Step 2 before step 3 is a rule, not a preference. `migrate` calls `sync_jobs()`

@@ -58,13 +58,18 @@ bundle at seam one instead.
 
 - Bench commands run inside the parent compose stack, not a standalone bench. From
   `/home/ubuntu/benchpress_devops` use `docker compose exec -T backend bench ...`.
-- One module while working:
-  `bench --site frontend run-tests --app benchpress --module <module.path>`.
+- The test site is `bp_test_site`. One module while working:
+  `bench --site bp_test_site run-tests --app benchpress --module <module.path>`.
   Whole app suite once before you commit: `... run-tests --app benchpress`.
+- **Never name `frontend` in a `run-tests` command.** It carries no `allow_tests`, so the runner
+  refuses it, and an interrupted run leaves its scheduler off from a value the runner held in
+  memory. A site with the scheduler off composes mail and never sends it, with nothing in any log
+  to say so. An interrupted iteration is normal in this loop, not exceptional.
 - Frontend changes need `bench build --app benchpress`, then restart backend and frontend.
-  Schema changes need `bench --site frontend migrate`.
-- The local site has this branch migrated and seeded, so the schema is real and every seam runs
-  locally.
+  Schema changes need `bench --site bp_test_site migrate`. Migrating `frontend` is a deploy step a
+  person runs by hand; it is not part of this loop.
+- `bp_test_site` has this branch migrated and seeded, and carries `benchpress_public_site`, so the
+  schema is real and every seam runs locally.
 - Query with `frappe.qb`, never raw SQL. Every whitelisted method checks permissions itself.
 - Behaviour lives in doctype controllers and `hooks.py` as often as in the obvious module. Read
   `hooks.py` before assuming a save does the plain thing.
@@ -75,13 +80,20 @@ A rendering test cannot see a broken layout, a header that overflows on a phone,
 stopped submitting. Any issue that changes what a page looks like or how it behaves must be checked
 in a real browser before you commit. Use the `agent-browser` skill.
 
-1. **The local stack, `http://localhost:8080`** — the port is `PORT` in
-   `/home/ubuntu/benchpress_devops/.env`. It runs this branch against real, migrated schema. Sign
-   in as `Administrator` with `ADMIN_PASSWORD` from that same file. **Use this for anything that
-   writes**: submitting a form, signing in or out, creating a user, editing in Desk.
-2. **The deployed branch instance, `$BP_TEST_URL`**, defaulting to
-   `https://b3873df7.benchpress.cloud`, signing in as `Administrator` with `$BP_TEST_PASSWORD`,
-   defaulting to `admin`. Use it to see a change against deployed data.
+Read `PUBLIC_HOSTNAME` in `/home/ubuntu/benchpress_devops/.env` before you open anything. That one
+key turns the checkout into a public deployment, and nginx serves the same `frontend` site on
+loopback that Traefik serves on 443. Where it is set there is no writable browser target, because
+`bp_test_site` is not published: check read-only, and say in the issue comment what you could not
+exercise.
+
+1. **The local stack, `http://localhost:8080`** — the port is `PORT` in that same file. It runs
+   this branch against real, migrated schema. Sign in as `Administrator` with `ADMIN_PASSWORD`
+   from that file. Use it for anything that writes — submitting a form, signing in or out,
+   creating a user, editing in Desk — **only while `PUBLIC_HOSTNAME` is unset**. Where it is set,
+   this port is production.
+2. **A deployed branch instance, `$BP_TEST_URL`**, signing in as `Administrator` with
+   `$BP_TEST_PASSWORD`. Use it to see a change against deployed data. Both are unset by default;
+   skip this check when they are.
 3. **Production, `https://benchpress.cloud`** — **read-only, always**. Never submit a form there,
    never sign in, never create or edit a record.
 

@@ -227,7 +227,8 @@ End the phase in this order, and do not reorder it:
 1. Rewrite **every** string in the same commit as the move: call sites,
    `hooks.py`, docstrings, tracked `.md`, and the test assertions naming the path.
    `git grep '<old.dotted.path>'` must come back empty.
-2. `docker compose exec backend bench --site frontend migrate`
+2. `docker compose exec backend bench --site bp_test_site migrate` — never
+   `--site frontend`, which is the deployment's own site
 3. `docker compose restart backend queue-long queue-short scheduler websocket`
 
 Before step 3, poll `queue-long` for at most 120 seconds, then go ahead anyway and

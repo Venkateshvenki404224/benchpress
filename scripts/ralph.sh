@@ -12,9 +12,12 @@ set -e
 
 export IS_SANDBOX=1
 
-# Browser checks. Writes belong on the local stack; production is read-only.
-export BP_TEST_URL=${BP_TEST_URL:-https://b3873df7.benchpress.cloud}
-export BP_TEST_PASSWORD=${BP_TEST_PASSWORD:-admin}
+# Optional browser check against a deployed branch instance. No defaults: the
+# pair used to name a live host and the password `admin`.
+if [[ -n "${BP_TEST_URL:-}" ]]; then
+  : "${BP_TEST_PASSWORD:?BP_TEST_URL is set, so BP_TEST_PASSWORD must be set too}"
+  export BP_TEST_URL BP_TEST_PASSWORD
+fi
 
 ITERATIONS=${1:-20}
 REPO=/home/ubuntu/benchpress_devops/apps/benchpress
