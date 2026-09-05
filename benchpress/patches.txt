@@ -35,3 +35,4 @@ benchpress.patches.drop_page_content_doctypes
 benchpress.patches.claim_host_name
 benchpress.patches.refresh_approval_mail
 benchpress.patches.seed_password_reset_template
+benchpress.patches.relogo_email_templates
