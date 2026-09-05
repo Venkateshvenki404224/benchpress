@@ -171,6 +171,7 @@ class TestDeployManager(FakeDockerMixin, IntegrationTestCase):
 			}
 		).insert(ignore_permissions=True)
 		cls.db_server_name = db_server.name
+		cls.db_server_container_name = container_name
 		cls.addClassCleanup(
 			lambda n=cls.db_server_name: (
 				frappe.delete_doc("Database Server", n, force=True, ignore_permissions=True)
@@ -241,7 +242,7 @@ class TestDeployManager(FakeDockerMixin, IntegrationTestCase):
 
 		lifecycle.torn_down(bench, release_admission=False)
 
-		db_container = self.docker.containers.get("test-db-server")
+		db_container = self.docker.containers.get(self.db_server_container_name)
 		self.assertIn(
 			f"DROP DATABASE IF EXISTS `{get_database_name(bench.site_name)}`",
 			sql_of(db_container.execs[-1]),
