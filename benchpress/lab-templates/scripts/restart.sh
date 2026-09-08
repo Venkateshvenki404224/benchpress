@@ -13,5 +13,9 @@ if [ -z "$TARGET_USER" ]; then
 fi
 
 sudo -u "$TARGET_USER" screen -X -S codeserver quit || true
+# Cap the Node.js V8 heap so code-server GCs aggressively instead of
+# growing until the container hits its memory limit and gets OOM-killed.
+# 512 MB is sufficient for editing; the process runs fine and just GCs more.
 sudo -u "$TARGET_USER" screen -d -m -S codeserver \
+    env NODE_OPTIONS="--max-old-space-size=512" \
     code-server "/home/$TARGET_USER/frappe-bench"
