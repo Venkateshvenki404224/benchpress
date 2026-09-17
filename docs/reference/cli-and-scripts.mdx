@@ -117,7 +117,7 @@ Neither script owns the VPN. Tunnels, peers and address allocation belong to the
 | `scripts/seed_docs_demo.py` | creates or removes the demo labs and users the documentation screenshots come from |
 | `scripts/admission_drill.py` | how many of N parallel deploys the admission gate really admits |
 | `scripts/density_drill.py` | how many endpoints a bridge of a given prefix length really takes |
-| `scripts/golden_drill.py` | what a golden restore costs against a cold deploy |
+| `scripts/golden_drill.py` | what a golden restore costs against a cold deploy, and how long a deploy takes to a first login |
 
 The three drills are measurement harnesses. None of them reimplements the thing
 it measures. Every request goes over HTTP to the shipped endpoint, and every
@@ -143,6 +143,15 @@ admission decision stays measurable with no worker running.
 
 `golden_drill.py --cold` is the control arm. It turns `restore_from_golden` off
 for the run and puts it back afterwards, so both arms deploy the same lab.
+`--concurrent N` starts N deploys at once, one for each drill user.
+`--probe-login` times each deploy to the first login on its new site. It reaches
+the site through the host's own Traefik at `BENCHPRESS_EDGE`, not through the CDN.
+
+`scripts/restore_probe.sh` is a shell script, not a drill. It times one lab's
+golden dump restored under four MariaDB configurations, each in a throwaway
+`bp-restore-probe` container. It never touches `benchpress-mariadb`.
+`--list` prints the four configurations. See
+[Golden images](/docs/operator/golden-images).
 
 `seed_docs_demo.py --destroy` removes only what the script creates and refuses
 every other name.

@@ -121,6 +121,30 @@ describe("a run that finished", () => {
 	});
 });
 
+describe("a site step that reports where its seconds went", () => {
+	const log = [
+		marker("site", 15.0),
+		"[*] restore took 23.1s",
+		"Site step timings: restore 23.1s, admin password 1.2s, apps 0.4s",
+		"Site demo restored from the image's golden dump",
+		marker("assets", 40.2),
+	].join("\n");
+
+	it("opens no step for a timing line, and the stepper keeps eleven", () => {
+		const run = deriveRun(log);
+
+		expect(parseStepLine("[*] restore took 23.1s")).toBeNull();
+		expect(classifyLine("[*] restore took 23.1s")).toBe("info");
+		expect(run.steps).toHaveLength(11);
+	});
+
+	it("still shows the site step's outcome as its detail", () => {
+		expect(deriveRun(log).steps.find((step) => step.key === "site").detail).toBe(
+			"Site demo restored from the image's golden dump"
+		);
+	});
+});
+
 describe("a run that failed", () => {
 	const log = [
 		marker("infrastructure", 0.1),

@@ -5,6 +5,7 @@ import json
 import re
 import secrets
 import shlex
+from pathlib import Path
 
 import frappe
 from frappe import _
@@ -15,6 +16,7 @@ from benchpress.deploy_pipeline import DeployLogWriter
 from benchpress.docker_manager import (
 	build_lab_image,
 	exec_in_container,
+	get_lab_template_dir,
 	host_runtimes,
 	resolve_runtime,
 	write_file_to_container,
@@ -65,8 +67,12 @@ def _remove_stale_container(bench) -> None:
 
 ADOPTED_MARKER = "already exists — adopting it"
 GOLDEN_MARKER = "Restored from golden dump"
-# What the Deploy Log says when the golden branch ran. `golden_drill` reads runs back by it.
 GOLDEN_RESTORED = "restored from the image's golden dump"
+
+LINKUSER = "/opt/benchpress/scripts/linkuser.sh"
+SETUP_SITE = "/opt/benchpress/scripts/setup-site.sh"
+SITE_TIMING = re.compile(r"^\[\*\] (.+) took (\d+\.\d)s$", re.MULTILINE)
+SITE_TIMINGS_PREFIX = "Site step timings:"
 
 
 def build_linkuser_args(bench, lab, settings) -> list[str]:
@@ -95,11 +101,14 @@ def linkuser_command(script_args: list[str]) -> str:
 	Runs as root inside the container, and the arguments carry free text
 	(the lab title, the owner's email).
 	"""
-	return "bash /opt/benchpress/scripts/linkuser.sh " + " ".join(shlex.quote(a) for a in script_args)
+	return f"bash {LINKUSER} " + " ".join(shlex.quote(a) for a in script_args)
 
 
-# The desk alert on a terminal deploy/build state. Shared with the enforcement sweep and the
-# reaper, which announce the same kind of thing about the same documents.
+def _lab_script(name: str) -> str:
+	"""The app's copy of a container script, which is authoritative over the one baked into the image."""
+	return (Path(get_lab_template_dir()) / "scripts" / name).read_text()
+
+
 _notify_owner = notify_owner
 
 
@@ -119,11 +128,12 @@ def create_site_in_container(
 	create the site even in an image that carries a golden dump.
 	"""
 	bench_dir = "/home/frappe/frappe-bench"
+	write_file_to_container(container_id, _lab_script("setup-site.sh"), SETUP_SITE, mode=0o755)
 	db_name, temp_user, temp_password = create_mariadb_user(db_server.name, site_name, database)
 	try:
 		return exec_in_container(
 			container_id,
-			"bash /opt/benchpress/scripts/setup-site.sh",
+			f"bash {SETUP_SITE}",
 			user="frappe",
 			workdir=bench_dir,
 			environment={
@@ -190,6 +200,11 @@ def _site_outcome(output: str, site_name: str) -> str:
 	return "Site created successfully"
 
 
+def _site_timings(output: str) -> str:
+	"""The site step's `[*] <part> took N.Ns` marks, as one clause for the Deploy Log."""
+	return ", ".join(f"{part} {seconds}s" for part, seconds in SITE_TIMING.findall(output))
+
+
 def _log_deploy_skipped(bench_name: str) -> None:
 	frappe.get_doc(
 		{
@@ -223,8 +238,6 @@ def _start_code_server(bench, container_id: str, pipeline, settings) -> None:
 	config_path = f"{cs_home}/.config/code-server/config.yaml"
 
 	write_file_to_container(container_id, config_yaml, config_path, mode=0o600)
-	# The tar header set the mode, but `linkuser.sh` minted the tenant account and this
-	# caller does not know its id, so the ownership fix still runs as its own exec.
 	_checked_exec(
 		container_id,
 		f"chown -R {cs_user}:{cs_user} {cs_home}/.config",
@@ -334,27 +347,16 @@ def _build_lab_with_logs(lab, log_fn) -> None:
 	frappe.db.commit()
 
 	image_tag = build_lab_image(lab, log_fn=log_fn)
-
-	# The tag set is memoised on `frappe.local` for the life of the job
-	# (`image_cache.cached_tags`). Build and deploy used to be separate jobs with
-	# separate locals; chained into one, `_prepare_lab_image` would read the
-	# pre-build set seconds from now and throw "No built image" about the image
-	# this line just produced.
 	image_cache.clear_cached_tags()
 
 	lab.reload()
 	lab.image_tag = image_tag
 	lab.status = "Ready"
 	lab.save(ignore_permissions=True)
-	# Charged after the build returns, so a failed build stays free — and reached only when
-	# `_prepare_lab_image` found no cached image, so a cache hit is free too.
 	metering.on_image_built(lab)
 	frappe.db.commit()
 	if log_fn:
 		log_fn(f"Lab image ready: {image_tag}")
-
-	# After the lab is Ready with its tag saved: the golden step appends a layer to that tag,
-	# and needs the row that names it.
 	_add_golden(lab, log_fn)
 
 
@@ -370,8 +372,6 @@ def _add_golden(lab, log_fn) -> None:
 	try:
 		manifest = golden.add_golden(lab, log_fn)
 		lab.reload()
-		# Written either way: this build replaced the image under the same tag, so a manifest left
-		# over from the last one would claim a golden that is no longer in there.
 		lab.golden_manifest = json.dumps(manifest, indent=2) if manifest else None
 		lab.save(ignore_permissions=True)
 		frappe.db.commit()
@@ -447,7 +447,6 @@ def build_lab(lab_name: str) -> None:
 	try:
 		image_tag = _run_build(lab, lab.owner)
 	except Exception:
-		# The admin asked for this build, so the catalog is the right place to record that it broke.
 		record_build_failure(lab_name, lab.owner)
 		return
 	_notify_owner(lab.owner, f"Lab build complete: {lab.title} ({image_tag})", "Lab", lab_name)
@@ -455,8 +454,6 @@ def build_lab(lab_name: str) -> None:
 
 def record_build_failure(lab_name: str, user: str) -> None:
 	"""Mark the catalog entry broken and tell whoever asked for the build."""
-	# `user` rather than the lab's owner: a launch builds a shared lab on somebody else's behalf,
-	# and the person waiting on the build is the one who has to hear that it broke.
 	frappe.db.set_value("Lab", lab_name, "status", "Error")
 	frappe.db.commit()  # nosemgrep -- the run is over; its verdict must survive the failure
 	title = frappe.db.get_value("Lab", lab_name, "title") or lab_name

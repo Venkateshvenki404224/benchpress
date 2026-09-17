@@ -1,31 +1,20 @@
 # Copyright (c) 2026, Venkatesh and contributors
 # For license information, please see license.txt
 
-"""Setup, measurement and teardown for `scripts/golden_drill.py`, the golden drill.
+"""Setup, measurement and teardown for `scripts/golden_drill.py`, reached only through `bench execute`.
 
-Nothing here is whitelisted, and nothing here may become whitelisted: `cleanup` deletes with
-`force=True` and has no business being reachable over HTTP. The harness reaches it through
-`bench --site frontend execute benchpress.golden_drill.<fn>`, and deploys through the shipped
-`create_bench` endpoint.
-
-The two arms of the drill run the **same lab**, so the image, the apps, the host and the minute
-are held still and the only difference is whether the site is restored or created.
-`BenchPress Settings.restore_from_golden` is what switches them, which is a site setting rather
-than something the drill owns: `setup` hands its previous value back and the harness puts it
-back in a `finally`.
-
-Cleanup filters on `golden-drill@example.com`, a user this module is the only thing that mints.
-Nothing else on the site ever owns a bench under it, which is what makes an owner filter safe
-here where it would not be on a real account.
+Never whitelist anything here: `cleanup` deletes drill users and their benches with `force=True`.
 """
+
+import re
 
 import frappe
 from frappe.utils import cint, flt
 from frappe.utils.password import get_decrypted_password
 
 from benchpress.credits import account
-from benchpress.deploy_manager import GOLDEN_RESTORED
-from benchpress.deploy_pipeline import parse_step_line
+from benchpress.deploy_manager import GOLDEN_RESTORED, SITE_TIMINGS_PREFIX
+from benchpress.deploy_pipeline import COMPLETE_KEY, parse_step_line
 
 ACCOUNT = "Credit Account"
 ADMISSION = "Bench Admission"
@@ -34,36 +23,32 @@ DEPLOY_LOG = "Deploy Log"
 LEDGER = "Credit Ledger Entry"
 SETTINGS = "BenchPress Settings"
 
-DRILL_USER = "golden-drill@example.com"
+DRILL_USER = "golden-drill-{n}@example.com"
+DRILL_USER_LIKE = "golden-drill-%@example.com"
+DRILL_USER_NAME = re.compile(r"golden-drill-\d+@example\.com")
 DRILL_ROLE = "BenchPress User"
+DRILL_ROW_LIMIT = 500
 
-# The label every drilled site is named from, so a row this drill made says so.
 SITE_PREFIX = "golddrill-"
 
-# Funded past anything a deploy could be refused for: the drill measures how long a site takes,
-# not what it costs, and a shortfall halfway through a run would measure nothing at all.
 DRILL_BALANCE = 100000.0
 
 
-def setup(lab: str, cold: int = 0) -> dict:
-	"""Open the drill account, point it at a real lab, and set the arm this run measures."""
+def setup(lab: str, cold: int = 0, concurrent: int = 1) -> dict:
+	"""Open one drill account per concurrent deploy, point them at a real lab, and set the arm."""
 	lab_doc = frappe.get_doc("Lab", lab)
 	if lab_doc.status != "Ready" or not lab_doc.image_tag:
 		frappe.throw(f"Lab '{lab}' has no built image to drill.")
 
-	user = _ensure_user()
-	_fund(user)
+	users = [_drill_user(n, lab_doc.lab_id) for n in range(1, max(1, cint(concurrent)) + 1)]
 	restore_before = cint(frappe.db.get_single_value(SETTINGS, "restore_from_golden"))
 	_set_restore(0 if cint(cold) else restore_before)
 	frappe.db.commit()  # nosemgrep -- the deploy runs in a worker that cannot see uncommitted fixtures
 	return {
-		"user": user,
-		"api_key": frappe.db.get_value("User", user, "api_key"),
-		"api_secret": _api_secret(user),
+		"users": users,
 		"base_domain": frappe.db.get_single_value(SETTINGS, "base_domain"),
 		"lab": lab,
 		"image_tag": lab_doc.image_tag,
-		"site_label": f"{SITE_PREFIX}{lab_doc.lab_id}",
 		"restore_before": restore_before,
 		"restoring": bool(0 if cint(cold) else restore_before),
 	}
@@ -76,11 +61,10 @@ def restore(restore_before: int) -> dict:
 	return {"restore_from_golden": cint(restore_before)}
 
 
-def measure(bench: str) -> dict:
-	"""One bench's newest Deploy Log, as the numbers the drill compares.
+def measure(bench: str) -> dict | None:
+	"""One bench's newest Deploy Log as the numbers the drill compares, or None for an unfinished run.
 
-	`site_seconds` is the gap between the `site` and `assets` markers, which is the site step's
-	own duration and the only place it survives after the run.
+	`site_seconds` is the gap between the `site` and `assets` markers, the site step's own duration.
 	"""
 	rows = frappe.get_all(
 		DEPLOY_LOG,
@@ -90,39 +74,48 @@ def measure(bench: str) -> dict:
 		limit=1,
 	)
 	if not rows:
-		return {"deploy_log": None}
+		return None
 	message = rows[0].message or ""
 	marks = {}
+	timings = None
 	for line in message.splitlines():
 		step = parse_step_line(line)
 		if step:
 			marks[step["step_key"]] = step["step_elapsed"]
+		elif line.startswith(SITE_TIMINGS_PREFIX):
+			timings = line.removeprefix(SITE_TIMINGS_PREFIX).strip()
+	if COMPLETE_KEY not in marks:
+		return None
 	return {
 		"deploy_log": rows[0].name,
 		"site_seconds": _gap(marks, "site", "assets"),
-		"total_seconds": marks.get("complete"),
+		"total_seconds": marks[COMPLETE_KEY],
 		"restored": GOLDEN_RESTORED in message,
+		"site_timings": timings,
 	}
 
 
 def cleanup() -> dict:
-	"""Remove every bench the drill deployed, through the same teardown the delete action runs."""
+	"""Remove every drill user, the benches they deployed and the credit rows they hold."""
 	from benchpress.api import _delete_bench
 
+	users = _drill_users()
 	removed = []
-	for name in _drill_benches():
+	for name in _drill_benches(users):
 		try:
 			_delete_bench(frappe.get_doc(BENCH, name))
 			removed.append(name)
 		except Exception:
-			# Named rather than swallowed: a drill container the harness cannot reach is an
-			# operator's problem, not a silent leak.
 			frappe.logger("benchpress").warning(f"golden drill: could not tear down {name}")
-	frappe.db.delete(ADMISSION, {"account": DRILL_USER})
-	frappe.db.delete(LEDGER, {"account": DRILL_USER})
-	frappe.db.delete(ACCOUNT, {"user": DRILL_USER})
+	left = _drill_benches(users)
+	if users:
+		frappe.db.delete(ADMISSION, {"account": ("in", users)})
+		frappe.db.delete(LEDGER, {"account": ("in", users)})
+		frappe.db.delete(ACCOUNT, {"user": ("in", users)})
+	for user in set(users) - _owners(left):
+		frappe.delete_doc("User", user, force=True, ignore_permissions=True, delete_permanently=True)
 	frappe.db.commit()  # nosemgrep -- cleanup on a host serving real tenants must be durable
-	return {"removed": removed, "left": _drill_benches()}
+	return {"removed": removed, "left": left}
 
 
 def _gap(marks: dict, start: str, end: str) -> float | None:
@@ -136,23 +129,50 @@ def _set_restore(value: int) -> None:
 	frappe.clear_document_cache(SETTINGS, SETTINGS)
 
 
-def _drill_benches() -> list[str]:
-	return frappe.get_all(BENCH, filters={"owner": DRILL_USER}, pluck="name")
+def _drill_user(n: int, lab_id: str) -> dict:
+	"""The `n`th drill user, funded, with its API token and the one site label it deploys under."""
+	user = _ensure_user(DRILL_USER.format(n=n))
+	_fund(user)
+	return {
+		"user": user,
+		"api_key": frappe.db.get_value("User", user, "api_key"),
+		"api_secret": _api_secret(user),
+		"site_label": f"{SITE_PREFIX}{lab_id}-{n}",
+	}
 
 
-def _ensure_user() -> str:
-	if not frappe.db.exists("User", DRILL_USER):
+def _drill_users() -> list[str]:
+	candidates = frappe.get_all(
+		"User", filters={"name": ("like", DRILL_USER_LIKE)}, pluck="name", limit=DRILL_ROW_LIMIT
+	)
+	return [name for name in candidates if DRILL_USER_NAME.fullmatch(name)]
+
+
+def _drill_benches(users: list[str]) -> list[str]:
+	if not users:
+		return []
+	return frappe.get_all(BENCH, filters={"owner": ("in", users)}, pluck="name", limit=DRILL_ROW_LIMIT)
+
+
+def _owners(benches: list[str]) -> set[str]:
+	if not benches:
+		return set()
+	return set(frappe.get_all(BENCH, filters={"name": ("in", benches)}, pluck="owner", limit=DRILL_ROW_LIMIT))
+
+
+def _ensure_user(email: str) -> str:
+	if not frappe.db.exists("User", email):
 		frappe.get_doc(
 			{
 				"doctype": "User",
-				"email": DRILL_USER,
+				"email": email,
 				"first_name": "Golden",
 				"last_name": "Drill",
 				"send_welcome_email": 0,
 				"roles": [{"role": DRILL_ROLE}],
 			}
 		).insert(ignore_permissions=True)
-	user = frappe.get_doc("User", DRILL_USER)
+	user = frappe.get_doc("User", email)
 	if DRILL_ROLE not in {row.role for row in user.roles}:
 		user.append("roles", {"role": DRILL_ROLE})
 	user.api_key = user.api_key or frappe.generate_hash(length=15)

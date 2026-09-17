@@ -4,6 +4,7 @@
 import io
 import json
 import tarfile
+import tempfile
 import types
 import unittest
 from unittest.mock import MagicMock, patch
@@ -12,8 +13,12 @@ import docker
 import frappe
 from frappe.tests import IntegrationTestCase
 
-from benchpress import deploy_manager, golden, golden_drill
+from benchpress import deploy_manager, golden, golden_drill, ingress
+from benchpress.credits import admission
 from benchpress.golden import GOLDEN_DB_PREFIX, GOLDEN_DIR, build_golden, golden_database
+from benchpress.tests.fakes import FakeDockerMixin
+from benchpress.tests.fixtures import drop
+from benchpress.tests.test_deploy_manager import _make_lab, _mounted
 
 MANIFEST = {"lab_id": "crm", "mariadb_version": "10.6.28-MariaDB", "dump_bytes": 3}
 
@@ -435,6 +440,7 @@ class TestGoldenDrillMeasure(IntegrationTestCase):
 		"=== Deploy started ===\n"
 		"=== Step 7/11: Creating the site [site @1.9s] ===\n"
 		"Site golddrill-crm.benchpress.cloud restored from the image's golden dump\n"
+		"Site step timings: restore 6.9s, admin password 1.2s, apps 0.1s\n"
 		"=== Step 8/11: Preparing assets [assets @11.6s] ===\n"
 		"=== Step 11/11: Deploy complete [complete @12.4s] ===\n"
 	)
@@ -455,11 +461,109 @@ class TestGoldenDrillMeasure(IntegrationTestCase):
 
 		self.assertFalse(self._measure(cold)["restored"])
 
-	def test_a_run_that_never_reached_the_site_step_measures_nothing(self):
-		measured = self._measure("=== Step 2/11: Preparing the lab image [image @0.4s] ===\n")
+	def test_the_site_step_s_own_timings_come_back_from_their_log_line(self):
+		self.assertEqual(
+			self._measure(self.LOG)["site_timings"], "restore 6.9s, admin password 1.2s, apps 0.1s"
+		)
 
-		self.assertIsNone(measured["site_seconds"])
-		self.assertIsNone(measured["total_seconds"])
+	def test_a_run_that_never_reached_the_site_step_measures_nothing(self):
+		self.assertIsNone(self._measure("=== Step 2/11: Preparing the lab image [image @0.4s] ===\n"))
+
+	def test_a_run_that_failed_after_the_site_step_measures_nothing(self):
+		"""Its site step has a duration, and a drill that printed it would report a deploy that never finished."""
+		failed = self.LOG.replace(
+			"=== Step 11/11: Deploy complete [complete @12.4s] ===\n",
+			"=== Deploy failed: serve.sh failed ===\n",
+		)
+
+		self.assertIsNone(self._measure(failed))
+
+
+class TestGoldenDrillUsers(FakeDockerMixin, IntegrationTestCase):
+	"""One drill user per concurrent deploy, and a cleanup that leaves none of them behind."""
+
+	@classmethod
+	def setUpClass(cls):
+		super().setUpClass()
+		frappe.set_user("Administrator")
+		cls.lab = _make_lab("test-lab-golden-drill")
+		frappe.db.set_value("Lab", cls.lab.name, {"status": "Ready", "image_tag": "benchpress/drill:lab"})
+		frappe.db.commit()
+
+	@classmethod
+	def tearDownClass(cls):
+		frappe.set_user("Administrator")
+		cls.lab.delete(ignore_permissions=True)
+		frappe.db.commit()
+		super().tearDownClass()
+
+	def setUp(self):
+		super().setUp()
+		routes = tempfile.TemporaryDirectory()
+		self.addCleanup(routes.cleanup)
+		routes_patch = patch.object(ingress, "TRAEFIK_DYNAMIC_DIR", _mounted(routes.name))
+		routes_patch.start()
+		self.addCleanup(routes_patch.stop)
+		self.addCleanup(self._cleanup)
+
+	def _cleanup(self):
+		frappe.set_user("Administrator")
+		golden_drill.cleanup()
+
+	def _bench_owned_by(self, user: str):
+		"""An instance as `create_bench` claims one: named from, and owned by, the drill user."""
+		frappe.set_user(user)
+		try:
+			bench = frappe.get_doc({"doctype": "Bench Instance", "lab": self.lab.name}).insert(
+				ignore_permissions=True
+			)
+		finally:
+			frappe.set_user("Administrator")
+		admission.claim(user, bench.name, 0)
+		return bench
+
+	def test_setup_gives_every_concurrent_deploy_its_own_user_and_site_label(self):
+		setup = golden_drill.setup(self.lab.name, concurrent=2)
+
+		users = setup["users"]
+		self.assertEqual(
+			[entry["user"] for entry in users], ["golden-drill-1@example.com", "golden-drill-2@example.com"]
+		)
+		self.assertEqual(
+			[entry["site_label"] for entry in users],
+			["golddrill-test-lab-golden-drill-1", "golddrill-test-lab-golden-drill-2"],
+		)
+		for entry in users:
+			self.assertTrue(frappe.db.exists("Credit Account", entry["user"]))
+			self.assertTrue(entry["api_key"] and entry["api_secret"])
+
+	def test_cleanup_leaves_a_user_the_drill_did_not_mint(self):
+		lookalike = "golden-drill-ops@example.com"
+		self.addCleanup(drop, "User", lookalike)
+		frappe.get_doc(
+			{"doctype": "User", "email": lookalike, "first_name": "Ops", "send_welcome_email": 0}
+		).insert(ignore_permissions=True)
+		frappe.db.commit()
+
+		golden_drill.cleanup()
+
+		self.assertTrue(frappe.db.exists("User", lookalike))
+
+	def test_cleanup_removes_every_numbered_drill_user_and_every_row_they_own(self):
+		users = [entry["user"] for entry in golden_drill.setup(self.lab.name, concurrent=2)["users"]]
+		for user in users:
+			self._bench_owned_by(user)
+		frappe.db.commit()
+
+		result = golden_drill.cleanup()
+
+		self.assertEqual(result["left"], [])
+		for user in users:
+			self.assertFalse(frappe.db.exists("User", user))
+			self.assertEqual(frappe.db.count("Bench Instance", {"owner": user}), 0)
+			self.assertEqual(frappe.db.count("Bench Admission", {"account": user}), 0)
+			self.assertEqual(frappe.db.count("Credit Ledger Entry", {"account": user}), 0)
+			self.assertFalse(frappe.db.exists("Credit Account", user))
 
 
 class TestGoldenSwitchDefaults(IntegrationTestCase):

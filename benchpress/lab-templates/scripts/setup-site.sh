@@ -7,6 +7,13 @@ cd /home/frappe/frappe-bench || true
 GOLDEN=/opt/benchpress/golden/site.sql.gz
 MANIFEST=/opt/benchpress/golden/manifest.json
 
+T0=$(date +%s%3N)
+mark() {
+    local now; now=$(date +%s%3N)
+    echo "[*] $1 took $(( (now - T0) / 1000 )).$(( (now - T0) % 1000 / 100 ))s"
+    T0=$now
+}
+
 # A deploy preserves the data volume, so an instance deployed before already has its
 # site. Adopted rather than recreated; nothing here destroys a site.
 if [ -f "sites/${SITE_NAME}/site_config.json" ]; then
@@ -17,6 +24,7 @@ if [ -f "sites/${SITE_NAME}/site_config.json" ]; then
     # password. Moving it to stdin means `getpass` with no controlling terminal, which hangs the
     # deploy if a TTY ever is attached.
     bench --site "${SITE_NAME}" set-admin-password "${ADMIN_PASSWORD}"
+    mark "admin password"
 # -s rather than -f: a zero-byte dump is a failed copy, and restoring one leaves a site with
 # no tables and no error.
 elif [ "${USE_GOLDEN:-1}" = "1" ] && [ -s "$GOLDEN" ]; then
@@ -29,9 +37,11 @@ elif [ "${USE_GOLDEN:-1}" = "1" ] && [ -s "$GOLDEN" ]; then
         --mariadb-root-username "${MARIADB_ROOT_USERNAME}" \
         --mariadb-root-password "${MARIADB_ROOT_PASSWORD}" \
         --mariadb-user-host-login-scope='%'
+    mark restore
     # Every tenant of this lab restores the same bytes, so the dump's own Administrator hash
     # must never be what one of them logs in with.
     bench --site "${SITE_NAME}" set-admin-password "${ADMIN_PASSWORD}"
+    mark "admin password"
     RESTORED=1
     echo "[*] Restored from golden dump"
 else
@@ -43,6 +53,7 @@ else
         --mariadb-root-username "${MARIADB_ROOT_USERNAME}" \
         --mariadb-root-password "${MARIADB_ROOT_PASSWORD}" \
         --mariadb-user-host-login-scope='%'
+    mark create
 fi
 
 if [ -n "${APPS}" ]; then
@@ -66,6 +77,7 @@ if [ -n "${APPS}" ]; then
             bench --site "${SITE_NAME}" install-app "${app}"
         fi
     done
+    mark apps
 fi
 
 # No `set-config developer_mode` and no `bench use` here: the control plane writes both keys

@@ -37,7 +37,9 @@
   "enable_credits",
   "reconcile_section",
   "orphan_grace_minutes",
-  "deploy_log_cap"
+  "deploy_log_cap",
+  "operator_alerts_section",
+  "operator_alert_email"
  ],
  "fields": [
   {
@@ -246,13 +248,25 @@
    "fieldname": "deploy_log_cap",
    "fieldtype": "Int",
    "label": "Deploy Log Cap"
+  },
+  {
+   "fieldname": "operator_alerts_section",
+   "fieldtype": "Section Break",
+   "label": "Operator Alerts"
+  },
+  {
+   "description": "Deploy failures and teardown failures are emailed here. Leave empty to send nothing.",
+   "fieldname": "operator_alert_email",
+   "fieldtype": "Data",
+   "label": "Operator Alert Email",
+   "options": "Email"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2026-08-28 06:00:00.000000",
+ "modified": "2026-09-17 06:00:00.000000",
  "modified_by": "Administrator",
  "module": "Benchpress",
  "name": "BenchPress Settings",

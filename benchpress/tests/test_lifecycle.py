@@ -584,6 +584,57 @@ class TestTeardownReports(TransitionFixtures, FakeDockerMixin, IntegrationTestCa
 		self.assertEqual(frappe.db.count(ERROR_LOG, {"method": ("like", f"%{bench.name}%")}), 0)
 
 
+class TestOperatorAlerts(TransitionFixtures, FakeDockerMixin, IntegrationTestCase):
+	"""A failed deploy or an incomplete teardown emails the operator once, and a clean one never does."""
+
+	lab_id = "test-lab-lifecycle-alerts"
+
+	def _bench_for_deploy(self):
+		bench = _fresh_bench(self, self.lab.name)
+		self.addCleanup(frappe.db.commit)
+		self.addCleanup(lambda name=bench.name: frappe.db.delete("Deploy Log", {"bench": name}))
+		self.addCleanup(self._forget_error_logs, bench.name)
+		return bench
+
+	def test_a_failed_deploy_alerts_the_operator_once(self):
+		bench = self._bench_for_deploy()
+
+		with (
+			patch.object(lifecycle.placement, "pick_network", return_value="benchpress-0"),
+			patch.object(lifecycle, "ensure_infrastructure", side_effect=Exception("mariadb down")),
+			patch.object(lifecycle, "notify_owner", autospec=True),
+			patch("benchpress.alerts.deploy_failed", autospec=True) as deploy_failed,
+		):
+			lifecycle._deploy_bench(bench.name)
+
+		deploy_failed.assert_called_once()
+		alerted_bench, lab_title, reason = deploy_failed.call_args.args
+		self.assertEqual(alerted_bench.name, bench.name)
+		self.assertEqual(lab_title, self.lab.title)
+		self.assertEqual(reason, "mariadb down")
+
+	def test_an_incomplete_teardown_alerts_the_operator_once(self):
+		bench = self._bench("Running", "running")
+		self.addCleanup(self._forget_error_logs, bench.name)
+		self.docker.containers.get(bench.container_id).remove_refusal = "container is in use"
+
+		with patch("benchpress.alerts.alert_operator", autospec=True) as alert_operator:
+			lifecycle.torn_down(bench)
+
+		alert_operator.assert_called_once()
+		subject, text = alert_operator.call_args.args
+		self.assertEqual(subject, f"BenchPress teardown incomplete: {bench.name}")
+		self.assertIn("container is in use", text)
+
+	def test_a_clean_teardown_alerts_nobody(self):
+		bench = self._bench("Running", "running")
+
+		with patch("benchpress.alerts.alert_operator", autospec=True) as alert_operator:
+			lifecycle.torn_down(bench)
+
+		alert_operator.assert_not_called()
+
+
 class TestTeardownFreesTheTunnelIP(TransitionFixtures, FakeDockerMixin, IntegrationTestCase):
 	"""The leak: every reaped bench used to hold its WireGuard address forever."""
 

@@ -18,7 +18,6 @@ import json
 import tarfile
 import time
 from datetime import UTC, datetime
-from pathlib import Path
 
 import docker
 import frappe
@@ -38,29 +37,20 @@ GOLDEN_DIR = "/opt/benchpress/golden"
 DUMP_PATH = f"{GOLDEN_DIR}/site.sql.gz"
 MANIFEST_PATH = f"{GOLDEN_DIR}/manifest.json"
 
-# Whether a tag carries a golden is read from these, never from `Lab.golden_manifest`: the row is
-# a claim about an image, and the image is the artefact a deploy actually runs.
 GOLDEN_LABEL = "benchpress.golden"
 GOLDEN_MARIADB_LABEL = "benchpress.golden.mariadb"
 
-# The three names this feature owns, and the only ones it ever drops or removes. A tenant's
-# database is `_<sha1>` from `mariadb_manager.get_database_name` and stays unreachable from here.
 GOLDEN_SITE_PREFIX = "bpgolden-"
 GOLDEN_CONTAINER_PREFIX = "bpgolden-"
 GOLDEN_DB_PREFIX = "_bpgolden"
 VERIFY_DB_PREFIX = "_bpgolden_verify_"
 
 BENCH_DIR = "/home/frappe/frappe-bench"
-SETUP_SITE_PATH = "/opt/benchpress/scripts/setup-site.sh"
 
-# The dump and the verification restore each report themselves on one marked line, because a
-# MariaDB client warning on stderr lands in the same stream as the output.
 META_MARKER = "GOLDEN_META"
 VERIFY_MARKER = "GOLDEN_VERIFY"
 
-# The restore is DDL-bound: a schema-only dump of the same site restores in the same time as
-# the full one, because the cost is 281 `CREATE TABLE`s. These three drop the statements that
-# are pure overhead against the empty database `bench new-site` has just created.
+
 LEAN_DUMP_FLAGS = "--skip-add-drop-table --skip-add-locks --skip-disable-keys"
 
 
@@ -81,7 +71,6 @@ def build_golden(lab_doc, log_fn=None) -> dict:
 		_append_layer(container.id, lab_doc.image_tag, manifest, log_fn)
 		return manifest
 	finally:
-		# Both outlive a failed run, and a leaked database sits in the server every tenant shares.
 		drop_site_database(db_server.name, site, database)
 		container.remove(force=True)
 
@@ -107,8 +96,6 @@ def build_golden_job(lab_name: str, user: str | None = None) -> None:
 	append_log(json.dumps(manifest))
 	append_log(f"=== Build complete: golden in {lab.image_tag} ===", "success")
 	frappe.db.set_value("Build Log", build_log_name, "log_type", "success")
-	# The row is only ever a record, so it is written the same way whether the golden came from
-	# a build or from this action — otherwise the admin screen reads empty for a lab that has one.
 	frappe.db.set_value("Lab", lab_name, "golden_manifest", json.dumps(manifest, indent=2))
 	frappe.db.commit()  # nosemgrep -- the log records a finished run
 
@@ -239,8 +226,6 @@ def _create_site(container_id: str, db_server, site: str, database: str, lab_doc
 
 def _dump_site(container_id: str, db_server, site: str, lab_doc, log_fn) -> dict:
 	"""Dump the golden site's database inside the container; return the manifest describing it."""
-	# Emptied, not reused: the image may already carry a golden, and its root-owned dump would
-	# both refuse the write and travel into the new layer beside this run's own.
 	exit_code, output = docker_manager.exec_in_container(
 		container_id,
 		f"rm -rf {GOLDEN_DIR} && mkdir -p {GOLDEN_DIR} && chown frappe:frappe {GOLDEN_DIR}",
@@ -293,7 +278,6 @@ def _verify_dump(container_id: str, db_server, lab_doc, log_fn) -> dict:
 			raise Exception(f"Could not read the restored database (exit {exit_code}): {output}")
 		tables, installed_apps = _read_verified(output)
 	finally:
-		# The scratch database and its limited user both sit in the server every tenant shares.
 		drop_site_database(db_server.name, site, database)
 		drop_mariadb_user(db_server.name, site, database)
 
@@ -320,7 +304,6 @@ def _restored_command(db_server, database: str) -> str:
 	client = f"{_verify_client(db_server)} -N -B"
 	count = f"SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='{database}'"
 	tables = f'tables=$({client} -e "{count}")'
-	# `app_name`, not `name`: a row in this child table is named by a hash.
 	names = "SELECT app_name FROM `tabInstalled Application`"
 	apps = f"apps=$({client} {database} -e '{names}' | tr '\\n' ' ')"
 	report = f'echo "{VERIFY_MARKER} $tables $apps"'
@@ -441,7 +424,7 @@ def _build_context(container_id: str, image_tag: str, manifest: dict) -> io.Byte
 				out.addfile(member, golden.extractfile(member) if member.isfile() else None)
 		_add_file(out, "golden/manifest.json", json.dumps(manifest, indent=2).encode())
 		_add_file(out, "Dockerfile", _dockerfile(image_tag, manifest).encode())
-		_add_file(out, "setup-site.sh", _setup_site_source().encode(), mode=0o755)
+		_add_file(out, "setup-site.sh", deploy_manager._lab_script("setup-site.sh").encode(), mode=0o755)
 	context.seek(0)
 	return context
 
@@ -456,15 +439,9 @@ def _dockerfile(image_tag: str, manifest: dict) -> str:
 	return (
 		f"FROM {image_tag}\n"
 		f"COPY golden {GOLDEN_DIR}\n"
-		f"COPY setup-site.sh {SETUP_SITE_PATH}\n"
+		f"COPY setup-site.sh {deploy_manager.SETUP_SITE}\n"
 		f'LABEL {GOLDEN_LABEL}="1" {GOLDEN_MARIADB_LABEL}="{manifest["mariadb_version"]}"\n'
 	)
-
-
-def _setup_site_source() -> str:
-	return (
-		Path(frappe.get_app_path("benchpress")) / "lab-templates" / "scripts" / "setup-site.sh"
-	).read_text()
 
 
 def _add_file(tar: tarfile.TarFile, name: str, data: bytes, mode: int = 0o644) -> None:

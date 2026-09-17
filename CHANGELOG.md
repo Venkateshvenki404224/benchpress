@@ -65,6 +65,17 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
   `.well-known/agent-skills/index.json`. A path that resolves outside the docs
   directory is refused.
   ([#262](https://github.com/Venkateshvenki404224/benchpress/pull/262))
+- A deploy reports where the seconds of its site step go, and a failure emails
+  the operator. The Deploy Log gets a `Site step timings:` line with the time for
+  the restore or the create, the admin password and the app loop. Every existing
+  lab image reports these times, because the deploy writes the app's copy of
+  `setup-site.sh` into the container. `scripts/golden_drill.py --probe-login`
+  times a deploy to the first login on its site, `--concurrent N` starts N
+  deploys at once, and `scripts/restore_probe.sh` times the golden dump under
+  four MariaDB configurations. A failed deploy, a failed image build during a
+  launch and an incomplete teardown each queue one email to
+  `BenchPress Settings.operator_alert_email`. BenchPress sends nothing while that
+  field is empty.
 
 ### Changed
 
@@ -100,8 +111,11 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
    every running bench's connection to the cache. Name the service: a bare
    `up -d` also creates the `docker-events` listener, and a second listener
    records every incident twice.
-2. **No `bench migrate` is needed.** This release changes no DocType schema and
-   adds no patch.
+2. **Run `bench --site <site> migrate`.** It adds `operator_alert_email` to
+   `BenchPress Settings`. Until it runs, BenchPress sends no failure alert, and
+   the Error Log records `BenchPress operator alert failed`.
+3. **Set `operator_alert_email`** in `/app/benchpress-settings` to get deploy and
+   teardown failures by email. The field ships empty, and empty sends nothing.
 
 ## [0.1.0] - 2026-08-28
 

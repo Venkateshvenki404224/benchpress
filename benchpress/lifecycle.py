@@ -6,13 +6,12 @@
 import json
 import secrets
 import shlex
-from pathlib import Path
 
 import frappe
 from frappe.utils.file_lock import LockTimeoutError
 from frappe.utils.synchronization import filelock
 
-from benchpress import addressing, ingress, placement
+from benchpress import addressing, alerts, ingress, placement
 from benchpress.credits import admission, lease, metering
 from benchpress.credits.config import size_by_name, size_for_lab
 from benchpress.deploy_pipeline import DeployLogWriter, DeployPipeline
@@ -193,11 +192,11 @@ def _record_teardown_failures(bench_name: str, removals: dict[str, str]) -> None
 	failed = [f"{step}: {result}" for step, result in removals.items() if result != GONE]
 	if not failed:
 		return
-	frappe.log_error(
-		title=f"BenchPress teardown incomplete: {bench_name}",
-		message="\n".join(failed),
-	)
+	title = f"BenchPress teardown incomplete: {bench_name}"
+	message = "\n".join(failed)
+	frappe.log_error(title=title, message=message)
 	frappe.db.commit()  # nosemgrep -- a record of the failure that a rollback can lose is the silence again
+	alerts.alert_operator(title, message)
 
 
 def _remove_bench_peer(bench) -> str:
@@ -276,14 +275,18 @@ def _deploy_bench(bench_name: str, size_name: str | None = None, deploy_log: str
 	# creation are the remainder `deploy_manager` keeps, and importing them at module scope
 	# would make a cycle the moment anything there needs a transition.
 	from benchpress.deploy_manager import (
+		LINKUSER,
+		SITE_TIMINGS_PREFIX,
 		_assert_runtime_registered,
 		_forget_code_server_url,
 		_golden_matches_server,
+		_lab_script,
 		_prepare_lab_image,
 		_record_primary_site,
 		_remove_stale_container,
 		_setup_container_vpn,
 		_site_outcome,
+		_site_timings,
 		_start_code_server,
 		build_linkuser_args,
 		create_site_in_container,
@@ -416,6 +419,9 @@ def _deploy_bench(bench_name: str, size_name: str | None = None, deploy_log: str
 		)
 		if exit_code != 0:
 			raise Exception(f"Site setup failed (exit {exit_code}): {output}")
+		timings = _site_timings(output)
+		if timings:
+			pipeline.log(f"{SITE_TIMINGS_PREFIX} {timings}")
 		pipeline.log(_site_outcome(output, site_name))
 		_record_primary_site(bench, lab, admin_password)
 
@@ -430,13 +436,7 @@ def _deploy_bench(bench_name: str, size_name: str | None = None, deploy_log: str
 		linkuser_args = build_linkuser_args(bench, lab, settings)
 		pipeline.step("ssh_user")
 		pipeline.log(f"linkuser.sh {bench.ssh_username}")
-		# The app's copy of linkuser.sh is authoritative over the one baked into the image.
-		linkuser_script = (
-			Path(frappe.get_app_path("benchpress")) / "lab-templates" / "scripts" / "linkuser.sh"
-		)
-		write_file_to_container(
-			container_id, linkuser_script.read_text(), "/opt/benchpress/scripts/linkuser.sh"
-		)
+		write_file_to_container(container_id, _lab_script("linkuser.sh"), LINKUSER)
 		linkuser_cmd = linkuser_command(linkuser_args)
 		exit_code, output = exec_in_container(
 			container_id, linkuser_cmd, user="root", environment={"SSH_PASSWORD": ssh_password}
@@ -503,6 +503,7 @@ def _deploy_bench(bench_name: str, size_name: str | None = None, deploy_log: str
 			message=frappe.get_traceback(),
 		)
 		notify_owner(bench.owner, f"Lab deploy failed: {lab.title}", "Bench Instance", bench.name)
+		alerts.deploy_failed(bench, lab.title, str(e))
 
 
 def redeploy_bench(bench_name: str) -> None:

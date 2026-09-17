@@ -147,3 +147,16 @@ class TestRunLaunch(IntegrationTestCase):
 		log = self._logs(bench.name)[0]
 		self.assertIn("=== Deploy failed: the lab image could not be built:", log.message)
 		self.assertEqual(log.log_type, "error")
+
+	def test_a_failed_build_alerts_the_operator_once(self):
+		bench = self._bench()
+		self._make_unbuilt()
+
+		with patch("benchpress.alerts.deploy_failed", autospec=True) as deploy_failed:
+			self._run(bench, cached=[], build_error=Exception("docker build blew up"))
+
+		deploy_failed.assert_called_once()
+		alerted_bench, lab_title, reason = deploy_failed.call_args.args
+		self.assertEqual(alerted_bench.name, bench.name)
+		self.assertEqual(lab_title, self.lab.title)
+		self.assertEqual(reason, "the lab image could not be built: docker build blew up")

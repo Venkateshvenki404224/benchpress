@@ -19,7 +19,7 @@
 import frappe
 from frappe.utils.synchronization import filelock
 
-from benchpress import addressing, deploy_manager, image_cache, lifecycle, notifications
+from benchpress import addressing, alerts, deploy_manager, image_cache, lifecycle, notifications
 from benchpress.benchpress.doctype.bench_instance.bench_instance import DEPLOY_JOB_TIMEOUT
 from benchpress.deploy_pipeline import DeployPipeline
 
@@ -69,6 +69,7 @@ def _built(lab, bench, writer, deploy_log) -> bool:
 		writer(f"=== Deploy failed: the lab image could not be built: {e!s} ===", "error")
 		frappe.db.set_value("Deploy Log", deploy_log, "log_type", "error")
 		frappe.db.commit()  # nosemgrep -- the run's outcome must survive its failure
+		alerts.deploy_failed(bench, lab.title, f"the lab image could not be built: {e!s}")
 		return False
 	return True
 

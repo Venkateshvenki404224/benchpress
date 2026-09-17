@@ -653,6 +653,27 @@ class TestDeployStepMarkers(IntegrationTestCase):
 		self.assertFalse({"assets", "ssh_user", "code_server", "complete"} & set(keys))
 		self.assertIn("=== Deploy failed:", self._log(bench.name))
 
+	def test_the_site_step_s_timings_reach_the_log_on_one_line_ahead_of_its_outcome(self):
+		"""The outcome stays the step's last line, which is the detail the stepper shows."""
+		bench = self._bench()
+		output = "[*] create took 23.1s\n[*] admin password took 1.2s\n[*] apps took 0.4s\n"
+
+		self._run_deploy(bench, site_result=(0, output))
+
+		self.assertIn(
+			"\nSite step timings: create 23.1s, admin password 1.2s, apps 0.4s\nSite created successfully\n",
+			self._log(bench.name),
+		)
+
+	def test_a_successful_deploy_never_alerts_the_operator(self):
+		bench = self._bench()
+
+		with patch("benchpress.alerts.deploy_failed", autospec=True) as deploy_failed:
+			self._run_deploy(bench)
+
+		self.assertEqual(self._bench_field(bench, "status"), "Running")
+		deploy_failed.assert_not_called()
+
 	def test_a_disabled_code_server_still_reports_its_step(self):
 		bench = self._bench()
 		frappe.db.set_value("Lab", self.lab.name, "enable_code_server", 0)
@@ -1384,3 +1405,49 @@ class TestBuildRefreshesTheImageMemo(IntegrationTestCase):
 			deploy_manager._build_lab_with_logs(lab, None)
 
 			self.assertTrue(image_cache.is_ready(lab))
+
+
+class TestSiteStep(unittest.TestCase):
+	"""The site step runs the app's own `setup-site.sh`, and reports the marks it printed."""
+
+	def _create_site(self):
+		calls = MagicMock()
+		with (
+			patch.object(deploy_manager, "create_mariadb_user", return_value=("_db", "_limited", "pw")),
+			patch.object(deploy_manager, "drop_mariadb_user"),
+			patch.object(deploy_manager, "write_file_to_container", new=calls.write),
+			patch.object(deploy_manager, "exec_in_container", new=calls.exec),
+		):
+			calls.exec.return_value = (0, "")
+			db_server = SimpleNamespace(name="db", container_name="benchpress-mariadb")
+			deploy_manager.create_site_in_container("cid", db_server, "site", "admin-pw", "crm")
+		return calls
+
+	def test_the_app_s_script_is_written_before_it_runs(self):
+		"""An image rebuild takes 10-40 minutes, so the marks reach a deploy through this write."""
+		calls = self._create_site()
+
+		self.assertEqual([call[0] for call in calls.mock_calls], ["write", "exec"])
+		_container, script, path = calls.write.call_args.args
+		self.assertIn("mark restore", script)
+		self.assertEqual(path, deploy_manager.SETUP_SITE)
+		self.assertEqual(calls.write.call_args.kwargs, {"mode": 0o755})
+		self.assertIn(deploy_manager.SETUP_SITE, calls.exec.call_args.args[1])
+
+	def test_the_marks_become_one_clause_and_a_step_marker_is_not_one(self):
+		output = (
+			"[*] Restoring site from the image's golden dump...\n"
+			"[*] restore took 23.1s\n"
+			"=== Step 7/11: Creating the site [site @1.9s] took 4.0s ===\n"
+			"[*] admin password took 1.2s\n"
+			"[*] Installing app: crm...\n"
+			"[*] apps took 0.4s\n"
+			"[*] Site site ready.\n"
+		)
+
+		self.assertEqual(
+			deploy_manager._site_timings(output), "restore 23.1s, admin password 1.2s, apps 0.4s"
+		)
+
+	def test_an_image_whose_script_prints_no_marks_reports_no_timings(self):
+		self.assertEqual(deploy_manager._site_timings("[*] Site site ready.\n"), "")
