@@ -2585,7 +2585,7 @@ BenchPress has two settings Singles. Neither is fully exposed in the app.
 
 |Document|Holds|Edited in|
 |--|--|--|
-|`BenchPress Settings`|Docker, addressing, the bench network, container defaults, health probes, reconciliation, and the credits master switch|the app's Settings dialog (10 fields) and Desk (all 26)|
+|`BenchPress Settings`|Docker, addressing, the bench network, container defaults, health probes, reconciliation, operator alerts, and the credits master switch|the app's Settings dialog (10 fields) and Desk (all 27)|
 |`Credit Settings`|grants, charges, leases, caps, and self-serve signup|Desk only|
 
 The app's Settings dialog is deliberately a subset — the ten fields an
@@ -2703,6 +2703,20 @@ on, every deploy is charged against a balance and capped by concurrency, and
 users who have no `Credit Account` are refused. Nothing on the self-hosted
 path needs it.
 
+### Operator alerts
+
+|Field|On this host|Ships as|What it does|
+|--|--|--|--|
+|`operator_alert_email`|*(empty)*|*(empty)*|The address that gets an email for each deploy failure and each teardown failure. Empty sends nothing|
+
+Three failures send an alert: a failed deploy, a failed image build during a
+launch, and a teardown that could not remove everything. A deploy alert names
+the owner, links the instance, and carries the first 300 characters of the
+failure. A teardown alert lists each removal that failed.
+
+Each alert is one queued email. The Email Queue sends it only while the site's
+scheduler runs.
+
 ## Credit Settings
 
 Every field here is inert while `enable_credits` is `0`. Each function in the
@@ -2777,6 +2791,7 @@ See [Self-serve signup](/docs/operator/hosted-signup).
 |`bench_subnet_base`, `bench_bridge_count`|bridges created after the change|existing bridges and the benches on them stay|
 |health probe fields|the next deploy, which writes a new healthcheck|untouched|
 |`enable_credits`|immediately|every deploy, renewal and device add is gated from the next request|
+|`operator_alert_email`|the next failure|untouched|
 |`reap_after_days`|the next daily sweep|a stopped instance already past the new figure is reaped on that sweep|
 
 ## How these values were read
@@ -2811,7 +2826,8 @@ wrap it in a single `exec()` call.
 |Settings will not save|`base_domain` is empty|It is required. Sites are addressed under it|
 |A field you cleared behaved as before|`0` falls back to the built-in for that field|See [Reconciliation and events](#reconciliation-and-events). Set the number you want|
 |Every user is refused a deploy|`enable_credits` was switched on and nobody has an account|Switch it back to `0`, or read [Credits and billing](/docs/operator/credits-and-billing)|
-|The Settings dialog does not show a field you read about|The dialog carries 10 of 26 fields|Edit it at `/app/benchpress-settings`|
+|The Settings dialog does not show a field you read about|The dialog carries 10 of 27 fields|Edit it at `/app/benchpress-settings`|
+|A deploy failed and no alert arrived|`operator_alert_email` is empty, or the site's scheduler is off|Set the address. Then check `bench --site <site> doctor` for the scheduler|
 |The Settings item is missing from the account menu|The screen is admin-only|See [Users and roles](/docs/operator/users-and-roles)|
 
 ## Related
@@ -3384,13 +3400,93 @@ restored or created.
 Two behaviors of the drill worth knowing before you run it on a live host. It
 goes to the host's own nginx rather than through the CDN, and it refuses to
 run unless `--i-know-this-is` matches the site's own `base_domain`. Every
-bench it makes belongs to `golden-drill@example.com`, and cleanup runs in a
-`finally` block.
+bench it makes belongs to a `golden-drill-<n>@example.com` user, and cleanup
+runs in a `finally` block. Cleanup removes those users too.
 
 The underlying measurement, taken directly inside `benchpress-mariadb`: a
 281-table database dumps in 0.67 s and restores in **6.6 s**, against 40.4 s
 to create. A 1,055-table one dumps in 2.5 s and restores in **24.9 s**,
 against 202 s to create.
+
+## Where a deploy's seconds go
+
+After the site step, a deploy writes one line into its Deploy Log:
+
+```text
+Site step timings: restore 23.1s, admin password 1.2s, apps 0.4s
+```
+
+|Part|Measures|
+|--|--|
+|`restore`|`bench new-site --source-sql`, including the start-up time of `bench`|
+|`create`|`bench new-site` on a cold run. It replaces `restore`|
+|`admin password`|`set-admin-password`|
+|`apps`|the loop that installs each app the golden does not carry|
+
+The deploy writes the app's copy of `setup-site.sh` into the container before
+it runs it. Every lab image reports these times, with no rebuild. The line
+opens no step, so the stepper still shows eleven.
+
+### Time a deploy to its first login
+
+```bash
+python3 scripts/golden_drill.py --lab crm --runs 1 --probe-login --i-know-this-is <your base domain>
+python3 scripts/golden_drill.py --lab crm --runs 1 --concurrent 5 --probe-login --i-know-this-is <your base domain>
+```
+
+`--probe-login` reads the new site's Administrator password through
+`get_bench_credentials`. It then posts to the site's `/api/method/login` every 2
+seconds, for up to 120 seconds. `login_seconds` runs from the `create_bench`
+call to the first reply that says `Logged In`.
+
+The probe connects to the host's own Traefik at `BENCHPRESS_EDGE`, which
+defaults to `127.0.0.1:8443`, and presents the bench's public name. The CDN
+answers a script with error `1010`, so a probe through the CDN never logs in.
+The probe reaches a bench with no public address at its container address.
+
+`--concurrent N` starts N deploys at once, one for each drill user. The drill
+prints a host line, one row for each deploy, and a median row.
+
+|Column|Source|
+|--|--|
+|`site_seconds`, `total_seconds`|the step markers in the Deploy Log|
+|`login_seconds`|the login probe|
+|`restored`|whether the Deploy Log says the golden dump was restored|
+|`peak_mem_mb`|the highest total memory of all containers while that deploy ran, from `docker stats`|
+
+A deploy with no `complete` marker prints `no measurement`. The drill does not
+estimate a number for it.
+
+### Time the restore alone
+
+The `restore` time includes the start-up time of `bench`. The restore probe
+restores the same dump directly, under four MariaDB configurations.
+
+```bash
+bash scripts/restore_probe.sh --list
+bash scripts/restore_probe.sh
+```
+
+|Configuration|Flags|
+|--|--|
+|`today`|the `mariadbd` flags in `benchpress/config/docker-compose.yml`|
+|`durable-off`|`today`, plus `--innodb-flush-log-at-trx-commit=2 --skip-log-bin --table-open-cache=4000 --table-definition-cache=4000`|
+|`per-table-off`|`durable-off`, plus `--innodb-file-per-table=OFF`. For information only|
+|`tmpfs`|`durable-off`, plus `--skip-innodb-doublewrite --innodb-flush-method=fsync`, on a 1 GB tmpfs data directory|
+
+Each configuration runs in its own throwaway `mariadb:10.6` container, named
+`bp-restore-probe`, with no ports and a 2 GB memory limit. The probe never
+touches `benchpress-mariadb`. Run it off-peak. `--lab-tag <tag>` probes a lab
+other than `crm`.
+
+The difference between the probe's `durable-off` time and a deploy's `restore`
+time is the start-up cost of `bench`. No MariaDB setting changes it.
+
+### File the numbers
+
+Record each measurement on this page as a dated table, with its host line and
+the lab. Title the drill's table `Baseline, <date>` and the probe's table
+`Probe, <date>`.
 
 ## Steps
 
@@ -3492,7 +3588,9 @@ it is the field the deploy compares.
 |Image label|`benchpress.golden=1`|
 |Version label|`benchpress.golden.mariadb=<version>`|
 |Deploy Log phrase|`restored from the image's golden dump`|
-|Drill|`python3 scripts/golden_drill.py --lab <id> --runs <n> --i-know-this-is <domain>`|
+|Timing line|`Site step timings: <part> <seconds>s, …`|
+|Drill|`python3 scripts/golden_drill.py --lab <id> --runs <n> [--concurrent <n>] [--probe-login] --i-know-this-is <domain>`|
+|Restore probe|`bash scripts/restore_probe.sh [--lab-tag <tag>] [--list]`|
 |Golden site prefix|`bpgolden-`|
 |Golden database prefix|`_bpgolden`|
 
@@ -7179,7 +7277,7 @@ Neither script owns the VPN. Tunnels, peers and address allocation belong to the
 |`scripts/seed_docs_demo.py`|creates or removes the demo labs and users the documentation screenshots come from|
 |`scripts/admission_drill.py`|how many of N parallel deploys the admission gate really admits|
 |`scripts/density_drill.py`|how many endpoints a bridge of a given prefix length really takes|
-|`scripts/golden_drill.py`|what a golden restore costs against a cold deploy|
+|`scripts/golden_drill.py`|what a golden restore costs against a cold deploy, and how long a deploy takes to a first login|
 
 The three drills are measurement harnesses. None of them reimplements the thing
 it measures. Every request goes over HTTP to the shipped endpoint, and every
@@ -7205,6 +7303,15 @@ admission decision stays measurable with no worker running.
 
 `golden_drill.py --cold` is the control arm. It turns `restore_from_golden` off
 for the run and puts it back afterwards, so both arms deploy the same lab.
+`--concurrent N` starts N deploys at once, one for each drill user.
+`--probe-login` times each deploy to the first login on its new site. It reaches
+the site through the host's own Traefik at `BENCHPRESS_EDGE`, not through the CDN.
+
+`scripts/restore_probe.sh` is a shell script, not a drill. It times one lab's
+golden dump restored under four MariaDB configurations, each in a throwaway
+`bp-restore-probe` container. It never touches `benchpress-mariadb`.
+`--list` prints the four configurations. See
+[Golden images](/docs/operator/golden-images).
 
 `seed_docs_demo.py --destroy` removes only what the script creates and refuses
 every other name.

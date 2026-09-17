@@ -3,7 +3,7 @@ title: Golden images
 description: A lab's finished site is baked into its own image as a database
   dump, so a deploy restores it instead of creating tables — the measured
   numbers, the two settings, and why a golden gets refused.
-lastModified: "2026-08-28T22:10:21+05:30"
+lastModified: "2026-09-17T12:14:43-04:00"
 lastAuthor: Venkatesh
 ---
 # Golden images
@@ -60,13 +60,93 @@ restored or created.
 Two behaviors of the drill worth knowing before you run it on a live host. It
 goes to the host's own nginx rather than through the CDN, and it refuses to
 run unless `--i-know-this-is` matches the site's own `base_domain`. Every
-bench it makes belongs to `golden-drill@example.com`, and cleanup runs in a
-`finally` block.
+bench it makes belongs to a `golden-drill-<n>@example.com` user, and cleanup
+runs in a `finally` block. Cleanup removes those users too.
 
 The underlying measurement, taken directly inside `benchpress-mariadb`: a
 281-table database dumps in 0.67 s and restores in **6.6 s**, against 40.4 s
 to create. A 1,055-table one dumps in 2.5 s and restores in **24.9 s**,
 against 202 s to create.
+
+## Where a deploy's seconds go
+
+After the site step, a deploy writes one line into its Deploy Log:
+
+```text
+Site step timings: restore 23.1s, admin password 1.2s, apps 0.4s
+```
+
+|Part|Measures|
+|--|--|
+|`restore`|`bench new-site --source-sql`, including the start-up time of `bench`|
+|`create`|`bench new-site` on a cold run. It replaces `restore`|
+|`admin password`|`set-admin-password`|
+|`apps`|the loop that installs each app the golden does not carry|
+
+The deploy writes the app's copy of `setup-site.sh` into the container before
+it runs it. Every lab image reports these times, with no rebuild. The line
+opens no step, so the stepper still shows eleven.
+
+### Time a deploy to its first login
+
+```bash
+python3 scripts/golden_drill.py --lab crm --runs 1 --probe-login --i-know-this-is <your base domain>
+python3 scripts/golden_drill.py --lab crm --runs 1 --concurrent 5 --probe-login --i-know-this-is <your base domain>
+```
+
+`--probe-login` reads the new site's Administrator password through
+`get_bench_credentials`. It then posts to the site's `/api/method/login` every 2
+seconds, for up to 120 seconds. `login_seconds` runs from the `create_bench`
+call to the first reply that says `Logged In`.
+
+The probe connects to the host's own Traefik at `BENCHPRESS_EDGE`, which
+defaults to `127.0.0.1:8443`, and presents the bench's public name. The CDN
+answers a script with error `1010`, so a probe through the CDN never logs in.
+The probe reaches a bench with no public address at its container address.
+
+`--concurrent N` starts N deploys at once, one for each drill user. The drill
+prints a host line, one row for each deploy, and a median row.
+
+|Column|Source|
+|--|--|
+|`site_seconds`, `total_seconds`|the step markers in the Deploy Log|
+|`login_seconds`|the login probe|
+|`restored`|whether the Deploy Log says the golden dump was restored|
+|`peak_mem_mb`|the highest total memory of all containers while that deploy ran, from `docker stats`|
+
+A deploy with no `complete` marker prints `no measurement`. The drill does not
+estimate a number for it.
+
+### Time the restore alone
+
+The `restore` time includes the start-up time of `bench`. The restore probe
+restores the same dump directly, under four MariaDB configurations.
+
+```bash
+bash scripts/restore_probe.sh --list
+bash scripts/restore_probe.sh
+```
+
+|Configuration|Flags|
+|--|--|
+|`today`|the `mariadbd` flags in `benchpress/config/docker-compose.yml`|
+|`durable-off`|`today`, plus `--innodb-flush-log-at-trx-commit=2 --skip-log-bin --table-open-cache=4000 --table-definition-cache=4000`|
+|`per-table-off`|`durable-off`, plus `--innodb-file-per-table=OFF`. For information only|
+|`tmpfs`|`durable-off`, plus `--skip-innodb-doublewrite --innodb-flush-method=fsync`, on a 1 GB tmpfs data directory|
+
+Each configuration runs in its own throwaway `mariadb:10.6` container, named
+`bp-restore-probe`, with no ports and a 2 GB memory limit. The probe never
+touches `benchpress-mariadb`. Run it off-peak. `--lab-tag <tag>` probes a lab
+other than `crm`.
+
+The difference between the probe's `durable-off` time and a deploy's `restore`
+time is the start-up cost of `bench`. No MariaDB setting changes it.
+
+### File the numbers
+
+Record each measurement on this page as a dated table, with its host line and
+the lab. Title the drill's table `Baseline, <date>` and the probe's table
+`Probe, <date>`.
 
 ## Steps
 
@@ -168,7 +248,9 @@ it is the field the deploy compares.
 |Image label|`benchpress.golden=1`|
 |Version label|`benchpress.golden.mariadb=<version>`|
 |Deploy Log phrase|`restored from the image's golden dump`|
-|Drill|`python3 scripts/golden_drill.py --lab <id> --runs <n> --i-know-this-is <domain>`|
+|Timing line|`Site step timings: <part> <seconds>s, …`|
+|Drill|`python3 scripts/golden_drill.py --lab <id> --runs <n> [--concurrent <n>] [--probe-login] --i-know-this-is <domain>`|
+|Restore probe|`bash scripts/restore_probe.sh [--lab-tag <tag>] [--list]`|
 |Golden site prefix|`bpgolden-`|
 |Golden database prefix|`_bpgolden`|
 

@@ -3,7 +3,7 @@ title: Settings reference
 description: Every field on BenchPress Settings and Credit Settings, with the
   value measured on a live host, where each one is edited, and what changing it
   costs.
-lastModified: "2026-08-28T22:10:21+05:30"
+lastModified: "2026-09-17T12:14:43-04:00"
 lastAuthor: Venkatesh
 ---
 # Settings reference
@@ -24,7 +24,7 @@ BenchPress has two settings Singles. Neither is fully exposed in the app.
 
 |Document|Holds|Edited in|
 |--|--|--|
-|`BenchPress Settings`|Docker, addressing, the bench network, container defaults, health probes, reconciliation, and the credits master switch|the app's Settings dialog (10 fields) and Desk (all 26)|
+|`BenchPress Settings`|Docker, addressing, the bench network, container defaults, health probes, reconciliation, operator alerts, and the credits master switch|the app's Settings dialog (10 fields) and Desk (all 27)|
 |`Credit Settings`|grants, charges, leases, caps, and self-serve signup|Desk only|
 
 The app's Settings dialog is deliberately a subset — the ten fields an
@@ -142,6 +142,20 @@ on, every deploy is charged against a balance and capped by concurrency, and
 users who have no `Credit Account` are refused. Nothing on the self-hosted
 path needs it.
 
+### Operator alerts
+
+|Field|On this host|Ships as|What it does|
+|--|--|--|--|
+|`operator_alert_email`|*(empty)*|*(empty)*|The address that gets an email for each deploy failure and each teardown failure. Empty sends nothing|
+
+Three failures send an alert: a failed deploy, a failed image build during a
+launch, and a teardown that could not remove everything. A deploy alert names
+the owner, links the instance, and carries the first 300 characters of the
+failure. A teardown alert lists each removal that failed.
+
+Each alert is one queued email. The Email Queue sends it only while the site's
+scheduler runs.
+
 ## Credit Settings
 
 Every field here is inert while `enable_credits` is `0`. Each function in the
@@ -216,6 +230,7 @@ See [Self-serve signup](/docs/operator/hosted-signup).
 |`bench_subnet_base`, `bench_bridge_count`|bridges created after the change|existing bridges and the benches on them stay|
 |health probe fields|the next deploy, which writes a new healthcheck|untouched|
 |`enable_credits`|immediately|every deploy, renewal and device add is gated from the next request|
+|`operator_alert_email`|the next failure|untouched|
 |`reap_after_days`|the next daily sweep|a stopped instance already past the new figure is reaped on that sweep|
 
 ## How these values were read
@@ -250,7 +265,8 @@ wrap it in a single `exec()` call.
 |Settings will not save|`base_domain` is empty|It is required. Sites are addressed under it|
 |A field you cleared behaved as before|`0` falls back to the built-in for that field|See [Reconciliation and events](#reconciliation-and-events). Set the number you want|
 |Every user is refused a deploy|`enable_credits` was switched on and nobody has an account|Switch it back to `0`, or read [Credits and billing](/docs/operator/credits-and-billing)|
-|The Settings dialog does not show a field you read about|The dialog carries 10 of 26 fields|Edit it at `/app/benchpress-settings`|
+|The Settings dialog does not show a field you read about|The dialog carries 10 of 27 fields|Edit it at `/app/benchpress-settings`|
+|A deploy failed and no alert arrived|`operator_alert_email` is empty, or the site's scheduler is off|Set the address. Then check `bench --site <site> doctor` for the scheduler|
 |The Settings item is missing from the account menu|The screen is admin-only|See [Users and roles](/docs/operator/users-and-roles)|
 
 ## Related
