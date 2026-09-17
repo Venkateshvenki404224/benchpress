@@ -2,7 +2,7 @@
 title: API
 description: Every whitelisted BenchPress endpoint, with arguments, what each
   returns, and the permission check each one makes for itself.
-lastModified: "2026-09-01T18:06:47+05:30"
+lastModified: "2026-09-17T10:56:32-04:00"
 lastAuthor: Venkatesh
 ---
 # API
@@ -325,15 +325,19 @@ unless `benchpress_public_site` is set — see
 
 |Endpoint|Arguments|Rate limit|Checks|
 |--|--|--|--|
-|`benchpress.waitlist.join`|`email`, `full_name`, `company`, `use_case`|3 an hour|none, by design|
+|`benchpress.waitlist.join`|`email`, `full_name`, `company`, `use_case`|3 an hour|Turnstile, when its keys are set|
 |`benchpress.signup.sign_up`|`email`, `full_name`, `redirect_to`|3 an hour|`waitlist_open` and the blocked domain list|
-|`benchpress.contact.submit`|`name`, `email`, `message`, `topic`|3 an hour|none, by design|
+|`benchpress.contact.submit`|`name`, `email`, `message`, `topic`|3 an hour|Turnstile, when its keys are set|
 
 The 3 an hour counts the address and the submitted email together, so changing
 the email starts a fresh allowance. A flat ceiling of 10 an hour for each address
 sits over it and does not. Each endpoint counts against its own pair of
 counters, so a contact message does not spend a visitor's allowance for
 requesting access.
+
+With the Turnstile keys set, `waitlist.join` and `contact.submit` also need a
+`cf-turnstile-response` token in the post. The rate limit runs first, so a
+refused post still counts. See [Configuration](/docs/reference/configuration).
 
 `waitlist.join` always answers the same way. A caller cannot tell a new address
 from one already on the list, so the endpoint is not an account oracle.

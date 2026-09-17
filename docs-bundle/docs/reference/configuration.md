@@ -3,7 +3,7 @@ title: Configuration
 description: Where each BenchPress setting lives — build arguments that need a
   rebuild, runtime environment that needs a restart, and DocType fields that
   apply on save.
-lastModified: "2026-09-02T00:09:08+05:30"
+lastModified: "2026-09-17T10:56:32-04:00"
 lastAuthor: Venkatesh
 ---
 # Configuration
@@ -79,11 +79,12 @@ Ubuntu hosts differ. `entry.py` writes the real value at setup and on every
 ## Site configuration
 
 `site_config.json` holds the keys that are read before any DocType exists.
-BenchPress adds one.
+BenchPress adds these.
 
 |Key|Decides|
 |--|--|
 |`benchpress_public_site`|whether this deployment serves the public marketing site|
+|`benchpress_turnstile_site_key`, `benchpress_turnstile_secret_key`|whether `/signup` and `/contact` ask Cloudflare Turnstile before they accept a post|
 
 **The public site is off unless this key is set.** BenchPress is open source,
 and an install that runs labs for one team has no use for the marketing pages
@@ -112,6 +113,38 @@ and short-circuits it on the next request, so without it the pages keep
 answering 404 after the key goes on.
 
 Unsetting the key hides the pages again. It deletes nothing.
+
+### Turnstile on the guest forms
+
+**The check is off unless both keys are set.** With both keys set, `/signup`
+and `/contact` render a Cloudflare Turnstile widget. `waitlist.join` and
+`contact.submit` then refuse a post with no token or with a token that
+Cloudflare rejects. The widget stays hidden until Cloudflare needs the visitor
+to click. A site key without its secret turns nothing on.
+
+To turn the check on:
+
+1. In the Cloudflare dashboard, add a Turnstile widget for the domain in Managed mode.
+2. Set both keys and clear the cache:
+
+```bash
+bench --site <site> set-config benchpress_turnstile_site_key <site-key>
+bench --site <site> set-config benchpress_turnstile_secret_key <secret-key>
+bench --site <site> clear-cache
+docker compose restart backend
+```
+
+**A missing verdict does not refuse a visitor.** If Cloudflare cannot be
+reached, or it rejects this deployment's secret, the post goes through. An Error
+Log titled `BenchPress Turnstile check skipped` records why. The rate limit
+still applies, and a spam request costs less than a lost one.
+
+A visitor whose browser blocks `challenges.cloudflare.com` cannot send either
+form. Neither can a visitor without JavaScript.
+
+On a staging site, use Cloudflare's test keys. The site key
+`1x00000000000000000000AA` with the secret `1x0000000000000000000000000000000AA`
+always passes.
 
 ## The site name invariant
 
@@ -156,6 +189,7 @@ ships as `0`. Nothing in `Credit Settings` has any effect while it is `0`.
 |`PORT`, `IMAGE_NAME`, a password|`./entry.py --restart`|
 |`PUBLIC_HOSTNAME`|`./entry.py --domain <fqdn>`, which regenerates `COMPOSE_FILE`|
 |`benchpress_public_site`|seeding the public site, a cache clear, then `docker compose restart backend`|
+|`benchpress_turnstile_site_key`, `benchpress_turnstile_secret_key`|a cache clear, then `docker compose restart backend`|
 |Python in the app|`docker compose restart backend`, and the workers if they import it|
 |A Vue file or a bundle|`bench build --app benchpress`, then restart `backend frontend`|
 |A hook, a fixture or a DocType schema|`bench --site frontend migrate`|
