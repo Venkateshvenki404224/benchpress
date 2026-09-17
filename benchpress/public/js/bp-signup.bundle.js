@@ -103,6 +103,12 @@
 			return;
 		}
 
+		const pending = window.bpSite.captchaPending(form);
+		if (pending) {
+			showAlert(banner, pending);
+			return;
+		}
+
 		setBusy(button, true);
 		try {
 			const reply = await window.bpSite.postMethod(METHOD, new FormData(form));
@@ -110,6 +116,7 @@
 			window.bpSite.track("waitlist_submitted");
 		} catch (error) {
 			showAlert(banner, error.message);
+			window.bpSite.resetCaptcha(form);
 		} finally {
 			setBusy(button, false);
 		}

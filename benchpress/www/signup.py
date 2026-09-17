@@ -4,7 +4,7 @@
 import frappe
 from frappe.utils import cint, cstr, strip_html
 
-from benchpress import waitlist
+from benchpress import captcha, waitlist
 from benchpress.benchpress.site_content import canonical_url, chrome_content, preview_tags, shipped
 from benchpress.credits.config import SIGNUP_ROUTE, credits_enabled, waitlist_open
 from benchpress.public_site import require_public_site
@@ -47,6 +47,7 @@ def get_context(context):
 	context.pending_links = settings.pending_links
 	context.team_size = select_field("team_size")
 	context.intent = select_field("intent")
+	context.captcha_site_key = captcha.site_key()
 
 	context.waitlist_open = True
 	context.signup_route = ROUTE

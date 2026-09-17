@@ -7,6 +7,7 @@ import frappe
 from frappe import _
 from frappe.utils import cstr, now_datetime
 
+from benchpress import captcha
 from benchpress.benchpress.doctype.contact_message.contact_message import ANSWERED
 from benchpress.benchpress.doctype.waitlist_entry.waitlist_entry import normalise_email
 from benchpress.permissions import require_admin
@@ -46,6 +47,7 @@ TOPICS = (
 def submit(name: str, email: str, message: str, topic: str | None = None) -> dict:
 	"""Record one contact message. Always answers the same way."""
 	require_public_site()
+	captcha.require_human()
 	record = frappe.new_doc(DOCTYPE)
 	record.update(
 		{

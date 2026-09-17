@@ -8,6 +8,7 @@ from frappe import _
 from frappe.database import savepoint
 from frappe.utils import cint, cstr, get_url, now_datetime
 
+from benchpress import captcha
 from benchpress.benchpress.doctype.waitlist_entry.waitlist_entry import derive_reference, send_notice
 from benchpress.credits import config
 from benchpress.permissions import require_admin
@@ -39,6 +40,7 @@ def join(
 	"""Record an interest in hosted access. Always answers the same way."""
 	require_public_site()
 	require_waitlist_open()
+	captcha.require_human()
 	entry = frappe.new_doc(DOCTYPE)
 	entry.update(
 		{

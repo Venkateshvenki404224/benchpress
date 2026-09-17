@@ -12,13 +12,14 @@ MISSING = object()
 
 
 class as_request:
-	def __init__(self, address: str = ADDRESS, path: str = "/"):
+	def __init__(self, address: str = ADDRESS, path: str = "/", method: str = "POST"):
 		self.address = address
 		self.path = path
+		self.method = method
 
 	def __enter__(self):
 		self.previous = getattr(frappe.local, "request", MISSING)
-		frappe.local.request = Request(EnvironBuilder(path=self.path, method="POST").get_environ())
+		frappe.local.request = Request(EnvironBuilder(path=self.path, method=self.method).get_environ())
 		frappe.local.request_ip = self.address
 		return self
 

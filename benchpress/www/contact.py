@@ -4,7 +4,7 @@
 import frappe
 from frappe.utils import cstr, strip_html
 
-from benchpress import contact, structured_data
+from benchpress import captcha, contact, structured_data
 from benchpress.benchpress.site_content import canonical_url, chrome_content, preview_tags, shipped
 from benchpress.public_site import require_public_site
 
@@ -53,6 +53,7 @@ def get_context(context):
 	context.channels = channel_rows([*email_channel(), *settings.channels])
 	context.topics = settings.topics
 	context.default_topic = contact.default_topic()
+	context.captcha_site_key = captcha.site_key()
 	context.selfhost_links = link_lines(settings.selfhost_links)
 
 	context.contact_route = ROUTE

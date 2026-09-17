@@ -647,6 +647,15 @@ a.bp-channel__body:focus-visible {
 	padding: 20px 26px 26px;
 }
 
+/* The Turnstile slot is empty until Cloudflare asks for a click; this cancels the gap it would add. */
+.bp-captcha {
+	margin-top: -16px;
+}
+
+.bp-captcha.is-challenged {
+	margin-top: 0;
+}
+
 .bp-pair {
 	display: grid;
 	grid-template-columns: repeat(auto-fit, minmax(min(160px, 100%), 1fr));
