@@ -1,12 +1,17 @@
 // window.bpSite: the theme toggle, the mobile nav disclosure, postMethod(method, values,
-// options), which posts to a whitelisted method and resolves with its return value, and
-// track(name, properties).
+// options), which posts to a whitelisted method and resolves with its return value,
+// track(name, properties), and the Turnstile helpers captchaPending(form) and resetCaptcha(form).
 (function () {
 	const MODES = ["dark", "light"];
 	const DEFAULT_MODE = "dark";
 	const STORAGE_KEY = "bp-mode";
 	const CONTENT_ID = "bp-content";
 	const GENERIC_ERROR = "Something went wrong. Please try again.";
+	const CAPTCHA_FIELD = "cf-turnstile-response";
+	const CAPTCHA_PENDING = "The spam check has not finished. Wait a moment, then send again.";
+	const CHALLENGED = "is-challenged";
+	// Turnstile never draws its full-size widget narrower than this, so a phone's form gets the compact one.
+	const CAPTCHA_MIN_WIDTH = 300;
 
 	function mode() {
 		const wrapper = document.querySelector(".bp");
@@ -177,6 +182,35 @@
 			.trim();
 	}
 
+	// --- captcha ---------------------------------------------------------------------------
+
+	// Turnstile's onload callback. The widget is drawn from here, not from markup, so it takes the
+	// page's mode rather than the operating system's.
+	function renderCaptchas() {
+		document.querySelectorAll("[data-bp-captcha]").forEach((slot) => {
+			slot.dataset.widgetId = window.turnstile.render(slot, {
+				sitekey: slot.dataset.sitekey,
+				theme: mode(),
+				size: slot.clientWidth < CAPTCHA_MIN_WIDTH ? "compact" : "flexible",
+				appearance: "interaction-only",
+				"before-interactive-callback": () => slot.classList.add(CHALLENGED),
+			});
+		});
+	}
+
+	// Empty when the form may post, otherwise the reason it may not.
+	function captchaPending(form) {
+		if (!form.querySelector("[data-bp-captcha]")) return "";
+		return new FormData(form).get(CAPTCHA_FIELD) ? "" : CAPTCHA_PENDING;
+	}
+
+	// The server spends a token when it checks one, so a refused post needs a fresh token.
+	function resetCaptcha(form) {
+		const slot = form.querySelector("[data-bp-captcha]");
+		if (!slot || !slot.dataset.widgetId || !window.turnstile) return;
+		window.turnstile.reset(slot.dataset.widgetId);
+	}
+
 	// --- analytics -------------------------------------------------------------------------
 
 	// No-op when no tracker is configured, or when one is blocked. Tracking is never load-bearing.
@@ -217,7 +251,8 @@
 		document.addEventListener("click", trackClick);
 	}
 
-	window.bpSite = { mode, setMode, toggleMode, postMethod, track };
+	window.bpSite = { mode, setMode, toggleMode, postMethod, track, captchaPending, resetCaptcha };
+	window.bpRenderCaptchas = renderCaptchas;
 
 	if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start);
 	else start();

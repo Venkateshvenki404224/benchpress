@@ -151,6 +151,8 @@
 						<p class="bp-field__error" id="bp-signup-consent-error" data-bp-error hidden></p>
 					</div>
 
+					{% include "templates/includes/turnstile.html" %}
+
 					<div class="bp-form__actions">
 						<button type="submit" class="bp-btn bp-btn--lg bp-btn--primary" data-bp-submit>
 							{{ settings.form_submit_label | default("Send request", true) | e }}{{ arrow_right("bp-btn__icon") }}

@@ -1,0 +1,8 @@
+{#- The Turnstile slot, present only while both keys are set. `bp-site.bundle.js` draws the widget
+    into it, and the widget stays hidden until Cloudflare needs the visitor to click. -#}
+{%- if captcha_site_key %}
+<div class="bp-captcha" data-bp-captcha data-sitekey="{{ captcha_site_key | e }}"></div>
+{#- `defer`, never `async`: the onload callback is defined by `bp-site.bundle.js`, which is deferred
+    too and comes earlier in the document. -#}
+<script defer src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit&amp;onload=bpRenderCaptchas"></script>
+{%- endif %}

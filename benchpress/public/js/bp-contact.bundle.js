@@ -70,6 +70,12 @@
 				return;
 			}
 
+			const pending = window.bpSite.captchaPending(form);
+			if (pending) {
+				show(banner, pending);
+				return;
+			}
+
 			busy(form, true);
 			try {
 				const data = new FormData(form);
@@ -80,6 +86,7 @@
 				});
 			} catch (error) {
 				show(banner, error.message);
+				window.bpSite.resetCaptcha(form);
 			} finally {
 				busy(form, false);
 			}
