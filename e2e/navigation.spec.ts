@@ -32,10 +32,28 @@ test.describe("Navigation & Routing", () => {
     await expect(page.locator('[data-test="devices"]')).toBeVisible();
   });
 
-  test("sidebar is five items and each one navigates", async ({ page }) => {
+  test("/benches route loads the benches page", async ({ page }) => {
+    await page.goto("/frontend/benches");
+    await page.waitForLoadState("networkidle");
+
+    await expect(page.locator('[data-test="benches"]')).toBeVisible();
+    await expect(
+      page.locator('[data-test="bench-template-frappe-develop"]'),
+    ).toBeVisible();
+  });
+
+  test("sidebar is six items and each one navigates", async ({ page }) => {
     const basePage = new BasePage(page);
     await basePage.gotoFrontend("/labs");
     await basePage.waitForUserContext();
+
+    const navItems = page.locator(
+      '[data-test^="nav-"]:not([data-test="nav-search"]):not([data-test="nav-notifications"])',
+    );
+    await expect(navItems).toHaveCount(6);
+
+    await basePage.clickNav("benches");
+    await expect(basePage.testId("benches")).toBeVisible();
 
     await basePage.clickNav("instances");
     await expect(basePage.testId("instances")).toBeVisible();

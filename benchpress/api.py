@@ -3,7 +3,7 @@
 
 import frappe
 from frappe import _
-from frappe.query_builder import DocType
+from frappe.query_builder import DocType, Order
 from frappe.query_builder.functions import Count
 
 from benchpress import (
@@ -17,6 +17,8 @@ from benchpress import (
 	site_names,
 )
 from benchpress.benchpress.doctype.bench_instance.bench_instance import DEPLOY_JOB_TIMEOUT
+
+MY_BENCHES_LIMIT = 100
 
 # Every field the renew path decides from, read once under the row lock.
 RENEW_FIELDS = [
@@ -83,7 +85,39 @@ def get_lab_form_options() -> dict:
 @frappe.whitelist()
 def get_lab_templates() -> list[dict]:
 	require_app_user()
-	return lab_templates.get_catalog()
+	return [template for template in lab_templates.get_catalog() if not template["self_managed"]]
+
+
+@frappe.whitelist()
+def get_bench_templates() -> list[dict]:
+	require_app_user()
+	return [
+		{**template, "image_ready": _template_image_ready(template["key"])}
+		for template in lab_templates.get_catalog()
+		if template["self_managed"]
+	]
+
+
+def _template_image_ready(template_key: str) -> bool:
+	lab = _matching_lab(template_key)
+	return bool(lab) and frappe.get_cached_doc("Lab", lab).status == "Ready"
+
+
+@frappe.whitelist()
+def get_my_benches() -> list[dict]:
+	require_app_user()
+	bench = DocType("Bench Instance")
+	lab = DocType("Lab")
+	return (
+		frappe.qb.from_(bench)
+		.join(lab)
+		.on(lab.name == bench.lab)
+		.select(bench.name, bench.lab, bench.status, bench.wg_ip, bench.code_server_url, bench.creation)
+		.where((bench.owner == frappe.session.user) & (lab.self_managed == 1))
+		.orderby(bench.creation, order=Order.desc)
+		.limit(MY_BENCHES_LIMIT)
+		.run(as_dict=True)
+	)
 
 
 @frappe.whitelist()

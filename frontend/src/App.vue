@@ -123,6 +123,7 @@ import SearchIcon from "~icons/lucide/search";
 import ServerIcon from "~icons/lucide/server";
 import SettingsIcon from "~icons/lucide/settings";
 import ShieldIcon from "~icons/lucide/shield";
+import SquareTerminalIcon from "~icons/lucide/square-terminal";
 
 // useTheme reads the stored choice on mount and honours prefers-color-scheme;
 // the hand-rolled toggle it replaces always resolved to dark on first click.
@@ -208,7 +209,7 @@ const utilityItems = computed(() => [
 	},
 ]);
 
-// Five flat items. Deploy and build history are reached from the objects they
+// Six flat items. Deploy and build history are reached from the objects they
 // belong to, so the old Logs section is gone; Settings is in the header menu.
 const NAV_ITEMS = [
 	{
@@ -224,6 +225,13 @@ const NAV_ITEMS = [
 		to: "/labs",
 		dataTest: "nav-labs",
 		routes: ["Labs", "LabDetail", "NewLab", "BuildLogs"],
+	},
+	{
+		label: "Benches",
+		icon: SquareTerminalIcon,
+		to: "/benches",
+		dataTest: "nav-benches",
+		routes: ["Benches"],
 	},
 	{
 		label: "Templates",
