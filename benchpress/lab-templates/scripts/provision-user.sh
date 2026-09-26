@@ -1,5 +1,5 @@
 #!/bin/bash
-# linkuser.sh — User provisioning for BenchPress containers
+# provision-user.sh — User provisioning for BenchPress containers
 # Renames the 'frappe' user to the dynamic username instead of creating a new one.
 # Args: USERNAME EMAIL LAB_NAME WG_IP BENCH_NAME BASE_DOMAIN LOGIN_SHELL
 # SSH_PASSWORD comes from the environment, not from argv: Docker publishes an exec's

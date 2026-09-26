@@ -138,3 +138,25 @@ class TestLabTemplates(IntegrationTestCase):
 	def test_catalog_does_not_mutate_the_module_catalog(self):
 		lab_templates.get_catalog()
 		self.assertFalse(any("lab" in template for template in lab_templates.get_templates()))
+
+	def test_the_seed_carries_the_frappe_develop_dockerfile(self):
+		template = lab_templates.get_template("frappe-develop")
+		self.assertEqual(template["frappe_version"], "develop")
+		self.assertTrue(template["self_managed"])
+		last_run = [line for line in template["dockerfile"].splitlines() if line.startswith("RUN ")][-1]
+		self.assertEqual(last_run, "RUN rm -f /etc/ssh/ssh_host_*")
+
+	def test_the_catalog_does_not_ship_the_dockerfile(self):
+		for template in lab_templates.get_templates():
+			self.assertNotIn("dockerfile", template)
+
+	def test_create_lab_from_template_copies_the_dockerfile(self):
+		lab = self._make_lab("frappe-develop", "tmpl-frappe-develop-test")
+		template = lab_templates.get_template("frappe-develop")
+		self.assertTrue(lab.self_managed)
+		self.assertEqual(lab.dockerfile, template["dockerfile"])
+
+	def test_an_ordinary_template_makes_an_ordinary_lab(self):
+		lab = self._make_lab("erpnext", "tmpl-erpnext-plain")
+		self.assertFalse(lab.self_managed)
+		self.assertFalse(lab.dockerfile)

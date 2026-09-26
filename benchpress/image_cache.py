@@ -14,6 +14,8 @@ Docker is asked for its image list **once** per request or job: `cached_tags` me
 `frappe.local`, so resolving a queue of labs costs one round trip, not one per lab.
 """
 
+import hashlib
+
 import frappe
 from frappe.utils import cstr
 
@@ -35,13 +37,16 @@ def build_spec(lab_doc) -> dict:
 	`app_name` is lowercased because the build lowercases it too — `ERPNext` and `erpnext`
 	produce the same image, so they must produce the same hash.
 	"""
-	return {
+	spec = {
 		"frappe_version": cstr(lab_doc.frappe_version).strip(),
 		"apps": sorted(
 			(cstr(row.app_name).strip().lower(), cstr(row.git_url).strip(), cstr(row.branch).strip())
 			for row in (lab_doc.apps or [])
 		),
 	}
+	if dockerfile := getattr(lab_doc, "dockerfile", None):
+		spec["dockerfile"] = hashlib.sha256(dockerfile.encode()).hexdigest()
+	return spec
 
 
 def cache_tag(lab_doc) -> str:
@@ -100,6 +105,8 @@ def template_spec(template: dict):
 		title=template["title"],
 		frappe_version=template["frappe_version"],
 		memory_limit=template.get("memory_limit"),
+		self_managed=template.get("self_managed"),
+		dockerfile=template.get("dockerfile"),
 		apps=[frappe._dict(app) for app in template["apps"]],
 	)
 
@@ -135,7 +142,8 @@ def build_template_image(template_key: str) -> str:
 
 	spec = template_spec(lab_templates.get_template(template_key))
 	spec.image_tag = build_lab_image(spec)
-	golden.add_golden(spec)
+	if not spec.self_managed:
+		golden.add_golden(spec)
 	frappe.logger("benchpress").info(f"Pre-warmed {spec.image_tag} for template {template_key}")
 	return spec.image_tag
 

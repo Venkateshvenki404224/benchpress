@@ -6,11 +6,11 @@
 # 0.0.0.0:8000 — and lab containers share one bridge and one WireGuard pool, so that console is
 # reachable by every other tenant.
 #
-# The account comes from /.benchpress_config, which linkuser.sh writes as root, and never from
+# The account comes from /.benchpress_config, which provision-user.sh writes as root, and never from
 # the ownership of the bench directory: that directory lives in the tenant's own volume, so a
 # tenant who chowned it could otherwise choose the account this root-invoked script drops to.
 #
-# Must run after linkuser.sh: that renames the bench user, and `usermod --login` refuses to
+# Must run after provision-user.sh: that renames the bench user, and `usermod --login` refuses to
 # rename a user that owns a running process.
 set -euo pipefail
 

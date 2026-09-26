@@ -155,8 +155,8 @@ class TestDeployManager(FakeDockerMixin, IntegrationTestCase):
 		super().setUpClass()
 		frappe.set_user("Administrator")
 		cls.lab = _make_lab()
-		cls.addClassCleanup(cls.lab.delete, ignore_permissions=True)
 		cls.addClassCleanup(frappe.db.commit)
+		cls.addClassCleanup(cls.lab.delete, ignore_permissions=True)
 		# Per-run unique container_name prevents collisions between concurrent runs or
 		# interrupted runs that left a stale row behind (#362). addClassCleanup registers
 		# teardown at insert time, so a setUpClass failure cannot skip it.
@@ -409,45 +409,45 @@ class TestDeployManager(FakeDockerMixin, IntegrationTestCase):
 		for call in mock_msgprint.call_args_list:
 			self.assertIn("already in progress", str(call.args[0]))
 
-	# --- build_linkuser_args (Lab.shell wiring) ---
+	# --- build_provision_args (Lab.shell wiring) ---
 
-	def test_build_linkuser_args_includes_lab_shell(self):
-		from benchpress.deploy_manager import build_linkuser_args
+	def test_build_provision_args_includes_lab_shell(self):
+		from benchpress.deploy_manager import build_provision_args
 
 		bench = self._fresh_bench()
 		bench.ssh_username = "tester"
 		self.lab.shell = "/bin/zsh"
 		settings = frappe.get_single("BenchPress Settings")
 
-		args = build_linkuser_args(bench, self.lab, settings)
+		args = build_provision_args(bench, self.lab, settings)
 
 		# 7 args: mount_target was removed, and SSH_PASSWORD now travels in the environment.
 		self.assertEqual(len(args), 7)
 		self.assertEqual(args[5], settings.base_domain or "localhost")  # BASE_DOMAIN position
 		self.assertEqual(args[-1], "/bin/zsh")  # LOGIN_SHELL position (right after BASE_DOMAIN)
 
-	def test_build_linkuser_args_defaults_shell_to_bash(self):
-		from benchpress.deploy_manager import build_linkuser_args
+	def test_build_provision_args_defaults_shell_to_bash(self):
+		from benchpress.deploy_manager import build_provision_args
 
 		bench = self._fresh_bench()
 		bench.ssh_username = "tester"
 		self.lab.shell = None
 		settings = frappe.get_single("BenchPress Settings")
 
-		args = build_linkuser_args(bench, self.lab, settings)
+		args = build_provision_args(bench, self.lab, settings)
 
 		self.assertEqual(args[-1], "/bin/bash")
 
-	def test_linkuser_command_survives_hostile_arguments(self):
+	def test_provision_command_survives_hostile_arguments(self):
 		import shlex
 
-		from benchpress.deploy_manager import linkuser_command
+		from benchpress.deploy_manager import provision_command
 
 		args = ["tester", "o'brien@example.com", "Venki's Lab; rm -rf /", "$(id)", "`id`", ""]
-		command = linkuser_command(args)
+		command = provision_command(args)
 
 		parsed = shlex.split(command)
-		self.assertEqual(parsed[0:2], ["bash", "/opt/benchpress/scripts/linkuser.sh"])
+		self.assertEqual(parsed[0:2], ["bash", "/opt/benchpress/scripts/provision-user.sh"])
 		self.assertEqual(parsed[2:], args)
 
 
@@ -473,8 +473,8 @@ class TestDeployStepMarkers(IntegrationTestCase):
 		super().setUpClass()
 		frappe.set_user("Administrator")
 		cls.lab = _make_lab("test-lab-steps")
-		cls.addClassCleanup(cls.lab.delete, ignore_permissions=True)
 		cls.addClassCleanup(frappe.db.commit)
+		cls.addClassCleanup(cls.lab.delete, ignore_permissions=True)
 		# Per-run unique container_name prevents collisions between concurrent or
 		# interrupted runs that left a stale row behind (#362).
 		container_name = f"test-db-steps-{uuid.uuid4().hex[:8]}"
@@ -576,6 +576,7 @@ class TestDeployStepMarkers(IntegrationTestCase):
 		):
 			self.cert_check = mock_cert
 			self.execs = mock_exec
+			self.site_setup = mock_site
 			mock_infra.return_value = self.db_server_name
 			mock_runtimes.return_value = {"names": set(registered_runtimes), "default": "runc"}
 			mock_runtime_of.return_value = "sysbox-runc"
@@ -779,16 +780,16 @@ class TestDeployStepMarkers(IntegrationTestCase):
 
 	@patch("benchpress.lifecycle.secrets.token_urlsafe")
 	def test_the_ssh_password_goes_into_the_environment_and_into_no_command(self, token):
-		"""Docker publishes every exec command line, and linkuser.sh read the password from argv."""
+		"""Docker publishes every exec command line, and provision-user.sh read the password from argv."""
 		sentinel = "sS1XnOtAr3alPassw0rd"
 		token.return_value = sentinel
 		bench = self._bench()
 
 		self._run_deploy(bench)
 
-		linkuser = [call for call in self.execs.call_args_list if "linkuser.sh" in call.args[1]]
-		self.assertEqual(len(linkuser), 1)
-		self.assertEqual(linkuser[0].kwargs.get("environment"), {"SSH_PASSWORD": sentinel})
+		provision = [call for call in self.execs.call_args_list if "provision-user.sh" in call.args[1]]
+		self.assertEqual(len(provision), 1)
+		self.assertEqual(provision[0].kwargs.get("environment"), {"SSH_PASSWORD": sentinel})
 		for call in self.execs.call_args_list:
 			self.assertNotIn(sentinel, call.args[1])
 
@@ -907,7 +908,7 @@ class TestDeployStepMarkers(IntegrationTestCase):
 	def _failed_after_the_route(self, bench):
 		"""A deploy that dies at the SSH step, which is past both the route and the site row."""
 		self._set_base_domain("benchpress.cloud")
-		self._run_deploy(bench, exec_failures={"linkuser.sh": (1, "linkuser exploded")})
+		self._run_deploy(bench, exec_failures={"provision-user.sh": (1, "provision-user exploded")})
 		self.assertEqual(self._bench_field(bench, "status"), "Error")
 
 	def test_a_failed_deploy_leaves_no_route_file_answering(self):
@@ -1060,8 +1061,8 @@ class TestTerminalStateNotifications(IntegrationTestCase):
 		frappe.set_user("Administrator")
 		cls.lab = _make_lab("test-lab-notify")
 		cls.owner = _ensure_owner("notify-owner@example.com")
-		cls.addClassCleanup(cls.lab.delete, ignore_permissions=True)
 		cls.addClassCleanup(frappe.db.commit)
+		cls.addClassCleanup(cls.lab.delete, ignore_permissions=True)
 		# Per-run unique container_name prevents collisions between concurrent or
 		# interrupted runs that left a stale row behind (#362).
 		container_name = f"test-db-notify-{uuid.uuid4().hex[:8]}"

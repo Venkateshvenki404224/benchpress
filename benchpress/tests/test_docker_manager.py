@@ -1,6 +1,7 @@
 # Copyright (c) 2026, Venkatesh and Contributors
 # See license.txt
 
+import os
 import types
 import unittest
 from datetime import UTC, datetime
@@ -150,6 +151,92 @@ class TestBenchHealthcheck(unittest.TestCase):
 	def test_a_zeroed_duration_falls_back_rather_than_asking_docker_for_zero(self):
 		self.assertEqual(self._healthcheck(bench_health_interval_seconds=0)["Interval"], 30 * 1_000_000_000)
 
+	def test_a_self_managed_bench_is_healthy_while_sshd_runs(self):
+		with patch("benchpress.docker_manager.frappe") as frappe_mock:
+			frappe_mock.get_cached_doc.return_value = frappe._dict()
+			probe = bench_healthcheck(frappe._dict(self_managed=1))
+
+		self.assertEqual(probe["Test"], ["CMD-SHELL", "pgrep -x sshd >/dev/null || exit 1"])
+		self.assertEqual(probe["Interval"], 30 * 1_000_000_000)
+		self.assertEqual(probe["Retries"], 3)
+
+	def test_an_ordinary_lab_keeps_the_site_probe(self):
+		with patch("benchpress.docker_manager.frappe") as frappe_mock:
+			frappe_mock.get_cached_doc.return_value = frappe._dict()
+			probe = bench_healthcheck(frappe._dict(self_managed=0))
+
+		self.assertIn("/api/method/ping", probe["Test"][1])
+
+
+class TestBuildLabImage(unittest.TestCase):
+	def _build(self, lab):
+		seen = {}
+
+		def build(**kwargs):
+			path = kwargs["path"]
+			seen.update(
+				kwargs,
+				dockerfile=open(os.path.join(path, "Dockerfile")).read()
+				if os.path.exists(os.path.join(path, "Dockerfile"))
+				else None,
+				has_provision=os.path.exists(os.path.join(path, "scripts", "provision-user.sh")),
+			)
+			return iter([{"stream": "Successfully built abc123"}])
+
+		client = MagicMock()
+		client.api.build.side_effect = build
+		with patch.object(docker_manager, "get_client", return_value=client):
+			tag = docker_manager.build_lab_image(lab)
+		return tag, seen
+
+	def test_a_self_managed_lab_builds_its_own_dockerfile_in_a_temp_context(self):
+		lab = frappe._dict(
+			lab_id="bench-ctx", frappe_version="develop", self_managed=1, dockerfile="FROM scratch\n", apps=[]
+		)
+
+		tag, seen = self._build(lab)
+
+		self.assertEqual(tag, "benchpress/bench-ctx:lab")
+		self.assertEqual(seen["dockerfile"], "FROM scratch\n")
+		self.assertTrue(seen["has_provision"])
+		self.assertEqual(seen["buildargs"], {})
+		self.assertNotEqual(seen["path"], docker_manager.get_lab_template_dir())
+		self.assertFalse(os.path.exists(seen["path"]))
+
+	def test_the_temp_context_is_removed_when_the_build_fails(self):
+		lab = frappe._dict(
+			lab_id="bench-fail", frappe_version="develop", self_managed=1, dockerfile="FROM x\n", apps=[]
+		)
+		paths = []
+
+		def build(**kwargs):
+			paths.append(kwargs["path"])
+			return iter([{"error": "boom"}])
+
+		client = MagicMock()
+		client.api.build.side_effect = build
+		with patch.object(docker_manager, "get_client", return_value=client), self.assertRaises(Exception):
+			docker_manager.build_lab_image(lab)
+
+		self.assertFalse(os.path.exists(paths[0]))
+
+	def test_an_ordinary_lab_builds_the_shared_template_with_its_arguments(self):
+		lab = frappe._dict(
+			lab_id="plain-ctx",
+			frappe_version="version-15",
+			apps=[
+				frappe._dict(app_name="ERPNext", git_url="https://github.com/frappe/erpnext", branch="v15")
+			],
+		)
+
+		_tag, seen = self._build(lab)
+
+		self.assertEqual(seen["path"], docker_manager.get_lab_template_dir())
+		self.assertEqual(seen["buildargs"]["FRAPPE_BRANCH"], "version-15")
+		self.assertIn('"app_name": "erpnext"', seen["buildargs"]["APPS_JSON"])
+		self.assertIn("CODE_SERVER_VERSION", seen["buildargs"])
+		self.assertTrue(os.path.exists(seen["path"]))
+
 
 def _reloading_container(states):
 	"""Container mock whose reload() steps through (status, attrs) states."""
@@ -211,7 +298,7 @@ class TestWriteFileToContainer(unittest.TestCase):
 
 	@patch("benchpress.docker_manager.get_client")
 	def test_no_mode_leaves_an_existing_file_the_mode_it_had(self, get_client):
-		"""`common_site_config.json` and `linkuser.sh` ship in the image already; a
+		"""`common_site_config.json` and `provision-user.sh` ship in the image already; a
 		default here would silently restate their modes."""
 		client, container = self._container()
 		get_client.return_value = client
@@ -319,6 +406,24 @@ class TestDockerManagerBlockIO(FakeDockerMixin, IntegrationTestCase):
 			kwargs = self._container_create_kwargs(lab)
 
 		self.assertEqual(kwargs["healthcheck"], probe)
+
+	def test_a_self_managed_lab_gets_the_sshd_probe_and_its_environment(self):
+		lab = _make_lab("self-managed-create", self_managed=1, dockerfile="FROM scratch\n")
+		self.addCleanup(drop, "Lab", lab.name)
+
+		kwargs = self._container_create_kwargs(lab)
+
+		self.assertEqual(kwargs["healthcheck"]["Test"], ["CMD-SHELL", "pgrep -x sshd >/dev/null || exit 1"])
+		self.assertEqual(kwargs["environment"], {"FRAPPE_BIND_ADDR": "0.0.0.0", "CI": "1"})
+
+	def test_an_ordinary_lab_gets_no_environment(self):
+		lab = _make_lab("ordinary-create")
+		self.addCleanup(drop, "Lab", lab.name)
+
+		kwargs = self._container_create_kwargs(lab)
+
+		self.assertNotIn("environment", kwargs)
+		self.assertIn("/api/method/ping", kwargs["healthcheck"]["Test"][1])
 
 	def test_the_switch_off_leaves_the_key_off_the_create(self):
 		"""Not an empty healthcheck: the daemon reads one as a healthcheck that always fails."""

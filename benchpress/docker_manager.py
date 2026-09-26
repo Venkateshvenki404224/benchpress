@@ -4,12 +4,14 @@
 import json
 import os
 import re
+import shutil
 import subprocess
+import tempfile
 import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from functools import lru_cache
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 
 import docker
 import frappe
@@ -40,6 +42,8 @@ NANOSECONDS = 1_000_000_000
 # `localhost`, so the probe tests the server and not the bridge. Any Host header resolves:
 # `common_site_config.json` names the bench's own site as `default_site`.
 BENCH_HEALTH_PROBE = "curl -fsS -m {timeout} http://localhost:{port}/api/method/ping || exit 1"
+SELF_MANAGED_HEALTH_PROBE = "pgrep -x sshd >/dev/null || exit 1"
+SELF_MANAGED_ENVIRONMENT = {"FRAPPE_BIND_ADDR": "0.0.0.0", "CI": "1"}
 
 # Docker's health verdict -> the `container_health` label. `starting` is neither: a bench mid-deploy
 # is not healthy and is certainly not unhealthy.
@@ -151,6 +155,18 @@ def get_lab_template_dir() -> str:
 	return os.path.join(app_path, "lab-templates")
 
 
+def _self_managed_context(lab_doc) -> str:
+	"""A temp build context: the shared base plus the lab's own Dockerfile."""
+	context = tempfile.mkdtemp(prefix=f"bench-{lab_doc.lab_id}-")
+	shutil.copytree(
+		os.path.join(frappe.get_app_path("benchpress"), "bench-templates", "base"),
+		context,
+		dirs_exist_ok=True,
+	)
+	Path(context, "Dockerfile").write_text(lab_doc.dockerfile)
+	return context
+
+
 def ensure_network(client: docker.DockerClient | None = None) -> None:
 	"""Create the benchpress Docker network if it does not exist."""
 	client = client or get_client()
@@ -171,27 +187,42 @@ def build_lab_image(lab_doc, log_fn=None, no_cache: bool = False) -> str:
 	shares one image instead of holding a private copy — see `image_cache`.
 	"""
 	validate_lab_id(lab_doc.lab_id)
-	template_dir = get_lab_template_dir()
 	image_tag = cache_tag(lab_doc)
 	version_branch = lab_doc.frappe_version
 
-	apps = [{"app_name": a.app_name.lower(), "git_url": a.git_url, "branch": a.branch} for a in lab_doc.apps]
+	if getattr(lab_doc, "self_managed", None):
+		template_dir = _self_managed_context(lab_doc)
+		build_args = {}
+		if log_fn:
+			log_fn(f"Building image {image_tag} from the lab's own Dockerfile...")
+	else:
+		template_dir = get_lab_template_dir()
+		apps = [
+			{"app_name": a.app_name.lower(), "git_url": a.git_url, "branch": a.branch} for a in lab_doc.apps
+		]
+		settings = frappe.get_cached_doc("BenchPress Settings")
+		build_args = {
+			"FRAPPE_BRANCH": version_branch,
+			"APPS_JSON": json.dumps(apps),
+			"CODE_SERVER_VERSION": settings.code_server_version or "4.96.4",
+		}
+		if log_fn:
+			log_fn(f"Building image {image_tag} (base: frappe/build:{version_branch}, apps: {len(apps)})...")
 
-	settings = frappe.get_cached_doc("BenchPress Settings")
-	build_args = {
-		"FRAPPE_BRANCH": version_branch,
-		"APPS_JSON": json.dumps(apps),
-		"CODE_SERVER_VERSION": settings.code_server_version or "4.96.4",
-	}
+	try:
+		_stream_build(template_dir, image_tag, build_args, no_cache, log_fn)
+	finally:
+		if getattr(lab_doc, "self_managed", None):
+			shutil.rmtree(template_dir, ignore_errors=True)
 
-	if log_fn:
-		log_fn(f"Building image {image_tag} (base: frappe/build:{version_branch}, apps: {len(apps)})...")
+	# The tag exists now, so a resolve later in this same job must not read a stale set.
+	clear_cached_tags()
+	return image_tag
 
-	client = get_client()
-	api_client = client.api
 
-	stream = api_client.build(
-		path=template_dir,
+def _stream_build(path: str, image_tag: str, build_args: dict, no_cache: bool, log_fn) -> None:
+	stream = get_client().api.build(
+		path=path,
 		tag=image_tag,
 		buildargs=build_args,
 		rm=True,
@@ -210,10 +241,6 @@ def build_lab_image(lab_doc, log_fn=None, no_cache: bool = False) -> str:
 			if log_fn:
 				log_fn(f"ERROR: {error_msg}")
 			raise Exception(f"Docker build failed: {error_msg}")
-
-	# The tag exists now, so a resolve later in this same job must not read a stale set.
-	clear_cached_tags()
-	return image_tag
 
 
 @dataclass(frozen=True)
@@ -272,7 +299,7 @@ def _resolve_limits(size, lab_doc) -> dict:
 	}
 
 
-def bench_healthcheck() -> dict | None:
+def bench_healthcheck(lab_doc=None) -> dict | None:
 	"""The Docker healthcheck for a bench container, or None when the switch is off."""
 	settings = frappe.get_cached_doc("BenchPress Settings")
 	# A Single stores only the fields somebody has written, so an unset Check reads None here. The
@@ -284,8 +311,12 @@ def bench_healthcheck() -> dict | None:
 	timeout = _health_setting(settings, "bench_health_timeout_seconds", DEFAULT_HEALTH_TIMEOUT)
 	interval = _health_setting(settings, "bench_health_interval_seconds", DEFAULT_HEALTH_INTERVAL)
 	start_period = _health_setting(settings, "bench_health_start_period_seconds", DEFAULT_HEALTH_START_PERIOD)
+	if getattr(lab_doc, "self_managed", None):
+		probe = SELF_MANAGED_HEALTH_PROBE
+	else:
+		probe = BENCH_HEALTH_PROBE.format(timeout=timeout, port=addressing.SITE_HTTP_PORT)
 	return {
-		"Test": ["CMD-SHELL", BENCH_HEALTH_PROBE.format(timeout=timeout, port=addressing.SITE_HTTP_PORT)],
+		"Test": ["CMD-SHELL", probe],
 		"Interval": interval * NANOSECONDS,
 		"Timeout": timeout * NANOSECONDS,
 		"StartPeriod": start_period * NANOSECONDS,
@@ -331,7 +362,8 @@ def create_bench_container(bench_doc, lab_doc, size=None, network: str | None = 
 	runtime = resolve_runtime(bench_doc)
 	runtime_kwargs = {"runtime": runtime} if runtime else {}
 
-	healthcheck = bench_healthcheck()
+	healthcheck = bench_healthcheck(lab_doc)
+	environment = SELF_MANAGED_ENVIRONMENT if getattr(lab_doc, "self_managed", None) else None
 
 	devices = _get_host_block_devices()
 	device_read_iops = [{"Path": dev, "Rate": iops} for dev in devices]
@@ -367,6 +399,7 @@ def create_bench_container(bench_doc, lab_doc, size=None, network: str | None = 
 		device_write_bps=device_write_bps or None,
 		network=network,
 		**({"healthcheck": healthcheck} if healthcheck else {}),
+		**({"environment": environment} if environment else {}),
 		**({"storage_opt": storage_opt} if storage_opt else {}),
 		**runtime_kwargs,
 	)
@@ -507,7 +540,7 @@ def exec_in_container(
 	container_id: str,
 	command: str,
 	user: str = "frappe",
-	workdir: str = "/home/frappe",
+	workdir: str | None = None,
 	environment: dict | None = None,
 ) -> tuple[int, str]:
 	client = get_client()

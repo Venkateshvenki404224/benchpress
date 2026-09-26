@@ -9,6 +9,8 @@ Templates live in the `Lab Template` DocType, so an admin adds, edits or retires
 after which the normal build/deploy flow takes over.
 """
 
+from pathlib import Path
+
 import frappe
 from frappe import _
 
@@ -30,6 +32,7 @@ TEMPLATE_FIELDS = [
 	"cpu_cores",
 	"eta_minutes",
 	"most_used",
+	"self_managed",
 ]
 APP_FIELDS = ["app_name", "app_label", "git_url", "branch"]
 
@@ -381,6 +384,22 @@ SEED_TEMPLATES = [
 			},
 		],
 	},
+	{
+		"key": "frappe-develop",
+		"title": "Frappe develop bench",
+		"description": "An empty Frappe develop bench you manage yourself. No site is created.",
+		"frappe_version": "develop",
+		"instance_size": "Medium",
+		"memory_limit": "2g",
+		"cpu_cores": 2,
+		"eta_minutes": 1,
+		"most_used": 0,
+		"is_active": 1,
+		"self_managed": 1,
+		"dockerfile_path": "frappe-develop.Dockerfile",
+		"sort_order": 10,
+		"apps": [],
+	},
 ]
 
 
@@ -452,6 +471,8 @@ def get_template(key: str) -> dict:
 		"cpu_cores": doc.cpu_cores,
 		"eta_minutes": doc.eta_minutes,
 		"most_used": doc.most_used,
+		"self_managed": doc.get("self_managed"),
+		"dockerfile": doc.get("dockerfile"),
 		"apps": [{field: app.get(field) for field in APP_FIELDS} for app in doc.apps],
 	}
 
@@ -492,6 +513,8 @@ def create_lab_from_template(
 			"instance_size": seeded_instance_size(template),
 			"memory_limit": template["memory_limit"],
 			"cpu_cores": template["cpu_cores"],
+			"self_managed": template["self_managed"],
+			"dockerfile": template["dockerfile"],
 			"apps": [dict(app) for app in template["apps"]],
 		}
 	)
@@ -519,4 +542,15 @@ def seed_lab_templates() -> None:
 	for template in SEED_TEMPLATES:
 		if template["key"] in existing:
 			continue
-		frappe.get_doc({"doctype": "Lab Template", **template}).insert(ignore_permissions=True)
+		frappe.get_doc({"doctype": "Lab Template", **_seed_row(template)}).insert(ignore_permissions=True)
+
+
+def _seed_row(template: dict) -> dict:
+	row = dict(template)
+	if path := row.pop("dockerfile_path", None):
+		row["dockerfile"] = (bench_templates_dir() / path).read_text()
+	return row
+
+
+def bench_templates_dir() -> Path:
+	return Path(frappe.get_app_path("benchpress"), "bench-templates")

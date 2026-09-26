@@ -13,6 +13,8 @@
   "description",
   "column_break_meta",
   "frappe_version",
+  "self_managed",
+  "dockerfile",
   "instance_size",
   "memory_limit",
   "cpu_cores",
@@ -62,6 +64,20 @@
    "label": "Frappe Version",
    "options": "version-15\nversion-14\nversion-16\ndevelop",
    "reqd": 1
+  },
+  {
+   "default": "0",
+   "description": "Deploys an empty bench the user manages. No site is created.",
+   "fieldname": "self_managed",
+   "fieldtype": "Check",
+   "label": "Self-managed bench"
+  },
+  {
+   "depends_on": "self_managed",
+   "fieldname": "dockerfile",
+   "fieldtype": "Code",
+   "label": "Dockerfile",
+   "mandatory_depends_on": "self_managed"
   },
   {
    "fieldname": "instance_size",
@@ -120,7 +136,7 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-08-19 08:00:00.000000",
+ "modified": "2026-09-26 10:00:00.000000",
  "modified_by": "Administrator",
  "module": "Benchpress",
  "name": "Lab Template",

@@ -69,10 +69,13 @@ GOLDEN_MARKER = "Restored from golden dump"
 GOLDEN_RESTORED = "restored from the image's golden dump"
 
 
-def build_linkuser_args(bench, lab, settings) -> list[str]:
-	"""Positional arguments for linkuser.sh, in the order the script reads them.
+PROVISION_SCRIPT = "/opt/benchpress/scripts/provision-user.sh"
 
-	Order must match scripts/linkuser.sh:
+
+def build_provision_args(bench, lab, settings) -> list[str]:
+	"""Positional arguments for provision-user.sh, in the order the script reads them.
+
+	Order must match scripts/provision-user.sh:
 	USERNAME EMAIL LAB_NAME WG_IP BENCH_NAME BASE_DOMAIN LOGIN_SHELL
 
 	The SSH password is not among them. It travels in the exec environment, which Docker
@@ -89,13 +92,13 @@ def build_linkuser_args(bench, lab, settings) -> list[str]:
 	]
 
 
-def linkuser_command(script_args: list[str]) -> str:
-	"""The linkuser.sh invocation, with every argument shell-quoted.
+def provision_command(script_args: list[str]) -> str:
+	"""The provision-user.sh invocation, with every argument shell-quoted.
 
 	Runs as root inside the container, and the arguments carry free text
 	(the lab title, the owner's email).
 	"""
-	return "bash /opt/benchpress/scripts/linkuser.sh " + " ".join(shlex.quote(a) for a in script_args)
+	return f"bash {PROVISION_SCRIPT} " + " ".join(shlex.quote(a) for a in script_args)
 
 
 # The desk alert on a terminal deploy/build state. Shared with the enforcement sweep and the
@@ -223,7 +226,7 @@ def _start_code_server(bench, container_id: str, pipeline, settings) -> None:
 	config_path = f"{cs_home}/.config/code-server/config.yaml"
 
 	write_file_to_container(container_id, config_yaml, config_path, mode=0o600)
-	# The tar header set the mode, but `linkuser.sh` minted the tenant account and this
+	# The tar header set the mode, but `provision-user.sh` minted the tenant account and this
 	# caller does not know its id, so the ownership fix still runs as its own exec.
 	_checked_exec(
 		container_id,
@@ -320,7 +323,7 @@ def _prepare_lab_image(lab, pipeline, user: str) -> None:
 	if not image_cache.is_ready(lab):
 		frappe.throw(_("No built image for lab '{0}'. Build it first from the Lab record.").format(lab.title))
 	pipeline.log(f"Using built image {tag}")
-	if not image_has_golden(tag):
+	if not lab.get("self_managed") and not image_has_golden(tag):
 		pipeline.log(
 			f"No golden dump in {tag} — this site is built from scratch. "
 			"Rebuild the lab, or run Build golden, to make its deploys ~5x faster."
@@ -355,7 +358,8 @@ def _build_lab_with_logs(lab, log_fn) -> None:
 
 	# After the lab is Ready with its tag saved: the golden step appends a layer to that tag,
 	# and needs the row that names it.
-	_add_golden(lab, log_fn)
+	if not lab.get("self_managed"):
+		_add_golden(lab, log_fn)
 
 
 def _add_golden(lab, log_fn) -> None:
