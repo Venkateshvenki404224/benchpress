@@ -37,6 +37,10 @@
     <lastmod>2026-08-28T16:40:21.000Z</lastmod>
   </url>
   <url>
+    <loc>https://benchpress.cloud/docs/user/benches</loc>
+    <lastmod>2026-09-26T19:04:53.000Z</lastmod>
+  </url>
+  <url>
     <loc>https://benchpress.cloud/docs/user/logs-and-monitoring</loc>
     <lastmod>2026-08-28T16:40:21.000Z</lastmod>
   </url>
@@ -66,7 +70,7 @@
   </url>
   <url>
     <loc>https://benchpress.cloud/docs/operator/settings-reference</loc>
-    <lastmod>2026-08-28T16:40:21.000Z</lastmod>
+    <lastmod>2026-09-26T19:04:53.000Z</lastmod>
   </url>
   <url>
     <loc>https://benchpress.cloud/docs/operator/database-server</loc>
@@ -122,11 +126,11 @@
   </url>
   <url>
     <loc>https://benchpress.cloud/docs/reference/data-model</loc>
-    <lastmod>2026-09-01T12:36:47.000Z</lastmod>
+    <lastmod>2026-09-26T19:04:53.000Z</lastmod>
   </url>
   <url>
     <loc>https://benchpress.cloud/docs/reference/api</loc>
-    <lastmod>2026-09-20T13:22:51.000Z</lastmod>
+    <lastmod>2026-09-26T19:04:53.000Z</lastmod>
   </url>
   <url>
     <loc>https://benchpress.cloud/docs/reference/deploy-pipeline</loc>

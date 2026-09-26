@@ -3,7 +3,7 @@ title: Settings reference
 description: Every field on BenchPress Settings and Credit Settings, with the
   value measured on a live host, where each one is edited, and what changing it
   costs.
-lastModified: "2026-08-28T22:10:21+05:30"
+lastModified: "2026-09-26T15:04:53-04:00"
 lastAuthor: Venkatesh
 ---
 # Settings reference
@@ -114,6 +114,7 @@ Applied to a new lab unless the lab overrides them.
 |`container_cpu_quota`|`100000`|same|CPU quota in microseconds. `100000` is one core|
 |`code_server_version`|`4.96.4`|same|The browser VS Code build installed into a bench|
 |`stop_grace_seconds`|`5`|same|Seconds a container gets to exit cleanly before it is killed|
+|`max_bench_databases`|`5`|same|Databases one self-managed bench may hold. `0` reads as the default|
 
 ### Reconciliation and events
 

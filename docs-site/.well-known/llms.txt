@@ -30,6 +30,7 @@ is done.
 - [Open the bench site](/docs/user/open-your-site.md): The Sites card, the three states of its Open button, and logging in to the Frappe site a deploy created.
 - [Connect over SSH and the VPN](/docs/user/connect-ssh-vpn.md): The connection card on a lab page — two addresses, the SSH command, the three passwords, and which of them work without the tunnel.
 - [Use code-server](/docs/user/code-server.md): Open the browser VS Code session on a bench, find its password, hand the session to a teammate, and restart it when it stops answering.
+- [Work on your own bench](/docs/user/benches.md): Prepare a Frappe develop bench, log in over SSH with your own key, create a database, make a site with bench new-site, and serve it with bench start on your VPN address.
 - [Read logs and container stats](/docs/user/logs-and-monitoring.md): The deploy stepper, the raw log and its step markers, the build log, and the CPU and memory bars on a running bench.
 - [Leases and credits](/docs/user/leases-and-credits.md): The countdown on a running bench, the renew dialog and its plans, the credit meter, the ledger, and where a purchase hands off to the payment gateway.
 - [Troubleshooting](/docs/user/troubleshooting.md): Every symptom a BenchPress user meets, its cause, and the page that fixes it — deploys, the VPN, SSH, code-server, logs and credits.
@@ -79,6 +80,7 @@ Route by the task, not by the track:
 - Open the bench site in a browser -> `/docs/user/open-your-site`
 - Put a laptop or phone on the VPN -> `/docs/user/vpn-devices`
 - Open the browser VS Code session -> `/docs/user/code-server`
+- Make a site on your own bench, with its own database -> `/docs/user/benches`
 - A bench stopped, or a countdown ran out -> `/docs/user/leases-and-credits`
 - Any user-facing symptom, with its cause -> `/docs/user/troubleshooting`
 - Install BenchPress on a new host -> `/docs/operator/install`
