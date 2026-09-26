@@ -75,6 +75,7 @@ export default defineDocsConfig({
           { urlPath: "/docs/user/open-your-site" },
           { urlPath: "/docs/user/connect-ssh-vpn" },
           { urlPath: "/docs/user/code-server" },
+          { urlPath: "/docs/user/benches" },
           { urlPath: "/docs/user/logs-and-monitoring" },
           { urlPath: "/docs/user/leases-and-credits" },
           { urlPath: "/docs/user/troubleshooting" },
@@ -136,6 +137,7 @@ export default defineDocsConfig({
           "- Open the bench site in a browser -> `/docs/user/open-your-site`",
           "- Put a laptop or phone on the VPN -> `/docs/user/vpn-devices`",
           "- Open the browser VS Code session -> `/docs/user/code-server`",
+          "- Make a site on your own bench, with its own database -> `/docs/user/benches`",
           "- A bench stopped, or a countdown ran out -> `/docs/user/leases-and-credits`",
           "- Any user-facing symptom, with its cause -> `/docs/user/troubleshooting`",
           "- Install BenchPress on a new host -> `/docs/operator/install`",
@@ -186,6 +188,7 @@ export default defineDocsConfig({
             "open-your-site",
             "connect-ssh-vpn",
             "code-server",
+            "benches",
           ],
         },
         {

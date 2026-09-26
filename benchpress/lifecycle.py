@@ -109,7 +109,7 @@ def _deactivate_bench_sites(bench) -> None:
 	frappe.db.set_value("Bench Site", {"bench": bench.name}, "status", "Inactive", update_modified=False)
 
 
-def torn_down(bench, *, release_admission: bool = True) -> dict[str, str]:
+def torn_down(bench, *, release_admission: bool = True, keep_databases: bool = False) -> dict[str, str]:
 	"""Return an instance to `Draft`, removing its container, site database, route and VPN peer.
 
 	Never raises; each removal reports `GONE` or its failure, and `release_admission=False` holds the slot.
@@ -121,6 +121,8 @@ def torn_down(bench, *, release_admission: bool = True) -> dict[str, str]:
 		"database": _drop_site_database(bench),
 		"vpn_peer": _remove_bench_peer(bench),
 	}
+	if not keep_databases:
+		removals["bench_databases"] = _drop_bench_databases(bench)
 	bench.container_id = None
 	bench.container_image = None
 	bench.container_ip = None
@@ -217,6 +219,23 @@ def _drop_site_database(bench) -> str:
 	from benchpress.mariadb_manager import drop_site_database
 
 	return _removed(drop_site_database, bench.database_server, bench.site_name)
+
+
+def _drop_bench_databases(bench) -> str:
+	from frappe.utils.password import delete_all_passwords_for
+
+	from benchpress.mariadb_manager import drop_bench_database
+
+	kept, failed = [], []
+	for row in bench.databases:
+		result = _removed(drop_bench_database, bench.database_server, row.db_name)
+		if result == GONE:
+			delete_all_passwords_for(row.doctype, row.name)
+		else:
+			kept.append(row)
+			failed.append(f"{row.db_name} {result}")
+	bench.set("databases", kept)
+	return "; ".join(failed) or GONE
 
 
 def _log_limits(pipeline, size, created) -> None:
@@ -571,5 +590,5 @@ def redeploy_bench(bench_name: str) -> None:
 def _redeploy_bench(bench_name: str) -> None:
 	# The slot is held across the whole redeploy: releasing between the two halves would hand it
 	# to somebody else and leave this caller one over their limit when their own deploy lands.
-	torn_down(frappe.get_doc("Bench Instance", bench_name), release_admission=False)
+	torn_down(frappe.get_doc("Bench Instance", bench_name), release_admission=False, keep_databases=True)
 	_deploy_bench(bench_name)

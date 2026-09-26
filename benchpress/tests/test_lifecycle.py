@@ -521,7 +521,9 @@ class TestTeardownReports(TransitionFixtures, FakeDockerMixin, IntegrationTestCa
 
 		removals = lifecycle.torn_down(bench)
 
-		self.assertEqual(set(removals), {"stop", "container", "database", "vpn_peer", "route"})
+		self.assertEqual(
+			set(removals), {"stop", "container", "database", "bench_databases", "vpn_peer", "route"}
+		)
 		self.assertEqual(set(removals.values()), {lifecycle.GONE})
 
 	def test_a_refused_stop_is_named_with_the_reason_the_daemon_gave(self):
@@ -570,13 +572,14 @@ class TestTeardownReports(TransitionFixtures, FakeDockerMixin, IntegrationTestCa
 
 	def test_a_teardown_whose_every_removal_failed_still_reaches_draft(self):
 		"""The swallowing stays: an instance must not be left describing what it no longer has."""
-		bench = self._deployed_bench(with_database=True)
+		bench = self._bench_with_databases("bp_dev_aaaa1111")
 		container = self._container(bench)
 		container.stop_refusal = "daemon is wedged"
 		container.remove_refusal = "container is in use"
 
 		with (
 			patch("benchpress.mariadb_manager.drop_site_database", side_effect=Exception("db unreachable")),
+			patch("benchpress.mariadb_manager.drop_bench_database", side_effect=Exception("db unreachable")),
 			patch("benchpress.vpn_adapter.remove_bench_peer", side_effect=Exception("wg agent down")),
 			patch.object(ingress, "withdraw", side_effect=Exception("route mount is missing")),
 		):
@@ -602,6 +605,72 @@ class TestTeardownReports(TransitionFixtures, FakeDockerMixin, IntegrationTestCa
 		lifecycle.torn_down(bench)
 
 		self.assertEqual(frappe.db.count(ERROR_LOG, {"method": ("like", f"%{bench.name}%")}), 0)
+
+	def _bench_with_databases(self, *names):
+		bench = self._deployed_bench(with_database=True)
+		for name in names:
+			bench.append("databases", {"db_name": name, "db_user": name, "db_password": f"pw-{name}"})
+		bench.save(ignore_permissions=True)
+		frappe.db.commit()  # nosemgrep -- the transition under test commits
+		return bench
+
+	def _stored_passwords(self, rows):
+		return frappe.db.count(
+			"__Auth", {"doctype": "Bench Database", "name": ("in", [row.name for row in rows])}
+		)
+
+	def test_a_teardown_drops_every_bench_database_and_forgets_it(self):
+		bench = self._bench_with_databases("bp_dev_aaaa1111", "bp_dev_bbbb2222")
+		rows = list(bench.databases)
+
+		with patch("benchpress.mariadb_manager.drop_bench_database") as drop:
+			removals = lifecycle.torn_down(bench)
+
+		self.assertEqual(
+			[call.args for call in drop.call_args_list],
+			[(self.db_server_name, "bp_dev_aaaa1111"), (self.db_server_name, "bp_dev_bbbb2222")],
+		)
+		self.assertEqual(removals["bench_databases"], lifecycle.GONE)
+		self.assertEqual(frappe.get_doc(BENCH, bench.name).databases, [])
+		self.assertEqual(self._stored_passwords(rows), 0)
+
+	def test_a_database_that_would_not_drop_is_named_and_kept(self):
+		bench = self._bench_with_databases("bp_dev_aaaa1111", "bp_dev_bbbb2222")
+
+		with patch(
+			"benchpress.mariadb_manager.drop_bench_database",
+			side_effect=lambda _server, name: name == "bp_dev_aaaa1111" and frappe.throw("db unreachable"),
+		):
+			removals = lifecycle.torn_down(bench)
+
+		self.assertIn("bp_dev_aaaa1111", removals["bench_databases"])
+		self.assertIn("db unreachable", removals["bench_databases"])
+		self.assertEqual(
+			[row.db_name for row in frappe.get_doc(BENCH, bench.name).databases], ["bp_dev_aaaa1111"]
+		)
+
+	def test_a_redeploy_drops_no_bench_database(self):
+		bench = self._bench_with_databases("bp_dev_aaaa1111")
+
+		with (
+			patch("benchpress.mariadb_manager.drop_bench_database") as drop,
+			patch.object(lifecycle, "_deploy_bench"),
+		):
+			lifecycle._redeploy_bench(bench.name)
+
+		drop.assert_not_called()
+		self.assertEqual(
+			[row.db_name for row in frappe.get_doc(BENCH, bench.name).databases], ["bp_dev_aaaa1111"]
+		)
+
+	def test_deleting_a_bench_forgets_its_database_passwords(self):
+		bench = self._bench_with_databases("bp_dev_aaaa1111")
+		rows = list(bench.databases)
+		self.assertEqual(self._stored_passwords(rows), 1)
+
+		frappe.delete_doc(BENCH, bench.name, force=True, ignore_permissions=True)
+
+		self.assertEqual(self._stored_passwords(rows), 0)
 
 
 class TestTeardownFreesTheTunnelIP(TransitionFixtures, FakeDockerMixin, IntegrationTestCase):

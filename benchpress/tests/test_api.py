@@ -1183,3 +1183,154 @@ class TestBenchesPage(IntegrationTestCase):
 				_drop_bench(bench)
 			frappe.delete_doc("Lab", lab, force=True, ignore_permissions=True)
 		frappe.db.commit()
+
+
+DB_CONTAINER = "test-db-bench-databases"
+
+
+def _ensure_database_server():
+	name = frappe.db.get_value("Database Server", {"container_name": DB_CONTAINER})
+	if name:
+		return name
+	return (
+		frappe.get_doc(
+			{
+				"doctype": "Database Server",
+				"container_name": DB_CONTAINER,
+				"mariadb_version": "10.6",
+				"status": "Active",
+				"mariadb_root_password": "test-root-password",
+			}
+		)
+		.insert(ignore_permissions=True)
+		.name
+	)
+
+
+@patch("benchpress.mariadb_manager.execute_sql", return_value=(0, ""))
+class TestBenchDatabases(IntegrationTestCase):
+	@classmethod
+	def setUpClass(cls):
+		super().setUpClass()
+		frappe.set_user("Administrator")
+		_ensure_app_user(BENCH_OWNER)
+		_ensure_app_user(BENCH_STRANGER)
+		cls.db_server = _ensure_database_server()
+		cls.bench_lab = _ensure_lab(
+			"api-bench-db-lab", frappe_version="develop", self_managed=1, dockerfile="FROM scratch\n"
+		)
+		cls.plain_lab = _ensure_lab("api-bench-db-plain-lab")
+		frappe.db.commit()
+
+	@classmethod
+	def tearDownClass(cls):
+		frappe.set_user("Administrator")
+		for lab in (cls.bench_lab, cls.plain_lab):
+			for bench in frappe.get_all("Bench Instance", filters={"lab": lab.name}, pluck="name"):
+				_drop_bench(bench)
+			frappe.delete_doc("Lab", lab.name, force=True, ignore_permissions=True)
+		frappe.delete_doc("Database Server", cls.db_server, force=True, ignore_permissions=True)
+		for email in (BENCH_OWNER, BENCH_STRANGER):
+			drop_all("Credit Ledger Entry", {"account": email})
+			drop("Credit Account", email)
+			drop("User", email)
+		frappe.db.commit()
+		super().tearDownClass()
+
+	def setUp(self):
+		frappe.set_user("Administrator")
+		self.bench = self._bench(self.bench_lab)
+
+	def _bench(self, lab, status="Running"):
+		bench = _bench_owned_by(BENCH_OWNER, lab)
+		bench.db_set({"status": status, "database_server": self.db_server, "ssh_username": "dev"})
+		return bench
+
+	def test_the_owner_of_a_running_bench_gets_a_database_and_the_command(self, _sql):
+		frappe.set_user(BENCH_OWNER)
+
+		created = api.create_bench_database(self.bench.name)
+
+		self.assertEqual(created["db_user"], created["db_name"])
+		self.assertEqual(
+			created["command"],
+			f"bench new-site {created['db_name'].replace('_', '-')}.localhost --set-default --no-setup-db "
+			f"--db-host {DB_CONTAINER} --db-name {created['db_name']} "
+			f"--db-user {created['db_name']} --db-password {created['db_password']}",
+		)
+		self.assertEqual(
+			[row.db_name for row in frappe.get_doc("Bench Instance", self.bench.name).databases],
+			[created["db_name"]],
+		)
+
+	def test_the_password_can_be_read_again_by_its_owner(self, _sql):
+		frappe.set_user(BENCH_OWNER)
+		created = api.create_bench_database(self.bench.name)
+
+		again = api.get_bench_database_password(self.bench.name, created["db_name"])
+
+		self.assertEqual(again["db_password"], created["db_password"])
+		self.assertEqual(again["command"], created["command"])
+
+	def test_a_database_of_another_bench_is_not_read(self, _sql):
+		frappe.set_user(BENCH_OWNER)
+
+		with self.assertRaises(frappe.DoesNotExistError):
+			api.get_bench_database_password(self.bench.name, "bp_someone_else")
+
+	def test_another_user_is_refused(self, sql):
+		frappe.set_user(BENCH_STRANGER)
+
+		with self.assertRaises(frappe.PermissionError):
+			api.create_bench_database(self.bench.name)
+		sql.assert_not_called()
+
+	def test_an_admin_who_does_not_own_the_bench_is_refused(self, sql):
+		with self.assertRaises(frappe.PermissionError):
+			api.create_bench_database(self.bench.name)
+		with self.assertRaises(frappe.PermissionError):
+			api.get_bench_database_password(self.bench.name, "bp_any")
+		sql.assert_not_called()
+
+	def test_a_stopped_bench_is_refused(self, sql):
+		self.bench.db_set("status", "Stopped")
+		frappe.set_user(BENCH_OWNER)
+
+		with self.assertRaisesRegex(frappe.ValidationError, "running"):
+			api.create_bench_database(self.bench.name)
+		sql.assert_not_called()
+
+	def test_an_ordinary_labs_bench_is_refused(self, sql):
+		bench = self._bench(self.plain_lab)
+		frappe.set_user(BENCH_OWNER)
+
+		with self.assertRaisesRegex(frappe.ValidationError, "self-managed"):
+			api.create_bench_database(bench.name)
+		sql.assert_not_called()
+
+	def test_the_sixth_database_is_refused_at_the_default_cap(self, sql):
+		frappe.set_user(BENCH_OWNER)
+		for _ in range(5):
+			api.create_bench_database(self.bench.name)
+		sql.reset_mock()
+
+		with self.assertRaisesRegex(frappe.ValidationError, "5 databases"):
+			api.create_bench_database(self.bench.name)
+		sql.assert_not_called()
+
+	def test_the_owner_cannot_write_a_database_row_themselves(self, _sql):
+		frappe.set_user(BENCH_OWNER)
+		doc = frappe.get_doc("Bench Instance", self.bench.name)
+		doc.append("databases", {"db_name": "_0f466d815af80ea5", "db_user": "_0f466d815af80ea5"})
+
+		doc.save()
+
+		self.assertEqual(frappe.get_doc("Bench Instance", self.bench.name).databases, [])
+
+	def test_the_lab_screen_lists_the_benchs_databases_without_passwords(self, _sql):
+		frappe.set_user(BENCH_OWNER)
+		created = api.create_bench_database(self.bench.name)
+
+		databases = lab_detail.get_lab(self.bench_lab.name)["bench"]["databases"]
+
+		self.assertEqual(databases, [{"db_name": created["db_name"], "db_user": created["db_user"]}])

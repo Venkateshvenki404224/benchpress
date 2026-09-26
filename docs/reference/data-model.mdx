@@ -11,11 +11,11 @@ to read a row.
 **Who this is for.** Somebody reading rows directly, writing a report, or adding
 a field.
 
-**Before you start.** The counts here are the whole module. Twenty DocTypes
-exist, three of them are child tables and two are Singles. Read
+**Before you start.** The counts here are the whole module. Twenty-one DocTypes
+exist, four of them are child tables and two are Singles. Read
 [How a row is scoped](#how-a-row-is-scoped) before you trust a query.
 
-## The 20 DocTypes
+## The 21 DocTypes
 
 | DocType | Kind | Named by | Holds |
 |---|---|---|---|
@@ -25,6 +25,7 @@ exist, three of them are child tables and two are Singles. Read
 | [Bench Instance](#bench-instance) | document | controller | one deployed bench |
 | [Bench Site](#bench-site) | document | `field:site_name` | a site inside a bench |
 | [Bench App](#bench-app) | child table | parent row | one app on a bench |
+| [Bench Database](#bench-database) | child table | parent row | one database a developer made on a self-managed bench |
 | [Bench Event](#bench-event) | document | `hash` | an incident seen on a bench |
 | [Bench Admission](#bench-admission) | document | `field:bench` | the concurrency and credit claim a bench holds |
 | [Site App](#site-app) | child table | parent row | one app installed on a site |
@@ -151,7 +152,7 @@ secrets.
 | Address | `domain`, `public_url`, `container_ip`, `wg_ip`, `vpn_peer`, `bridge_network` |
 | Container | `container_id`, `container_image`, `runtime`, `node`, `started_at`, `instance_size` |
 | Health | `cpu_usage`, `memory_usage`, `container_health`, `last_health_check` |
-| Data | `database_server`, `apps` |
+| Data | `database_server`, `apps`, `databases` |
 | Lease | `expires_at_ts`, `lease_state`, `stop_claimed_at`, `stop_started_at`, `container_stopped_at`, `expiry_attempts`, `expiry_lateness` |
 | Reaper | `reap_warned_at` |
 
@@ -187,6 +188,17 @@ Child table on `Bench Instance`. The same four fields as
 The two are separate on purpose. `Lab App` is what the lab asks for, and
 `Bench App` is what a bench actually got. A lab edited after a deploy leaves the
 two disagreeing, and that difference is the record of it.
+
+## Bench Database
+
+Child table on `Bench Instance`, in the `databases` field. It holds `db_name`,
+`db_user` and `db_password`. The name and the user are the same string.
+`api.create_bench_database` adds a row, and only on a running self-managed
+bench.
+
+The user has `ALL` on its own database and nothing global. A teardown drops
+every row's database and user, and a redeploy keeps them. `db_password` is a
+`Password` field, so read it through `get_bench_database_password`.
 
 ## Bench Event
 
@@ -299,7 +311,7 @@ switch and the lease sweep numbers. Every field is documented in the
 
 ## BenchPress Settings
 
-A Single. Twenty-six fields. The Settings dialog in the app shows ten of them,
+A Single. Twenty-seven fields. The Settings dialog in the app shows ten of them,
 and the rest are at `/app/benchpress-settings`.
 
 `enable_credits` lives here, and it ships as `0`. Nothing in

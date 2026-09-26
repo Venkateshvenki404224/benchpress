@@ -5,6 +5,7 @@ import base64
 import hashlib
 import io
 import os
+import re
 import secrets
 import subprocess
 import tarfile
@@ -19,6 +20,9 @@ from benchpress.docker_manager import ensure_network, get_client
 BACKUP_TIMEOUT = 3600
 
 REDIS_CONTAINER_NAME = "benchpress-redis"
+
+BENCH_DATABASE_PREFIX_LENGTH = 16
+BENCH_DATABASE_NAME = re.compile(r"bp_[a-z0-9]{1,16}_[0-9a-f]{8}")
 
 # `Database Server` statuses. A bench carries its own, spelled the same and meaning
 # something else, and only `lifecycle` writes that one.
@@ -352,6 +356,56 @@ def drop_site_database(db_server_name: str, site_name: str, database: str | None
 			"FLUSH PRIVILEGES",
 		),
 	)
+
+
+def bench_database_script(name: str, password_hash: str) -> str:
+	"""SQL for one database and a user limited to it."""
+	return _script(
+		f"CREATE DATABASE `{name}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci",
+		f"CREATE USER '{name}'@'%' IDENTIFIED VIA mysql_native_password USING '{password_hash}'",
+		f"GRANT ALL PRIVILEGES ON `{name}`.* TO '{name}'@'%'",
+		"FLUSH PRIVILEGES",
+	)
+
+
+def bench_new_site_command(db_host: str, name: str, password: str) -> str:
+	return (
+		f"bench new-site {name.replace('_', '-')}.localhost --set-default --no-setup-db "
+		f"--db-host {db_host} --db-name {name} --db-user {name} --db-password {password}"
+	)
+
+
+def create_bench_database(db_server_name: str, prefix: str) -> tuple[str, str]:
+	"""Create a database and its limited user; returns (name, password)."""
+	prefix = re.sub(r"[^a-z0-9]", "", prefix.lower())[:BENCH_DATABASE_PREFIX_LENGTH] or "bench"
+	name = f"bp_{prefix}_{frappe.generate_hash(length=8)}"
+	password = frappe.generate_hash(length=32)
+	exit_code, output = execute_sql(
+		db_server_name, bench_database_script(name, _native_password_hash(password))
+	)
+	if exit_code != 0:
+		drop_bench_database(db_server_name, name)
+		frappe.throw(_("Failed to create database {0}: {1}").format(name, output))
+	return name, password
+
+
+def drop_bench_database(db_server_name: str, name: str) -> None:
+	_assert_bench_database_name(name)
+	exit_code, output = execute_sql(
+		db_server_name,
+		_script(
+			f"DROP DATABASE IF EXISTS `{name}`",
+			f"DROP USER IF EXISTS '{name}'@'%'",
+			"FLUSH PRIVILEGES",
+		),
+	)
+	if exit_code != 0:
+		frappe.throw(_("Failed to drop database {0}: {1}").format(name, output))
+
+
+def _assert_bench_database_name(name: str) -> None:
+	if not BENCH_DATABASE_NAME.fullmatch(name or ""):
+		frappe.throw(_("{0} is not a bench database name.").format(name))
 
 
 # What `SHOW DATABASES` returns that no site ever owns. `backups` is not a schema at all —

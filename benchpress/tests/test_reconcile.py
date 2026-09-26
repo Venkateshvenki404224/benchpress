@@ -410,6 +410,20 @@ class TestOrphanDatabases(unittest.TestCase):
 		self.assertEqual(report["names"], {"db-one": ["_bbbb111111111111"]})
 
 
+class TestClaimedDatabases(IntegrationTestCase):
+	LAB = "test-lab-reconcile-bench-db"
+
+	def test_a_bench_database_is_claimed(self):
+		lab = _make_lab(self.LAB)
+		self.addCleanup(frappe.db.commit)
+		self.addCleanup(frappe.delete_doc, "Lab", lab.name, force=True, ignore_permissions=True)
+		bench = _fresh_bench(self, lab.name)
+		bench.append("databases", {"db_name": "bp_dev_aaaa1111", "db_user": "bp_dev_aaaa1111"})
+		bench.save(ignore_permissions=True)
+
+		self.assertIn("bp_dev_aaaa1111", reconcile._claimed_databases())
+
+
 class TestTrimDeployRecords(IntegrationTestCase):
 	"""The per-bench cap that sits on top of Frappe's 7-day age sweep."""
 

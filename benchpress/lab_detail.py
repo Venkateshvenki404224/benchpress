@@ -56,6 +56,8 @@ def get_lab(name: str) -> dict:
 	# nothing copies it onto the Lab any more, so the stored fields go stale the moment a size
 	# is retuned in Desk.
 	size = config.size_for_lab(lab)
+	if bench and lab.self_managed:
+		bench["databases"] = _databases(bench["name"])
 	return {
 		"name": lab.name,
 		"lab_id": lab.lab_id,
@@ -121,6 +123,17 @@ def _caller_bench(lab_name: str) -> dict | None:
 	bench["grace_ends_at_ts"] = lease.grace_ends_at(bench) if bench["status"] == "Stopped" else None
 	bench["addresses"] = addressing.addresses_for(bench)
 	return bench
+
+
+def _databases(bench_name: str) -> list[dict]:
+	return frappe.get_all(
+		"Bench Database",
+		filters={"parent": bench_name, "parenttype": "Bench Instance"},
+		fields=["db_name", "db_user"],
+		order_by="idx asc",
+		parent_doctype="Bench Instance",
+		limit_page_length=0,
+	)
 
 
 def _sites(bench: dict | None) -> list[dict]:

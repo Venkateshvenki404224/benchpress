@@ -244,7 +244,8 @@ def _claimed_databases() -> set[str]:
 	names = frappe.get_all("Bench Site", pluck="site_name") + frappe.get_all(
 		"Bench Instance", pluck="site_name"
 	)
-	return {mariadb_manager.get_database_name(name) for name in names if name}
+	bench_databases = frappe.get_all("Bench Database", pluck="db_name", parent_doctype="Bench Instance")
+	return {mariadb_manager.get_database_name(name) for name in names if name} | set(bench_databases)
 
 
 def _site_databases(server: str) -> list[str]:

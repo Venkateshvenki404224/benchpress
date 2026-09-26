@@ -5,6 +5,7 @@ import frappe
 from frappe import _
 from frappe.query_builder import DocType, Order
 from frappe.query_builder.functions import Count
+from frappe.utils import cint
 
 from benchpress import (
 	addressing,
@@ -19,6 +20,7 @@ from benchpress import (
 from benchpress.benchpress.doctype.bench_instance.bench_instance import DEPLOY_JOB_TIMEOUT
 
 MY_BENCHES_LIMIT = 100
+MAX_BENCH_DATABASES = 5
 
 # Every field the renew path decides from, read once under the row lock.
 RENEW_FIELDS = [
@@ -781,6 +783,59 @@ def get_bench_credentials(bench_name: str) -> dict:
 		except frappe.exceptions.ValidationError:
 			credentials[field] = None
 	return credentials
+
+
+@frappe.whitelist(methods=["POST"])
+def create_bench_database(bench: str) -> dict:
+	from benchpress import mariadb_manager
+
+	doc = _own_self_managed_bench(bench, for_update=True)
+	cap = cint(frappe.get_cached_doc("BenchPress Settings").get("max_bench_databases")) or MAX_BENCH_DATABASES
+	if len(doc.databases) >= cap:
+		frappe.throw(_("This bench already has {0} databases, the most it can hold.").format(cap))
+
+	name, password = mariadb_manager.create_bench_database(doc.database_server, doc.ssh_username or doc.owner)
+	doc.append("databases", {"db_name": name, "db_user": name, "db_password": password})
+	try:
+		doc.save(ignore_permissions=True)
+	except Exception:
+		mariadb_manager.drop_bench_database(doc.database_server, name)
+		raise
+	return {
+		"db_name": name,
+		"db_user": name,
+		"db_password": password,
+		"command": _new_site_command(doc, name, password),
+	}
+
+
+@frappe.whitelist()
+def get_bench_database_password(bench: str, db_name: str) -> dict:
+	doc = _own_self_managed_bench(bench)
+	row = next((row for row in doc.databases if row.db_name == db_name), None)
+	if not row:
+		frappe.throw(_("Database {0} is not on this bench.").format(db_name), frappe.DoesNotExistError)
+	password = row.get_password("db_password")
+	return {"db_password": password, "command": _new_site_command(doc, db_name, password)}
+
+
+def _own_self_managed_bench(bench_name: str, *, for_update: bool = False):
+	require_bench_access(bench_name)
+	bench = frappe.get_doc("Bench Instance", bench_name, for_update=for_update)
+	if bench.owner != frappe.session.user:
+		frappe.throw(_("Only the bench's owner can manage its databases."), frappe.PermissionError)
+	if not frappe.db.get_value("Lab", bench.lab, "self_managed"):
+		frappe.throw(_("Databases are for self-managed benches only."))
+	if bench.status != "Running":
+		frappe.throw(_("Start the bench first. Databases are made on a running bench."))
+	return bench
+
+
+def _new_site_command(bench, name: str, password: str) -> str:
+	from benchpress.mariadb_manager import bench_new_site_command
+
+	host = frappe.db.get_value("Database Server", bench.database_server, "container_name")
+	return bench_new_site_command(host, name, password)
 
 
 @frappe.whitelist()
