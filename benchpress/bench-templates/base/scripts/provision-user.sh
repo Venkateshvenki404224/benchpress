@@ -25,6 +25,11 @@ export NVM_DIR="$HOME/.nvm"
 cd ~/frappe-bench 2>/dev/null || true
 RC
 mkdir -p "$USER_HOME/.config/code-server"
+if [ -n "${SSH_KEYS:-}" ]; then
+    install -d -m 700 "$USER_HOME/.ssh"
+    printf '%s\n' "$SSH_KEYS" > "$USER_HOME/.ssh/authorized_keys"
+    chmod 600 "$USER_HOME/.ssh/authorized_keys"
+fi
 chown -R "$USERNAME:$USERNAME" "$USER_HOME"
 
 for var in CI FRAPPE_BIND_ADDR; do

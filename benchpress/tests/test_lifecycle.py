@@ -25,8 +25,10 @@ from benchpress.tests.test_deploy_manager import (
 	_mounted,
 )
 from benchpress.tests.test_device_wrappers import RECONCILE_HOOK, ensure_wg0_pool
+from benchpress.user import SSH_KEYS_FIELD
 
 BENCH = "Bench Instance"
+SSH_KEY = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGmGY6wbhu8fIW8Ss6S9Yq5Vs9esVwGK0lP9CmjKHuPv dev@laptop"
 SITE = "Bench Site"
 ADMISSION = "Bench Admission"
 ALLOCATION = "IP Allocation"
@@ -787,21 +789,47 @@ class TestSelfManagedDeploy(IntegrationTestCase):
 		keys = [step["step_key"] for step in self._emitted_steps(bench.name)]
 		self.assertEqual(keys, [step.key for step in DEPLOY_STEPS])
 
+	def _owner_keys(self, keys):
+		previous = frappe.db.get_value("User", "Administrator", SSH_KEYS_FIELD)
+		self.addCleanup(frappe.db.commit)
+		self.addCleanup(frappe.db.set_value, "User", "Administrator", SSH_KEYS_FIELD, previous)
+		frappe.db.set_value("User", "Administrator", SSH_KEYS_FIELD, keys)
+		frappe.db.commit()
+
+	def _provision_call(self):
+		return next(
+			call
+			for call in lifecycle.exec_in_container.call_args_list
+			if call.args[1].startswith(f"bash {deploy_manager.PROVISION_SCRIPT} ")
+		)
+
 	def test_the_bench_s_own_provisioning_runs_with_no_password(self):
+		self._owner_keys(SSH_KEY)
 		bench = self._deployed()
 
 		written = {call.args[2]: call.args[1] for call in lifecycle.write_file_to_container.call_args_list}
 		self.assertEqual(
 			written[deploy_manager.PROVISION_SCRIPT], lifecycle.SELF_MANAGED_PROVISION.read_text()
 		)
-		provision = next(
-			call
-			for call in lifecycle.exec_in_container.call_args_list
-			if call.args[1].startswith(f"bash {deploy_manager.PROVISION_SCRIPT} ")
-		)
-		self.assertFalse(provision.kwargs.get("environment"))
+		self.assertNotIn("SSH_PASSWORD", self._provision_call().kwargs["environment"])
 		self.assertFalse(bench.ssh_password)
 		self.assertFalse(bench.admin_password)
+
+	def test_the_owner_s_keys_reach_provisioning_through_the_environment_only(self):
+		self._owner_keys(SSH_KEY)
+		self._deployed()
+
+		provision = self._provision_call()
+		self.assertEqual(provision.kwargs["environment"], {"SSH_KEYS": SSH_KEY})
+		self.assertNotIn("AAAAC3NzaC1lZDI1NTE5", provision.args[1])
+
+	def test_a_bench_whose_owner_has_no_keys_still_deploys_with_ssh_closed(self):
+		self._owner_keys(None)
+		bench = self._deployed()
+
+		self.assertEqual(bench.status, "Running")
+		self.assertEqual(self._provision_call().kwargs["environment"], {"SSH_KEYS": ""})
+		self.assertIn(lifecycle.NO_SSH_KEYS, self._log(bench.name).splitlines())
 
 	def test_code_server_still_starts(self):
 		self._deployed()

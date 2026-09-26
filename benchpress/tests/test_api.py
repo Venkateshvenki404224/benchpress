@@ -8,7 +8,7 @@ import frappe
 from frappe.tests import IntegrationTestCase
 from frappe.utils.data import get_datetime
 
-from benchpress import api, lab_templates
+from benchpress import api, lab_detail, lab_templates, user
 from benchpress.benchpress.doctype.bench_instance import get_instance_id
 from benchpress.tests.fixtures import drop, drop_all
 
@@ -1010,6 +1010,7 @@ class TestLaunch(IntegrationTestCase):
 
 BENCH_OWNER = "api-benches-owner@example.com"
 BENCH_STRANGER = "api-benches-stranger@example.com"
+SSH_KEY = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGmGY6wbhu8fIW8Ss6S9Yq5Vs9esVwGK0lP9CmjKHuPv dev@laptop"
 
 
 def _ensure_app_user(email):
@@ -1051,6 +1052,9 @@ class TestBenchesPage(IntegrationTestCase):
 		cls.own = _bench_owned_by(BENCH_OWNER, cls.bench_lab)
 		cls.own_plain = _bench_owned_by(BENCH_OWNER, cls.plain_lab)
 		cls.strangers = _bench_owned_by(BENCH_STRANGER, cls.bench_lab)
+		cls.develop_labs = frappe.get_all(
+			"Lab", filters={"template": "frappe-develop"}, pluck="name", order_by="name"
+		)
 		frappe.db.commit()
 
 	@classmethod
@@ -1117,3 +1121,65 @@ class TestBenchesPage(IntegrationTestCase):
 
 	def test_an_admin_sees_only_their_own_benches_here(self):
 		self.assertNotIn(self.own.name, [bench["name"] for bench in api.get_my_benches()])
+
+	def test_the_lab_screen_says_which_labs_are_self_managed(self):
+		self.assertEqual(lab_detail.get_lab(self.bench_lab.name)["self_managed"], 1)
+		self.assertEqual(lab_detail.get_lab(self.plain_lab.name)["self_managed"], 0)
+
+	def test_a_bench_launch_with_no_ssh_key_is_refused_before_anything_is_claimed(self):
+		frappe.set_user(BENCH_OWNER)
+		self.addCleanup(self._forget_launch)
+		before = frappe.get_all("Bench Instance", filters={"owner": BENCH_OWNER}, pluck="name")
+
+		with self.assertRaisesRegex(frappe.ValidationError, "Add an SSH key first"):
+			api.launch_template("frappe-develop")
+
+		self.assertEqual(
+			frappe.get_all("Bench Instance", filters={"owner": BENCH_OWNER}, pluck="name"), before
+		)
+		self.assertEqual(self._develop_labs(), self.develop_labs)
+
+	def test_a_self_managed_lab_with_no_ssh_key_is_refused_on_every_door(self):
+		frappe.set_user(BENCH_OWNER)
+		data = frappe.as_json({"lab": self.bench_lab.name})
+
+		for door in (api.launch_lab, api.create_bench):
+			with patch("frappe.enqueue") as enqueue:
+				with self.assertRaisesRegex(frappe.ValidationError, "Add an SSH key first"):
+					door(data)
+			enqueue.assert_not_called()
+
+	def test_an_ordinary_lab_needs_no_ssh_key(self):
+		lab = _ensure_lab("api-benches-keyless-plain-lab")
+		self.addCleanup(frappe.db.commit)
+		self.addCleanup(frappe.delete_doc, "Lab", lab.name, force=True, ignore_permissions=True)
+		self.addCleanup(_drop_bench, get_instance_id(BENCH_OWNER, lab.name))
+		frappe.set_user(BENCH_OWNER)
+
+		with patch("frappe.enqueue"):
+			result = api.launch_lab(frappe.as_json({"lab": lab.name}))
+
+		self.assertEqual(result["lab"], lab.name)
+
+	def test_a_bench_launch_with_an_ssh_key_proceeds(self):
+		frappe.set_user(BENCH_OWNER)
+		user.set_ssh_keys(SSH_KEY)
+		self.addCleanup(self._forget_launch)
+
+		with patch("frappe.enqueue") as enqueue:
+			result = api.launch_template("frappe-develop")
+
+		self.assertEqual(enqueue.call_args.args[0], "benchpress.launch.run_launch")
+		self.assertEqual(frappe.db.get_value("Bench Instance", result["bench"], "owner"), BENCH_OWNER)
+
+	def _develop_labs(self):
+		return frappe.get_all("Lab", filters={"template": "frappe-develop"}, pluck="name", order_by="name")
+
+	def _forget_launch(self):
+		frappe.set_user("Administrator")
+		frappe.db.set_value("User", BENCH_OWNER, user.SSH_KEYS_FIELD, None)
+		for lab in set(self._develop_labs()) - set(self.develop_labs):
+			for bench in frappe.get_all("Bench Instance", filters={"lab": lab}, pluck="name"):
+				_drop_bench(bench)
+			frappe.delete_doc("Lab", lab, force=True, ignore_permissions=True)
+		frappe.db.commit()

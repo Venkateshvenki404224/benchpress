@@ -50,6 +50,7 @@ from benchpress.permissions import (
 	require_app_user,
 	require_bench_access,
 )
+from benchpress.user import ssh_keys_of
 
 
 @frappe.whitelist()
@@ -238,6 +239,7 @@ def _counts_by_bench(doctype: str, column: str, bench_names: list[str]) -> dict[
 def create_bench(data: str) -> dict:
 	require_app_user()
 	data = frappe.parse_json(data)
+	_require_ssh_key(frappe.db.get_value("Lab", data.get("lab"), "self_managed"))
 	doc = _claim_instance(data)
 
 	frappe.enqueue(
@@ -292,8 +294,10 @@ def launch_template(template: str, instance_size: str | None = None, site_name: 
 	require_app_user()
 	# `lab_templates.get_template` checks existence only, so without this a user
 	# could materialise a template an admin retired.
-	if not frappe.db.get_value("Lab Template", template, "is_active"):
+	row = frappe.db.get_value("Lab Template", template, ["is_active", "self_managed"], as_dict=True)
+	if not row or not row.is_active:
 		frappe.throw(_("Unknown lab template '{0}'.").format(template or ""))
+	_require_ssh_key(row.self_managed)
 	lab_name = _lab_for_template(template)
 	return _launch(frappe.as_json({"lab": lab_name, "instance_size": instance_size, "site_name": site_name}))
 
@@ -302,6 +306,7 @@ def launch_template(template: str, instance_size: str | None = None, site_name: 
 def launch_lab(data: str) -> dict:
 	"""`create_bench` for a lab that may not be built yet: the build is part of the run."""
 	require_app_user()
+	_require_ssh_key(frappe.db.get_value("Lab", frappe.parse_json(data).get("lab"), "self_managed"))
 	return _launch(data)
 
 
@@ -325,6 +330,11 @@ def _launch(data: str) -> dict:
 		enqueue_after_commit=True,
 	)
 	return _launch_response(doc)
+
+
+def _require_ssh_key(self_managed) -> None:
+	if self_managed and not ssh_keys_of(frappe.session.user):
+		frappe.throw(_("Add an SSH key first."))
 
 
 def _launch_response(doc) -> dict:

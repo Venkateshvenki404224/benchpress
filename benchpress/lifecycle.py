@@ -31,10 +31,12 @@ from benchpress.docker_manager import (
 )
 from benchpress.mariadb_manager import ensure_infrastructure, wait_for_mariadb
 from benchpress.notifications import notify_owner
+from benchpress.user import ssh_keys_of
 
 NOTHING_TO_ROLL_BACK = "Cleanup: nothing to roll back — no container was created"
 GONE = "gone"
 SELF_MANAGED_SKIPPED = "skipped: self-managed bench"
+NO_SSH_KEYS = "no SSH keys on file; SSH is closed until you add one"
 SELF_MANAGED_PROVISION = Path(__file__).parent / "bench-templates" / "base" / "scripts" / "provision-user.sh"
 
 
@@ -533,8 +535,14 @@ def _deploy_self_managed(bench, lab, container_id: str, pipeline, settings) -> N
 	pipeline.step("ssh_user")
 	pipeline.log(f"provision-user.sh {bench.ssh_username}")
 	write_file_to_container(container_id, SELF_MANAGED_PROVISION.read_text(), PROVISION_SCRIPT)
+	ssh_keys = ssh_keys_of(bench.owner)
+	if not ssh_keys:
+		pipeline.log(NO_SSH_KEYS)
 	exit_code, output = exec_in_container(
-		container_id, provision_command(build_provision_args(bench, lab, settings)), user="root"
+		container_id,
+		provision_command(build_provision_args(bench, lab, settings)),
+		user="root",
+		environment={"SSH_KEYS": ssh_keys},
 	)
 	if output:
 		pipeline.log(output.strip())

@@ -69,6 +69,7 @@ def get_lab(name: str) -> dict:
 		"memory_limit": size.memory_limit if size else lab.memory_limit,
 		"cpu_cores": size.cpu_cores if size else lab.cpu_cores,
 		"enable_ssh": lab.enable_ssh,
+		"self_managed": lab.self_managed,
 		"enable_code_server": ingress.lab_has_ide(lab),
 		"lease_price": _lease_price(lab),
 		# Sent beside the deadline so nothing renders a countdown against the browser's own clock.
