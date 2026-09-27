@@ -131,7 +131,7 @@ import { SSH_KEYS_GROUP, openSettings } from "@/data/benchpressSettings";
 import { openDeployRun } from "@/data/deployRun";
 import { labsResource } from "@/data/labs";
 import { hasSshKey, loadSshKeys } from "@/data/sshKeys";
-import { benchLabel, cpuLabel, memoryLabel } from "@/utils/labSpecs";
+import { benchLabel, resourceChips } from "@/utils/labSpecs";
 import { Button, ErrorMessage, createResource, dayjsLocal, toast } from "frappe-ui";
 import { computed, ref } from "vue";
 
@@ -151,10 +151,6 @@ const allTemplates = computed(() => templates.data ?? []);
 const myBenches = computed(() => benches.data ?? []);
 
 loadSshKeys();
-
-function resourceChips(template) {
-	return [memoryLabel(template.memory_limit), cpuLabel(template.cpu_cores)];
-}
 
 async function prepareBench(template) {
 	pendingKey.value = template.key;

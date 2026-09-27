@@ -2,7 +2,7 @@
 title: Deploy pipeline
 description: The eleven steps of a BenchPress deploy, in the order the code runs
   them, with the function behind each step and the log line it writes.
-lastModified: "2026-09-26T11:26:56-04:00"
+lastModified: "2026-09-27T19:10:03+05:30"
 lastAuthor: Venkatesh
 ---
 # Deploy pipeline

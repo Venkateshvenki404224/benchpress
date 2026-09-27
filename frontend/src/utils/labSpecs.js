@@ -20,6 +20,21 @@ export function cpuLabel(cpuCores) {
 	return `${cpuCores || 1} vCPU`;
 }
 
+/** The memory and CPU chips a card carries. */
+export function resourceChips({ memory_limit, cpu_cores }) {
+	return [memoryLabel(memory_limit), cpuLabel(cpu_cores)];
+}
+
+/** Every app a lab or template installs; a bare bench is still Frappe. */
+export function installedApps(appNames) {
+	return appNames?.length ? appNames : ["frappe"];
+}
+
+/** The card's mark — the first app that is not Frappe itself. */
+export function markApp(appNames) {
+	return installedApps(appNames).find((app) => app.toLowerCase() !== "frappe") || "frappe";
+}
+
 /** The build-and-deploy estimate a template card carries. */
 export function etaLabel(etaMinutes) {
 	return etaMinutes ? `~${etaMinutes} min to deploy` : "";

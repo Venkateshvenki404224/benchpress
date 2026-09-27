@@ -18,6 +18,14 @@ test.describe("Navigation & Routing", () => {
     await expect(page.locator("h1", { hasText: "Labs" })).toBeVisible();
   });
 
+  test("/labs/templates opens the Templates tab under Labs", async ({ page }) => {
+    const basePage = new BasePage(page);
+    await basePage.gotoFrontend("/labs/templates");
+
+    await expect(basePage.testId("templates")).toBeVisible();
+    await expect(basePage.testId("nav-labs")).toHaveAttribute("aria-current", "page");
+  });
+
   test("/bench-instances route loads the instances page", async ({ page }) => {
     await page.goto("/frontend/bench-instances");
     await page.waitForLoadState("networkidle");
@@ -42,7 +50,7 @@ test.describe("Navigation & Routing", () => {
     ).toBeVisible();
   });
 
-  test("sidebar is six items and each one navigates", async ({ page }) => {
+  test("sidebar is five items and each one navigates", async ({ page }) => {
     const basePage = new BasePage(page);
     await basePage.gotoFrontend("/labs");
     await basePage.waitForUserContext();
@@ -50,7 +58,7 @@ test.describe("Navigation & Routing", () => {
     const navItems = page.locator(
       '[data-test^="nav-"]:not([data-test="nav-search"]):not([data-test="nav-notifications"])',
     );
-    await expect(navItems).toHaveCount(6);
+    await expect(navItems).toHaveCount(5);
 
     await basePage.clickNav("benches");
     await expect(basePage.testId("benches")).toBeVisible();

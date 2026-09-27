@@ -3,7 +3,7 @@ title: Settings reference
 description: Every field on BenchPress Settings and Credit Settings, with the
   value measured on a live host, where each one is edited, and what changing it
   costs.
-lastModified: "2026-09-27T09:24:08-04:00"
+lastModified: "2026-09-27T19:10:03+05:30"
 lastAuthor: Venkatesh
 ---
 # Settings reference

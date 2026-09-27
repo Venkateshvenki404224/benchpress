@@ -117,8 +117,8 @@ import { useRouter } from "vue-router";
 
 import ListIcon from "~icons/lucide/list";
 
-// Fixed widths for the same reason as the Labs table: ListView's grid sits in
-// a `w-max` container, so a fractional track sizes to its longest cell.
+// Fixed widths: ListView's grid sits in a `w-max` container, so a fractional
+// track sizes to its longest cell.
 const COLUMNS = [
 	{ label: "Bench", key: "bench", width: "240px" },
 	{ label: "Status", key: "status", width: "110px" },

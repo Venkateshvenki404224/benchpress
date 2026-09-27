@@ -2,7 +2,7 @@
 title: Quick tour
 description: The five screens in the BenchPress sidebar, and every number the
   Overview dashboard reports.
-lastModified: "2026-09-27T09:24:08-04:00"
+lastModified: "2026-09-27T11:18:31-04:00"
 lastAuthor: Venkatesh
 ---
 # Quick tour
@@ -62,8 +62,8 @@ says where to fix that.
    is 4096, below the 9024 that 1000 benches need. That check names the host
    command that fixes it.
 
-3. Move through the sidebar. Five items, top to bottom, and each one owns a
-   different object.
+3. Move through the sidebar. It has five items: Overview, Labs, Benches,
+   Instances and Devices. Each one owns a different object.
 
    Watch the chip in the header while you go. Green and reading **VPN
    connected** means bench sites open. Amber and reading **VPN off** means they
@@ -85,7 +85,7 @@ You have read the tour correctly when all four are true.
 |`/frontend` returns to the login page|You have no session, or it expired|Sign in at `/login`, then open `/frontend` again|
 |The VPN chip is amber and reads VPN off|This device has no WireGuard tunnel|Open **Devices**, register the device, install the config it gives you|
 |**Open site** opens nothing|The site has no public name, so it answers only on the VPN|Connect the VPN, then click again|
-|**Templates** is missing from the sidebar|Templates is admin-only|Ask an admin, or start a bench from **Labs**|
+|**Templates** is missing from the sidebar|Templates is a tab on the **Labs** page|Open **Labs**, then click the **Templates** tab|
 |**Needs attention** is above zero|A bench errored or stopped answering|Open **Instances**, open the bench, read its deploy log|
 |**Credits** is missing everywhere|Credits are off on this server|Nothing to fix. A self-hosted server runs without them|
 
@@ -96,8 +96,8 @@ You have read the tour correctly when all four are true.
 |Item|Route|What it holds|Who sees it|
 |--|--|--|--|
 |Overview|`/`|The dashboard on this page|Everybody|
-|Labs|`/labs`|Lab definitions, and the deploy button|Everybody|
-|Templates|`/labs/templates`|The catalog a lab is built from|Admins|
+|Labs|`/labs`|Lab definitions, the deploy button, and the **Templates** tab at `/labs/templates`|Everybody|
+|Benches|`/benches`|Develop benches you manage yourself, with SSH and code-server|Everybody|
 |Instances|`/bench-instances`|Every running container, and deploy history|Everybody|
 |Devices|`/devices`|Your WireGuard devices and their configs|Everybody|
 
@@ -120,7 +120,7 @@ BenchPress User.
 |--|--|--|
 |Primary button|New lab|New environment|
 |Instance card heading|All instances|My environments|
-|Templates in the sidebar|Shown|Hidden|
+|**New lab** and **Build history** on Labs|Shown|Hidden|
 |Shared infrastructure card|Shown|Hidden|
 
 A user also sees only their own benches. An admin sees every bench on the
