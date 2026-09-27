@@ -1163,7 +1163,7 @@ class TestBenchesPage(IntegrationTestCase):
 
 	def test_a_bench_launch_with_an_ssh_key_proceeds(self):
 		frappe.set_user(BENCH_OWNER)
-		user.set_ssh_keys(SSH_KEY)
+		user.add_ssh_key(SSH_KEY)
 		self.addCleanup(self._forget_launch)
 
 		with patch("frappe.enqueue") as enqueue:

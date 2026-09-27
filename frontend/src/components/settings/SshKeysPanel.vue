@@ -22,12 +22,20 @@
 			>
 				<KeyRoundIcon class="size-4 flex-none text-ink-gray-5" />
 				<div class="min-w-0 flex-1">
-					<p class="truncate text-base text-ink-gray-8">{{ key.comment || key.type }}</p>
+					<p class="truncate text-base text-ink-gray-8">{{ key.label }}</p>
 					<p class="truncate font-mono text-2xs text-ink-gray-5">
 						{{ key.fingerprint }}
 					</p>
 				</div>
 				<Badge :label="key.badge" />
+				<Button
+					variant="subtle"
+					:loading="key.fingerprint === removingFingerprint"
+					:data-test="`remove-ssh-key-${index}`"
+					@click="askToRemove(key)"
+				>
+					Remove
+				</Button>
 			</li>
 		</ul>
 		<p v-else-if="sshKeysResource.loading" class="py-4 text-body text-ink-gray-5">
@@ -37,7 +45,7 @@
 			v-else-if="sshKeysResource.data"
 			message="No SSH key yet. Add the one in ~/.ssh/id_ed25519.pub."
 		/>
-		<ErrorMessage :message="sshKeysResource.error" />
+		<ErrorMessage :message="sshKeysResource.error || removeSshKeyResource.error" />
 
 		<Dialog v-model="adding" :options="{ title: 'Add SSH key' }">
 			<template #body-content>
@@ -67,12 +75,48 @@
 				</div>
 			</template>
 		</Dialog>
+
+		<Dialog
+			v-if="removing"
+			:model-value="true"
+			:options="{ title: 'Remove this SSH key?' }"
+			@update:model-value="removing = null"
+		>
+			<template #body-content>
+				<p class="text-p-base text-ink-gray-6" data-test="remove-ssh-key-message">
+					{{ removing.label }}
+					<span class="break-all font-mono text-sm">({{ removing.fingerprint }})</span>
+					can no longer log in to a bench after its next deploy.
+				</p>
+			</template>
+			<template #actions>
+				<div class="flex justify-end gap-2">
+					<Button data-test="cancel-remove-ssh-key" @click="removing = null">
+						Cancel
+					</Button>
+					<Button
+						variant="solid"
+						theme="red"
+						data-test="confirm-remove-ssh-key"
+						@click="confirmRemove"
+					>
+						Remove
+					</Button>
+				</div>
+			</template>
+		</Dialog>
 	</div>
 </template>
 
 <script setup>
 import EmptyState from "@/components/EmptyState.vue";
-import { addSshKeyResource, loadSshKeys, sshKeys, sshKeysResource } from "@/data/sshKeys";
+import {
+	addSshKeyResource,
+	loadSshKeys,
+	removeSshKeyResource,
+	sshKeys,
+	sshKeysResource,
+} from "@/data/sshKeys";
 import { Badge, Button, Dialog, ErrorMessage, Textarea, toast } from "frappe-ui";
 import { computed, onMounted, ref } from "vue";
 
@@ -87,8 +131,18 @@ const SHORT_TYPES = {
 
 const adding = ref(false);
 const draft = ref("");
+const removing = ref(null);
 
-const rows = computed(() => sshKeys.value.map((key) => ({ ...key, badge: shortType(key.type) })));
+const rows = computed(() =>
+	sshKeys.value.map((key) => ({
+		...key,
+		label: key.comment || key.type,
+		badge: shortType(key.type),
+	}))
+);
+const removingFingerprint = computed(() =>
+	removeSshKeyResource.loading ? removeSshKeyResource.params?.fingerprint : null
+);
 
 onMounted(loadSshKeys);
 
@@ -110,5 +164,21 @@ async function submitKey() {
 	draft.value = "";
 	adding.value = false;
 	toast.success("SSH key added.");
+}
+
+function askToRemove(key) {
+	removeSshKeyResource.reset();
+	removing.value = key;
+}
+
+async function confirmRemove() {
+	const { fingerprint } = removing.value;
+	removing.value = null;
+	try {
+		sshKeysResource.setData(await removeSshKeyResource.submit({ fingerprint }));
+	} catch {
+		return;
+	}
+	toast.success("SSH key removed.");
 }
 </script>

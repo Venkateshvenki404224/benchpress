@@ -2,9 +2,6 @@ import { createApp, h, nextTick, reactive } from "vue";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const resources = {};
-const SAVED_KEY =
-	"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGmGY6wbhu8fIW8Ss6S9Yq5Vs9esVwGK0lP9CmjKHuPv dev@laptop";
-let savedKeys = SAVED_KEY;
 
 const FRAPPE_DEVELOP = {
 	key: "frappe-develop",
@@ -44,9 +41,7 @@ vi.mock("frappe-ui", () => {
 				error: null,
 				reload: vi.fn(),
 				setData: vi.fn((data) => (resource.data = data)),
-				submit: vi.fn(async (params) =>
-					options.url === "benchpress.user.set_ssh_keys" ? params.keys : LAUNCHED
-				),
+				submit: vi.fn(async () => LAUNCHED),
 			});
 			resources[options.url] = resource;
 			return resource;
@@ -56,15 +51,23 @@ vi.mock("frappe-ui", () => {
 
 function initialData(url) {
 	if (url === "benchpress.api.get_bench_templates") return [FRAPPE_DEVELOP];
-	if (url === "benchpress.user.get_ssh_keys") return savedKeys;
 	return [];
 }
 
 vi.mock("@/data/labs", () => ({ labsResource: { reload: vi.fn() } }));
 vi.mock("@/data/deployRun", () => ({ openDeployRun: vi.fn() }));
+vi.mock("@/data/sshKeys", async () => {
+	const { ref } = await import("vue");
+	return { hasSshKey: ref(true), loadSshKeys: vi.fn() };
+});
+vi.mock("@/data/benchpressSettings", () => ({
+	SSH_KEYS_GROUP: "group-ssh-keys",
+	openSettings: vi.fn(),
+}));
 
 const { openDeployRun } = await import("@/data/deployRun");
-const { toast } = await import("frappe-ui");
+const { hasSshKey, loadSshKeys } = await import("@/data/sshKeys");
+const { openSettings } = await import("@/data/benchpressSettings");
 const { default: Benches } = await import("./Benches.vue");
 
 describe("the Benches page", () => {
@@ -82,15 +85,8 @@ describe("the Benches page", () => {
 	afterEach(() => {
 		app.unmount();
 		root.remove();
-		savedKeys = SAVED_KEY;
+		hasSshKey.value = true;
 	});
-
-	async function remount() {
-		app.unmount();
-		app = createApp(Benches);
-		app.mount(root);
-		await nextTick();
-	}
 
 	it("renders a card for each bench template", () => {
 		const card = root.querySelector('[data-test="bench-template-frappe-develop"]');
@@ -128,31 +124,9 @@ describe("the Benches page", () => {
 		);
 	});
 
-	it("loads the saved keys into the key card", () => {
-		const input = root.querySelector('[data-test="ssh-keys-input"]');
-
-		expect(input.value).toBe(SAVED_KEY);
-		expect(root.querySelector('[data-test="ssh-keys"]').textContent).toContain(
-			"~/.ssh/id_ed25519.pub"
-		);
-	});
-
-	it("saves the pasted keys", async () => {
-		const input = root.querySelector('[data-test="ssh-keys-input"]');
-		input.value = `${SAVED_KEY}\nssh-rsa AAAA second`;
-		input.dispatchEvent(new Event("input"));
-		await nextTick();
-		root.querySelector('[data-test="save-ssh-keys"]').click();
-		await nextTick();
-
-		expect(resources["benchpress.user.set_ssh_keys"].submit).toHaveBeenCalledWith({
-			keys: `${SAVED_KEY}\nssh-rsa AAAA second`,
-		});
-	});
-
 	it("will not prepare a bench until a key is saved, and says why", async () => {
-		savedKeys = "";
-		await remount();
+		hasSshKey.value = false;
+		await nextTick();
 
 		const button = root.querySelector('[data-test="prepare-bench-frappe-develop"]');
 		button.click();
@@ -165,44 +139,31 @@ describe("the Benches page", () => {
 		).toContain("Add an SSH key first");
 	});
 
-	it("reloads the card when a key is added in Settings", async () => {
-		const card = resources["benchpress.user.get_ssh_keys"];
-		card.reload.mockClear();
-
-		resources["benchpress.user.list_ssh_keys"].setData([{ fingerprint: "SHA256:new" }]);
+	it("opens Settings on SSH keys from the hint", async () => {
+		hasSshKey.value = false;
 		await nextTick();
 
-		expect(card.reload).toHaveBeenCalled();
+		root.querySelector('[data-test="add-ssh-key-link"]').click();
+
+		expect(openSettings).toHaveBeenCalledWith("group-ssh-keys");
 	});
 
-	it("tells Settings when the card saves", async () => {
-		const settings = resources["benchpress.user.list_ssh_keys"];
-		settings.reload.mockClear();
+	it("lets a bench be prepared as soon as a key is saved, with no reload", async () => {
+		hasSshKey.value = false;
+		await nextTick();
+		const button = root.querySelector('[data-test="prepare-bench-frappe-develop"]');
+		expect(button.disabled).toBe(true);
 
-		root.querySelector('[data-test="ssh-keys-input"]').value = "";
-		root.querySelector('[data-test="ssh-keys-input"]').dispatchEvent(new Event("input"));
-		await nextTick();
-		root.querySelector('[data-test="save-ssh-keys"]').click();
-		await nextTick();
+		hasSshKey.value = true;
 		await nextTick();
 
-		expect(settings.reload).toHaveBeenCalled();
+		expect(button.disabled).toBe(false);
+		expect(root.querySelector('[data-test="add-ssh-key-link"]')).toBeNull();
 	});
 
-	it("keeps the refusal on the card and does not report a save", async () => {
-		const save = resources["benchpress.user.set_ssh_keys"];
-		save.submit.mockRejectedValueOnce(new Error("Line 1 is a private key."));
-		toast.success.mockClear();
-		const input = root.querySelector('[data-test="ssh-keys-input"]');
-		input.value = "-----BEGIN OPENSSH PRIVATE KEY-----";
-		input.dispatchEvent(new Event("input"));
-		await nextTick();
-
-		root.querySelector('[data-test="save-ssh-keys"]').click();
-		await nextTick();
-		await nextTick();
-
-		expect(toast.success).not.toHaveBeenCalled();
-		expect(resources["benchpress.user.get_ssh_keys"].data).toBe(SAVED_KEY);
+	it("loads the saved keys and prints none of them", () => {
+		expect(loadSshKeys).toHaveBeenCalled();
+		expect(root.querySelector("textarea")).toBeNull();
+		expect(root.querySelector('[data-test="ssh-keys"]')).toBeNull();
 	});
 });

@@ -75,6 +75,7 @@ const { default: SshKeysPanel } = await import("./SshKeysPanel.vue");
 
 const listed = () => resources["benchpress.user.list_ssh_keys"];
 const addKey = () => resources["benchpress.user.add_ssh_key"];
+const removeKey = () => resources["benchpress.user.remove_ssh_key"];
 
 async function settle() {
 	await nextTick();
@@ -88,6 +89,8 @@ describe("the SSH keys panel", () => {
 	beforeEach(async () => {
 		listed().data = ROWS;
 		toast.success.mockClear();
+		removeKey().submit.mockClear();
+		removeKey().error = null;
 		root = document.createElement("div");
 		document.body.append(root);
 		app = createApp(SshKeysPanel);
@@ -185,6 +188,78 @@ describe("the SSH keys panel", () => {
 
 		expect(find("error").textContent).toContain("Not permitted");
 		listed().error = null;
+	});
+
+	async function askToRemove(index) {
+		find(`remove-ssh-key-${index}`).click();
+		await nextTick();
+	}
+
+	it("asks before it removes a key, and names the key by its fingerprint", async () => {
+		await askToRemove(0);
+
+		expect(find("remove-ssh-key-message").textContent).toContain(ROWS[0].fingerprint);
+		expect(find("remove-ssh-key-message").textContent).toContain("dev@laptop");
+		expect(removeKey().submit).not.toHaveBeenCalled();
+	});
+
+	it("removes the confirmed key by its fingerprint", async () => {
+		removeKey().submit.mockResolvedValueOnce([ROWS[1]]);
+		await askToRemove(0);
+
+		find("confirm-remove-ssh-key").click();
+		await settle();
+
+		expect(removeKey().submit).toHaveBeenCalledWith({ fingerprint: ROWS[0].fingerprint });
+		expect(find("remove-ssh-key-message")).toBeNull();
+		expect(find("ssh-key-0").textContent).toContain(ROWS[1].fingerprint);
+		expect(find("ssh-key-1")).toBeNull();
+		expect(toast.success).toHaveBeenCalledWith("SSH key removed.");
+	});
+
+	it("removes nothing when the confirm is cancelled", async () => {
+		await askToRemove(1);
+
+		find("cancel-remove-ssh-key").click();
+		await settle();
+
+		expect(removeKey().submit).not.toHaveBeenCalled();
+		expect(find("remove-ssh-key-message")).toBeNull();
+		expect(find("ssh-key-1").textContent).toContain(ROWS[1].fingerprint);
+	});
+
+	it("keeps the rows and reports no removal when the server refuses", async () => {
+		removeKey().submit.mockImplementationOnce(async () => {
+			removeKey().error = "That key is not saved.";
+			throw new Error(removeKey().error);
+		});
+		await askToRemove(0);
+
+		find("confirm-remove-ssh-key").click();
+		await settle();
+
+		expect(toast.success).not.toHaveBeenCalled();
+		expect(find("ssh-key-0").textContent).toContain(ROWS[0].fingerprint);
+		expect(find("ssh-key-1").textContent).toContain(ROWS[1].fingerprint);
+		expect(find("error").textContent).toContain("That key is not saved.");
+	});
+
+	it("clears the last refused remove when the next one is asked for", async () => {
+		removeKey().error = "That key is not saved.";
+
+		await askToRemove(0);
+
+		expect(removeKey().reset).toHaveBeenCalled();
+		expect(find("error")).toBeNull();
+	});
+
+	it("prints a key comment in the confirm as text, never as markup", async () => {
+		listed().data = [{ ...ROWS[0], comment: '<img src="x">' }];
+		await nextTick();
+		await askToRemove(0);
+
+		expect(find("remove-ssh-key-message").querySelector("img")).toBeNull();
+		expect(find("remove-ssh-key-message").textContent).toContain('<img src="x">');
 	});
 
 	it("says what to add when there are no keys", async () => {

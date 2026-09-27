@@ -23,24 +23,6 @@ MAX_KEYS = 10
 
 
 @frappe.whitelist()
-def get_ssh_keys() -> str:
-	require_app_user()
-	return ssh_keys_of(frappe.session.user)
-
-
-@frappe.whitelist(methods=["POST"])
-def set_ssh_keys(keys: str) -> str:
-	require_app_user()
-	lines = [(number, line.strip()) for number, line in enumerate((keys or "").splitlines(), 1)]
-	clean = [_valid_key(number, line) for number, line in lines if line]
-	if len(clean) > MAX_KEYS:
-		frappe.throw(_("You can save at most {0} SSH keys.").format(MAX_KEYS))
-	saved = "\n".join(clean)
-	frappe.db.set_value("User", frappe.session.user, SSH_KEYS_FIELD, saved)
-	return saved
-
-
-@frappe.whitelist()
 def list_ssh_keys() -> list[dict]:
 	require_app_user()
 	return [_row(line) for line in ssh_keys_of(frappe.session.user).splitlines() if line]
@@ -50,17 +32,25 @@ def list_ssh_keys() -> list[dict]:
 def add_ssh_key(key: str) -> list[dict]:
 	require_app_user()
 	lines = [line.strip() for line in (key or "").splitlines() if line.strip()]
-	if len(lines) != 1:
+	pasted = [_valid_key(number, line) for number, line in enumerate(lines, 1)]
+	if len(pasted) != 1:
 		frappe.throw(_("Paste one key at a time."))
-	new = _valid_key(1, lines[0])
-	stored = frappe.db.get_value("User", frappe.session.user, SSH_KEYS_FIELD, for_update=True) or ""
-	saved = [line for line in stored.splitlines() if line]
-	if _fingerprint(new.split()[1]) in {_fingerprint(line.split()[1]) for line in saved}:
+	saved = _locked_keys()
+	if _key_fingerprint(pasted[0]) in {_key_fingerprint(line) for line in saved}:
 		frappe.throw(_("That key is already saved."))
 	if len(saved) >= MAX_KEYS:
 		frappe.throw(_("You can save at most {0} SSH keys.").format(MAX_KEYS))
-	frappe.db.set_value("User", frappe.session.user, SSH_KEYS_FIELD, "\n".join([*saved, new]))
-	return list_ssh_keys()
+	return _save_keys([*saved, pasted[0]])
+
+
+@frappe.whitelist(methods=["POST"])
+def remove_ssh_key(fingerprint: str) -> list[dict]:
+	require_app_user()
+	saved = _locked_keys()
+	kept = [line for line in saved if _key_fingerprint(line) != fingerprint]
+	if len(kept) == len(saved):
+		frappe.throw(_("That key is not saved."))
+	return _save_keys(kept)
 
 
 def ssh_keys_of(email: str) -> str:
@@ -102,11 +92,25 @@ def _blob_type(encoded: str) -> str | None:
 	return blob[4 : 4 + length].decode("ascii", errors="replace")
 
 
+def _locked_keys() -> list[str]:
+	stored = frappe.db.get_value("User", frappe.session.user, SSH_KEYS_FIELD, for_update=True) or ""
+	return [line for line in stored.splitlines() if line]
+
+
+def _save_keys(keys: list[str]) -> list[dict]:
+	frappe.db.set_value("User", frappe.session.user, SSH_KEYS_FIELD, "\n".join(keys))
+	return [_row(line) for line in keys]
+
+
 def _row(line: str) -> dict:
 	kind, encoded, *comment = line.split(None, 2)
-	return {"fingerprint": _fingerprint(encoded), "type": kind, "comment": comment[0] if comment else ""}
+	return {"fingerprint": _blob_fingerprint(encoded), "type": kind, "comment": comment[0] if comment else ""}
 
 
-def _fingerprint(encoded: str) -> str:
+def _key_fingerprint(line: str) -> str:
+	return _blob_fingerprint(line.split()[1])
+
+
+def _blob_fingerprint(encoded: str) -> str:
 	digest = hashlib.sha256(base64.b64decode(encoded)).digest()
 	return "SHA256:" + base64.b64encode(digest).decode().rstrip("=")

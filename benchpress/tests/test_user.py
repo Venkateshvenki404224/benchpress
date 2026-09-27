@@ -53,83 +53,13 @@ class TestSshKeys(IntegrationTestCase):
 	def setUp(self):
 		frappe.set_user(OWNER)
 		self.addCleanup(frappe.set_user, "Administrator")
-
-	def test_an_ed25519_key_saves(self):
-		self.assertEqual(user.set_ssh_keys(ED25519), ED25519)
-		self.assertEqual(user.get_ssh_keys(), ED25519)
-
-	def test_an_rsa_key_saves_beside_an_ed25519_key(self):
-		self.assertEqual(user.set_ssh_keys(f"{ED25519}\n\n{RSA}\n"), f"{ED25519}\n{RSA}")
-
-	def test_a_private_key_is_refused(self):
-		with self.assertRaisesRegex(frappe.ValidationError, "Line 2 is a private key"):
-			user.set_ssh_keys(f"{ED25519}\n-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXktdjEAAAAA")
-
-	def test_a_long_private_key_is_named_as_one_before_the_key_count(self):
-		pem = "\n".join(["-----BEGIN OPENSSH PRIVATE KEY-----", *["b3BlbnNzaC1rZXktdjEAAAAA"] * 30])
-
-		with self.assertRaisesRegex(frappe.ValidationError, "Line 1 is a private key"):
-			user.set_ssh_keys(pem)
-
-	def test_an_unknown_key_type_is_refused(self):
-		with self.assertRaisesRegex(frappe.ValidationError, "Line 1 is not an SSH public key"):
-			user.set_ssh_keys(ED25519.replace("ssh-ed25519", "ssh-dss"))
-
-	def test_a_type_that_disagrees_with_its_blob_is_refused(self):
-		with self.assertRaisesRegex(frappe.ValidationError, "Line 1 is not an SSH public key"):
-			user.set_ssh_keys(ED25519.replace("ssh-ed25519", "ssh-rsa"))
-
-	def test_authorized_keys_options_are_refused(self):
-		with self.assertRaisesRegex(frappe.ValidationError, "Line 1 is not an SSH public key"):
-			user.set_ssh_keys(f'command="/bin/sh" {ED25519}')
-
-	def test_an_eleventh_key_is_refused(self):
-		with self.assertRaisesRegex(frappe.ValidationError, "at most 10"):
-			user.set_ssh_keys("\n".join(f"{ED25519} {n}" for n in range(11)))
-
-	def test_a_refused_save_keeps_the_saved_keys(self):
-		user.set_ssh_keys(ED25519)
-
-		with self.assertRaises(frappe.ValidationError):
-			user.set_ssh_keys("not a key")
-
-		self.assertEqual(user.get_ssh_keys(), ED25519)
-
-	def test_a_save_writes_the_callers_row_and_nobody_elses(self):
-		user.set_ssh_keys(ED25519)
-
-		frappe.set_user(BYSTANDER)
-		self.assertEqual(user.get_ssh_keys(), "")
-
-	def test_a_guest_can_neither_read_nor_write_keys(self):
-		frappe.set_user("Guest")
-
-		with self.assertRaises(frappe.PermissionError):
-			user.get_ssh_keys()
-		with self.assertRaises(frappe.PermissionError):
-			user.set_ssh_keys(ED25519)
-
-
-class TestSshKeyRows(IntegrationTestCase):
-	@classmethod
-	def setUpClass(cls):
-		super().setUpClass()
-		frappe.set_user("Administrator")
-		for email in (OWNER, BYSTANDER):
-			_app_user(email)
-		frappe.db.commit()
-
-	@classmethod
-	def tearDownClass(cls):
-		frappe.set_user("Administrator")
-		for email in (OWNER, BYSTANDER):
-			drop("User", email)
-		super().tearDownClass()
-
-	def setUp(self):
-		frappe.set_user(OWNER)
-		self.addCleanup(frappe.set_user, "Administrator")
 		self.addCleanup(frappe.db.rollback)
+
+	def test_keys_are_stored_as_pasted_one_per_line(self):
+		user.add_ssh_key(ED25519)
+		user.add_ssh_key(f"\n{RSA}\n")
+
+		self.assertEqual(user.ssh_keys_of(OWNER), f"{ED25519}\n{RSA}")
 
 	def test_a_row_names_the_key_by_the_fingerprint_ssh_keygen_prints(self):
 		(row,) = user.add_ssh_key(ED25519)
@@ -195,6 +125,36 @@ class TestSshKeyRows(IntegrationTestCase):
 		with self.assertRaisesRegex(frappe.ValidationError, "Line 1 is a private key"):
 			user.add_ssh_key("-----BEGIN OPENSSH PRIVATE KEY-----")
 
+	def test_a_private_key_after_a_public_one_is_named(self):
+		with self.assertRaisesRegex(frappe.ValidationError, "Line 2 is a private key"):
+			user.add_ssh_key(f"{ED25519}\n-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXktdjEAAAAA")
+
+	def test_a_pasted_private_key_file_is_named_as_one_before_the_key_count(self):
+		pem = "\n".join(["-----BEGIN OPENSSH PRIVATE KEY-----", *["b3BlbnNzaC1rZXktdjEAAAAA"] * 30])
+
+		with self.assertRaisesRegex(frappe.ValidationError, "Line 1 is a private key"):
+			user.add_ssh_key(pem)
+
+	def test_an_unknown_key_type_is_refused(self):
+		with self.assertRaisesRegex(frappe.ValidationError, "Line 1 is not an SSH public key"):
+			user.add_ssh_key(ED25519.replace("ssh-ed25519", "ssh-dss"))
+
+	def test_a_type_that_disagrees_with_its_blob_is_refused(self):
+		with self.assertRaisesRegex(frappe.ValidationError, "Line 1 is not an SSH public key"):
+			user.add_ssh_key(ED25519.replace("ssh-ed25519", "ssh-rsa"))
+
+	def test_authorized_keys_options_are_refused(self):
+		with self.assertRaisesRegex(frappe.ValidationError, "Line 1 is not an SSH public key"):
+			user.add_ssh_key(f'command="/bin/sh" {ED25519}')
+
+	def test_a_refused_add_keeps_the_saved_keys(self):
+		user.add_ssh_key(ED25519)
+
+		with self.assertRaises(frappe.ValidationError):
+			user.add_ssh_key("not a key")
+
+		self.assertEqual(user.ssh_keys_of(OWNER), ED25519)
+
 	def test_an_add_writes_the_callers_row_and_nobody_elses(self):
 		frappe.set_user(BYSTANDER)
 		user.add_ssh_key(RSA)
@@ -205,13 +165,54 @@ class TestSshKeyRows(IntegrationTestCase):
 		self.assertEqual(user.ssh_keys_of(OWNER), ED25519)
 		self.assertEqual(user.ssh_keys_of(BYSTANDER), RSA)
 
-	def test_a_guest_can_neither_list_nor_add_keys(self):
+	def test_a_remove_drops_the_named_key_and_keeps_the_other(self):
+		user.add_ssh_key(ED25519)
+		user.add_ssh_key(RSA)
+
+		rows = user.remove_ssh_key(ED25519_FINGERPRINT)
+
+		self.assertEqual([row["fingerprint"] for row in rows], [RSA_FINGERPRINT])
+		self.assertEqual(user.ssh_keys_of(OWNER), RSA)
+
+	def test_a_remove_skips_a_blank_line_in_the_saved_keys(self):
+		frappe.db.set_value("User", OWNER, user.SSH_KEYS_FIELD, f"{ED25519}\n\n{RSA}")
+
+		user.remove_ssh_key(RSA_FINGERPRINT)
+
+		self.assertEqual(user.ssh_keys_of(OWNER), ED25519)
+
+	def test_a_remove_of_a_key_that_is_not_saved_is_refused(self):
+		user.add_ssh_key(ED25519)
+
+		with self.assertRaisesRegex(frappe.ValidationError, "That key is not saved."):
+			user.remove_ssh_key(RSA_FINGERPRINT)
+
+		self.assertEqual(user.ssh_keys_of(OWNER), ED25519)
+
+	def test_a_remove_leaves_everybody_elses_keys_alone(self):
+		frappe.set_user(BYSTANDER)
+		user.add_ssh_key(ED25519)
+		frappe.set_user(OWNER)
+		user.add_ssh_key(ED25519)
+
+		user.remove_ssh_key(ED25519_FINGERPRINT)
+
+		self.assertEqual(user.ssh_keys_of(OWNER), "")
+		self.assertEqual(user.ssh_keys_of(BYSTANDER), ED25519)
+
+	def test_a_guest_can_neither_list_add_nor_remove_keys(self):
 		frappe.set_user("Guest")
 
 		with self.assertRaises(frappe.PermissionError):
 			user.list_ssh_keys()
 		with self.assertRaises(frappe.PermissionError):
 			user.add_ssh_key(ED25519)
+		with self.assertRaises(frappe.PermissionError):
+			user.remove_ssh_key(ED25519_FINGERPRINT)
+
+	def test_the_whole_text_endpoints_are_gone(self):
+		for verb in ("get", "set"):
+			self.assertFalse(hasattr(user, f"{verb}_ssh_keys"))
 
 
 def _fresh_key(comment):
