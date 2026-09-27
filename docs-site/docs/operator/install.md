@@ -2,7 +2,7 @@
 title: Install
 description: Install BenchPress into a Frappe v16 bench — get-app, setup.sh, the
   frontend build, the base domain, and the first screen.
-lastModified: "2026-09-27T09:24:08-04:00"
+lastModified: "2026-09-27T19:10:03+05:30"
 lastAuthor: Venkatesh
 ---
 # Install

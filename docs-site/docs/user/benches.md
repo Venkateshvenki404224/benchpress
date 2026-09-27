@@ -3,7 +3,7 @@ title: Work on your own bench
 description: Prepare a Frappe develop bench, log in over SSH with your own key,
   create a database, make a site with bench new-site, and serve it with bench
   start on your VPN address.
-lastModified: "2026-09-27T09:24:08-04:00"
+lastModified: "2026-09-27T19:10:03+05:30"
 lastAuthor: Venkatesh
 ---
 # Work on your own bench

@@ -3,7 +3,7 @@ title: Users and roles
 description: The two BenchPress roles, what each one may read and write, which
   screens are admin-only, and how ownership rather than a role decides who sees
   a bench.
-lastModified: "2026-09-27T09:24:08-04:00"
+lastModified: "2026-09-27T19:10:03+05:30"
 lastAuthor: Venkatesh
 ---
 # Users and roles

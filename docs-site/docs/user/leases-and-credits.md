@@ -3,7 +3,7 @@ title: Leases and credits
 description: The countdown on a running bench, the renew dialog and its plans,
   the credit meter, the ledger, and where a purchase hands off to the payment
   gateway.
-lastModified: "2026-08-28T22:10:21+05:30"
+lastModified: "2026-09-27T10:35:38-04:00"
 lastAuthor: Venkatesh
 ---
 # Leases and credits
@@ -33,8 +33,8 @@ Two things, and the Credits screen says so at the top.
 
 ## Steps
 
-1. Find the countdown. Every running bench with a lease shows one on the
-   **Labs** list, under the instance it is deployed as.
+1. Find the countdown. Every running bench with a lease shows one on its
+   lab's card on the **Labs** page, under the site it is deployed as.
 
    ![The BenchPress Labs list at 1280 by 800 pixels with credits switched on. Ten labs are listed. The Frappe CRM demo row reads version-15, the app chip CRM, a green Running badge, the bench hostname, bench-crm-demo Running, a green line reading Lease ends in 29:48, and 23 minutes ago in the Last run column. Every other lab reads Ready or Draft with Never deployed and an em dash. At the foot of the sidebar a credit meter reads 60 of 65 with a green progress bar, which only appears while credits are on.](../images/user/leases-and-credits/01-labs-countdown.png)
 
@@ -151,7 +151,8 @@ credits buy time.
 
 ## Verify
 
-* The Labs row for a running bench shows `Lease ends in …`.
+* On the **Labs** page, the card of a lab with a running bench shows
+  `Lease ends in …`.
 * The countdown falls by one second a second.
 * After a renewal the countdown jumps by the plan's duration and the meter
   falls by its price.

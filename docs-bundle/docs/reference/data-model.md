@@ -2,7 +2,7 @@
 title: Data model
 description: All 20 BenchPress DocTypes with their fields, links, naming and the
   permission rule that scopes each one — plus why there is no Device DocType.
-lastModified: "2026-09-26T15:04:53-04:00"
+lastModified: "2026-09-27T19:10:03+05:30"
 lastAuthor: Venkatesh
 ---
 # Data model

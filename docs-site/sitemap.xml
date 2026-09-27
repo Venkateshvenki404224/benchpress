@@ -2,7 +2,7 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
     <loc>https://benchpress.cloud/docs/user/quick-tour</loc>
-    <lastmod>2026-09-27T13:24:08.000Z</lastmod>
+    <lastmod>2026-09-27T13:40:03.000Z</lastmod>
   </url>
   <url>
     <loc>https://benchpress.cloud/docs/user/deploy-from-template</loc>
@@ -14,7 +14,7 @@
   </url>
   <url>
     <loc>https://benchpress.cloud/docs/user/lab-detail</loc>
-    <lastmod>2026-08-30T14:43:11.000Z</lastmod>
+    <lastmod>2026-09-27T14:35:38.000Z</lastmod>
   </url>
   <url>
     <loc>https://benchpress.cloud/docs/user/lifecycle</loc>
@@ -38,7 +38,7 @@
   </url>
   <url>
     <loc>https://benchpress.cloud/docs/user/benches</loc>
-    <lastmod>2026-09-27T13:24:08.000Z</lastmod>
+    <lastmod>2026-09-27T13:40:03.000Z</lastmod>
   </url>
   <url>
     <loc>https://benchpress.cloud/docs/user/logs-and-monitoring</loc>
@@ -46,11 +46,11 @@
   </url>
   <url>
     <loc>https://benchpress.cloud/docs/user/leases-and-credits</loc>
-    <lastmod>2026-08-28T16:40:21.000Z</lastmod>
+    <lastmod>2026-09-27T14:35:38.000Z</lastmod>
   </url>
   <url>
     <loc>https://benchpress.cloud/docs/user/troubleshooting</loc>
-    <lastmod>2026-09-27T13:24:08.000Z</lastmod>
+    <lastmod>2026-09-27T13:40:03.000Z</lastmod>
   </url>
   <url>
     <loc>https://benchpress.cloud/docs/operator</loc>
@@ -62,7 +62,7 @@
   </url>
   <url>
     <loc>https://benchpress.cloud/docs/operator/install</loc>
-    <lastmod>2026-09-27T13:24:08.000Z</lastmod>
+    <lastmod>2026-09-27T13:40:03.000Z</lastmod>
   </url>
   <url>
     <loc>https://benchpress.cloud/docs/operator/wireguard-setup</loc>
@@ -70,7 +70,7 @@
   </url>
   <url>
     <loc>https://benchpress.cloud/docs/operator/settings-reference</loc>
-    <lastmod>2026-09-27T13:24:08.000Z</lastmod>
+    <lastmod>2026-09-27T13:40:03.000Z</lastmod>
   </url>
   <url>
     <loc>https://benchpress.cloud/docs/operator/database-server</loc>
@@ -82,7 +82,7 @@
   </url>
   <url>
     <loc>https://benchpress.cloud/docs/operator/users-and-roles</loc>
-    <lastmod>2026-09-27T13:24:08.000Z</lastmod>
+    <lastmod>2026-09-27T13:40:03.000Z</lastmod>
   </url>
   <url>
     <loc>https://benchpress.cloud/docs/operator/golden-images</loc>
@@ -122,19 +122,19 @@
   </url>
   <url>
     <loc>https://benchpress.cloud/docs/reference/architecture</loc>
-    <lastmod>2026-09-27T13:24:08.000Z</lastmod>
+    <lastmod>2026-09-27T13:40:03.000Z</lastmod>
   </url>
   <url>
     <loc>https://benchpress.cloud/docs/reference/data-model</loc>
-    <lastmod>2026-09-26T19:04:53.000Z</lastmod>
+    <lastmod>2026-09-27T13:40:03.000Z</lastmod>
   </url>
   <url>
     <loc>https://benchpress.cloud/docs/reference/api</loc>
-    <lastmod>2026-09-26T19:04:53.000Z</lastmod>
+    <lastmod>2026-09-27T13:40:03.000Z</lastmod>
   </url>
   <url>
     <loc>https://benchpress.cloud/docs/reference/deploy-pipeline</loc>
-    <lastmod>2026-09-26T15:26:56.000Z</lastmod>
+    <lastmod>2026-09-27T13:40:03.000Z</lastmod>
   </url>
   <url>
     <loc>https://benchpress.cloud/docs/reference/lifecycle-and-events</loc>
