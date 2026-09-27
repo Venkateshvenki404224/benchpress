@@ -97,9 +97,9 @@ describe("the databases card", () => {
 		root.querySelector('[data-test="show-bp_dev_old00000"]').click();
 		await settle();
 
-		expect(resources["benchpress.api.get_bench_database_password"].submit).toHaveBeenCalledWith(
-			{ bench: "b1", db_name: "bp_dev_old00000" }
-		);
+		expect(
+			resources["benchpress.api.get_bench_database_password"].submit
+		).toHaveBeenCalledWith({ bench: "b1", db_name: "bp_dev_old00000" });
 		expect(root.querySelector('[data-test="database-command"]').textContent).toContain(
 			REVEALED.command
 		);

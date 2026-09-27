@@ -17,10 +17,7 @@
 			over SSH to create a site on it.
 		</p>
 
-		<ErrorMessage
-			class="px-4 pt-2.5"
-			:message="createAction.error || revealAction.error"
-		/>
+		<ErrorMessage class="px-4 pt-2.5" :message="createAction.error || revealAction.error" />
 
 		<ul v-if="databases.length" class="divide-y divide-outline-gray-1">
 			<li
