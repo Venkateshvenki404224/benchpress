@@ -57,6 +57,7 @@
 						/>
 						<Select
 							v-model="ownerFilter"
+							class="max-w-full overflow-hidden"
 							:options="ownerOptions"
 							data-test="filter-owner"
 						/>
