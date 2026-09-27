@@ -3,7 +3,7 @@ title: Work on your own bench
 description: Prepare a Frappe develop bench, log in over SSH with your own key,
   create a database, make a site with bench new-site, and serve it with bench
   start on your VPN address.
-lastModified: "2026-09-26T15:04:53-04:00"
+lastModified: "2026-09-27T09:24:08-04:00"
 lastAuthor: Venkatesh
 ---
 # Work on your own bench
@@ -21,10 +21,19 @@ pair on your laptop, for example `~/.ssh/id_ed25519` and `~/.ssh/id_ed25519.pub`
 
 ## Prepare the bench
 
-1. Open **Benches** in the sidebar.
-2. Paste the contents of `~/.ssh/id_ed25519.pub` into **Your SSH keys**.
-3. Press **Save keys**.
-4. Press **Prepare bench** on the **Frappe develop bench** card.
+1. Open the menu under your name at the top of the sidebar.
+2. Choose **Settings**.
+3. In **SSH keys**, press **Add SSH key**.
+4. Paste the contents of `~/.ssh/id_ed25519.pub`.
+5. Press **Add key**.
+6. Open **Benches** in the sidebar.
+7. Press **Prepare bench** on the **Frappe develop bench** card.
+
+Settings shows each saved key as its fingerprint. Run
+`ssh-keygen -lf ~/.ssh/id_ed25519.pub` on your laptop to see the same fingerprint.
+
+To remove a key, press **Remove** on its row in **SSH keys**. Press **Remove**
+again in the confirm dialog. A bench accepts the key until the bench deploys again.
 
 The deploy dialog shows each step. When the image is already built, the bench
 is ready in about a minute. The first launch builds the image and takes about

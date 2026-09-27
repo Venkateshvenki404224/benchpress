@@ -2,7 +2,7 @@
 title: Quick tour
 description: The five screens in the BenchPress sidebar, and every number the
   Overview dashboard reports.
-lastModified: "2026-08-30T20:13:11+05:30"
+lastModified: "2026-09-27T09:24:08-04:00"
 lastAuthor: Venkatesh
 ---
 # Quick tour
@@ -107,7 +107,7 @@ You have read the tour correctly when all four are true.
 |--|--|--|
 |Search|Above the nav|Opens the command palette. The shortcut is `Ctrl K`|
 |Notifications|Above the nav|Opens the panel. The badge counts items that need you|
-|Account menu|Sidebar header chevron|Settings and Switch to Desk for admins, theme toggle and log out for everybody|
+|Account menu|Sidebar header chevron|Settings, theme toggle and log out for everybody, and Switch to Desk for admins|
 |VPN chip|Header, right|States the tunnel status and links to **Devices**|
 |Credit meter|Sidebar footer|The balance. It renders only while credits are on|
 

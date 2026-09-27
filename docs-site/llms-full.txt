@@ -152,7 +152,7 @@ You have read the tour correctly when all four are true.
 |--|--|--|
 |Search|Above the nav|Opens the command palette. The shortcut is `Ctrl K`|
 |Notifications|Above the nav|Opens the panel. The badge counts items that need you|
-|Account menu|Sidebar header chevron|Settings and Switch to Desk for admins, theme toggle and log out for everybody|
+|Account menu|Sidebar header chevron|Settings, theme toggle and log out for everybody, and Switch to Desk for admins|
 |VPN chip|Header, right|States the tunnel status and links to **Devices**|
 |Credit meter|Sidebar footer|The balance. It renders only while credits are on|
 
@@ -1328,10 +1328,19 @@ pair on your laptop, for example `~/.ssh/id_ed25519` and `~/.ssh/id_ed25519.pub`
 
 ## Prepare the bench
 
-1. Open **Benches** in the sidebar.
-2. Paste the contents of `~/.ssh/id_ed25519.pub` into **Your SSH keys**.
-3. Press **Save keys**.
-4. Press **Prepare bench** on the **Frappe develop bench** card.
+1. Open the menu under your name at the top of the sidebar.
+2. Choose **Settings**.
+3. In **SSH keys**, press **Add SSH key**.
+4. Paste the contents of `~/.ssh/id_ed25519.pub`.
+5. Press **Add key**.
+6. Open **Benches** in the sidebar.
+7. Press **Prepare bench** on the **Frappe develop bench** card.
+
+Settings shows each saved key as its fingerprint. Run
+`ssh-keygen -lf ~/.ssh/id_ed25519.pub` on your laptop to see the same fingerprint.
+
+To remove a key, press **Remove** on its row in **SSH keys**. Press **Remove**
+again in the confirm dialog. A bench accepts the key until the bench deploys again.
 
 The deploy dialog shows each step. When the image is already built, the bench
 is ready in about a minute. The first launch builds the image and takes about
@@ -1870,7 +1879,7 @@ from a browser and have nothing to do with each other.
 |Symptom|Cause|Fix|
 |--|--|--|
 |`/frontend` sends you to `/login`|No session|Sign in, then open `/frontend` again|
-|The sidebar has no **Templates**, **New lab** or **Settings**|Those screens are admin-only|Ask an admin. See [Quick tour](/docs/user/quick-tour)|
+|The sidebar has no **Templates** or **New lab**, and **Settings** has no **Server** groups|Those are admin-only|Ask an admin. See [Quick tour](/docs/user/quick-tour)|
 |The sidebar has no credit meter and `/frontend/credits` bounces to Labs|Credits are switched off on this server|Nothing to do. See [Leases and credits](/docs/user/leases-and-credits)|
 |A lab you were shown is not in your list|A user sees only their own benches|Ask the owner, or an admin|
 
@@ -2403,7 +2412,7 @@ Throughout, replace `<site>` with your real site name.
    [Register a VPN device](/docs/user/vpn-devices).
 
    The sidebar is five items — Overview, Labs, Templates, Instances and
-   Devices — with Settings in the account menu for admins. Build history and
+   Devices — with Settings in the account menu. Build history and
    deploy history are not in the sidebar. They are reached from Labs and
    Instances.
 
@@ -2906,7 +2915,7 @@ wrap it in a single `exec()` call.
 |A field you cleared behaved as before|`0` falls back to the built-in for that field|See [Reconciliation and events](#reconciliation-and-events). Set the number you want|
 |Every user is refused a deploy|`enable_credits` was switched on and nobody has an account|Switch it back to `0`, or read [Credits and billing](/docs/operator/credits-and-billing)|
 |The Settings dialog does not show a field you read about|The dialog carries 10 of 26 fields|Edit it at `/app/benchpress-settings`|
-|The Settings item is missing from the account menu|The screen is admin-only|See [Users and roles](/docs/operator/users-and-roles)|
+|Settings shows only **SSH keys**|The Server groups are admin-only|See [Users and roles](/docs/operator/users-and-roles)|
 
 ## Related
 
@@ -3371,13 +3380,15 @@ Confirmed by looking at both roles in the running app:
 |--|--|
 |**Templates** in the sidebar|curating the catalog|
 |**New lab** in the Overview and Labs header|creating a lab is a write on `Lab`|
-|**Settings** in the account menu|`BenchPress Settings` is not readable by a user|
+|The **Server** groups in **Settings**|`BenchPress Settings` is not readable by a user|
 |The **Build log** tab on a lab|build output can name private repositories|
 |**Rebuild image** in the overflow menu|it costs an image build|
 |**Delete bench** in the overflow menu|delete is admin-gated even for the bench's owner|
 
 A `BenchPress User` gets exactly two items in the bench overflow menu: **Stop**
 and **Redeploy**.
+
+A user can open **Settings** too. It shows them only **SSH keys**.
 
 ## How the checks are written
 
@@ -3398,7 +3409,7 @@ that would let a new endpoint ship unguarded by omission.
 |The app refuses at login with no roles|The user has none of the three roles|Add `BenchPress User`|
 |A user cannot see a bench a colleague described|They see only their own benches|Have the owner share, or use an admin account|
 |A user sees a lab but has no **Deploy**|Deploy writes a `Bench Instance` they will own. Check the caps instead|See [Admission and limits](/docs/operator/admission-and-limits)|
-|An admin cannot open Settings|They hold `BenchPress User` only|Change the role, then have them reload|
+|An admin sees no **Server** groups in Settings|They hold `BenchPress User` only|Change the role, then have them reload|
 |A `BenchPress Admin` cannot open `/app/user`|The role grants no `User` doctype access|Grant roles as a `System Manager`|
 |A user can reach Desk|They hold a role with desk access, such as `BenchPress Admin`|Give them `BenchPress User` instead|
 |Deleting a bench is refused for its owner|Delete is admin-only by design|An admin deletes it|
@@ -5311,7 +5322,7 @@ credits are on.
 |`/labs/new`|New lab|admin only|
 |`/labs/templates`|Templates|admin only|
 |`/build-logs`|Build history|admin only|
-|`/settings`|Settings|admin only|
+|`/settings`|Settings|any app user. Only an admin sees the Server groups|
 |`/credits`|Credits|any app user, and only while credits are on|
 
 A guard in `frontend/src/router.js` sends a non-admin who reaches an admin-only
