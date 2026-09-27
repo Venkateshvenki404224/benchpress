@@ -2,7 +2,7 @@
 title: Create a lab
 description: Fill in the New lab form when no catalog template matches the app
   list you need.
-lastModified: "2026-08-28T22:10:21+05:30"
+lastModified: "2026-09-27T11:18:31-04:00"
 lastAuthor: Venkatesh
 ---
 # Create a lab

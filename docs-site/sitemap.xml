@@ -2,15 +2,15 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
     <loc>https://benchpress.cloud/docs/user/quick-tour</loc>
-    <lastmod>2026-09-27T13:40:03.000Z</lastmod>
+    <lastmod>2026-09-27T15:18:31.000Z</lastmod>
   </url>
   <url>
     <loc>https://benchpress.cloud/docs/user/deploy-from-template</loc>
-    <lastmod>2026-08-30T14:43:11.000Z</lastmod>
+    <lastmod>2026-09-27T15:18:31.000Z</lastmod>
   </url>
   <url>
     <loc>https://benchpress.cloud/docs/user/create-a-lab</loc>
-    <lastmod>2026-08-28T16:40:21.000Z</lastmod>
+    <lastmod>2026-09-27T15:18:31.000Z</lastmod>
   </url>
   <url>
     <loc>https://benchpress.cloud/docs/user/lab-detail</loc>
@@ -42,7 +42,7 @@
   </url>
   <url>
     <loc>https://benchpress.cloud/docs/user/logs-and-monitoring</loc>
-    <lastmod>2026-08-28T16:40:21.000Z</lastmod>
+    <lastmod>2026-09-27T15:18:31.000Z</lastmod>
   </url>
   <url>
     <loc>https://benchpress.cloud/docs/user/leases-and-credits</loc>
@@ -50,7 +50,7 @@
   </url>
   <url>
     <loc>https://benchpress.cloud/docs/user/troubleshooting</loc>
-    <lastmod>2026-09-27T13:40:03.000Z</lastmod>
+    <lastmod>2026-09-27T15:18:31.000Z</lastmod>
   </url>
   <url>
     <loc>https://benchpress.cloud/docs/operator</loc>
@@ -62,7 +62,7 @@
   </url>
   <url>
     <loc>https://benchpress.cloud/docs/operator/install</loc>
-    <lastmod>2026-09-27T13:40:03.000Z</lastmod>
+    <lastmod>2026-09-27T15:18:31.000Z</lastmod>
   </url>
   <url>
     <loc>https://benchpress.cloud/docs/operator/wireguard-setup</loc>
@@ -82,7 +82,7 @@
   </url>
   <url>
     <loc>https://benchpress.cloud/docs/operator/users-and-roles</loc>
-    <lastmod>2026-09-27T13:40:03.000Z</lastmod>
+    <lastmod>2026-09-27T15:18:31.000Z</lastmod>
   </url>
   <url>
     <loc>https://benchpress.cloud/docs/operator/golden-images</loc>
@@ -122,7 +122,7 @@
   </url>
   <url>
     <loc>https://benchpress.cloud/docs/reference/architecture</loc>
-    <lastmod>2026-09-27T13:40:03.000Z</lastmod>
+    <lastmod>2026-09-27T15:18:31.000Z</lastmod>
   </url>
   <url>
     <loc>https://benchpress.cloud/docs/reference/data-model</loc>

@@ -2,7 +2,7 @@
 title: Deploy from a template
 description: Turn a catalog template into a running bench, and read the eleven
   pipeline steps while they run.
-lastModified: "2026-08-30T20:13:11+05:30"
+lastModified: "2026-09-27T11:18:31-04:00"
 lastAuthor: Venkatesh
 ---
 # Deploy from a template
@@ -19,8 +19,8 @@ deploy. You need it to open the bench afterwards.
 
 ## Steps
 
-1. Open **Labs** in the sidebar, then click the **Templates** tab. The tab has
-   its own URL, `/frontend/labs/templates`.
+1. Open the **Templates** tab on the **Labs** page. Its URL is
+   `/frontend/labs/templates`.
 
    ![The Labs page at 1280 by 800 pixels with the Templates tab open, seen as an administrator. The sidebar holds Overview, Labs, Benches, Instances and Devices, and Labs is highlighted. The header breadcrumb reads BenchPress / Templates. The Labs heading has Build history and New lab buttons at the right. Below it, the My labs and Templates tabs sit above a search box and Apps and Version filters. Nine template cards fill a three-column grid, and the bottom edge cuts off the third row. Each card carries a logo, a title, a Frappe version, a description, app chips and resource chips. ERPNext on version-15 is tagged Most used. Each card reads a deploy estimate such as ~3 min to deploy and offers a Use template button.](../images/user/deploy-from-template/01-templates.png)
 
@@ -28,7 +28,7 @@ deploy. You need it to open the bench afterwards.
    memory and CPU the bench gets, and either a deploy estimate or the lab that
    already exists.
 
-   |Template in the frame|Version|Size|Estimate|
+   |Template in the first two rows|Version|Size|Estimate|
    |--|--|--|--|
    |Frappe Framework|version-15|1 GB, 1 vCPU|\~3 min|
    |ERPNext|version-15|2 GB, 2 vCPU|\~6 min|

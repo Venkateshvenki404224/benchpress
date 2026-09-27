@@ -2,7 +2,7 @@
 title: Read logs and container stats
 description: The deploy stepper, the raw log and its step markers, the build
   log, and the CPU and memory bars on a running bench.
-lastModified: "2026-08-28T22:10:21+05:30"
+lastModified: "2026-09-27T11:18:31-04:00"
 lastAuthor: Venkatesh
 ---
 # Read logs and container stats

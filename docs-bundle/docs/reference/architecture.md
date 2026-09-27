@@ -3,7 +3,7 @@ title: Architecture
 description: The moving parts of BenchPress — the control plane, the bench
   containers, the shared infrastructure, and which Python module owns each
   concern.
-lastModified: "2026-09-27T19:10:03+05:30"
+lastModified: "2026-09-27T11:18:31-04:00"
 lastAuthor: Venkatesh
 ---
 # Architecture
