@@ -3,6 +3,7 @@
 
 import base64
 import binascii
+import hashlib
 
 import frappe
 from frappe import _
@@ -37,6 +38,29 @@ def set_ssh_keys(keys: str) -> str:
 	saved = "\n".join(clean)
 	frappe.db.set_value("User", frappe.session.user, SSH_KEYS_FIELD, saved)
 	return saved
+
+
+@frappe.whitelist()
+def list_ssh_keys() -> list[dict]:
+	require_app_user()
+	return [_row(line) for line in ssh_keys_of(frappe.session.user).splitlines() if line]
+
+
+@frappe.whitelist(methods=["POST"])
+def add_ssh_key(key: str) -> list[dict]:
+	require_app_user()
+	lines = [line.strip() for line in (key or "").splitlines() if line.strip()]
+	if len(lines) != 1:
+		frappe.throw(_("Paste one key at a time."))
+	new = _valid_key(1, lines[0])
+	stored = frappe.db.get_value("User", frappe.session.user, SSH_KEYS_FIELD, for_update=True) or ""
+	saved = [line for line in stored.splitlines() if line]
+	if _fingerprint(new.split()[1]) in {_fingerprint(line.split()[1]) for line in saved}:
+		frappe.throw(_("That key is already saved."))
+	if len(saved) >= MAX_KEYS:
+		frappe.throw(_("You can save at most {0} SSH keys.").format(MAX_KEYS))
+	frappe.db.set_value("User", frappe.session.user, SSH_KEYS_FIELD, "\n".join([*saved, new]))
+	return list_ssh_keys()
 
 
 def ssh_keys_of(email: str) -> str:
@@ -76,3 +100,13 @@ def _blob_type(encoded: str) -> str | None:
 	if len(blob) < 4 + length:
 		return None
 	return blob[4 : 4 + length].decode("ascii", errors="replace")
+
+
+def _row(line: str) -> dict:
+	kind, encoded, *comment = line.split(None, 2)
+	return {"fingerprint": _fingerprint(encoded), "type": kind, "comment": comment[0] if comment else ""}
+
+
+def _fingerprint(encoded: str) -> str:
+	digest = hashlib.sha256(base64.b64decode(encoded)).digest()
+	return "SHA256:" + base64.b64encode(digest).decode().rstrip("=")

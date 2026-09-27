@@ -154,6 +154,7 @@ import SectionCard from "@/components/SectionCard.vue";
 import StatusBadge from "@/components/StatusBadge.vue";
 import { openDeployRun } from "@/data/deployRun";
 import { labsResource } from "@/data/labs";
+import { sshKeysResource } from "@/data/sshKeys";
 import { benchLabel, cpuLabel, memoryLabel } from "@/utils/labSpecs";
 import { Button, ErrorMessage, createResource, dayjsLocal, toast } from "frappe-ui";
 import { computed, ref, watch } from "vue";
@@ -180,6 +181,10 @@ const hasKey = computed(() => Boolean(savedKeys.value.trim()));
 const keysDraft = ref("");
 
 watch(savedKeys, (value) => (keysDraft.value = value), { immediate: true });
+watch(
+	() => sshKeysResource.data,
+	() => keys.reload()
+);
 
 async function saveSshKeys() {
 	try {
@@ -187,6 +192,7 @@ async function saveSshKeys() {
 	} catch {
 		return;
 	}
+	sshKeysResource.reload();
 	toast.success("SSH keys saved.");
 }
 

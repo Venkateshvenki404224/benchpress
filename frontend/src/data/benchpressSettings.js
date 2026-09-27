@@ -1,10 +1,24 @@
+import { userContext, waitForUserContext } from "@/data/userContext";
 import { createDocumentResource, dayjsLocal, toast } from "frappe-ui";
 import { computed, reactive, ref } from "vue";
 
 import ContainerIcon from "~icons/lucide/container";
 import CpuIcon from "~icons/lucide/cpu";
 import GlobeIcon from "~icons/lucide/globe";
+import KeyRoundIcon from "~icons/lucide/key-round";
 import NetworkIcon from "~icons/lucide/network";
+
+export const SSH_KEYS_GROUP = "group-ssh-keys";
+
+export const ACCOUNT_GROUPS = [
+	{
+		key: SSH_KEYS_GROUP,
+		tab: "ssh-keys",
+		title: "SSH keys",
+		icon: KeyRoundIcon,
+		note: "Keys that can log in to your benches over SSH.",
+	},
+];
 
 /** Each group is one nav item and one panel in the settings dialog. */
 export const SETTINGS_GROUPS = [
@@ -99,10 +113,11 @@ const FIELDS = SETTINGS_GROUPS.flatMap((group) => group.fields.map((field) => fi
 const REQUIRED = { base_domain: "A base domain is required — sites are addressed under it." };
 
 export const isSettingsOpen = ref(false);
+export const activeSettingsKey = ref(SSH_KEYS_GROUP);
 export const form = reactive(Object.fromEntries(FIELDS.map((field) => [field, ""])));
 
-// Only admins can read the doctype, so nothing is fetched until the dialog is
-// opened from the account menu, which is admin-only.
+// Only admins can read the doctype, so it is fetched only when an admin opens
+// the dialog.
 export const settingsResource = createDocumentResource({
 	doctype: "BenchPress Settings",
 	name: "BenchPress Settings",
@@ -115,9 +130,11 @@ export const settingsResource = createDocumentResource({
 	},
 });
 
-export function openSettings() {
-	settingsResource.reload();
+export async function openSettings(groupKey = SSH_KEYS_GROUP) {
+	activeSettingsKey.value = groupKey;
 	isSettingsOpen.value = true;
+	await waitForUserContext().catch(() => {});
+	if (userContext.isAdmin) settingsResource.reload();
 }
 
 export const isDirty = computed(() =>

@@ -55,6 +55,7 @@ declare module 'vue' {
     SectionCard: typeof import('./src/components/SectionCard.vue')['default']
     SettingsDialog: typeof import('./src/components/settings/SettingsDialog.vue')['default']
     SitesCard: typeof import('./src/components/lab/SitesCard.vue')['default']
+    SshKeysPanel: typeof import('./src/components/settings/SshKeysPanel.vue')['default']
     StatTile: typeof import('./src/components/StatTile.vue')['default']
     StatusBadge: typeof import('./src/components/StatusBadge.vue')['default']
     UsageBar: typeof import('./src/components/UsageBar.vue')['default']

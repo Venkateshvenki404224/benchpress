@@ -82,7 +82,7 @@
 		     sidebar's own dialogs are mounted here for the same reason. -->
 		<DeployDialog />
 		<AppSearch />
-		<SettingsDialog v-if="userContext.isAdmin" />
+		<SettingsDialog />
 	</FrappeUIProvider>
 </template>
 
@@ -163,20 +163,13 @@ function logout() {
 // Everything that acts on the account rather than on a lab lives behind the
 // sidebar header chevron — Settings included, so the nav stays object-shaped.
 const accountMenu = computed(() => {
-	const account = [];
+	const account = [{ label: "Settings", icon: SettingsIcon, onClick: () => openSettings() }];
 	if (userContext.isAdmin) {
-		account.push(
-			{
-				label: "Settings",
-				icon: SettingsIcon,
-				onClick: openSettings,
-			},
-			{
-				label: "Switch to Desk",
-				icon: LayoutDashboardIcon,
-				onClick: switchToDesk,
-			}
-		);
+		account.push({
+			label: "Switch to Desk",
+			icon: LayoutDashboardIcon,
+			onClick: switchToDesk,
+		});
 	}
 	account.push({ label: "Toggle theme", icon: MoonIcon, onClick: toggleTheme });
 	return [

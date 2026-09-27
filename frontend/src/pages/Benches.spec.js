@@ -165,6 +165,30 @@ describe("the Benches page", () => {
 		).toContain("Add an SSH key first");
 	});
 
+	it("reloads the card when a key is added in Settings", async () => {
+		const card = resources["benchpress.user.get_ssh_keys"];
+		card.reload.mockClear();
+
+		resources["benchpress.user.list_ssh_keys"].setData([{ fingerprint: "SHA256:new" }]);
+		await nextTick();
+
+		expect(card.reload).toHaveBeenCalled();
+	});
+
+	it("tells Settings when the card saves", async () => {
+		const settings = resources["benchpress.user.list_ssh_keys"];
+		settings.reload.mockClear();
+
+		root.querySelector('[data-test="ssh-keys-input"]').value = "";
+		root.querySelector('[data-test="ssh-keys-input"]').dispatchEvent(new Event("input"));
+		await nextTick();
+		root.querySelector('[data-test="save-ssh-keys"]').click();
+		await nextTick();
+		await nextTick();
+
+		expect(settings.reload).toHaveBeenCalled();
+	});
+
 	it("keeps the refusal on the card and does not report a save", async () => {
 		const save = resources["benchpress.user.set_ssh_keys"];
 		save.submit.mockRejectedValueOnce(new Error("Line 1 is a private key."));
