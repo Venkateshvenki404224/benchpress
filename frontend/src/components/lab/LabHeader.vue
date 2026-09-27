@@ -140,6 +140,12 @@ const CONFIRMATIONS = {
 		message:
 			"Redeploying replaces the container. Everything inside it — code changes, installed apps, uploaded files and the site database — is destroyed and rebuilt fresh from the lab image. To bring a stopped bench back as it was, use Start instead.",
 	},
+	deploySelfManaged: {
+		event: "deploy",
+		title: "Redeploy this bench?",
+		message:
+			"Redeploying replaces the container. Your databases are kept, but everything inside the container — code changes, installed apps and the site folders in ~/frappe-bench/sites — is destroyed. To bring a stopped bench back as it was, use Start instead.",
+	},
 };
 
 const props = defineProps({
@@ -247,6 +253,7 @@ function runPrimary() {
 }
 
 function askConfirm(key) {
+	if (key === "deploy" && props.lab.self_managed) key = "deploySelfManaged";
 	confirming.value = CONFIRMATIONS[key];
 }
 
