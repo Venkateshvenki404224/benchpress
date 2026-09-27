@@ -6,14 +6,16 @@
 import ast
 import tempfile
 import unittest
+import uuid
 from pathlib import Path
 from unittest.mock import patch
 
 import frappe
 from frappe.tests import IntegrationTestCase
 
-from benchpress import api, ingress, lifecycle, vpn_adapter
+from benchpress import api, deploy_manager, ingress, lifecycle, vpn_adapter
 from benchpress.credits import account, admission, lease
+from benchpress.tests import test_deploy_manager as deploy_tests
 from benchpress.tests.fakes import FakeDockerMixin
 from benchpress.tests.test_deploy_manager import (
 	_delete_bench_sites,
@@ -23,12 +25,16 @@ from benchpress.tests.test_deploy_manager import (
 	_mounted,
 )
 from benchpress.tests.test_device_wrappers import RECONCILE_HOOK, ensure_wg0_pool
+from benchpress.user import SSH_KEYS_FIELD
 
 BENCH = "Bench Instance"
+SSH_KEY = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGmGY6wbhu8fIW8Ss6S9Yq5Vs9esVwGK0lP9CmjKHuPv dev@laptop"
 SITE = "Bench Site"
 ADMISSION = "Bench Admission"
 ALLOCATION = "IP Allocation"
 ERROR_LOG = "Error Log"
+LEDGER = "Credit Ledger Entry"
+LEDGER_ACCOUNT = "Credit Account"
 SETTINGS = "BenchPress Settings"
 LIFECYCLE_MODULE = "lifecycle.py"
 
@@ -207,7 +213,21 @@ class TestRunning(TransitionFixtures, FakeDockerMixin, IntegrationTestCase):
 		"""Armed for this test only, and restored through a commit because the code commits."""
 		original = frappe.db.get_single_value(SETTINGS, "enable_credits")
 		self.addCleanup(self._write_credits_switch, original)
+		self._keep_ledger_as_found(frappe.session.user)
 		self._write_credits_switch(1)
+
+	def _keep_ledger_as_found(self, owner: str) -> None:
+		balance = frappe.db.get_value(LEDGER_ACCOUNT, owner, "balance")
+		found = set(frappe.get_all(LEDGER, filters={"account": owner}, pluck="name"))
+
+		def restore():
+			for name in set(frappe.get_all(LEDGER, filters={"account": owner}, pluck="name")) - found:
+				frappe.delete_doc(LEDGER, name, force=True, ignore_permissions=True)
+			if balance is not None:
+				frappe.db.set_value(LEDGER_ACCOUNT, owner, "balance", balance, update_modified=False)
+			frappe.db.commit()  # nosemgrep -- the charge was committed by the code under test
+
+		self.addCleanup(restore)
 
 	def _write_credits_switch(self, value) -> None:
 		frappe.db.set_single_value(SETTINGS, "enable_credits", value)
@@ -501,7 +521,9 @@ class TestTeardownReports(TransitionFixtures, FakeDockerMixin, IntegrationTestCa
 
 		removals = lifecycle.torn_down(bench)
 
-		self.assertEqual(set(removals), {"stop", "container", "database", "vpn_peer", "route"})
+		self.assertEqual(
+			set(removals), {"stop", "container", "database", "bench_databases", "vpn_peer", "route"}
+		)
 		self.assertEqual(set(removals.values()), {lifecycle.GONE})
 
 	def test_a_refused_stop_is_named_with_the_reason_the_daemon_gave(self):
@@ -550,13 +572,14 @@ class TestTeardownReports(TransitionFixtures, FakeDockerMixin, IntegrationTestCa
 
 	def test_a_teardown_whose_every_removal_failed_still_reaches_draft(self):
 		"""The swallowing stays: an instance must not be left describing what it no longer has."""
-		bench = self._deployed_bench(with_database=True)
+		bench = self._bench_with_databases("bp_dev_aaaa1111")
 		container = self._container(bench)
 		container.stop_refusal = "daemon is wedged"
 		container.remove_refusal = "container is in use"
 
 		with (
 			patch("benchpress.mariadb_manager.drop_site_database", side_effect=Exception("db unreachable")),
+			patch("benchpress.mariadb_manager.drop_bench_database", side_effect=Exception("db unreachable")),
 			patch("benchpress.vpn_adapter.remove_bench_peer", side_effect=Exception("wg agent down")),
 			patch.object(ingress, "withdraw", side_effect=Exception("route mount is missing")),
 		):
@@ -582,6 +605,72 @@ class TestTeardownReports(TransitionFixtures, FakeDockerMixin, IntegrationTestCa
 		lifecycle.torn_down(bench)
 
 		self.assertEqual(frappe.db.count(ERROR_LOG, {"method": ("like", f"%{bench.name}%")}), 0)
+
+	def _bench_with_databases(self, *names):
+		bench = self._deployed_bench(with_database=True)
+		for name in names:
+			bench.append("databases", {"db_name": name, "db_user": name, "db_password": f"pw-{name}"})
+		bench.save(ignore_permissions=True)
+		frappe.db.commit()  # nosemgrep -- the transition under test commits
+		return bench
+
+	def _stored_passwords(self, rows):
+		return frappe.db.count(
+			"__Auth", {"doctype": "Bench Database", "name": ("in", [row.name for row in rows])}
+		)
+
+	def test_a_teardown_drops_every_bench_database_and_forgets_it(self):
+		bench = self._bench_with_databases("bp_dev_aaaa1111", "bp_dev_bbbb2222")
+		rows = list(bench.databases)
+
+		with patch("benchpress.mariadb_manager.drop_bench_database") as drop:
+			removals = lifecycle.torn_down(bench)
+
+		self.assertEqual(
+			[call.args for call in drop.call_args_list],
+			[(self.db_server_name, "bp_dev_aaaa1111"), (self.db_server_name, "bp_dev_bbbb2222")],
+		)
+		self.assertEqual(removals["bench_databases"], lifecycle.GONE)
+		self.assertEqual(frappe.get_doc(BENCH, bench.name).databases, [])
+		self.assertEqual(self._stored_passwords(rows), 0)
+
+	def test_a_database_that_would_not_drop_is_named_and_kept(self):
+		bench = self._bench_with_databases("bp_dev_aaaa1111", "bp_dev_bbbb2222")
+
+		with patch(
+			"benchpress.mariadb_manager.drop_bench_database",
+			side_effect=lambda _server, name: name == "bp_dev_aaaa1111" and frappe.throw("db unreachable"),
+		):
+			removals = lifecycle.torn_down(bench)
+
+		self.assertIn("bp_dev_aaaa1111", removals["bench_databases"])
+		self.assertIn("db unreachable", removals["bench_databases"])
+		self.assertEqual(
+			[row.db_name for row in frappe.get_doc(BENCH, bench.name).databases], ["bp_dev_aaaa1111"]
+		)
+
+	def test_a_redeploy_drops_no_bench_database(self):
+		bench = self._bench_with_databases("bp_dev_aaaa1111")
+
+		with (
+			patch("benchpress.mariadb_manager.drop_bench_database") as drop,
+			patch.object(lifecycle, "_deploy_bench"),
+		):
+			lifecycle._redeploy_bench(bench.name)
+
+		drop.assert_not_called()
+		self.assertEqual(
+			[row.db_name for row in frappe.get_doc(BENCH, bench.name).databases], ["bp_dev_aaaa1111"]
+		)
+
+	def test_deleting_a_bench_forgets_its_database_passwords(self):
+		bench = self._bench_with_databases("bp_dev_aaaa1111")
+		rows = list(bench.databases)
+		self.assertEqual(self._stored_passwords(rows), 1)
+
+		frappe.delete_doc(BENCH, bench.name, force=True, ignore_permissions=True)
+
+		self.assertEqual(self._stored_passwords(rows), 0)
 
 
 class TestTeardownFreesTheTunnelIP(TransitionFixtures, FakeDockerMixin, IntegrationTestCase):
@@ -701,3 +790,117 @@ class TestDeployLogHandover(TransitionFixtures, IntegrationTestCase):
 
 		pick.assert_called_once()
 		self.assertEqual(frappe.db.get_value(BENCH, bench.name, "bridge_network"), "benchpress-0")
+
+
+class TestSelfManagedDeploy(IntegrationTestCase):
+	_run_deploy = deploy_tests.TestDeployStepMarkers._run_deploy
+	_log = deploy_tests.TestDeployStepMarkers._log
+	_emitted_steps = deploy_tests.TestDeployStepMarkers._emitted_steps
+
+	@classmethod
+	def setUpClass(cls):
+		super().setUpClass()
+		frappe.set_user("Administrator")
+		cls.lab = _make_lab("test-lab-self-managed")
+		cls.addClassCleanup(frappe.db.commit)
+		cls.addClassCleanup(cls.lab.delete, ignore_permissions=True)
+		frappe.db.set_value("Lab", cls.lab.name, {"self_managed": 1, "dockerfile": "FROM scratch\n"})
+		cls.lab.reload()
+		db_server = frappe.get_doc(
+			{
+				"doctype": "Database Server",
+				"container_name": f"test-db-self-managed-{uuid.uuid4().hex[:8]}",
+				"mariadb_version": "10.6",
+			}
+		).insert(ignore_permissions=True)
+		cls.db_server_name = db_server.name
+		cls.addClassCleanup(
+			lambda n=cls.db_server_name: frappe.delete_doc(
+				"Database Server", n, force=True, ignore_permissions=True
+			)
+			if frappe.db.exists("Database Server", n)
+			else None
+		)
+		frappe.db.commit()
+
+	def _deployed(self):
+		bench = _fresh_bench(self, self.lab.name)
+		self.addCleanup(lambda name=bench.name: frappe.db.delete("Deploy Log", {"bench": name}))
+		with patch.object(lifecycle, "_drop_site_database") as drop_database:
+			self._run_deploy(bench)
+		self.drop_database = drop_database
+		return frappe.get_doc(BENCH, bench.name)
+
+	def _exec_commands(self):
+		return [call.args[1] for call in lifecycle.exec_in_container.call_args_list]
+
+	def test_a_self_managed_deploy_creates_no_site(self):
+		bench = self._deployed()
+
+		self.site_setup.assert_not_called()
+		self.drop_database.assert_not_called()
+		self.assertFalse(any("serve.sh" in command for command in self._exec_commands()))
+		self.assertEqual(bench.status, "Running")
+
+	def test_the_site_steps_are_logged_as_skipped(self):
+		bench = self._deployed()
+
+		log = self._log(bench.name).splitlines()
+		for key in ("site_config", "site", "assets"):
+			opened = next(i for i, line in enumerate(log) if f"[{key} @" in line)
+			self.assertEqual(log[opened + 1], lifecycle.SELF_MANAGED_SKIPPED)
+
+	def test_all_eleven_steps_are_emitted(self):
+		from benchpress.deploy_pipeline import DEPLOY_STEPS
+
+		bench = self._deployed()
+
+		keys = [step["step_key"] for step in self._emitted_steps(bench.name)]
+		self.assertEqual(keys, [step.key for step in DEPLOY_STEPS])
+
+	def _owner_keys(self, keys):
+		previous = frappe.db.get_value("User", "Administrator", SSH_KEYS_FIELD)
+		self.addCleanup(frappe.db.commit)
+		self.addCleanup(frappe.db.set_value, "User", "Administrator", SSH_KEYS_FIELD, previous)
+		frappe.db.set_value("User", "Administrator", SSH_KEYS_FIELD, keys)
+		frappe.db.commit()
+
+	def _provision_call(self):
+		return next(
+			call
+			for call in lifecycle.exec_in_container.call_args_list
+			if call.args[1].startswith(f"bash {deploy_manager.PROVISION_SCRIPT} ")
+		)
+
+	def test_the_bench_s_own_provisioning_runs_with_no_password(self):
+		self._owner_keys(SSH_KEY)
+		bench = self._deployed()
+
+		written = {call.args[2]: call.args[1] for call in lifecycle.write_file_to_container.call_args_list}
+		self.assertEqual(
+			written[deploy_manager.PROVISION_SCRIPT], lifecycle.SELF_MANAGED_PROVISION.read_text()
+		)
+		self.assertNotIn("SSH_PASSWORD", self._provision_call().kwargs["environment"])
+		self.assertFalse(bench.ssh_password)
+		self.assertFalse(bench.admin_password)
+
+	def test_the_owner_s_keys_reach_provisioning_through_the_environment_only(self):
+		self._owner_keys(SSH_KEY)
+		self._deployed()
+
+		provision = self._provision_call()
+		self.assertEqual(provision.kwargs["environment"], {"SSH_KEYS": SSH_KEY})
+		self.assertNotIn("AAAAC3NzaC1lZDI1NTE5", provision.args[1])
+
+	def test_a_bench_whose_owner_has_no_keys_still_deploys_with_ssh_closed(self):
+		self._owner_keys(None)
+		bench = self._deployed()
+
+		self.assertEqual(bench.status, "Running")
+		self.assertEqual(self._provision_call().kwargs["environment"], {"SSH_KEYS": ""})
+		self.assertIn(lifecycle.NO_SSH_KEYS, self._log(bench.name).splitlines())
+
+	def test_code_server_still_starts(self):
+		self._deployed()
+
+		self.assertTrue(any("restart.sh" in command for command in self._exec_commands()))

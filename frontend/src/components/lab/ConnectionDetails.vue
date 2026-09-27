@@ -49,7 +49,10 @@
 					{{ row.value }}
 				</code>
 
-				<Tooltip :text="copiedKey === row.key ? 'Copied' : 'Copy'">
+				<Tooltip
+					v-if="row.copyable !== false"
+					:text="copiedKey === row.key ? 'Copied' : 'Copy'"
+				>
 					<Button
 						variant="ghost"
 						size="sm"
@@ -114,12 +117,7 @@ const rows = computed(() =>
 		{ key: "runtime", label: "Runtime", value: props.bench.runtime },
 		codeServerRow(),
 		sshRow(),
-		{
-			key: "ssh-password",
-			label: "SSH password",
-			value: secret("ssh_password"),
-			secret: true,
-		},
+		sshCredentialRow(),
 		{
 			key: "admin-password",
 			label: "Admin password",
@@ -160,6 +158,18 @@ function sshRow() {
 		key: "ssh",
 		label: "SSH",
 		value: user && address.value ? `ssh ${user}@${address.value}` : "",
+	};
+}
+
+function sshCredentialRow() {
+	if (props.lab.self_managed) {
+		return { key: "ssh-key", label: "SSH key", value: "your saved key", copyable: false };
+	}
+	return {
+		key: "ssh-password",
+		label: "SSH password",
+		value: secret("ssh_password"),
+		secret: true,
 	};
 }
 

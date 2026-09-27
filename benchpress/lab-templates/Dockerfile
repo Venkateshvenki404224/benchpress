@@ -59,7 +59,7 @@ USER root
 
 # --- Layer 6: Runtime scripts, last so a script fix rebuilds only this layer ---
 # The whole scripts/ dir (install-apps.sh included again, harmlessly) so entry.sh, serve.sh,
-# setup-site.sh, linkuser.sh and restart.sh are present for the container at runtime.
+# setup-site.sh, provision-user.sh and restart.sh are present for the container at runtime.
 COPY scripts/ /opt/benchpress/scripts/
 RUN chmod +x /opt/benchpress/scripts/*
 

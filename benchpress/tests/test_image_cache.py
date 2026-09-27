@@ -86,6 +86,36 @@ class TestBuildSpec(unittest.TestCase):
 			image_cache.build_spec(_spec(apps=[_app("erpnext")])),
 		)
 
+	def test_a_dockerfile_edit_changes_the_spec(self):
+		first = _spec()
+		first.dockerfile = "FROM ubuntu:24.04\n"
+		edited = _spec()
+		edited.dockerfile = "FROM ubuntu:24.04\nRUN true\n"
+		self.assertNotEqual(image_cache.build_spec(first), image_cache.build_spec(edited))
+
+	def test_a_lab_with_no_dockerfile_has_the_spec_it_always_had(self):
+		spec = _spec(apps=[_app()])
+		self.assertEqual(
+			image_cache.build_spec(spec),
+			{
+				"frappe_version": "version-15",
+				"apps": [("erpnext", "https://github.com/frappe/erpnext", "version-15")],
+			},
+		)
+
+	def test_a_template_spec_carries_the_dockerfile_it_builds(self):
+		template = {
+			"key": "bench-spec",
+			"title": "Bench",
+			"frappe_version": "develop",
+			"self_managed": 1,
+			"dockerfile": "FROM x\n",
+			"apps": [],
+		}
+		spec = image_cache.template_spec(template)
+		self.assertEqual((spec.self_managed, spec.dockerfile), (1, "FROM x\n"))
+		self.assertIn("dockerfile", image_cache.build_spec(spec))
+
 	def test_the_tag_is_static_per_lab_id(self):
 		spec = _spec(apps=[_app()])
 		self.assertEqual(image_cache.cache_tag(spec), f"{image_cache.CACHE_REPOSITORY}/{spec.lab_id}:lab")

@@ -52,7 +52,9 @@
   "expiry_lateness",
   "reap_warned_at",
   "apps_section",
-  "apps"
+  "apps",
+  "databases_section",
+  "databases"
  ],
  "fields": [
   {
@@ -358,6 +360,19 @@
    "label": "Instance Size",
    "options": "Instance Size",
    "read_only": 1
+  },
+  {
+   "fieldname": "databases_section",
+   "fieldtype": "Section Break",
+   "label": "Databases"
+  },
+  {
+   "fieldname": "databases",
+   "fieldtype": "Table",
+   "label": "Databases",
+   "options": "Bench Database",
+   "read_only": 1,
+   "permlevel": 1
   }
  ],
  "grid_page_length": 50,
@@ -372,7 +387,7 @@
    "link_fieldname": "bench"
   }
  ],
- "modified": "2026-08-27 10:00:00.000000",
+ "modified": "2026-09-26 14:30:00.000000",
  "modified_by": "Administrator",
  "module": "Benchpress",
  "name": "Bench Instance",

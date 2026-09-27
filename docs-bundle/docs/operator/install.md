@@ -2,7 +2,7 @@
 title: Install
 description: Install BenchPress into a Frappe v16 bench — get-app, setup.sh, the
   frontend build, the base domain, and the first screen.
-lastModified: "2026-08-30T17:48:34+05:30"
+lastModified: "2026-09-27T09:24:08-04:00"
 lastAuthor: Venkatesh
 ---
 # Install
@@ -126,7 +126,7 @@ Throughout, replace `<site>` with your real site name.
    [Register a VPN device](/docs/user/vpn-devices).
 
    The sidebar is five items — Overview, Labs, Templates, Instances and
-   Devices — with Settings in the account menu for admins. Build history and
+   Devices — with Settings in the account menu. Build history and
    deploy history are not in the sidebar. They are reached from Labs and
    Instances.
 

@@ -3,8 +3,9 @@
 
 import frappe
 from frappe import _
-from frappe.query_builder import DocType
+from frappe.query_builder import DocType, Order
 from frappe.query_builder.functions import Count
+from frappe.utils import cint
 
 from benchpress import (
 	addressing,
@@ -17,6 +18,9 @@ from benchpress import (
 	site_names,
 )
 from benchpress.benchpress.doctype.bench_instance.bench_instance import DEPLOY_JOB_TIMEOUT
+
+MY_BENCHES_LIMIT = 100
+MAX_BENCH_DATABASES = 5
 
 # Every field the renew path decides from, read once under the row lock.
 RENEW_FIELDS = [
@@ -48,6 +52,7 @@ from benchpress.permissions import (
 	require_app_user,
 	require_bench_access,
 )
+from benchpress.user import ssh_keys_of
 
 
 @frappe.whitelist()
@@ -83,7 +88,39 @@ def get_lab_form_options() -> dict:
 @frappe.whitelist()
 def get_lab_templates() -> list[dict]:
 	require_app_user()
-	return lab_templates.get_catalog()
+	return [template for template in lab_templates.get_catalog() if not template["self_managed"]]
+
+
+@frappe.whitelist()
+def get_bench_templates() -> list[dict]:
+	require_app_user()
+	return [
+		{**template, "image_ready": _template_image_ready(template["key"])}
+		for template in lab_templates.get_catalog()
+		if template["self_managed"]
+	]
+
+
+def _template_image_ready(template_key: str) -> bool:
+	lab = _matching_lab(template_key)
+	return bool(lab) and frappe.get_cached_doc("Lab", lab).status == "Ready"
+
+
+@frappe.whitelist()
+def get_my_benches() -> list[dict]:
+	require_app_user()
+	bench = DocType("Bench Instance")
+	lab = DocType("Lab")
+	return (
+		frappe.qb.from_(bench)
+		.join(lab)
+		.on(lab.name == bench.lab)
+		.select(bench.name, bench.lab, bench.status, bench.wg_ip, bench.code_server_url, bench.creation)
+		.where((bench.owner == frappe.session.user) & (lab.self_managed == 1))
+		.orderby(bench.creation, order=Order.desc)
+		.limit(MY_BENCHES_LIMIT)
+		.run(as_dict=True)
+	)
 
 
 @frappe.whitelist()
@@ -204,6 +241,7 @@ def _counts_by_bench(doctype: str, column: str, bench_names: list[str]) -> dict[
 def create_bench(data: str) -> dict:
 	require_app_user()
 	data = frappe.parse_json(data)
+	_require_ssh_key(frappe.db.get_value("Lab", data.get("lab"), "self_managed"))
 	doc = _claim_instance(data)
 
 	frappe.enqueue(
@@ -258,8 +296,10 @@ def launch_template(template: str, instance_size: str | None = None, site_name: 
 	require_app_user()
 	# `lab_templates.get_template` checks existence only, so without this a user
 	# could materialise a template an admin retired.
-	if not frappe.db.get_value("Lab Template", template, "is_active"):
+	row = frappe.db.get_value("Lab Template", template, ["is_active", "self_managed"], as_dict=True)
+	if not row or not row.is_active:
 		frappe.throw(_("Unknown lab template '{0}'.").format(template or ""))
+	_require_ssh_key(row.self_managed)
 	lab_name = _lab_for_template(template)
 	return _launch(frappe.as_json({"lab": lab_name, "instance_size": instance_size, "site_name": site_name}))
 
@@ -268,6 +308,7 @@ def launch_template(template: str, instance_size: str | None = None, site_name: 
 def launch_lab(data: str) -> dict:
 	"""`create_bench` for a lab that may not be built yet: the build is part of the run."""
 	require_app_user()
+	_require_ssh_key(frappe.db.get_value("Lab", frappe.parse_json(data).get("lab"), "self_managed"))
 	return _launch(data)
 
 
@@ -291,6 +332,11 @@ def _launch(data: str) -> dict:
 		enqueue_after_commit=True,
 	)
 	return _launch_response(doc)
+
+
+def _require_ssh_key(self_managed) -> None:
+	if self_managed and not ssh_keys_of(frappe.session.user):
+		frappe.throw(_("Add an SSH key first."))
 
 
 def _launch_response(doc) -> dict:
@@ -737,6 +783,59 @@ def get_bench_credentials(bench_name: str) -> dict:
 		except frappe.exceptions.ValidationError:
 			credentials[field] = None
 	return credentials
+
+
+@frappe.whitelist(methods=["POST"])
+def create_bench_database(bench: str) -> dict:
+	from benchpress import mariadb_manager
+
+	doc = _own_self_managed_bench(bench, for_update=True)
+	cap = cint(frappe.get_cached_doc("BenchPress Settings").get("max_bench_databases")) or MAX_BENCH_DATABASES
+	if len(doc.databases) >= cap:
+		frappe.throw(_("This bench already has {0} databases, the most it can hold.").format(cap))
+
+	name, password = mariadb_manager.create_bench_database(doc.database_server, doc.ssh_username or doc.owner)
+	doc.append("databases", {"db_name": name, "db_user": name, "db_password": password})
+	try:
+		doc.save(ignore_permissions=True)
+	except Exception:
+		mariadb_manager.drop_bench_database(doc.database_server, name)
+		raise
+	return {
+		"db_name": name,
+		"db_user": name,
+		"db_password": password,
+		"command": _new_site_command(doc, name, password),
+	}
+
+
+@frappe.whitelist()
+def get_bench_database_password(bench: str, db_name: str) -> dict:
+	doc = _own_self_managed_bench(bench)
+	row = next((row for row in doc.databases if row.db_name == db_name), None)
+	if not row:
+		frappe.throw(_("Database {0} is not on this bench.").format(db_name), frappe.DoesNotExistError)
+	password = row.get_password("db_password")
+	return {"db_password": password, "command": _new_site_command(doc, db_name, password)}
+
+
+def _own_self_managed_bench(bench_name: str, *, for_update: bool = False):
+	require_bench_access(bench_name)
+	bench = frappe.get_doc("Bench Instance", bench_name, for_update=for_update)
+	if bench.owner != frappe.session.user:
+		frappe.throw(_("Only the bench's owner can manage its databases."), frappe.PermissionError)
+	if not frappe.db.get_value("Lab", bench.lab, "self_managed"):
+		frappe.throw(_("Databases are for self-managed benches only."))
+	if bench.status != "Running":
+		frappe.throw(_("Start the bench first. Databases are made on a running bench."))
+	return bench
+
+
+def _new_site_command(bench, name: str, password: str) -> str:
+	from benchpress.mariadb_manager import bench_new_site_command
+
+	host = frappe.db.get_value("Database Server", bench.database_server, "container_name")
+	return bench_new_site_command(host, name, password)
 
 
 @frappe.whitelist()

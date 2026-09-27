@@ -70,11 +70,15 @@ class BenchInstance(Document):
 		instance is gone can no longer drop its own database: only `api._delete_bench` does that,
 		and it needs the instance. It runs the drop before this, while the rows are still here.
 		"""
+		from frappe.utils.password import delete_all_passwords_for
+
 		from benchpress import site_names
 		from benchpress.credits import admission
 
 		admission.release(self.name)
 		site_names.release(self.name)
+		for row in self.databases:
+			delete_all_passwords_for(row.doctype, row.name)
 
 	def validate_higher_perm_levels(self):
 		"""Refuse a create-time field the caller may not set, where Frappe would silently drop it.

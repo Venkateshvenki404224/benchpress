@@ -3,7 +3,7 @@ title: Architecture
 description: The moving parts of BenchPress — the control plane, the bench
   containers, the shared infrastructure, and which Python module owns each
   concern.
-lastModified: "2026-08-30T17:48:34+05:30"
+lastModified: "2026-09-27T09:24:08-04:00"
 lastAuthor: Venkatesh
 ---
 # Architecture
@@ -136,7 +136,7 @@ credits are on.
 |`/labs/new`|New lab|admin only|
 |`/labs/templates`|Templates|admin only|
 |`/build-logs`|Build history|admin only|
-|`/settings`|Settings|admin only|
+|`/settings`|Settings|any app user. Only an admin sees the Server groups|
 |`/credits`|Credits|any app user, and only while credits are on|
 
 A guard in `frontend/src/router.js` sends a non-admin who reaches an admin-only

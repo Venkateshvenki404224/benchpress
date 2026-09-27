@@ -239,7 +239,7 @@ this.$socket.on("bench_deploy_log", (data) => { this.logs.push(data) })
 There is **no web terminal in this app**: no `ttyd`, no `xterm.js`, no PTY endpoint. A user gets a shell
 in exactly two ways, both over the WireGuard tunnel:
 
-1. **SSH** — `ssh <ssh_username>@<wg_ip>` with the SSH password from Connection details. `linkuser.sh`
+1. **SSH** — `ssh <ssh_username>@<wg_ip>` with the SSH password from Connection details. `provision-user.sh`
    renames the image's `frappe` user to the lab's own username, sets the password, grants passwordless
    `sudo` for `bench`/`supervisord`/`supervisorctl`/`service` only, and appends the nvm node path plus
    `frappe-bench/env/bin` to its `.bashrc` — so `bench` resolves on login with no PATH fix.

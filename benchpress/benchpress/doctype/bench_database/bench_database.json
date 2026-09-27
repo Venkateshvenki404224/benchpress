@@ -1,0 +1,48 @@
+{
+ "actions": [],
+ "creation": "2026-09-26 14:30:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "field_order": [
+  "db_name",
+  "db_user",
+  "db_password"
+ ],
+ "fields": [
+  {
+   "fieldname": "db_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Database",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "db_user",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "User",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "db_password",
+   "fieldtype": "Password",
+   "label": "Password",
+   "read_only": 1
+  }
+ ],
+ "istable": 1,
+ "links": [],
+ "modified": "2026-09-26 14:30:00.000000",
+ "modified_by": "Administrator",
+ "module": "Benchpress",
+ "name": "Bench Database",
+ "owner": "Administrator",
+ "permissions": [],
+ "row_format": "Dynamic",
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": []
+}

@@ -2,7 +2,7 @@
 title: API
 description: Every whitelisted BenchPress endpoint, with arguments, what each
   returns, and the permission check each one makes for itself.
-lastModified: "2026-09-17T10:56:32-04:00"
+lastModified: "2026-09-26T15:04:53-04:00"
 lastAuthor: Venkatesh
 ---
 # API
@@ -222,6 +222,20 @@ that bench.
 
 These exist because Frappe does not return `Password` fields in an ordinary
 document read. Reading the `Bench Instance` gives you nothing. Ask here.
+
+## Bench databases
+
+Two endpoints serve the **Databases** card of a self-managed bench. Both refuse
+a caller who does not own the bench, a lab that is not self-managed, and a bench
+that is not `Running`. An admin who does not own the bench is refused too.
+
+|Endpoint|Arguments|Returns|Checks|
+|--|--|--|--|
+|`create_bench_database`|`bench`|`{db_name, db_user, db_password, command}`|POST only. `require_bench_access`, the owner, self-managed, `Running`, then `max_bench_databases`|
+|`get_bench_database_password`|`bench`, `db_name`|`{db_password, command}`|the same as `create_bench_database`, then the row must be on that bench|
+
+`command` is the full `bench new-site` line, with `--no-setup-db` and the
+database server's container name as `--db-host`.
 
 ## Credits
 

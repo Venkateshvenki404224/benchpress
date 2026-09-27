@@ -2,7 +2,7 @@
 title: Deploy pipeline
 description: The eleven steps of a BenchPress deploy, in the order the code runs
   them, with the function behind each step and the log line it writes.
-lastModified: "2026-08-28T22:10:21+05:30"
+lastModified: "2026-09-26T11:26:56-04:00"
 lastAuthor: Venkatesh
 ---
 # Deploy pipeline
@@ -31,7 +31,7 @@ runs ten of them, and `deploy_manager` runs the fifth.
 |6|`site_config`|Writing common\_site\_config.json|`docker_manager.write_file_to_container`|
 |7|`site`|Creating the site|`docker_manager.create_site_in_container`|
 |8|`assets`|Preparing assets|`lifecycle._deploy_bench`|
-|9|`ssh_user`|Provisioning the SSH user|`linkuser.sh`, in the container|
+|9|`ssh_user`|Provisioning the SSH user|`provision-user.sh`, in the container|
 |10|`code_server`|Starting the lab's services|`serve.sh`, then `_start_code_server`|
 |11|`complete`|Deploy complete|`lifecycle._deploy_bench`|
 
@@ -148,11 +148,11 @@ builds assets, and a deploy will not fix a stale one.
 
 ## Step 9. Provisioning the SSH user
 
-Runs `linkuser.sh` in the container to create the Linux account, using a
+Runs `provision-user.sh` in the container to create the Linux account, using a
 username derived from the owner's email address. The part before the `@` is
 lowercased, stripped of invalid characters and capped at 32 characters.
 
-The app's copy of `linkuser.sh` wins over the copy baked into the image.
+The app's copy of `provision-user.sh` wins over the copy baked into the image.
 
 The SSH password is generated for this run and stored on the bench as a
 `Password` field. Read it with

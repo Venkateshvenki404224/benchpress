@@ -25,6 +25,7 @@ Read the summary links first. If the page links are not enough, use `/llms-full.
 - [Open the bench site](/docs/user/open-your-site.md): The Sites card, the three states of its Open button, and logging in to the Frappe site a deploy created.
 - [Connect over SSH and the VPN](/docs/user/connect-ssh-vpn.md): The connection card on a lab page — two addresses, the SSH command, the three passwords, and which of them work without the tunnel.
 - [Use code-server](/docs/user/code-server.md): Open the browser VS Code session on a bench, find its password, hand the session to a teammate, and restart it when it stops answering.
+- [Work on your own bench](/docs/user/benches.md): Prepare a Frappe develop bench, log in over SSH with your own key, create a database, make a site with bench new-site, and serve it with bench start on your VPN address.
 
 ### Watch it and pay for it
 
