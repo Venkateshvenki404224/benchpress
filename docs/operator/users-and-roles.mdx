@@ -60,9 +60,9 @@ bench --site <site> execute frappe.client.get_list \
 
 Then confirm what the person will actually see. `benchpress.api.get_user_context`
 returns the caller's identity and roles, and the SPA renders the sidebar from
-it. The user-facing proof is simpler still: the **New lab** and **Build
-history** buttons on the **Labs** page appear only for an admin, and so does
-the **New lab** button in the Overview header.
+it. The user-facing proof is simpler still. Only an admin sees the **New lab**
+and **Build history** buttons on the **Labs** page. Only an admin sees
+**New lab** in the Overview header.
 
 ## What each role may do
 
