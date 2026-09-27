@@ -18,13 +18,6 @@
 					Build history
 				</Button>
 				<Button
-					variant="subtle"
-					data-test="from-template"
-					@click="router.push('/labs/templates')"
-				>
-					From template
-				</Button>
-				<Button
 					v-if="userContext.isAdmin"
 					variant="solid"
 					data-test="new-lab"
@@ -36,88 +29,126 @@
 			</div>
 		</div>
 
-		<div v-if="labs.length" class="mb-3 flex flex-wrap items-center gap-2">
-			<FormControl
-				class="w-[240px]"
-				type="text"
-				placeholder="Search labs"
-				v-model="search"
-				data-test="labs-search"
-			>
-				<template #prefix><SearchIcon class="size-3.5 text-ink-gray-4" /></template>
-			</FormControl>
-			<Select v-model="statusFilter" :options="statusOptions" data-test="filter-status" />
-			<Select v-model="versionFilter" :options="versionOptions" data-test="filter-version" />
-			<Select v-model="ownerFilter" :options="ownerOptions" data-test="filter-owner" />
-		</div>
-
-		<p v-if="labsResource.loading && !labs.length" class="text-body text-ink-gray-5">
-			Loading labs…
-		</p>
-
-		<OnboardingPanel v-else-if="!labs.length" />
-
-		<div
-			v-else-if="rows.length"
-			class="grid gap-3.5"
-			style="grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr))"
-			data-test="labs-grid"
-		>
-			<RecipeCard
-				v-for="lab in rows"
-				:key="lab.name"
-				class="cursor-pointer"
-				:title="lab.title || lab.lab_id"
-				:subtitle="`${lab.lab_id} · ${lab.frappe_version}`"
-				:logo="lab.logo || ''"
-				:description="lab.description || ''"
-				:apps="lab.app_names"
-				:chips="resourceChips(lab)"
-				:data-test="`lab-card-${lab.name}`"
-				@click="openLab(lab)"
-			>
-				<!-- A deployed lab's card answers "what is it doing now": the running
-				     instance's state outranks the image's Ready. Undeployed labs keep
-				     showing the image lifecycle (Draft/Building/Ready/Error). -->
-				<template #badge>
-					<StatusBadge :status="lab.deployed_as?.status || lab.status" />
-				</template>
-				<template #footer>
-					<div class="min-w-0 flex-1">
-						<template v-if="lab.deployed_as">
-							<span class="block truncate text-meta text-ink-gray-6">
-								{{ lab.deployed_as.site || "No site yet" }}
-							</span>
-							<LeaseCountdown :expires-at-ts="lab.deployed_as.expires_at_ts" />
-						</template>
-						<span v-else class="block truncate text-meta text-ink-gray-4">
-							Never deployed
-						</span>
-						<span v-if="lab.last_run" class="block truncate text-2xs text-ink-gray-4">
-							Last run {{ dayjsLocal(lab.last_run).fromNow() }}
-						</span>
+		<Tabs :model-value="activeTab" :tabs="TABS" data-test="labs-tabs">
+			<template #tab-panel="{ tab }">
+				<TemplateCatalog v-if="tab.key === 'templates'" class="pt-4" />
+				<div v-else class="pt-4">
+					<div v-if="labs.length" class="mb-3 flex flex-wrap items-center gap-2">
+						<FormControl
+							class="w-[240px]"
+							type="text"
+							placeholder="Search labs"
+							v-model="search"
+							data-test="labs-search"
+						>
+							<template #prefix
+								><SearchIcon class="size-3.5 text-ink-gray-4"
+							/></template>
+						</FormControl>
+						<Select
+							v-model="statusFilter"
+							:options="statusOptions"
+							data-test="filter-status"
+						/>
+						<Select
+							v-model="versionFilter"
+							:options="versionOptions"
+							data-test="filter-version"
+						/>
+						<Select
+							v-model="ownerFilter"
+							:options="ownerOptions"
+							data-test="filter-owner"
+						/>
 					</div>
-					<Button
-						class="flex-none"
-						variant="solid"
-						:data-test="`lab-open-${lab.name}`"
-						@click.stop="openLab(lab)"
-					>
-						Open lab
-					</Button>
-				</template>
-			</RecipeCard>
-		</div>
 
-		<SectionCard v-else :padded="false">
-			<EmptyState message="No labs match these filters.">
-				<template #action>
-					<Button variant="subtle" data-test="clear-filters" @click="clearFilters">
-						Clear filters
-					</Button>
-				</template>
-			</EmptyState>
-		</SectionCard>
+					<p
+						v-if="labsResource.loading && !labs.length"
+						class="text-body text-ink-gray-5"
+					>
+						Loading labs…
+					</p>
+
+					<OnboardingPanel v-else-if="!labs.length" />
+
+					<div
+						v-else-if="rows.length"
+						class="grid gap-3.5"
+						style="
+							grid-template-columns: repeat(
+								auto-fill,
+								minmax(min(300px, 100%), 1fr)
+							);
+						"
+						data-test="labs-grid"
+					>
+						<RecipeCard
+							v-for="lab in rows"
+							:key="lab.name"
+							class="cursor-pointer"
+							:title="lab.title || lab.lab_id"
+							:subtitle="`${lab.lab_id} · ${lab.frappe_version}`"
+							:logo="lab.logo || ''"
+							:description="lab.description || ''"
+							:apps="lab.app_names"
+							:chips="resourceChips(lab)"
+							:data-test="`lab-card-${lab.name}`"
+							@click="openLab(lab)"
+						>
+							<!-- A deployed lab's card answers "what is it doing now": the running
+							     instance's state outranks the image's Ready. Undeployed labs keep
+							     showing the image lifecycle (Draft/Building/Ready/Error). -->
+							<template #badge>
+								<StatusBadge :status="lab.deployed_as?.status || lab.status" />
+							</template>
+							<template #footer>
+								<div class="min-w-0 flex-1">
+									<template v-if="lab.deployed_as">
+										<span class="block truncate text-meta text-ink-gray-6">
+											{{ lab.deployed_as.site || "No site yet" }}
+										</span>
+										<LeaseCountdown
+											:expires-at-ts="lab.deployed_as.expires_at_ts"
+										/>
+									</template>
+									<span v-else class="block truncate text-meta text-ink-gray-4">
+										Never deployed
+									</span>
+									<span
+										v-if="lab.last_run"
+										class="block truncate text-2xs text-ink-gray-4"
+									>
+										Last run {{ dayjsLocal(lab.last_run).fromNow() }}
+									</span>
+								</div>
+								<Button
+									class="flex-none"
+									variant="solid"
+									:data-test="`lab-open-${lab.name}`"
+									@click.stop="openLab(lab)"
+								>
+									Open lab
+								</Button>
+							</template>
+						</RecipeCard>
+					</div>
+
+					<SectionCard v-else :padded="false">
+						<EmptyState message="No labs match these filters.">
+							<template #action>
+								<Button
+									variant="subtle"
+									data-test="clear-filters"
+									@click="clearFilters"
+								>
+									Clear filters
+								</Button>
+							</template>
+						</EmptyState>
+					</SectionCard>
+				</div>
+			</template>
+		</Tabs>
 	</div>
 </template>
 
@@ -127,19 +158,28 @@ import SectionCard from "@/components/SectionCard.vue";
 import StatusBadge from "@/components/StatusBadge.vue";
 import LeaseCountdown from "@/components/lab/LeaseCountdown.vue";
 import RecipeCard from "@/components/lab/RecipeCard.vue";
+import TemplateCatalog from "@/components/lab/TemplateCatalog.vue";
 import OnboardingPanel from "@/components/overview/OnboardingPanel.vue";
 import { labsResource } from "@/data/labs";
 import { userContext } from "@/data/userContext";
 import { ALL, matches, optionsFrom } from "@/utils/filters";
 import { resourceChips } from "@/utils/labSpecs";
-import { Button, FormControl, Select, dayjsLocal } from "frappe-ui";
+import { Button, FormControl, Select, Tabs, dayjsLocal } from "frappe-ui";
 import { computed, onMounted, ref } from "vue";
-import { useRouter } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 
 import PlusIcon from "~icons/lucide/plus";
 import SearchIcon from "~icons/lucide/search";
 
+const TABS = [
+	{ key: "labs", label: "My labs", route: "/labs" },
+	{ key: "templates", label: "Templates", route: "/labs/templates" },
+];
+
 const router = useRouter();
+const route = useRoute();
+const activeTab = computed(() => (route.name === "LabTemplates" ? 1 : 0));
+
 const search = ref("");
 const statusFilter = ref(ALL);
 const versionFilter = ref(ALL);

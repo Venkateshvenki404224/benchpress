@@ -56,16 +56,31 @@ vi.mock("frappe-ui", () => {
 		(tag) =>
 		(_props, { slots, attrs }) =>
 			h(tag, attrs, slots.default?.());
+	const Tabs = {
+		props: ["modelValue", "tabs"],
+		setup(props, { slots, attrs }) {
+			return () =>
+				h("div", attrs, slots["tab-panel"]?.({ tab: props.tabs[props.modelValue] }));
+		},
+	};
 	return {
 		Badge: passThrough("span"),
 		Button: passThrough("button"),
+		ErrorMessage: () => null,
 		FormControl: passThrough("input"),
 		Select: passThrough("div"),
+		Tabs,
+		createResource: () => ({ data: [], loading: false, error: null }),
 		dayjsLocal: () => ({ fromNow: () => "a day ago" }),
+		toast: { success: vi.fn() },
 	};
 });
 
-vi.mock("vue-router", () => ({ useRouter: () => ({ push }) }));
+vi.mock("vue-router", async () => {
+	const { reactive } = await import("vue");
+	const route = reactive({ name: "Labs" });
+	return { useRouter: () => ({ push }), useRoute: () => route };
+});
 
 vi.mock("@/data/labs", async () => {
 	const { reactive } = await import("vue");
@@ -79,6 +94,8 @@ vi.mock("@/data/userContext", async () => {
 	return { userContext: reactive({ isAdmin: true }) };
 });
 
+const { useRoute } = await import("vue-router");
+const { userContext } = await import("@/data/userContext");
 const { default: Labs } = await import("./Labs.vue");
 
 describe("the Labs page", () => {
@@ -87,6 +104,8 @@ describe("the Labs page", () => {
 
 	beforeEach(async () => {
 		push.mockClear();
+		useRoute().name = "Labs";
+		userContext.isAdmin = true;
 		root = document.createElement("div");
 		document.body.append(root);
 		app = createApp(Labs);
@@ -150,5 +169,33 @@ describe("the Labs page", () => {
 
 		expect(push).toHaveBeenCalledTimes(1);
 		expect(push).toHaveBeenCalledWith(LAB_DETAIL);
+	});
+
+	it("opens on the labs tab at /labs", () => {
+		expect(find("labs-grid")).not.toBeNull();
+		expect(find("templates")).toBeNull();
+	});
+
+	it("opens on the templates tab at /labs/templates", async () => {
+		useRoute().name = "LabTemplates";
+		await nextTick();
+
+		expect(find("templates")).not.toBeNull();
+		expect(find("labs-grid")).toBeNull();
+	});
+
+	it("shows New lab and Build history to an admin, and no From template button", () => {
+		expect(find("new-lab")).not.toBeNull();
+		expect(find("build-history")).not.toBeNull();
+		expect(find("from-template")).toBeNull();
+	});
+
+	it("hides New lab and Build history from a normal user", async () => {
+		userContext.isAdmin = false;
+		await nextTick();
+
+		expect(find("new-lab")).toBeNull();
+		expect(find("build-history")).toBeNull();
+		expect(find("from-template")).toBeNull();
 	});
 });

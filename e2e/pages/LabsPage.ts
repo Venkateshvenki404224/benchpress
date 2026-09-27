@@ -17,7 +17,7 @@ export class LabsPage extends BasePage {
   readonly onboardingPanel: Locator;
   readonly clearFilters: Locator;
   readonly newLabButton: Locator;
-  readonly fromTemplateButton: Locator;
+  readonly templatesTab: Locator;
   readonly buildHistoryButton: Locator;
 
   constructor(page: Page) {
@@ -33,7 +33,7 @@ export class LabsPage extends BasePage {
     this.onboardingPanel = this.testId("onboarding-panel");
     this.clearFilters = this.testId("clear-filters");
     this.newLabButton = this.testId("new-lab");
-    this.fromTemplateButton = this.testId("from-template");
+    this.templatesTab = this.testId("labs-tabs").getByRole("tab", { name: "Templates" });
     this.buildHistoryButton = this.testId("build-history");
   }
 

@@ -1,12 +1,9 @@
 <template>
-	<div class="page-shell" data-test="templates">
-		<div class="mb-4">
-			<h1 class="text-title font-semibold text-ink-gray-9">Templates</h1>
-			<p class="mt-0.5 max-w-[600px] text-body text-ink-gray-5">
-				Ready-made recipes. Pick one and BenchPress creates the lab for you — no form to
-				fill in.
-			</p>
-		</div>
+	<div data-test="templates">
+		<p class="mb-4 max-w-[600px] text-body text-ink-gray-5">
+			Ready-made recipes. Pick one and BenchPress creates the lab for you — no form to fill
+			in.
+		</p>
 
 		<div v-if="allTemplates.length" class="mb-3 flex flex-wrap items-center gap-2">
 			<FormControl
@@ -18,8 +15,12 @@
 			>
 				<template #prefix><SearchIcon class="size-3.5 text-ink-gray-4" /></template>
 			</FormControl>
-			<Select v-model="appsFilter" :options="appOptions" data-test="filter-apps" />
-			<Select v-model="versionFilter" :options="versionOptions" data-test="filter-version" />
+			<Select v-model="appsFilter" :options="appOptions" data-test="templates-filter-apps" />
+			<Select
+				v-model="versionFilter"
+				:options="versionOptions"
+				data-test="templates-filter-version"
+			/>
 		</div>
 
 		<p v-if="templates.loading && !allTemplates.length" class="text-body text-ink-gray-5">
@@ -87,7 +88,11 @@
 		<SectionCard v-else-if="allTemplates.length" :padded="false">
 			<EmptyState message="No templates match these filters.">
 				<template #action>
-					<Button variant="subtle" data-test="clear-filters" @click="clearFilters">
+					<Button
+						variant="subtle"
+						data-test="templates-clear-filters"
+						@click="clearFilters"
+					>
 						Clear filters
 					</Button>
 				</template>
@@ -99,7 +104,14 @@
 				message="The template catalog is empty — create a lab from scratch instead."
 			>
 				<template #action>
-					<Button variant="solid" @click="router.push('/labs/new')">New lab</Button>
+					<Button
+						v-if="userContext.isAdmin"
+						variant="solid"
+						data-test="templates-new-lab"
+						@click="router.push('/labs/new')"
+					>
+						New lab
+					</Button>
 				</template>
 			</EmptyState>
 		</SectionCard>
@@ -114,6 +126,7 @@ import SectionCard from "@/components/SectionCard.vue";
 import RecipeCard from "@/components/lab/RecipeCard.vue";
 import { openDeployRun } from "@/data/deployRun";
 import { labsResource } from "@/data/labs";
+import { userContext } from "@/data/userContext";
 import { labelFor as appLabel } from "@/utils/appIcons";
 import { ALL, matches, optionsFrom } from "@/utils/filters";
 import { etaLabel, installedApps, resourceChips } from "@/utils/labSpecs";

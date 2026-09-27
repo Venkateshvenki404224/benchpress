@@ -99,7 +99,15 @@ test.describe("Labs Page", () => {
     await labsPage.goto();
 
     await labsPage.expectAdminActionsVisible();
-    await expect(labsPage.fromTemplateButton).toBeVisible();
+  });
+
+  test("the Templates tab opens the catalog at its own URL", async ({ page }) => {
+    const labsPage = new LabsPage(page);
+    await labsPage.goto();
+
+    await labsPage.templatesTab.click();
+    await page.waitForURL("**/labs/templates");
+    await expect(labsPage.testId("templates")).toBeVisible();
   });
 
   test("clicking a lab opens its detail page", async ({ page }) => {

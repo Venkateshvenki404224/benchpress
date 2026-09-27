@@ -116,7 +116,6 @@ import { useRoute } from "vue-router";
 import BellIcon from "~icons/lucide/bell";
 import FlaskConicalIcon from "~icons/lucide/flask-conical";
 import LayoutDashboardIcon from "~icons/lucide/layout-dashboard";
-import LayoutTemplateIcon from "~icons/lucide/layout-template";
 import LogOutIcon from "~icons/lucide/log-out";
 import MoonIcon from "~icons/lucide/moon";
 import SearchIcon from "~icons/lucide/search";
@@ -202,7 +201,7 @@ const utilityItems = computed(() => [
 	},
 ]);
 
-// Six flat items. Deploy and build history are reached from the objects they
+// Five flat items. Deploy and build history are reached from the objects they
 // belong to, so the old Logs section is gone; Settings is in the header menu.
 const NAV_ITEMS = [
 	{
@@ -217,7 +216,7 @@ const NAV_ITEMS = [
 		icon: FlaskConicalIcon,
 		to: "/labs",
 		dataTest: "nav-labs",
-		routes: ["Labs", "LabDetail", "NewLab", "BuildLogs"],
+		routes: ["Labs", "LabTemplates", "LabDetail", "NewLab", "BuildLogs"],
 	},
 	{
 		label: "Benches",
@@ -225,14 +224,6 @@ const NAV_ITEMS = [
 		to: "/benches",
 		dataTest: "nav-benches",
 		routes: ["Benches"],
-	},
-	{
-		label: "Templates",
-		icon: LayoutTemplateIcon,
-		to: "/labs/templates",
-		dataTest: "nav-templates",
-		routes: ["LabTemplates"],
-		adminOnly: true,
 	},
 	{
 		label: "Instances",
@@ -251,12 +242,10 @@ const NAV_ITEMS = [
 ];
 
 const sections = computed(() => {
-	const items = NAV_ITEMS.filter((item) => !item.adminOnly || userContext.isAdmin).map(
-		(item) => ({
-			...item,
-			isActive: item.routes.includes(route.name),
-		})
-	);
+	const items = NAV_ITEMS.map((item) => ({
+		...item,
+		isActive: item.routes.includes(route.name),
+	}));
 	return [{ label: "", items }];
 });
 
