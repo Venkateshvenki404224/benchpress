@@ -29,34 +29,20 @@
 		<div
 			v-else-if="rows.length"
 			class="grid gap-3.5"
-			style="grid-template-columns: repeat(auto-fill, minmax(300px, 1fr))"
+			style="grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr))"
 		>
-			<article
+			<RecipeCard
 				v-for="template in rows"
 				:key="template.key"
-				class="flex flex-col rounded-card border border-outline-gray-1 bg-surface-white px-4 pb-3 pt-4 transition-shadow duration-150 ease-out hover:shadow-card-hover"
+				:title="template.title"
+				:subtitle="template.frappe_version"
+				:logo="template.logo || ''"
+				:description="template.description || ''"
+				:apps="templateApps(template)"
+				:chips="resourceChips(template)"
 				:data-test="`template-${template.key}`"
 			>
-				<div class="flex items-center gap-2.5">
-					<span
-						class="grid size-8 flex-none place-items-center rounded-md border border-outline-gray-1 bg-surface-white"
-					>
-						<img
-							v-if="template.logo"
-							:src="template.logo"
-							:alt="template.title"
-							class="size-full rounded-md object-cover"
-						/>
-						<AppIcon v-else :app="markFor(template)" :size="20" />
-					</span>
-					<div class="min-w-0 flex-1">
-						<h2 class="truncate text-sm font-semibold text-ink-gray-9">
-							{{ template.title }}
-						</h2>
-						<p class="truncate text-meta text-ink-gray-4">
-							{{ template.frappe_version }}
-						</p>
-					</div>
+				<template #badge>
 					<Badge
 						v-if="template.most_used"
 						theme="green"
@@ -65,24 +51,8 @@
 						label="Most used"
 						data-test="most-used"
 					/>
-				</div>
-
-				<p class="mb-3 mt-2.5 min-h-[34px] text-xs text-ink-gray-6">
-					{{ template.description }}
-				</p>
-
-				<div class="mb-3 flex flex-wrap items-center gap-1.5">
-					<AppChip v-for="app in appsOf(template)" :key="app" :app="app" />
-					<span
-						v-for="chip in resourceChips(template)"
-						:key="chip"
-						class="rounded bg-surface-gray-2 px-1.5 py-0.5 text-2xs text-ink-gray-6"
-					>
-						{{ chip }}
-					</span>
-				</div>
-
-				<div class="mt-auto flex items-center gap-2 border-t border-outline-gray-1 pt-2.5">
+				</template>
+				<template #footer>
 					<span
 						class="min-w-0 truncate text-meta"
 						:class="template.lab ? 'text-ink-gray-6' : 'text-ink-gray-4'"
@@ -110,8 +80,8 @@
 					>
 						Use template
 					</Button>
-				</div>
-			</article>
+				</template>
+			</RecipeCard>
 		</div>
 
 		<SectionCard v-else-if="allTemplates.length" :padded="false">
@@ -139,15 +109,14 @@
 </template>
 
 <script setup>
-import AppChip from "@/components/AppChip.vue";
-import AppIcon from "@/components/AppIcon.vue";
 import EmptyState from "@/components/EmptyState.vue";
 import SectionCard from "@/components/SectionCard.vue";
+import RecipeCard from "@/components/lab/RecipeCard.vue";
 import { openDeployRun } from "@/data/deployRun";
 import { labsResource } from "@/data/labs";
 import { labelFor as appLabel } from "@/utils/appIcons";
 import { ALL, matches, optionsFrom } from "@/utils/filters";
-import { cpuLabel, etaLabel, memoryLabel } from "@/utils/labSpecs";
+import { etaLabel, installedApps, resourceChips } from "@/utils/labSpecs";
 import {
 	Badge,
 	Button,
@@ -184,7 +153,7 @@ const appsFilter = ref(ALL);
 const versionFilter = ref(ALL);
 
 const appOptions = computed(() =>
-	optionsFrom("Apps", allTemplates.value.flatMap(appsOf), appLabel)
+	optionsFrom("Apps", allTemplates.value.flatMap(templateApps), appLabel)
 );
 const versionOptions = computed(() =>
 	optionsFrom(
@@ -203,13 +172,18 @@ const rows = computed(() =>
 );
 
 function matchesApps(template) {
-	return appsFilter.value === ALL || appsOf(template).includes(appsFilter.value);
+	return appsFilter.value === ALL || templateApps(template).includes(appsFilter.value);
 }
 
 function matchesSearch(template) {
 	const query = search.value.trim().toLowerCase();
 	if (!query) return true;
-	const haystack = [template.key, template.title, template.description, ...appsOf(template)];
+	const haystack = [
+		template.key,
+		template.title,
+		template.description,
+		...templateApps(template),
+	];
 	return haystack.some((value) => (value || "").toLowerCase().includes(query));
 }
 
@@ -221,19 +195,8 @@ function clearFilters() {
 
 const launchAction = createResource({ url: "benchpress.api.launch_template" });
 
-/** Every app a template installs; a bare bench is still Frappe. */
-function appsOf(template) {
-	const apps = template.apps.map((app) => app.app_name);
-	return apps.length ? apps : ["frappe"];
-}
-
-/** The card's mark — the first app that is not Frappe itself. */
-function markFor(template) {
-	return appsOf(template).find((app) => app.toLowerCase() !== "frappe") || "frappe";
-}
-
-function resourceChips(template) {
-	return [memoryLabel(template.memory_limit), cpuLabel(template.cpu_cores)];
+function templateApps(template) {
+	return installedApps(template.apps.map((app) => app.app_name));
 }
 
 function footnote(template) {
