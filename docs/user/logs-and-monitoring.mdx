@@ -93,7 +93,7 @@ and build history are admin-only.
 5. Open the **Build log** tab for the image the bench was made from. This tab
    and the build history are admin-only.
 
-   ![The Build log tab of the Frappe CRM lab, seen as an admin at 1280 by 800 pixels. The sidebar carries an extra Templates entry that a non-admin does not see. Six collapsible rows each carry a green dot: Build started, Step 1 of 4 FROM benchpress slash crm colon lab, Step 2 of 4 COPY golden to slash opt slash benchpress slash golden, Step 3 of 4 COPY setup-site.sh, Step 4 of 4 LABEL benchpress.golden equals 1 and benchpress.golden.mariadb equals 10.6.28-MariaDB-ubu2204, and Build complete, golden in benchpress slash crm colon lab. The last row is expanded and reads No output.](../images/user/logs-and-monitoring/04-build-log.png)
+   ![The Build log tab of the Frappe CRM lab, seen as an admin at 1280 by 800 pixels. The sidebar still carries a Templates entry, from before Templates moved to a tab on the Labs page. Six collapsible rows each carry a green dot: Build started, Step 1 of 4 FROM benchpress slash crm colon lab, Step 2 of 4 COPY golden to slash opt slash benchpress slash golden, Step 3 of 4 COPY setup-site.sh, Step 4 of 4 LABEL benchpress.golden equals 1 and benchpress.golden.mariadb equals 10.6.28-MariaDB-ubu2204, and Build complete, golden in benchpress slash crm colon lab. The last row is expanded and reads No output.](../images/user/logs-and-monitoring/04-build-log.png)
 
    Each Docker step is one collapsible row with a status dot. Expand a row to
    read its output. A row with nothing to show says `No output` rather than
@@ -111,7 +111,7 @@ Neither history is in the sidebar. Both hang off the list they belong to.
 | History | Where | Who |
 |---|---|---|
 | Deploy history | **Instances** page | everybody, for the benches they can see |
-| Build history | **Labs** page, beside **From template** | admins |
+| Build history | **Labs** page, beside **New lab** | admins |
 
 Each row carries the run, a result badge, the last step the run opened, the
 duration and when it started. Clicking a row opens the lab.
