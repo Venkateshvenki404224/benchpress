@@ -67,6 +67,7 @@ vi.mock("@/data/labs", () => ({ labsResource: { reload: vi.fn() } }));
 
 vi.mock("@/data/userContext", () => ({ userContext: { isAdmin: true } }));
 
+const { deployRun } = await import("@/data/deployRun");
 const { userContext } = await import("@/data/userContext");
 const { default: TemplateCatalog } = await import("./TemplateCatalog.vue");
 
@@ -83,6 +84,14 @@ describe("the template catalog", () => {
 		await nextTick();
 	}
 
+	async function remountEmpty() {
+		app.unmount();
+		root.remove();
+		await mount([]);
+	}
+
+	const find = (test) => root.querySelector(`[data-test="${test}"]`);
+
 	beforeEach(async () => {
 		push.mockClear();
 		userContext.isAdmin = true;
@@ -94,8 +103,6 @@ describe("the template catalog", () => {
 		root.remove();
 	});
 
-	const find = (test) => root.querySelector(`[data-test="${test}"]`);
-
 	it("draws one card per template", () => {
 		expect(
 			root.querySelectorAll('[data-test^="template-"]:not([data-test*="-footnote-"])')
@@ -104,7 +111,7 @@ describe("the template catalog", () => {
 		expect(find("template-helpdesk")).not.toBeNull();
 	});
 
-	it("launches a template, then reloads the catalog", async () => {
+	it("launches a template, reloads the catalog and opens the deploy", async () => {
 		find("use-template-crm").click();
 		await nextTick();
 		await nextTick();
@@ -113,6 +120,8 @@ describe("the template catalog", () => {
 			template: "crm",
 		});
 		expect(resources["benchpress.api.get_lab_templates"].reload).toHaveBeenCalled();
+		expect(deployRun.open).toBe(true);
+		expect(deployRun.benchName).toBe("crm-bench-1");
 	});
 
 	it("offers Go to lab, not Use template, for a template already used", () => {
@@ -121,16 +130,17 @@ describe("the template catalog", () => {
 		expect(find("open-lab-crm")).toBeNull();
 	});
 
-	async function remountEmpty() {
-		app.unmount();
-		root.remove();
-		await mount([]);
-	}
+	it("opens the lab from Go to lab", () => {
+		find("open-lab-helpdesk").click();
+
+		expect(push).toHaveBeenCalledWith("/labs/helpdesk");
+	});
 
 	it("offers New lab to an admin when the catalog is empty", async () => {
 		await remountEmpty();
 
 		expect(find("templates-new-lab")).not.toBeNull();
+		expect(root.textContent).toContain("create a lab from scratch");
 	});
 
 	it("offers no New lab to a normal user when the catalog is empty", async () => {
@@ -138,5 +148,7 @@ describe("the template catalog", () => {
 		await remountEmpty();
 
 		expect(find("templates-new-lab")).toBeNull();
+		expect(root.textContent).toContain("ask an admin to add a template");
+		expect(root.textContent).not.toContain("create a lab from scratch");
 	});
 });

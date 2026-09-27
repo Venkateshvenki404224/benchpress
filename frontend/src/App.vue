@@ -31,6 +31,7 @@
 						:icon="item.icon"
 						:to="item.to"
 						:isActive="item.isActive"
+						:aria-current="item.isActive ? 'page' : undefined"
 						:data-test="item.dataTest"
 					/>
 				</template>

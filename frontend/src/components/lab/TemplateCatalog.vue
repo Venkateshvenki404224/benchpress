@@ -100,9 +100,7 @@
 		</SectionCard>
 
 		<SectionCard v-else :padded="false">
-			<EmptyState
-				message="The template catalog is empty — create a lab from scratch instead."
-			>
+			<EmptyState :message="emptyCatalogMessage">
 				<template #action>
 					<Button
 						v-if="userContext.isAdmin"
@@ -160,6 +158,12 @@ const LAB_STATES = {
 const templates = createResource({ url: "benchpress.api.get_lab_templates", auto: true });
 
 const allTemplates = computed(() => templates.data ?? []);
+
+const emptyCatalogMessage = computed(() =>
+	userContext.isAdmin
+		? "The template catalog is empty — create a lab from scratch instead."
+		: "The template catalog is empty — ask an admin to add a template."
+);
 
 const search = ref("");
 const appsFilter = ref(ALL);

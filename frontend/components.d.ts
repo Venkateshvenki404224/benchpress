@@ -48,6 +48,7 @@ declare module 'vue' {
     OnboardingPanel: typeof import('./src/components/overview/OnboardingPanel.vue')['default']
     QrPanel: typeof import('./src/components/device/QrPanel.vue')['default']
     RawLogPanel: typeof import('./src/components/deploy/RawLogPanel.vue')['default']
+    RecipeCard: typeof import('./src/components/lab/RecipeCard.vue')['default']
     RenewDialog: typeof import('./src/components/lab/RenewDialog.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
@@ -58,6 +59,7 @@ declare module 'vue' {
     SshKeysPanel: typeof import('./src/components/settings/SshKeysPanel.vue')['default']
     StatTile: typeof import('./src/components/StatTile.vue')['default']
     StatusBadge: typeof import('./src/components/StatusBadge.vue')['default']
+    TemplateCatalog: typeof import('./src/components/lab/TemplateCatalog.vue')['default']
     UsageBar: typeof import('./src/components/UsageBar.vue')['default']
     VpnStatusBanner: typeof import('./src/components/device/VpnStatusBanner.vue')['default']
   }

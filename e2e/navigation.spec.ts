@@ -23,7 +23,7 @@ test.describe("Navigation & Routing", () => {
     await basePage.gotoFrontend("/labs/templates");
 
     await expect(basePage.testId("templates")).toBeVisible();
-    await expect(basePage.testId("nav-labs")).toHaveClass(/bg-surface-selected/);
+    await expect(basePage.testId("nav-labs")).toHaveAttribute("aria-current", "page");
   });
 
   test("/bench-instances route loads the instances page", async ({ page }) => {
