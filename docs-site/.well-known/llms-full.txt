@@ -107,8 +107,8 @@ says where to fix that.
    is 4096, below the 9024 that 1000 benches need. That check names the host
    command that fixes it.
 
-3. Move through the sidebar. Five items, top to bottom, and each one owns a
-   different object.
+3. Move through the sidebar. It has five items: Overview, Labs, Benches,
+   Instances and Devices. Each one owns a different object.
 
    Watch the chip in the header while you go. Green and reading **VPN
    connected** means bench sites open. Amber and reading **VPN off** means they
@@ -130,7 +130,7 @@ You have read the tour correctly when all four are true.
 |`/frontend` returns to the login page|You have no session, or it expired|Sign in at `/login`, then open `/frontend` again|
 |The VPN chip is amber and reads VPN off|This device has no WireGuard tunnel|Open **Devices**, register the device, install the config it gives you|
 |**Open site** opens nothing|The site has no public name, so it answers only on the VPN|Connect the VPN, then click again|
-|**Templates** is missing from the sidebar|Templates is admin-only|Ask an admin, or start a bench from **Labs**|
+|**Templates** is missing from the sidebar|Templates is a tab on the **Labs** page|Open **Labs**, then click the **Templates** tab|
 |**Needs attention** is above zero|A bench errored or stopped answering|Open **Instances**, open the bench, read its deploy log|
 |**Credits** is missing everywhere|Credits are off on this server|Nothing to fix. A self-hosted server runs without them|
 
@@ -141,8 +141,8 @@ You have read the tour correctly when all four are true.
 |Item|Route|What it holds|Who sees it|
 |--|--|--|--|
 |Overview|`/`|The dashboard on this page|Everybody|
-|Labs|`/labs`|Lab definitions, and the deploy button|Everybody|
-|Templates|`/labs/templates`|The catalog a lab is built from|Admins|
+|Labs|`/labs`|Lab definitions, the deploy button, and the **Templates** tab at `/labs/templates`|Everybody|
+|Benches|`/benches`|Develop benches you manage yourself, with SSH and code-server|Everybody|
 |Instances|`/bench-instances`|Every running container, and deploy history|Everybody|
 |Devices|`/devices`|Your WireGuard devices and their configs|Everybody|
 
@@ -165,7 +165,7 @@ BenchPress User.
 |--|--|--|
 |Primary button|New lab|New environment|
 |Instance card heading|All instances|My environments|
-|Templates in the sidebar|Shown|Hidden|
+|**New lab** and **Build history** on Labs|Shown|Hidden|
 |Shared infrastructure card|Shown|Hidden|
 
 A user also sees only their own benches. An admin sees every bench on the
@@ -185,15 +185,16 @@ catalog to a bench you can open, without filling in a form.
 **Who this is for.** Anybody who needs a working bench and does not care how the
 image was built.
 
-**Before you start.** You need a login. **Templates** is admin-only, so ask an
-admin if the item is missing from your sidebar. You do not need the VPN to
+**Before you start.** You need a login. Every user sees the **Templates** tab
+on the **Labs** page. You do not need the VPN to
 deploy. You need it to open the bench afterwards.
 
 ## Steps
 
-1. Open **Templates** in the sidebar, or go to `/frontend/labs/templates`.
+1. Open **Labs** in the sidebar, then click the **Templates** tab. The tab has
+   its own URL, `/frontend/labs/templates`.
 
-   ![The BenchPress Templates catalog at 1280 by 800 pixels, showing eight template cards in a three-column grid. Each card carries a logo, a title, a Frappe version, a description, app chips and resource chips. VPN Management and ERPNext are tagged Most used. The first four cards read Already used and offer a Go to lab button. Google, ChatGPT, Claude and BenchPress read a deploy estimate such as 12 min to deploy and offer a Use template button instead.](../images/user/deploy-from-template/01-templates.png)
+   ![The Labs page at 1280 by 800 pixels with the Templates tab open, seen as an administrator. The sidebar holds Overview, Labs, Benches, Instances and Devices, and Labs is highlighted. The header breadcrumb reads BenchPress / Templates. The Labs heading has Build history and New lab buttons at the right. Below it, the My labs and Templates tabs sit above a search box and Apps and Version filters. Nine template cards fill a three-column grid, and the bottom edge cuts off the third row. Each card carries a logo, a title, a Frappe version, a description, app chips and resource chips. ERPNext on version-15 is tagged Most used. Each card reads a deploy estimate such as ~3 min to deploy and offers a Use template button.](../images/user/deploy-from-template/01-templates.png)
 
    Every card names the same five things: the app list, the Frappe version, the
    memory and CPU the bench gets, and either a deploy estimate or the lab that
@@ -201,14 +202,12 @@ deploy. You need it to open the bench afterwards.
 
    |Template in the frame|Version|Size|Estimate|
    |--|--|--|--|
-   |VPN Management|version-16|1 GB, 1 vCPU|already used|
-   |ERPNext|version-15|2 GB, 2 vCPU|already used|
-   |Frappe CRM|version-15|1 GB, 1 vCPU|already used|
-   |Frappe|version-16|4 GB, 4 vCPU|already used|
-   |Google|version-16|2 GB, 2 vCPU|\~12 min|
-   |ChatGPT|version-16|2 GB, 2 vCPU|\~12 min|
-   |Claude|version-16|4 GB, 4 vCPU|\~20 min|
-   |BenchPress|version-16|2 GB, 2 vCPU|\~8 min|
+   |Frappe Framework|version-15|1 GB, 1 vCPU|\~3 min|
+   |ERPNext|version-15|2 GB, 2 vCPU|\~6 min|
+   |Frappe CRM|version-15|1 GB, 1 vCPU|\~4 min|
+   |Frappe HR|version-15|2 GB, 2 vCPU|\~5 min|
+   |Frappe Learning|version-15|1 GB, 1 vCPU|\~4 min|
+   |Frappe Helpdesk|version-15|1 GB, 1 vCPU|\~4 min|
 
    Use the three controls above the grid to narrow it: a search box, an **Apps**
    filter and a **Version** filter.
@@ -280,7 +279,7 @@ The deploy worked when all four are true.
 
 |Symptom|Cause|Fix|
 |--|--|--|
-|**Templates** is missing from the sidebar|The catalog is admin-only|Ask an admin, or deploy an existing lab from **Labs**|
+|**Templates** is missing from the sidebar|Templates is a tab on the **Labs** page|Open **Labs**, then click the **Templates** tab|
 |Step 2 fails with `No built image for lab`|The lab has no image, or its recipe changed after the last build|Ask an admin to press **Rebuild image** on the lab|
 |The log stops at `Waiting for the worker to pick the deploy up…`|No worker is running, so nothing has started|Ask the operator to check `queue-long`|
 |Step 7 runs for minutes|The image has no golden dump, so the site is built from scratch|Nothing to fix. Read step 2, which reports the same thing|
@@ -331,7 +330,8 @@ limits. This page fills that recipe in by hand.
 **Who this is for.** Admins. **New lab** is admin-only, because saving it can
 start an image build.
 
-**Before you start.** Check [Templates](/docs/user/deploy-from-template) first.
+**Before you start.** Check the **Templates** tab on the **Labs** page first.
+See [Deploy from a template](/docs/user/deploy-from-template).
 A template is faster and its image usually exists already. Use this form only
 when no template carries the app list you need.
 
@@ -1504,7 +1504,7 @@ and build history are admin-only.
 5. Open the **Build log** tab for the image the bench was made from. This tab
    and the build history are admin-only.
 
-   ![The Build log tab of the Frappe CRM lab, seen as an admin at 1280 by 800 pixels. The sidebar carries an extra Templates entry that a non-admin does not see. Six collapsible rows each carry a green dot: Build started, Step 1 of 4 FROM benchpress slash crm colon lab, Step 2 of 4 COPY golden to slash opt slash benchpress slash golden, Step 3 of 4 COPY setup-site.sh, Step 4 of 4 LABEL benchpress.golden equals 1 and benchpress.golden.mariadb equals 10.6.28-MariaDB-ubu2204, and Build complete, golden in benchpress slash crm colon lab. The last row is expanded and reads No output.](../images/user/logs-and-monitoring/04-build-log.png)
+   ![The Build log tab of the Frappe CRM lab, seen as an admin at 1280 by 800 pixels. The sidebar still carries a Templates entry, from before Templates moved to a tab on the Labs page. Six collapsible rows each carry a green dot: Build started, Step 1 of 4 FROM benchpress slash crm colon lab, Step 2 of 4 COPY golden to slash opt slash benchpress slash golden, Step 3 of 4 COPY setup-site.sh, Step 4 of 4 LABEL benchpress.golden equals 1 and benchpress.golden.mariadb equals 10.6.28-MariaDB-ubu2204, and Build complete, golden in benchpress slash crm colon lab. The last row is expanded and reads No output.](../images/user/logs-and-monitoring/04-build-log.png)
 
    Each Docker step is one collapsible row with a status dot. Expand a row to
    read its output. A row with nothing to show says `No output` rather than
@@ -1522,7 +1522,7 @@ Neither history is in the sidebar. Both hang off the list they belong to.
 |History|Where|Who|
 |--|--|--|
 |Deploy history|**Instances** page|everybody, for the benches they can see|
-|Build history|**Labs** page, beside **From template**|admins|
+|Build history|**Labs** page, beside **New lab**|admins|
 
 Each row carries the run, a result badge, the last step the run opened, the
 duration and when it started. Clicking a row opens the lab.
@@ -1880,7 +1880,7 @@ from a browser and have nothing to do with each other.
 |Symptom|Cause|Fix|
 |--|--|--|
 |`/frontend` sends you to `/login`|No session|Sign in, then open `/frontend` again|
-|The sidebar has no **Templates** or **New lab**, and **Settings** has no **Server** groups|Those are admin-only|Ask an admin. See [Quick tour](/docs/user/quick-tour)|
+|**Labs** has no **New lab** or **Build history** button, and **Settings** has no **Server** groups|Those are admin-only|Ask an admin. See [Quick tour](/docs/user/quick-tour)|
 |The sidebar has no credit meter and `/frontend/credits` bounces to Labs|Credits are switched off on this server|Nothing to do. See [Leases and credits](/docs/user/leases-and-credits)|
 |A lab you were shown is not in your list|A user sees only their own benches|Ask the owner, or an admin|
 
@@ -2412,8 +2412,9 @@ Throughout, replace `<site>` with your real site name.
    button reads `Open site — VPN off`. See
    [Register a VPN device](/docs/user/vpn-devices).
 
-   The sidebar is five items — Overview, Labs, Templates, Instances and
-   Devices — with Settings in the account menu. Build history and
+   The sidebar is five items — Overview, Labs, Benches, Instances and
+   Devices — with Settings in the account menu. Templates is a tab on the
+   Labs page. Build history and
    deploy history are not in the sidebar. They are reached from Labs and
    Instances.
 
@@ -2437,8 +2438,8 @@ Every row should read `pass`. A `fail` row names the fix. See
 
 ## Your first bench
 
-The fastest route is **Templates**: pick a recipe and BenchPress creates the
-lab and deploys it in one action. See
+The fastest route is the **Templates** tab on the **Labs** page. Pick a recipe
+and BenchPress creates the lab and deploys it in one action. See
 [Deploy from a template](/docs/user/deploy-from-template). To describe an
 environment yourself, see [Create a lab](/docs/user/create-a-lab).
 
@@ -3319,9 +3320,9 @@ bench --site <site> execute frappe.client.get_list \
 
 Then confirm what the person will actually see. `benchpress.api.get_user_context`
 returns the caller's identity and roles, and the SPA renders the sidebar from
-it. The user-facing proof is simpler still: **Templates** is in the sidebar
-for an admin and absent for a user, and the **New lab** button in the Overview
-header appears only for an admin.
+it. The user-facing proof is simpler still: the **New lab** and **Build
+history** buttons on the **Labs** page appear only for an admin, and so does
+the **New lab** button in the Overview header.
 
 ## What each role may do
 
@@ -3379,12 +3380,15 @@ Confirmed by looking at both roles in the running app:
 
 |Surface|Why it is admin-only|
 |--|--|
-|**Templates** in the sidebar|curating the catalog|
+|**Build history** on the Labs page|build output can name private repositories|
 |**New lab** in the Overview and Labs header|creating a lab is a write on `Lab`|
 |The **Server** groups in **Settings**|`BenchPress Settings` is not readable by a user|
 |The **Build log** tab on a lab|build output can name private repositories|
 |**Rebuild image** in the overflow menu|it costs an image build|
 |**Delete bench** in the overflow menu|delete is admin-gated even for the bench's owner|
+
+The **Templates** tab on the **Labs** page is not admin-only. Every user can
+open the catalog and launch a template.
 
 A `BenchPress User` gets exactly two items in the bench overflow menu: **Stop**
 and **Redeploy**.
@@ -5321,7 +5325,7 @@ credits are on.
 |`/devices`|Devices|any app user|
 |`/deploy-logs`|Deploy history|any app user, scoped to their benches|
 |`/labs/new`|New lab|admin only|
-|`/labs/templates`|Templates|admin only|
+|`/labs/templates`|The Templates tab of Labs|any app user|
 |`/build-logs`|Build history|admin only|
 |`/settings`|Settings|any app user. Only an admin sees the Server groups|
 |`/credits`|Credits|any app user, and only while credits are on|

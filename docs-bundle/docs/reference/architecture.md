@@ -134,7 +134,7 @@ credits are on.
 |`/devices`|Devices|any app user|
 |`/deploy-logs`|Deploy history|any app user, scoped to their benches|
 |`/labs/new`|New lab|admin only|
-|`/labs/templates`|Templates|admin only|
+|`/labs/templates`|The Templates tab of Labs|any app user|
 |`/build-logs`|Build history|admin only|
 |`/settings`|Settings|any app user. Only an admin sees the Server groups|
 |`/credits`|Credits|any app user, and only while credits are on|

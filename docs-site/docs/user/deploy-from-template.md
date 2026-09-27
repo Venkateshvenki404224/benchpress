@@ -13,15 +13,16 @@ catalog to a bench you can open, without filling in a form.
 **Who this is for.** Anybody who needs a working bench and does not care how the
 image was built.
 
-**Before you start.** You need a login. **Templates** is admin-only, so ask an
-admin if the item is missing from your sidebar. You do not need the VPN to
+**Before you start.** You need a login. Every user sees the **Templates** tab
+on the **Labs** page. You do not need the VPN to
 deploy. You need it to open the bench afterwards.
 
 ## Steps
 
-1. Open **Templates** in the sidebar, or go to `/frontend/labs/templates`.
+1. Open **Labs** in the sidebar, then click the **Templates** tab. The tab has
+   its own URL, `/frontend/labs/templates`.
 
-   ![The BenchPress Templates catalog at 1280 by 800 pixels, showing eight template cards in a three-column grid. Each card carries a logo, a title, a Frappe version, a description, app chips and resource chips. VPN Management and ERPNext are tagged Most used. The first four cards read Already used and offer a Go to lab button. Google, ChatGPT, Claude and BenchPress read a deploy estimate such as 12 min to deploy and offer a Use template button instead.](../images/user/deploy-from-template/01-templates.png)
+   ![The Labs page at 1280 by 800 pixels with the Templates tab open, seen as an administrator. The sidebar holds Overview, Labs, Benches, Instances and Devices, and Labs is highlighted. The header breadcrumb reads BenchPress / Templates. The Labs heading has Build history and New lab buttons at the right. Below it, the My labs and Templates tabs sit above a search box and Apps and Version filters. Nine template cards fill a three-column grid, and the bottom edge cuts off the third row. Each card carries a logo, a title, a Frappe version, a description, app chips and resource chips. ERPNext on version-15 is tagged Most used. Each card reads a deploy estimate such as ~3 min to deploy and offers a Use template button.](../images/user/deploy-from-template/01-templates.png)
 
    Every card names the same five things: the app list, the Frappe version, the
    memory and CPU the bench gets, and either a deploy estimate or the lab that
@@ -29,14 +30,12 @@ deploy. You need it to open the bench afterwards.
 
    |Template in the frame|Version|Size|Estimate|
    |--|--|--|--|
-   |VPN Management|version-16|1 GB, 1 vCPU|already used|
-   |ERPNext|version-15|2 GB, 2 vCPU|already used|
-   |Frappe CRM|version-15|1 GB, 1 vCPU|already used|
-   |Frappe|version-16|4 GB, 4 vCPU|already used|
-   |Google|version-16|2 GB, 2 vCPU|\~12 min|
-   |ChatGPT|version-16|2 GB, 2 vCPU|\~12 min|
-   |Claude|version-16|4 GB, 4 vCPU|\~20 min|
-   |BenchPress|version-16|2 GB, 2 vCPU|\~8 min|
+   |Frappe Framework|version-15|1 GB, 1 vCPU|\~3 min|
+   |ERPNext|version-15|2 GB, 2 vCPU|\~6 min|
+   |Frappe CRM|version-15|1 GB, 1 vCPU|\~4 min|
+   |Frappe HR|version-15|2 GB, 2 vCPU|\~5 min|
+   |Frappe Learning|version-15|1 GB, 1 vCPU|\~4 min|
+   |Frappe Helpdesk|version-15|1 GB, 1 vCPU|\~4 min|
 
    Use the three controls above the grid to narrow it: a search box, an **Apps**
    filter and a **Version** filter.
@@ -108,7 +107,7 @@ The deploy worked when all four are true.
 
 |Symptom|Cause|Fix|
 |--|--|--|
-|**Templates** is missing from the sidebar|The catalog is admin-only|Ask an admin, or deploy an existing lab from **Labs**|
+|**Templates** is missing from the sidebar|Templates is a tab on the **Labs** page|Open **Labs**, then click the **Templates** tab|
 |Step 2 fails with `No built image for lab`|The lab has no image, or its recipe changed after the last build|Ask an admin to press **Rebuild image** on the lab|
 |The log stops at `Waiting for the worker to pick the deploy up…`|No worker is running, so nothing has started|Ask the operator to check `queue-long`|
 |Step 7 runs for minutes|The image has no golden dump, so the site is built from scratch|Nothing to fix. Read step 2, which reports the same thing|
