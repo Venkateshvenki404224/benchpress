@@ -2,7 +2,7 @@
 title: API
 description: Every whitelisted BenchPress endpoint, with arguments, what each
   returns, and the permission check each one makes for itself.
-lastModified: "2026-09-27T19:10:03+05:30"
+lastModified: "2026-09-29T04:59:40-04:00"
 lastAuthor: Venkatesh
 ---
 # API
@@ -171,19 +171,6 @@ what actually happens.
 |Endpoint|Arguments|Returns|Checks|
 |--|--|--|--|
 |`get_deploy_logs`|`bench_name`|the log rows for one bench|`require_bench_access`|
-|`get_deploy_history`|—|up to 50 recent deploy runs|`require_app_user`, inside `run_history`|
-
-`get_deploy_history` does not check permissions in `api.py`. It delegates
-immediately to `benchpress/run_history.py`, and the check is the first statement
-there. This is the one place where the guard is a function call away, so the
-table names where it lives.
-
-It reads through `frappe.get_list`, so its rows pick up
-`deploy_log_query_conditions`.
-
-The answer carries `window_days`, `limit` and `truncated`. Logs are cleared
-after seven days, so the table is not complete, and the answer says so rather
-than implying otherwise.
 
 ## Devices
 

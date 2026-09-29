@@ -2,7 +2,7 @@
 title: Data model
 description: All 20 BenchPress DocTypes with their fields, links, naming and the
   permission rule that scopes each one — plus why there is no Device DocType.
-lastModified: "2026-09-27T19:10:03+05:30"
+lastModified: "2026-09-29T04:59:40-04:00"
 lastAuthor: Venkatesh
 ---
 # Data model
@@ -254,9 +254,7 @@ the run is going.
 The same four fields, with `lab` in place of `bench`. One row for each image
 build.
 
-Both log DocTypes are cleared after seven days. Neither is a complete record,
-and [Deploy history](/docs/reference/api#history) states the
-window rather than implying completeness.
+Both log DocTypes are cleared after seven days. Neither is a complete record.
 
 ## Instance Size
 

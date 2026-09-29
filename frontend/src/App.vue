@@ -202,7 +202,7 @@ const utilityItems = computed(() => [
 	},
 ]);
 
-// Five flat items. Deploy history is reached from Instances, so the old Logs section is gone; Settings is in the header menu.
+// Five flat items. Settings is in the header menu.
 const NAV_ITEMS = [
 	{
 		label: "Overview",
@@ -230,7 +230,7 @@ const NAV_ITEMS = [
 		icon: ServerIcon,
 		to: "/bench-instances",
 		dataTest: "nav-instances",
-		routes: ["BenchInstances", "DeployLogs"],
+		routes: ["BenchInstances"],
 	},
 	{
 		label: "Devices",

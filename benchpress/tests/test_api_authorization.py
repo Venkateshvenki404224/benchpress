@@ -376,21 +376,6 @@ class TestApiAuthorization(IntegrationTestCase):
 		self.assertIsNotNone(row, "the fixture lab is readable by every app user")
 		return row
 
-	# --- History is scoped ---------------------------------------------------
-
-	def test_deploy_history_hides_another_users_runs(self):
-		frappe.set_user(self.user_b)
-		names = [row["name"] for row in api.get_deploy_history()["rows"]]
-		self.assertNotIn(self.deploy_log.name, names)
-
-		frappe.set_user(self.user_a)
-		names = [row["name"] for row in api.get_deploy_history()["rows"]]
-		self.assertIn(self.deploy_log.name, names)
-
-	def test_roleless_denied_from_history(self):
-		frappe.set_user(self.norole_user)
-		self.assert_denied(api.get_deploy_history)
-
 	def test_non_admin_denied_from_get_lab_form_options(self):
 		frappe.set_user(self.user_a)
 		self.assert_denied(api.get_lab_form_options)

@@ -7,15 +7,6 @@
 					{{ scopeLine }}
 				</p>
 			</div>
-			<Button
-				class="ml-auto"
-				variant="subtle"
-				data-test="deploy-history"
-				@click="router.push('/deploy-logs')"
-			>
-				<template #prefix><ListIcon class="size-3.5" /></template>
-				Deploy history
-			</Button>
 		</div>
 
 		<p v-if="benchesResource.loading && !benches.length" class="text-body text-ink-gray-5">
@@ -114,8 +105,6 @@ import { benchLabel } from "@/utils/labSpecs";
 import { Button, dayjsLocal } from "frappe-ui";
 import { computed, onMounted } from "vue";
 import { useRouter } from "vue-router";
-
-import ListIcon from "~icons/lucide/list";
 
 // Fixed widths: ListView's grid sits in a `w-max` container, so a fractional
 // track sizes to its longest cell.

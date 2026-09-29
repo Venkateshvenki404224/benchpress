@@ -3,7 +3,7 @@ title: Architecture
 description: The moving parts of BenchPress — the control plane, the bench
   containers, the shared infrastructure, and which Python module owns each
   concern.
-lastModified: "2026-09-27T21:09:56+05:30"
+lastModified: "2026-09-29T04:59:40-04:00"
 lastAuthor: Venkatesh
 ---
 # Architecture
@@ -68,7 +68,7 @@ One concern for each module. The table is the whole `benchpress/` package.
 |`docker_events.py`|the Docker event stream, and the incidents it records|
 |`stats_collector.py`|CPU, memory and health, sampled for each running bench|
 |`permissions.py`|the role helpers and the six query conditions|
-|`overview.py`, `labs.py`, `lab_detail.py`, `run_history.py`|one screen each, assembled in a fixed number of queries|
+|`overview.py`, `labs.py`, `lab_detail.py`|one screen each, assembled in a fixed number of queries|
 |`waitlist.py`, `signup.py`|the two doors open to a guest|
 |`diagnostics.py`|twelve read-only environment checks|
 |`notifications.py`|one desk alert and one email to a document owner|
@@ -122,8 +122,9 @@ A Vue 3 single-page app in `frontend/`, built with frappe-ui, vue-router and
 Tailwind. It is served from the same origin as the API, so a socket connection
 needs no separate host.
 
-Eleven routes exist. One of them is admin-only, and one renders only while
-credits are on. An old `/build-logs` link opens Labs.
+Ten routes exist. One of them is admin-only, and one renders only while
+credits are on. Old `/build-logs` and `/deploy-logs` links open Labs and
+Instances.
 
 |Route|Screen|Who sees it|
 |--|--|--|
@@ -133,7 +134,6 @@ credits are on. An old `/build-logs` link opens Labs.
 |`/bench-instances`|Instances|any app user|
 |`/labs/:labId`|Lab detail|the owner, and any admin|
 |`/devices`|Devices|any app user|
-|`/deploy-logs`|Deploy history|any app user, scoped to their benches|
 |`/labs/new`|New lab|admin only|
 |`/labs/templates`|The Templates tab of Labs|any app user|
 |`/settings`|Settings|any app user. Only an admin sees the Server groups|

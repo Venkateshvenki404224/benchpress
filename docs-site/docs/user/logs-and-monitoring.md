@@ -2,13 +2,13 @@
 title: Read logs and container stats
 description: The deploy stepper, the raw log and its step markers, the build
   log, and the CPU and memory bars on a running bench.
-lastModified: "2026-09-27T21:09:56+05:30"
+lastModified: "2026-09-29T04:59:40-04:00"
 lastAuthor: Venkatesh
 ---
 # Read logs and container stats
 
 Every deploy and every image build writes a log you can read while it runs and
-months after it finished. This page finds those logs and reads them.
+for seven days after it finished. This page finds those logs and reads them.
 
 **Who this is for.** Anybody whose deploy failed, or who wants to know where
 the time went.
@@ -108,17 +108,8 @@ are admin-only.
 
 ## Find an older run
 
-Deploy history is not in the sidebar. It hangs off the Instances page.
-
-|History|Where|Who|
-|--|--|--|
-|Deploy history|**Instances** page|everybody, for the benches they can see|
-
-Each row carries the run, a result badge, the last step the run opened, the
-duration and when it started. Clicking a row opens the lab.
-
-A run recorded before the pipeline emitted step markers shows an em dash for
-its last step and its duration. The table does not guess.
+The app shows the latest run for each lab and each bench. An admin reads older
+runs in Desk, at `/app/deploy-log` and `/app/build-log`.
 
 ## Verify
 
@@ -133,8 +124,7 @@ its last step and its duration. The table does not guess.
 |--|--|--|
 |The Deploy log tab is empty|The bench has never been deployed|Deploy the lab|
 |The log stops mid-run and never finishes|The live stream dropped|Reload the tab. The record is complete either way|
-|A run is missing from Deploy history|Logs are cleared after 7 days|Nothing to recover. Read a newer run|
-|A row shows an em dash for duration|The run predates the step markers|Read the raw log instead|
+|An older run is missing|Logs are cleared after 7 days|Nothing to recover. Read a newer run|
 |No **Build log** tab|Build logs are admin-only|Ask an admin|
 |CPU and MEMORY read a dash|The container is not running|Start the bench|
 |Health reads `Healthy` on a stopped bench|The last probe ran before the stop|Read the `checked … ago` age|
@@ -147,7 +137,6 @@ its last step and its duration. The table does not guess.
 |Log|Tab|Scope|
 |--|--|--|
 |Deploy log|**Deploy log** on the lab page|the latest run for that bench|
-|Deploy history|**Instances** page|your benches, or all of them for an admin|
 |Build log|**Build log** on the lab page|the latest image build for that lab. Admins|
 
 ### Retention

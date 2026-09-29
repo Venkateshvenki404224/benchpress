@@ -50,13 +50,8 @@ const routes = [
 		meta: { title: "Lab detail" },
 		component: () => import("@/pages/LabDetail.vue"),
 	},
-	{
-		path: "/deploy-logs",
-		name: "DeployLogs",
-		meta: { title: "Deploy history" },
-		component: () => import("@/pages/DeployLogs.vue"),
-	},
 	{ path: "/build-logs", redirect: { name: "Labs" } },
+	{ path: "/deploy-logs", redirect: { name: "BenchInstances" } },
 	{
 		path: "/devices",
 		name: "Devices",

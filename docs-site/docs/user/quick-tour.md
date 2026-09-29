@@ -2,7 +2,7 @@
 title: Quick tour
 description: The five screens in the BenchPress sidebar, and every number the
   Overview dashboard reports.
-lastModified: "2026-09-27T21:09:56+05:30"
+lastModified: "2026-09-29T04:59:40-04:00"
 lastAuthor: Venkatesh
 ---
 # Quick tour
@@ -98,7 +98,7 @@ You have read the tour correctly when all four are true.
 |Overview|`/`|The dashboard on this page|Everybody|
 |Labs|`/labs`|Lab definitions, the deploy button, and the **Templates** tab at `/labs/templates`|Everybody|
 |Benches|`/benches`|Develop benches you manage yourself, with SSH and code-server|Everybody|
-|Instances|`/bench-instances`|Every running container, and deploy history|Everybody|
+|Instances|`/bench-instances`|Every running container|Everybody|
 |Devices|`/devices`|Your WireGuard devices and their configs|Everybody|
 
 ### Everything else on the shell

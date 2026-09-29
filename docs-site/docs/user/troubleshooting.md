@@ -2,7 +2,7 @@
 title: Troubleshooting
 description: Every symptom a BenchPress user meets, its cause, and the page that
   fixes it — deploys, the VPN, SSH, code-server, logs and credits.
-lastModified: "2026-09-27T21:09:56+05:30"
+lastModified: "2026-09-29T04:59:40-04:00"
 lastAuthor: Venkatesh
 ---
 # Troubleshooting
@@ -85,8 +85,7 @@ from a browser and have nothing to do with each other.
 |--|--|--|
 |The Deploy log tab is empty|The bench has never been deployed|Deploy the lab|
 |The log stopped streaming mid-run|The live connection dropped|Reload the tab. The record is written either way|
-|A run is missing from Deploy history|Logs are cleared after 7 days|Read a newer run, or download the ones you need|
-|A history row shows an em dash for duration|The run predates the step markers|Read the raw log|
+|An older run is missing|Logs are cleared after 7 days|Read a newer run|
 |No **Build log** tab|Build logs are admin-only|Ask an admin|
 |CPU and MEMORY read a dash|The container is not running|Start the bench|
 |Health reads `Healthy` on a stopped bench|The last probe ran before the stop|Read the `checked … ago` age beside it|

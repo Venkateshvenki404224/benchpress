@@ -2,7 +2,7 @@
 title: Install
 description: Install BenchPress into a Frappe v16 bench — get-app, setup.sh, the
   frontend build, the base domain, and the first screen.
-lastModified: "2026-09-27T21:09:56+05:30"
+lastModified: "2026-09-29T04:59:40-04:00"
 lastAuthor: Venkatesh
 ---
 # Install
@@ -127,8 +127,7 @@ Throughout, replace `<site>` with your real site name.
 
    The sidebar is five items — Overview, Labs, Benches, Instances and
    Devices — with Settings in the account menu. Templates is a tab on the
-   Labs page. Deploy history is not in the sidebar. It is reached from
-   Instances.
+   Labs page.
 
 ## Verify
 

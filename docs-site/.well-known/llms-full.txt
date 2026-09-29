@@ -28,7 +28,7 @@
 - [Golden images](https://benchpress.cloud/docs/operator/golden-images): A lab's finished site is baked into its own image as a database dump, so a deploy restores it instead of creating tables — the measured numbers, the two settings, and why a golden gets refused.
 - [The image cache](https://benchpress.cloud/docs/operator/image-cache): One image per lab, tagged benchpress/<lab_id>:lab — what it costs on disk, how the weekly prewarm and sweep work, and what is safe to prune.
 - [Upgrading](https://benchpress.cloud/docs/operator/upgrading): Move a BenchPress install to a newer release — the backup gate, the five steps, the scripted path, rollback, and why lab images are a separate opt-in.
-- [Production safety](https://benchpress.cloud/docs/operator/production-safety): What BenchPress is and is not ready to carry — the alpha verdict, the container privilege boundary, what is backed up, and the release checklist that covers 25 of 51 whitelisted callables.
+- [Production safety](https://benchpress.cloud/docs/operator/production-safety): What BenchPress is and is not ready to carry — the alpha verdict, the container privilege boundary, what is backed up, and the release checklist that covers 25 of 50 whitelisted callables.
 - [Diagnostics](https://benchpress.cloud/docs/operator/diagnostics): The twelve read-only checks that ask Docker, MariaDB, Redis and the kernel what is true — how to run them, what each failure means, and the four things they do not cover.
 - [Credits and billing](https://benchpress.cloud/docs/operator/credits-and-billing): Optional and off by default — the metering half of BenchPress, covering leases, balances, the ledger, admin adjustments, and the optional Razorpay handoff.
 - [Admission and limits](https://benchpress.cloud/docs/operator/admission-and-limits): Optional and off by default — concurrency caps, size ceilings, device and build quotas, how a slot is claimed as a row, and the acceptance run that proves access still works.
@@ -143,7 +143,7 @@ You have read the tour correctly when all four are true.
 |Overview|`/`|The dashboard on this page|Everybody|
 |Labs|`/labs`|Lab definitions, the deploy button, and the **Templates** tab at `/labs/templates`|Everybody|
 |Benches|`/benches`|Develop benches you manage yourself, with SSH and code-server|Everybody|
-|Instances|`/bench-instances`|Every running container, and deploy history|Everybody|
+|Instances|`/bench-instances`|Every running container|Everybody|
 |Devices|`/devices`|Your WireGuard devices and their configs|Everybody|
 
 ### Everything else on the shell
@@ -1417,7 +1417,7 @@ URL: https://benchpress.cloud/docs/user/logs-and-monitoring
 The deploy stepper, the raw log and its step markers, the build log, and the CPU and memory bars on a running bench.
 
 Every deploy and every image build writes a log you can read while it runs and
-months after it finished. This page finds those logs and reads them.
+for seven days after it finished. This page finds those logs and reads them.
 
 **Who this is for.** Anybody whose deploy failed, or who wants to know where
 the time went.
@@ -1517,17 +1517,8 @@ are admin-only.
 
 ## Find an older run
 
-Deploy history is not in the sidebar. It hangs off the Instances page.
-
-|History|Where|Who|
-|--|--|--|
-|Deploy history|**Instances** page|everybody, for the benches they can see|
-
-Each row carries the run, a result badge, the last step the run opened, the
-duration and when it started. Clicking a row opens the lab.
-
-A run recorded before the pipeline emitted step markers shows an em dash for
-its last step and its duration. The table does not guess.
+The app shows the latest run for each lab and each bench. An admin reads older
+runs in Desk, at `/app/deploy-log` and `/app/build-log`.
 
 ## Verify
 
@@ -1542,8 +1533,7 @@ its last step and its duration. The table does not guess.
 |--|--|--|
 |The Deploy log tab is empty|The bench has never been deployed|Deploy the lab|
 |The log stops mid-run and never finishes|The live stream dropped|Reload the tab. The record is complete either way|
-|A run is missing from Deploy history|Logs are cleared after 7 days|Nothing to recover. Read a newer run|
-|A row shows an em dash for duration|The run predates the step markers|Read the raw log instead|
+|An older run is missing|Logs are cleared after 7 days|Nothing to recover. Read a newer run|
 |No **Build log** tab|Build logs are admin-only|Ask an admin|
 |CPU and MEMORY read a dash|The container is not running|Start the bench|
 |Health reads `Healthy` on a stopped bench|The last probe ran before the stop|Read the `checked … ago` age|
@@ -1556,7 +1546,6 @@ its last step and its duration. The table does not guess.
 |Log|Tab|Scope|
 |--|--|--|
 |Deploy log|**Deploy log** on the lab page|the latest run for that bench|
-|Deploy history|**Instances** page|your benches, or all of them for an admin|
 |Build log|**Build log** on the lab page|the latest image build for that lab. Admins|
 
 ### Retention
@@ -1928,8 +1917,7 @@ from a browser and have nothing to do with each other.
 |--|--|--|
 |The Deploy log tab is empty|The bench has never been deployed|Deploy the lab|
 |The log stopped streaming mid-run|The live connection dropped|Reload the tab. The record is written either way|
-|A run is missing from Deploy history|Logs are cleared after 7 days|Read a newer run, or download the ones you need|
-|A history row shows an em dash for duration|The run predates the step markers|Read the raw log|
+|An older run is missing|Logs are cleared after 7 days|Read a newer run|
 |No **Build log** tab|Build logs are admin-only|Ask an admin|
 |CPU and MEMORY read a dash|The container is not running|Start the bench|
 |Health reads `Healthy` on a stopped bench|The last probe ran before the stop|Read the `checked … ago` age beside it|
@@ -2412,8 +2400,7 @@ Throughout, replace `<site>` with your real site name.
 
    The sidebar is five items — Overview, Labs, Benches, Instances and
    Devices — with Settings in the account menu. Templates is a tab on the
-   Labs page. Deploy history is not in the sidebar. It is reached from
-   Instances.
+   Labs page.
 
 ## Verify
 
@@ -3978,7 +3965,7 @@ and never skip the step 0 gate.
 
 # Production safety
 URL: https://benchpress.cloud/docs/operator/production-safety
-What BenchPress is and is not ready to carry — the alpha verdict, the container privilege boundary, what is backed up, and the release checklist that covers 25 of 51 whitelisted callables.
+What BenchPress is and is not ready to carry — the alpha verdict, the container privilege boundary, what is backed up, and the release checklist that covers 25 of 50 whitelisted callables.
 
 Whether BenchPress is safe to run on your host, and what has to be true first.
 
@@ -4008,9 +3995,9 @@ ERPNext environments. It is not built to host customer data. Concretely:
   up. See [Backup and restore](/docs/operator/backup-and-restore).
 * **Single-tenant assumption.** Quotas, rate limits and audit trails are still
   in progress. Run BenchPress for people you trust, on a host dedicated to it.
-* **The security review is partial.** It covers 25 of the app's 51 whitelisted
+* **The security review is partial.** It covers 25 of the app's 50 whitelisted
   callables. The credit-purchase path and the per-bench credential endpoint are
-  among the 26 it never reached. See
+  among the 25 it never reached. See
   [the release checklist](#the-release-checklist).
 
 Use it on a dedicated dev box, a VM, or a cloud instance you can rebuild. Not
@@ -4074,10 +4061,10 @@ and secret-handling path. Every row below was re-checked against the code on
 2026-08-30. Two findings had been fixed, one described an endpoint that never
 existed, and several guard descriptions were wrong.
 
-**What the audit covered.** The app exposes **51** whitelisted callables. This
+**What the audit covered.** The app exposes **50** whitelisted callables. This
 checklist covers **25** of them: 16 endpoints and 9 controller methods. It also
 carried a row for a `create_site` endpoint, which does not exist in the code —
-that row is gone. **26 whitelisted callables have never been reviewed**, and
+that row is gone. **25 whitelisted callables have never been reviewed**, and
 that is the largest gap on this page. They are:
 
 |Never reviewed|Where|
@@ -4087,7 +4074,7 @@ that is the largest gap on this page. They are:
 |`launch_template`, `launch_lab`, `build_lab_golden`, `prewarm_catalog`|the one-click deploy and golden-build path|
 |`sign_up`, `join`, `notify_of_signup`, `approve`|`signup.py` and `waitlist.py`, the only self-service entry points|
 |`Credit Account.post_adjustment`, `post_refund`|controller methods that move a balance|
-|`server_time`, `get_lab_form_options`, `get_device_types`, `get_deploy_history`, `get_overview`, `get_vpn_status`, `run_connection_test`, `run_diagnostics`, `preflight_runtime`|the rest|
+|`server_time`, `get_lab_form_options`, `get_device_types`, `get_overview`, `get_vpn_status`, `run_connection_test`, `run_diagnostics`, `preflight_runtime`|the rest|
 
 Treat an unreviewed endpoint as unreviewed, not as safe.
 
@@ -4146,7 +4133,7 @@ Read the verdicts as: **Ready**, **Ready with a follow-up**, **Not ready**.
 
 1. **The container privilege boundary.** Ship only on a host that closes it.
    This is a deployment precondition, not an app default.
-2. **The 26 unreviewed endpoints.** Review them, starting with `buy_credits`,
+2. **The 25 unreviewed endpoints.** Review them, starting with `buy_credits`,
    which takes money, and `get_bench_credentials`, which decrypts passwords.
 3. **`Database Server` state-changing methods.** They call
    `frappe.has_permission` with no `ptype`, which checks `read`. Move them to
@@ -4177,9 +4164,9 @@ any password. The `create_site` item described an endpoint that does not exist.
 |Backed up|the shared MariaDB, nightly, 7 dumps|
 |Not backed up|bench Docker volumes|
 |Checklist reviewed|2026-07-02, re-verified against the code 2026-08-30|
-|Whitelisted callables|51|
+|Whitelisted callables|50|
 |Covered by this checklist|25|
-|Never reviewed|26|
+|Never reviewed|25|
 
 ## Related
 
@@ -5246,7 +5233,7 @@ One concern for each module. The table is the whole `benchpress/` package.
 |`docker_events.py`|the Docker event stream, and the incidents it records|
 |`stats_collector.py`|CPU, memory and health, sampled for each running bench|
 |`permissions.py`|the role helpers and the six query conditions|
-|`overview.py`, `labs.py`, `lab_detail.py`, `run_history.py`|one screen each, assembled in a fixed number of queries|
+|`overview.py`, `labs.py`, `lab_detail.py`|one screen each, assembled in a fixed number of queries|
 |`waitlist.py`, `signup.py`|the two doors open to a guest|
 |`diagnostics.py`|twelve read-only environment checks|
 |`notifications.py`|one desk alert and one email to a document owner|
@@ -5300,8 +5287,9 @@ A Vue 3 single-page app in `frontend/`, built with frappe-ui, vue-router and
 Tailwind. It is served from the same origin as the API, so a socket connection
 needs no separate host.
 
-Eleven routes exist. One of them is admin-only, and one renders only while
-credits are on. An old `/build-logs` link opens Labs.
+Ten routes exist. One of them is admin-only, and one renders only while
+credits are on. Old `/build-logs` and `/deploy-logs` links open Labs and
+Instances.
 
 |Route|Screen|Who sees it|
 |--|--|--|
@@ -5311,7 +5299,6 @@ credits are on. An old `/build-logs` link opens Labs.
 |`/bench-instances`|Instances|any app user|
 |`/labs/:labId`|Lab detail|the owner, and any admin|
 |`/devices`|Devices|any app user|
-|`/deploy-logs`|Deploy history|any app user, scoped to their benches|
 |`/labs/new`|New lab|admin only|
 |`/labs/templates`|The Templates tab of Labs|any app user|
 |`/settings`|Settings|any app user. Only an admin sees the Server groups|
@@ -5594,9 +5581,7 @@ the run is going.
 The same four fields, with `lab` in place of `bench`. One row for each image
 build.
 
-Both log DocTypes are cleared after seven days. Neither is a complete record,
-and [Deploy history](/docs/reference/api#history) states the
-window rather than implying completeness.
+Both log DocTypes are cleared after seven days. Neither is a complete record.
 
 ## Instance Size
 
@@ -5852,19 +5837,6 @@ what actually happens.
 |Endpoint|Arguments|Returns|Checks|
 |--|--|--|--|
 |`get_deploy_logs`|`bench_name`|the log rows for one bench|`require_bench_access`|
-|`get_deploy_history`|—|up to 50 recent deploy runs|`require_app_user`, inside `run_history`|
-
-`get_deploy_history` does not check permissions in `api.py`. It delegates
-immediately to `benchpress/run_history.py`, and the check is the first statement
-there. This is the one place where the guard is a function call away, so the
-table names where it lives.
-
-It reads through `frappe.get_list`, so its rows pick up
-`deploy_log_query_conditions`.
-
-The answer carries `window_days`, `limit` and `truncated`. Logs are cleared
-after seven days, so the table is not complete, and the answer says so rather
-than implying otherwise.
 
 ## Devices
 

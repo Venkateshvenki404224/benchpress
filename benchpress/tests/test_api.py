@@ -43,7 +43,6 @@ BUDGETS_MS = {
 	"get_device_types": 200,
 	"run_connection_test": 800,
 	"get_lab_form_options": 200,
-	"get_deploy_history": 600,
 }
 
 # The twelve rows benchpress.diagnostics always returns; the real checks talk to
@@ -456,19 +455,6 @@ class TestApi(IntegrationTestCase):
 		self.assertEqual(options["frappe_versions"], [v for v in versions if v])
 		self.assertEqual(options["defaults"]["cpu_cores"], "1")
 		self.assert_within_budget("get_lab_form_options", elapsed_ms)
-
-	def test_get_deploy_history_shape_and_timing(self):
-		history, elapsed_ms = _timed(api.get_deploy_history)
-		row = next(row for row in history["rows"] if row["name"] == self.deploy_log.name)
-		self.assertEqual(row["bench"], self.bench.name)
-		self.assertEqual(row["lab"], self.lab.name)
-		self.assertEqual(row["result"], "Deploying")
-		self.assert_within_budget("get_deploy_history", elapsed_ms)
-
-	def test_history_never_returns_the_log_bodies_it_parsed(self):
-		"""A list of runs is not a list of logs — the messages stay on the server."""
-		for row in api.get_deploy_history()["rows"]:
-			self.assertNotIn("message", row)
 
 	def test_get_device_types_is_the_backend_list(self):
 		from benchpress.vpn_adapter import DEVICE_TYPES
