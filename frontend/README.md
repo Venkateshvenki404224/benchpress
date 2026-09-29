@@ -40,7 +40,7 @@ yarn test:run
 
 ## Structure
 
-- `src/pages/` -- routed pages (Labs, NewLab, LabDetail, BenchInstances, DeployLogs, BuildLogs, Devices, Settings)
+- `src/pages/` -- routed pages (Labs, NewLab, LabDetail, BenchInstances, DeployLogs, Devices, Settings)
 - `src/components/` -- shared components
 - `src/router.js` -- Vue Router routes
 - `src/socket.js` -- socket.io client for real-time build/deploy logs

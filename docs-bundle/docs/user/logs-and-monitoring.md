@@ -2,7 +2,7 @@
 title: Read logs and container stats
 description: The deploy stepper, the raw log and its step markers, the build
   log, and the CPU and memory bars on a running bench.
-lastModified: "2026-09-27T11:18:31-04:00"
+lastModified: "2026-09-27T21:09:56+05:30"
 lastAuthor: Venkatesh
 ---
 # Read logs and container stats
@@ -14,7 +14,7 @@ months after it finished. This page finds those logs and reads them.
 the time went.
 
 **Before you start.** Nothing. A log exists as soon as a run starts. Build logs
-and build history are admin-only.
+are admin-only.
 
 ## Steps
 
@@ -93,7 +93,7 @@ and build history are admin-only.
    than a live meter. `checked 58s ago` is the honest age of the reading.
 
 5. Open the **Build log** tab for the image the bench was made from. This tab
-   and the build history are admin-only.
+   is admin-only.
 
    ![The Build log tab of the Frappe CRM lab, seen as an admin at 1280 by 800 pixels. The sidebar still carries a Templates entry, from before Templates moved to a tab on the Labs page. Six collapsible rows each carry a green dot: Build started, Step 1 of 4 FROM benchpress slash crm colon lab, Step 2 of 4 COPY golden to slash opt slash benchpress slash golden, Step 3 of 4 COPY setup-site.sh, Step 4 of 4 LABEL benchpress.golden equals 1 and benchpress.golden.mariadb equals 10.6.28-MariaDB-ubu2204, and Build complete, golden in benchpress slash crm colon lab. The last row is expanded and reads No output.](../images/user/logs-and-monitoring/04-build-log.png)
 
@@ -108,12 +108,11 @@ and build history are admin-only.
 
 ## Find an older run
 
-Neither history is in the sidebar. Both hang off the list they belong to.
+Deploy history is not in the sidebar. It hangs off the Instances page.
 
 |History|Where|Who|
 |--|--|--|
 |Deploy history|**Instances** page|everybody, for the benches they can see|
-|Build history|**Labs** page, beside **New lab**|admins|
 
 Each row carries the run, a result badge, the last step the run opened, the
 duration and when it started. Clicking a row opens the lab.
@@ -150,7 +149,6 @@ its last step and its duration. The table does not guess.
 |Deploy log|**Deploy log** on the lab page|the latest run for that bench|
 |Deploy history|**Instances** page|your benches, or all of them for an admin|
 |Build log|**Build log** on the lab page|the latest image build for that lab. Admins|
-|Build history|**Labs** page|every build. Admins|
 
 ### Retention
 

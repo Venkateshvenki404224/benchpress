@@ -202,8 +202,7 @@ const utilityItems = computed(() => [
 	},
 ]);
 
-// Five flat items. Deploy and build history are reached from the objects they
-// belong to, so the old Logs section is gone; Settings is in the header menu.
+// Five flat items. Deploy history is reached from Instances, so the old Logs section is gone; Settings is in the header menu.
 const NAV_ITEMS = [
 	{
 		label: "Overview",
@@ -217,7 +216,7 @@ const NAV_ITEMS = [
 		icon: FlaskConicalIcon,
 		to: "/labs",
 		dataTest: "nav-labs",
-		routes: ["Labs", "LabTemplates", "LabDetail", "NewLab", "BuildLogs"],
+		routes: ["Labs", "LabTemplates", "LabDetail", "NewLab"],
 	},
 	{
 		label: "Benches",

@@ -1,7 +1,6 @@
 import { expect, test } from "@playwright/test";
 import {
   createTestBench,
-  createTestBuildLog,
   createTestDeployLog,
   deleteTestDoc,
   deployStepLine,
@@ -10,9 +9,8 @@ import { createTestLab } from "./fixtures/test-data";
 import { RunHistoryPage } from "./pages/RunHistoryPage";
 
 /**
- * The two history tables. They share one component, so the assertions that
- * matter are the ones about what a row says: the result badge, the step the run
- * last opened, its duration, and the em-dash where a run recorded neither.
+ * The assertions that matter are the ones about what a row says: the step the
+ * run last opened, its duration, and the em-dash where a run recorded neither.
  */
 const STRUCTURED_RUN = [
   "=== Deploy started ===",
@@ -27,7 +25,6 @@ let labName: string;
 let benchName: string;
 let structuredLog: string;
 let legacyLog: string;
-let buildLog: string;
 
 test.describe("Run history", () => {
   test.beforeEach(async ({ page }) => {
@@ -41,21 +38,12 @@ test.describe("Run history", () => {
 
     structuredLog = (await createTestDeployLog(page, benchName, STRUCTURED_RUN, "success")).name;
     legacyLog = (await createTestDeployLog(page, benchName, LEGACY_RUN, "info")).name;
-    buildLog = (
-      await createTestBuildLog(
-        page,
-        labName,
-        "=== Build started ===\n=== Installing apps ===\n=== Build failed: app install exited 128 ===",
-        "error"
-      )
-    ).name;
   });
 
   test.afterEach(async ({ page }) => {
     for (const [doctype, name] of [
       ["Deploy Log", structuredLog],
       ["Deploy Log", legacyLog],
-      ["Build Log", buildLog],
       ["Bench Instance", benchName],
       ["Lab", labName],
     ] as const) {
@@ -84,37 +72,21 @@ test.describe("Run history", () => {
     await expect(history.table).toContainText("Deploy started");
   });
 
-  test("both tables state the seven-day retention", async ({ page }) => {
-    for (const history of [RunHistoryPage.deploy(page), RunHistoryPage.build(page)]) {
-      await history.goto();
-      await expect(history.retentionNote).toContainText("kept for 7 days");
-    }
-  });
-
-  test("build history names the failing step and shows a result badge", async ({ page }) => {
-    const history = RunHistoryPage.build(page);
+  test("the table states the seven-day retention", async ({ page }) => {
+    const history = RunHistoryPage.deploy(page);
     await history.goto();
-
-    await expect(history.row(buildLog)).toBeVisible();
-    await expect(history.table).toContainText("Installing apps");
-    await expect(history.table).toContainText("Failed");
+    await expect(history.retentionNote).toContainText("kept for 7 days");
   });
 
   test("a row opens the lab behind the run", async ({ page }) => {
-    const history = RunHistoryPage.build(page);
+    const history = RunHistoryPage.deploy(page);
     await history.goto();
 
-    await history.row(buildLog).click();
+    await history.row(structuredLog).click();
     await page.waitForURL(`**/labs/${labName}`, { timeout: 20_000 });
   });
 
-  test("each table links back to its parent, since neither is in the sidebar", async ({ page }) => {
-    const build = RunHistoryPage.build(page);
-    await build.goto();
-    await expect(build.backLink).toContainText("Labs");
-    await build.backLink.click();
-    await page.waitForURL("**/labs", { timeout: 20_000 });
-
+  test("the table links back to Instances, since it is not in the sidebar", async ({ page }) => {
     const deploy = RunHistoryPage.deploy(page);
     await deploy.goto();
     await expect(deploy.backLink).toContainText("Instances");

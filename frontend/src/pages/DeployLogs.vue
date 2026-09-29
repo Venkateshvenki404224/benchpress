@@ -17,9 +17,8 @@
 </template>
 
 <script setup>
-// The same table as Build history, with a bench as the subject. `bench_name` is
-// an md5, so a deploy row is named after the lab it deployed — `benchLabel` is
-// the one place that convention lives.
+// `bench_name` is an md5, so a deploy row is named after the lab it deployed —
+// `benchLabel` is the one place that convention lives.
 import RunHistory from "@/components/RunHistory.vue";
 import { deployHistoryResource } from "@/data/runHistory";
 import { benchLabel } from "@/utils/labSpecs";

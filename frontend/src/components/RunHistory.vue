@@ -25,13 +25,6 @@
 					{{ row.subject }}
 				</span>
 
-				<span
-					v-else-if="column.key === 'image_tag'"
-					class="truncate font-mono text-2xs text-ink-gray-6"
-				>
-					{{ row.image_tag || EM_DASH }}
-				</span>
-
 				<StatusBadge v-else-if="column.key === 'result'" :status="row.result" />
 
 				<span
@@ -74,10 +67,6 @@
 </template>
 
 <script setup>
-// Build history and deploy history are the same table with a different subject,
-// so they are one component. They were near-identical twins before this phase
-// and should not become twins again.
-//
 // Every column that the run itself did not record renders an em-dash. A run
 // that predates the pipeline's step markers has no last step and no measured
 // duration, and inventing either would be worse than the gap.

@@ -200,7 +200,6 @@ refusing on one would take every golden on the host out of service on a routine 
 | **LabDetail** | `/labs/:labId` | Tabbed: Dashboard, Sites, Deploy/Build Log. Confirmation dialogs for Deploy/Stop |
 | **BenchInstances** | `/bench-instances` | Table of all bench containers with status, IP, CPU/memory |
 | **DeployLogs** | `/deploy-logs` | Deploy log list with expandable entries |
-| **BuildLogs** | `/build-logs` | Build log list with expandable entries |
 | **Devices** | `/devices` | VPN device management: add, remove, download config |
 | **Settings** | `/settings` | Global settings dialog using createDocumentResource |
 

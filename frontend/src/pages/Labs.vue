@@ -11,14 +11,6 @@
 			<div class="ml-auto flex flex-wrap gap-2">
 				<Button
 					v-if="userContext.isAdmin"
-					variant="subtle"
-					data-test="build-history"
-					@click="router.push('/build-logs')"
-				>
-					Build history
-				</Button>
-				<Button
-					v-if="userContext.isAdmin"
 					variant="solid"
 					data-test="new-lab"
 					@click="router.push('/labs/new')"

@@ -2,7 +2,7 @@
 title: Quick tour
 description: The five screens in the BenchPress sidebar, and every number the
   Overview dashboard reports.
-lastModified: "2026-09-27T11:18:31-04:00"
+lastModified: "2026-09-27T21:09:56+05:30"
 lastAuthor: Venkatesh
 ---
 # Quick tour
@@ -120,7 +120,7 @@ BenchPress User.
 |--|--|--|
 |Primary button|New lab|New environment|
 |Instance card heading|All instances|My environments|
-|**New lab** and **Build history** on Labs|Shown|Hidden|
+|**New lab** on Labs|Shown|Hidden|
 |Shared infrastructure card|Shown|Hidden|
 
 A user also sees only their own benches. An admin sees every bench on the

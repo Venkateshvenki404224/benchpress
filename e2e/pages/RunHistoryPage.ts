@@ -1,10 +1,6 @@
 import { type Locator, type Page } from "@playwright/test";
 import { BasePage } from "./BasePage";
 
-/**
- * Build history and deploy history are one component with two subjects, so
- * they are one page object addressed by the screen's own `data-test` root.
- */
 export class RunHistoryPage extends BasePage {
   readonly root: Locator;
   readonly table: Locator;
@@ -14,7 +10,7 @@ export class RunHistoryPage extends BasePage {
 
   constructor(
     page: Page,
-    private readonly key: "build-history" | "deploy-history",
+    private readonly key: "deploy-history",
     private readonly path: string
   ) {
     super(page);
@@ -23,10 +19,6 @@ export class RunHistoryPage extends BasePage {
     this.retentionNote = this.testId("retention-note");
     this.backLink = this.testId("back-link");
     this.emptyAction = this.testId("empty-action");
-  }
-
-  static build(page: Page) {
-    return new RunHistoryPage(page, "build-history", "/build-logs");
   }
 
   static deploy(page: Page) {

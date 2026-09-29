@@ -28,7 +28,7 @@
 - [Golden images](https://benchpress.cloud/docs/operator/golden-images): A lab's finished site is baked into its own image as a database dump, so a deploy restores it instead of creating tables — the measured numbers, the two settings, and why a golden gets refused.
 - [The image cache](https://benchpress.cloud/docs/operator/image-cache): One image per lab, tagged benchpress/<lab_id>:lab — what it costs on disk, how the weekly prewarm and sweep work, and what is safe to prune.
 - [Upgrading](https://benchpress.cloud/docs/operator/upgrading): Move a BenchPress install to a newer release — the backup gate, the five steps, the scripted path, rollback, and why lab images are a separate opt-in.
-- [Production safety](https://benchpress.cloud/docs/operator/production-safety): What BenchPress is and is not ready to carry — the alpha verdict, the container privilege boundary, what is backed up, and the release checklist that covers 25 of 52 whitelisted callables.
+- [Production safety](https://benchpress.cloud/docs/operator/production-safety): What BenchPress is and is not ready to carry — the alpha verdict, the container privilege boundary, what is backed up, and the release checklist that covers 25 of 51 whitelisted callables.
 - [Diagnostics](https://benchpress.cloud/docs/operator/diagnostics): The twelve read-only checks that ask Docker, MariaDB, Redis and the kernel what is true — how to run them, what each failure means, and the four things they do not cover.
 - [Credits and billing](https://benchpress.cloud/docs/operator/credits-and-billing): Optional and off by default — the metering half of BenchPress, covering leases, balances, the ledger, admin adjustments, and the optional Razorpay handoff.
 - [Admission and limits](https://benchpress.cloud/docs/operator/admission-and-limits): Optional and off by default — concurrency caps, size ceilings, device and build quotas, how a slot is claimed as a row, and the acceptance run that proves access still works.
@@ -165,7 +165,7 @@ BenchPress User.
 |--|--|--|
 |Primary button|New lab|New environment|
 |Instance card heading|All instances|My environments|
-|**New lab** and **Build history** on Labs|Shown|Hidden|
+|**New lab** on Labs|Shown|Hidden|
 |Shared infrastructure card|Shown|Hidden|
 
 A user also sees only their own benches. An admin sees every bench on the
@@ -194,7 +194,7 @@ deploy. You need it to open the bench afterwards.
 1. Open the **Templates** tab on the **Labs** page. Its URL is
    `/frontend/labs/templates`.
 
-   ![The Labs page at 1280 by 800 pixels with the Templates tab open, seen as an administrator. The sidebar holds Overview, Labs, Benches, Instances and Devices, and Labs is highlighted. The header breadcrumb reads BenchPress / Templates. The Labs heading has Build history and New lab buttons at the right. Below it, the My labs and Templates tabs sit above a search box and Apps and Version filters. Nine template cards fill a three-column grid, and the bottom edge cuts off the third row. Each card carries a logo, a title, a Frappe version, a description, app chips and resource chips. ERPNext on version-15 is tagged Most used. Each card reads a deploy estimate such as ~3 min to deploy and offers a Use template button.](../images/user/deploy-from-template/01-templates.png)
+   ![The Labs page at 1280 by 800 pixels with the Templates tab open, seen as an administrator. The sidebar holds Overview, Labs, Benches, Instances and Devices, and Labs is highlighted. The header breadcrumb reads BenchPress / Templates. The Labs heading has one button at the right, New lab. Below it, the My labs and Templates tabs sit above a line that reads Ready-made recipes, a search box, and Apps and Version filters. Nine template cards fill a three-column grid, and the bottom edge cuts off the third row. Each card carries a logo, a title, a Frappe version, a description, app chips and resource chips. ERPNext on version-15 is tagged Most used. Each card reads a deploy estimate such as ~3 min to deploy and offers a Use template button.](../images/user/deploy-from-template/01-templates.png)
 
    Every card names the same five things: the app list, the Frappe version, the
    memory and CPU the bench gets, and either a deploy estimate or the lab that
@@ -1423,7 +1423,7 @@ months after it finished. This page finds those logs and reads them.
 the time went.
 
 **Before you start.** Nothing. A log exists as soon as a run starts. Build logs
-and build history are admin-only.
+are admin-only.
 
 ## Steps
 
@@ -1502,7 +1502,7 @@ and build history are admin-only.
    than a live meter. `checked 58s ago` is the honest age of the reading.
 
 5. Open the **Build log** tab for the image the bench was made from. This tab
-   and the build history are admin-only.
+   is admin-only.
 
    ![The Build log tab of the Frappe CRM lab, seen as an admin at 1280 by 800 pixels. The sidebar still carries a Templates entry, from before Templates moved to a tab on the Labs page. Six collapsible rows each carry a green dot: Build started, Step 1 of 4 FROM benchpress slash crm colon lab, Step 2 of 4 COPY golden to slash opt slash benchpress slash golden, Step 3 of 4 COPY setup-site.sh, Step 4 of 4 LABEL benchpress.golden equals 1 and benchpress.golden.mariadb equals 10.6.28-MariaDB-ubu2204, and Build complete, golden in benchpress slash crm colon lab. The last row is expanded and reads No output.](../images/user/logs-and-monitoring/04-build-log.png)
 
@@ -1517,12 +1517,11 @@ and build history are admin-only.
 
 ## Find an older run
 
-Neither history is in the sidebar. Both hang off the list they belong to.
+Deploy history is not in the sidebar. It hangs off the Instances page.
 
 |History|Where|Who|
 |--|--|--|
 |Deploy history|**Instances** page|everybody, for the benches they can see|
-|Build history|**Labs** page, beside **New lab**|admins|
 
 Each row carries the run, a result badge, the last step the run opened, the
 duration and when it started. Clicking a row opens the lab.
@@ -1559,7 +1558,6 @@ its last step and its duration. The table does not guess.
 |Deploy log|**Deploy log** on the lab page|the latest run for that bench|
 |Deploy history|**Instances** page|your benches, or all of them for an admin|
 |Build log|**Build log** on the lab page|the latest image build for that lab. Admins|
-|Build history|**Labs** page|every build. Admins|
 
 ### Retention
 
@@ -1880,7 +1878,7 @@ from a browser and have nothing to do with each other.
 |Symptom|Cause|Fix|
 |--|--|--|
 |`/frontend` sends you to `/login`|No session|Sign in, then open `/frontend` again|
-|**Labs** has no **New lab** or **Build history** button, and **Settings** has no **Server** groups|Those are admin-only|Ask an admin. See [Quick tour](/docs/user/quick-tour)|
+|**Labs** has no **New lab** button, and **Settings** has no **Server** groups|Those are admin-only|Ask an admin. See [Quick tour](/docs/user/quick-tour)|
 |The sidebar has no credit meter and `/frontend/credits` bounces to Labs|Credits are switched off on this server|Nothing to do. See [Leases and credits](/docs/user/leases-and-credits)|
 |A lab you were shown is not in your list|A user sees only their own benches|Ask the owner, or an admin|
 
@@ -2414,8 +2412,8 @@ Throughout, replace `<site>` with your real site name.
 
    The sidebar is five items — Overview, Labs, Benches, Instances and
    Devices — with Settings in the account menu. Templates is a tab on the
-   Labs page. Build history and deploy history are not in the sidebar. They
-   are reached from Labs and Instances.
+   Labs page. Deploy history is not in the sidebar. It is reached from
+   Instances.
 
 ## Verify
 
@@ -3320,8 +3318,8 @@ bench --site <site> execute frappe.client.get_list \
 Then confirm what the person will actually see. `benchpress.api.get_user_context`
 returns the caller's identity and roles, and the SPA renders the sidebar from
 it. The user-facing proof is simpler still. Only an admin sees the **New lab**
-and **Build history** buttons on the **Labs** page. Only an admin sees
-**New lab** in the Overview header.
+button on the **Labs** page. Only an admin sees **New lab** in the Overview
+header.
 
 ## What each role may do
 
@@ -3379,7 +3377,6 @@ Confirmed by looking at both roles in the running app:
 
 |Surface|Why it is admin-only|
 |--|--|
-|**Build history** on the Labs page|build output can name private repositories|
 |**New lab** in the Overview and Labs header|creating a lab is a write on `Lab`|
 |The **Server** groups in **Settings**|`BenchPress Settings` is not readable by a user|
 |The **Build log** tab on a lab|build output can name private repositories|
@@ -3694,17 +3691,8 @@ occupies 54.74 GB, of which 19.12 GB is reclaimable.
 
    Both jobs also run weekly on their own.
 
-4. **Watch a build.** Open **Build history** at `/frontend/build-logs`,
-   reached from **Labs**. The screen is admin-only, and says so under its own
-   heading.
-
-   ![The Build history page in BenchPress, listing image builds across every lab in six columns — Lab, Image tag, Result, Last step, Duration and Started. The top row is Password Manager building benchpress/password-manager, Success, 26m 5s, 6 hours ago. One Frappe CRM row reads Failed after 44s, and several rows carry the image tag golden rather than a lab tag.](../images/operator/image-cache/01-build-logs.png)
-
-   Six columns: the lab, the image tag, the result, the last step reached, the
-   duration and when it started. The slowest build on this host took **26
-   minutes 5 seconds**, and one CRM row **failed after 44 seconds** at
-   `Build started`. Read the build history rather than the deploy log when a
-   deploy fails for a lab that has never been built.
+4. **Watch a build.** Open the lab and select the **Build log** tab. The tab
+   is admin-only. See [Logs and monitoring](/docs/user/logs-and-monitoring).
 
    **A row tagged `golden` is not an image build.** It is the pass that bakes
    the finished site's dump into an image that already exists. Those runs take
@@ -3990,7 +3978,7 @@ and never skip the step 0 gate.
 
 # Production safety
 URL: https://benchpress.cloud/docs/operator/production-safety
-What BenchPress is and is not ready to carry — the alpha verdict, the container privilege boundary, what is backed up, and the release checklist that covers 25 of 52 whitelisted callables.
+What BenchPress is and is not ready to carry — the alpha verdict, the container privilege boundary, what is backed up, and the release checklist that covers 25 of 51 whitelisted callables.
 
 Whether BenchPress is safe to run on your host, and what has to be true first.
 
@@ -4020,9 +4008,9 @@ ERPNext environments. It is not built to host customer data. Concretely:
   up. See [Backup and restore](/docs/operator/backup-and-restore).
 * **Single-tenant assumption.** Quotas, rate limits and audit trails are still
   in progress. Run BenchPress for people you trust, on a host dedicated to it.
-* **The security review is partial.** It covers 25 of the app's 52 whitelisted
+* **The security review is partial.** It covers 25 of the app's 51 whitelisted
   callables. The credit-purchase path and the per-bench credential endpoint are
-  among the 27 it never reached. See
+  among the 26 it never reached. See
   [the release checklist](#the-release-checklist).
 
 Use it on a dedicated dev box, a VM, or a cloud instance you can rebuild. Not
@@ -4086,10 +4074,10 @@ and secret-handling path. Every row below was re-checked against the code on
 2026-08-30. Two findings had been fixed, one described an endpoint that never
 existed, and several guard descriptions were wrong.
 
-**What the audit covered.** The app exposes **52** whitelisted callables. This
+**What the audit covered.** The app exposes **51** whitelisted callables. This
 checklist covers **25** of them: 16 endpoints and 9 controller methods. It also
 carried a row for a `create_site` endpoint, which does not exist in the code —
-that row is gone. **27 whitelisted callables have never been reviewed**, and
+that row is gone. **26 whitelisted callables have never been reviewed**, and
 that is the largest gap on this page. They are:
 
 |Never reviewed|Where|
@@ -4099,7 +4087,7 @@ that is the largest gap on this page. They are:
 |`launch_template`, `launch_lab`, `build_lab_golden`, `prewarm_catalog`|the one-click deploy and golden-build path|
 |`sign_up`, `join`, `notify_of_signup`, `approve`|`signup.py` and `waitlist.py`, the only self-service entry points|
 |`Credit Account.post_adjustment`, `post_refund`|controller methods that move a balance|
-|`server_time`, `get_lab_form_options`, `get_device_types`, `get_build_history`, `get_deploy_history`, `get_overview`, `get_vpn_status`, `run_connection_test`, `run_diagnostics`, `preflight_runtime`|the rest|
+|`server_time`, `get_lab_form_options`, `get_device_types`, `get_deploy_history`, `get_overview`, `get_vpn_status`, `run_connection_test`, `run_diagnostics`, `preflight_runtime`|the rest|
 
 Treat an unreviewed endpoint as unreviewed, not as safe.
 
@@ -4158,7 +4146,7 @@ Read the verdicts as: **Ready**, **Ready with a follow-up**, **Not ready**.
 
 1. **The container privilege boundary.** Ship only on a host that closes it.
    This is a deployment precondition, not an app default.
-2. **The 27 unreviewed endpoints.** Review them, starting with `buy_credits`,
+2. **The 26 unreviewed endpoints.** Review them, starting with `buy_credits`,
    which takes money, and `get_bench_credentials`, which decrypts passwords.
 3. **`Database Server` state-changing methods.** They call
    `frappe.has_permission` with no `ptype`, which checks `read`. Move them to
@@ -4189,9 +4177,9 @@ any password. The `create_site` item described an endpoint that does not exist.
 |Backed up|the shared MariaDB, nightly, 7 dumps|
 |Not backed up|bench Docker volumes|
 |Checklist reviewed|2026-07-02, re-verified against the code 2026-08-30|
-|Whitelisted callables|52|
+|Whitelisted callables|51|
 |Covered by this checklist|25|
-|Never reviewed|27|
+|Never reviewed|26|
 
 ## Related
 
@@ -5312,20 +5300,20 @@ A Vue 3 single-page app in `frontend/`, built with frappe-ui, vue-router and
 Tailwind. It is served from the same origin as the API, so a socket connection
 needs no separate host.
 
-Eleven routes exist. Four of them are admin-only, and one renders only while
-credits are on.
+Eleven routes exist. One of them is admin-only, and one renders only while
+credits are on. An old `/build-logs` link opens Labs.
 
 |Route|Screen|Who sees it|
 |--|--|--|
 |`/`|Overview|any app user|
 |`/labs`|Labs|any app user|
+|`/benches`|Benches|any app user|
 |`/bench-instances`|Instances|any app user|
 |`/labs/:labId`|Lab detail|the owner, and any admin|
 |`/devices`|Devices|any app user|
 |`/deploy-logs`|Deploy history|any app user, scoped to their benches|
 |`/labs/new`|New lab|admin only|
 |`/labs/templates`|The Templates tab of Labs|any app user|
-|`/build-logs`|Build history|admin only|
 |`/settings`|Settings|any app user. Only an admin sees the Server groups|
 |`/credits`|Credits|any app user, and only while credits are on|
 
@@ -5607,7 +5595,7 @@ The same four fields, with `lab` in place of `bench`. One row for each image
 build.
 
 Both log DocTypes are cleared after seven days. Neither is a complete record,
-and [Build history and deploy history](/docs/reference/api#history) states the
+and [Deploy history](/docs/reference/api#history) states the
 window rather than implying completeness.
 
 ## Instance Size
@@ -5865,22 +5853,17 @@ what actually happens.
 |--|--|--|--|
 |`get_deploy_logs`|`bench_name`|the log rows for one bench|`require_bench_access`|
 |`get_deploy_history`|—|up to 50 recent deploy runs|`require_app_user`, inside `run_history`|
-|`get_build_history`|—|up to 50 recent image builds|`require_app_user`, inside `run_history`|
 
-The two history endpoints do not check permissions in `api.py`. They delegate
+`get_deploy_history` does not check permissions in `api.py`. It delegates
 immediately to `benchpress/run_history.py`, and the check is the first statement
 there. This is the one place where the guard is a function call away, so the
 table names where it lives.
 
-Both are endpoints rather than a generic list read for a reason.
-`Build Log` had no query condition, and reading it through the generic list API
-served every user's image builds to everybody. Scoping cannot be added to a
-generic read, so it is applied here: deploy rows go through `frappe.get_list`
-and pick up `deploy_log_query_conditions`, and build rows are filtered by owner
-for anybody who is not an admin.
+It reads through `frappe.get_list`, so its rows pick up
+`deploy_log_query_conditions`.
 
-Both answers carry `window_days`, `limit` and `truncated`. Logs are cleared
-after seven days, so neither table is complete, and the answer says so rather
+The answer carries `window_days`, `limit` and `truncated`. Logs are cleared
+after seven days, so the table is not complete, and the answer says so rather
 than implying otherwise.
 
 ## Devices

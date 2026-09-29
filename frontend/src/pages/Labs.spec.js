@@ -184,18 +184,21 @@ describe("the Labs page", () => {
 		expect(find("labs-grid")).toBeNull();
 	});
 
-	it("shows New lab and Build history to an admin, and no From template button", () => {
-		expect(find("new-lab")).not.toBeNull();
-		expect(find("build-history")).not.toBeNull();
+	const headerActions = () =>
+		[...find("labs").firstElementChild.querySelectorAll("button")].map(
+			(button) => button.dataset.test
+		);
+
+	it("shows New lab to an admin as the only header action, and no From template button", () => {
+		expect(headerActions()).toEqual(["new-lab"]);
 		expect(find("from-template")).toBeNull();
 	});
 
-	it("hides New lab and Build history from a normal user", async () => {
+	it("hides New lab from a normal user, leaving no header action", async () => {
 		userContext.isAdmin = false;
 		await nextTick();
 
-		expect(find("new-lab")).toBeNull();
-		expect(find("build-history")).toBeNull();
+		expect(headerActions()).toEqual([]);
 		expect(find("from-template")).toBeNull();
 	});
 });

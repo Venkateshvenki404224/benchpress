@@ -3,7 +3,7 @@ title: Users and roles
 description: The two BenchPress roles, what each one may read and write, which
   screens are admin-only, and how ownership rather than a role decides who sees
   a bench.
-lastModified: "2026-09-27T11:18:31-04:00"
+lastModified: "2026-09-27T21:09:56+05:30"
 lastAuthor: Venkatesh
 ---
 # Users and roles
@@ -63,8 +63,8 @@ bench --site <site> execute frappe.client.get_list \
 Then confirm what the person will actually see. `benchpress.api.get_user_context`
 returns the caller's identity and roles, and the SPA renders the sidebar from
 it. The user-facing proof is simpler still. Only an admin sees the **New lab**
-and **Build history** buttons on the **Labs** page. Only an admin sees
-**New lab** in the Overview header.
+button on the **Labs** page. Only an admin sees **New lab** in the Overview
+header.
 
 ## What each role may do
 
@@ -122,7 +122,6 @@ Confirmed by looking at both roles in the running app:
 
 |Surface|Why it is admin-only|
 |--|--|
-|**Build history** on the Labs page|build output can name private repositories|
 |**New lab** in the Overview and Labs header|creating a lab is a write on `Lab`|
 |The **Server** groups in **Settings**|`BenchPress Settings` is not readable by a user|
 |The **Build log** tab on a lab|build output can name private repositories|

@@ -3,7 +3,7 @@ title: Architecture
 description: The moving parts of BenchPress — the control plane, the bench
   containers, the shared infrastructure, and which Python module owns each
   concern.
-lastModified: "2026-09-27T11:18:31-04:00"
+lastModified: "2026-09-27T21:09:56+05:30"
 lastAuthor: Venkatesh
 ---
 # Architecture
@@ -122,20 +122,20 @@ A Vue 3 single-page app in `frontend/`, built with frappe-ui, vue-router and
 Tailwind. It is served from the same origin as the API, so a socket connection
 needs no separate host.
 
-Eleven routes exist. Four of them are admin-only, and one renders only while
-credits are on.
+Eleven routes exist. One of them is admin-only, and one renders only while
+credits are on. An old `/build-logs` link opens Labs.
 
 |Route|Screen|Who sees it|
 |--|--|--|
 |`/`|Overview|any app user|
 |`/labs`|Labs|any app user|
+|`/benches`|Benches|any app user|
 |`/bench-instances`|Instances|any app user|
 |`/labs/:labId`|Lab detail|the owner, and any admin|
 |`/devices`|Devices|any app user|
 |`/deploy-logs`|Deploy history|any app user, scoped to their benches|
 |`/labs/new`|New lab|admin only|
 |`/labs/templates`|The Templates tab of Labs|any app user|
-|`/build-logs`|Build history|admin only|
 |`/settings`|Settings|any app user. Only an admin sees the Server groups|
 |`/credits`|Credits|any app user, and only while credits are on|
 

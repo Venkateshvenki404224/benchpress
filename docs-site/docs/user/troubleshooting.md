@@ -2,7 +2,7 @@
 title: Troubleshooting
 description: Every symptom a BenchPress user meets, its cause, and the page that
   fixes it — deploys, the VPN, SSH, code-server, logs and credits.
-lastModified: "2026-09-27T11:18:31-04:00"
+lastModified: "2026-09-27T21:09:56+05:30"
 lastAuthor: Venkatesh
 ---
 # Troubleshooting
@@ -35,7 +35,7 @@ from a browser and have nothing to do with each other.
 |Symptom|Cause|Fix|
 |--|--|--|
 |`/frontend` sends you to `/login`|No session|Sign in, then open `/frontend` again|
-|**Labs** has no **New lab** or **Build history** button, and **Settings** has no **Server** groups|Those are admin-only|Ask an admin. See [Quick tour](/docs/user/quick-tour)|
+|**Labs** has no **New lab** button, and **Settings** has no **Server** groups|Those are admin-only|Ask an admin. See [Quick tour](/docs/user/quick-tour)|
 |The sidebar has no credit meter and `/frontend/credits` bounces to Labs|Credits are switched off on this server|Nothing to do. See [Leases and credits](/docs/user/leases-and-credits)|
 |A lab you were shown is not in your list|A user sees only their own benches|Ask the owner, or an admin|
 

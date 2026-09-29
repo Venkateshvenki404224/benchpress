@@ -1,6 +1,6 @@
 ---
 title: Production safety
-description: What BenchPress is and is not ready to carry — the alpha verdict, the container privilege boundary, what is backed up, and the release checklist that covers 25 of 52 whitelisted callables.
+description: What BenchPress is and is not ready to carry — the alpha verdict, the container privilege boundary, what is backed up, and the release checklist that covers 25 of 51 whitelisted callables.
 ---
 
 # Production safety
@@ -33,9 +33,9 @@ ERPNext environments. It is not built to host customer data. Concretely:
   up. See [Backup and restore](/docs/operator/backup-and-restore).
 - **Single-tenant assumption.** Quotas, rate limits and audit trails are still
   in progress. Run BenchPress for people you trust, on a host dedicated to it.
-- **The security review is partial.** It covers 25 of the app's 52 whitelisted
+- **The security review is partial.** It covers 25 of the app's 51 whitelisted
   callables. The credit-purchase path and the per-bench credential endpoint are
-  among the 27 it never reached. See
+  among the 26 it never reached. See
   [the release checklist](#the-release-checklist).
 
 Use it on a dedicated dev box, a VM, or a cloud instance you can rebuild. Not
@@ -99,10 +99,10 @@ and secret-handling path. Every row below was re-checked against the code on
 2026-08-30. Two findings had been fixed, one described an endpoint that never
 existed, and several guard descriptions were wrong.
 
-**What the audit covered.** The app exposes **52** whitelisted callables. This
+**What the audit covered.** The app exposes **51** whitelisted callables. This
 checklist covers **25** of them: 16 endpoints and 9 controller methods. It also
 carried a row for a `create_site` endpoint, which does not exist in the code —
-that row is gone. **27 whitelisted callables have never been reviewed**, and
+that row is gone. **26 whitelisted callables have never been reviewed**, and
 that is the largest gap on this page. They are:
 
 | Never reviewed | Where |
@@ -112,7 +112,7 @@ that is the largest gap on this page. They are:
 | `launch_template`, `launch_lab`, `build_lab_golden`, `prewarm_catalog` | the one-click deploy and golden-build path |
 | `sign_up`, `join`, `notify_of_signup`, `approve` | `signup.py` and `waitlist.py`, the only self-service entry points |
 | `Credit Account.post_adjustment`, `post_refund` | controller methods that move a balance |
-| `server_time`, `get_lab_form_options`, `get_device_types`, `get_build_history`, `get_deploy_history`, `get_overview`, `get_vpn_status`, `run_connection_test`, `run_diagnostics`, `preflight_runtime` | the rest |
+| `server_time`, `get_lab_form_options`, `get_device_types`, `get_deploy_history`, `get_overview`, `get_vpn_status`, `run_connection_test`, `run_diagnostics`, `preflight_runtime` | the rest |
 
 Treat an unreviewed endpoint as unreviewed, not as safe.
 
@@ -171,7 +171,7 @@ Read the verdicts as: **Ready**, **Ready with a follow-up**, **Not ready**.
 
 1. **The container privilege boundary.** Ship only on a host that closes it.
    This is a deployment precondition, not an app default.
-2. **The 27 unreviewed endpoints.** Review them, starting with `buy_credits`,
+2. **The 26 unreviewed endpoints.** Review them, starting with `buy_credits`,
    which takes money, and `get_bench_credentials`, which decrypts passwords.
 3. **`Database Server` state-changing methods.** They call
    `frappe.has_permission` with no `ptype`, which checks `read`. Move them to
@@ -202,9 +202,9 @@ any password. The `create_site` item described an endpoint that does not exist.
 | Backed up | the shared MariaDB, nightly, 7 dumps |
 | Not backed up | bench Docker volumes |
 | Checklist reviewed | 2026-07-02, re-verified against the code 2026-08-30 |
-| Whitelisted callables | 52 |
+| Whitelisted callables | 51 |
 | Covered by this checklist | 25 |
-| Never reviewed | 27 |
+| Never reviewed | 26 |
 
 ## Related
 

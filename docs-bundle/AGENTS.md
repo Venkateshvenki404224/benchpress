@@ -50,7 +50,7 @@ is done.
 - [The image cache](./docs/operator/image-cache.md): One image per lab, tagged benchpress/<lab_id>:lab — what it costs on disk, how the weekly prewarm and sweep work, and what is safe to prune.
 - [Users and roles](./docs/operator/users-and-roles.md): The two BenchPress roles, what each one may read and write, which screens are admin-only, and how ownership rather than a role decides who sees a bench.
 - [Upgrading](./docs/operator/upgrading.md): Move a BenchPress install to a newer release — the backup gate, the five steps, the scripted path, rollback, and why lab images are a separate opt-in.
-- [Production safety](./docs/operator/production-safety.md): What BenchPress is and is not ready to carry — the alpha verdict, the container privilege boundary, what is backed up, and the release checklist that covers 25 of 52 whitelisted callables.
+- [Production safety](./docs/operator/production-safety.md): What BenchPress is and is not ready to carry — the alpha verdict, the container privilege boundary, what is backed up, and the release checklist that covers 25 of 51 whitelisted callables.
 - [Diagnostics](./docs/operator/diagnostics.md): The twelve read-only checks that ask Docker, MariaDB, Redis and the kernel what is true — how to run them, what each failure means, and the four things they do not cover.
 - [Credits and billing](./docs/operator/credits-and-billing.md): Optional and off by default — the metering half of BenchPress, covering leases, balances, the ledger, admin adjustments, and the optional Razorpay handoff.
 - [Admission and limits](./docs/operator/admission-and-limits.md): Optional and off by default — concurrency caps, size ceilings, device and build quotas, how a slot is claimed as a row, and the acceptance run that proves access still works.
@@ -163,7 +163,7 @@ so `enable_credits` is `0` and no page about billing applies to a plain install.
 ### Keep it safe
 
 - [Upgrading](./docs/operator/upgrading.md): Move a BenchPress install to a newer release — the backup gate, the five steps, the scripted path, rollback, and why lab images are a separate opt-in.
-- [Production safety](./docs/operator/production-safety.md): What BenchPress is and is not ready to carry — the alpha verdict, the container privilege boundary, what is backed up, and the release checklist that covers 25 of 52 whitelisted callables.
+- [Production safety](./docs/operator/production-safety.md): What BenchPress is and is not ready to carry — the alpha verdict, the container privilege boundary, what is backed up, and the release checklist that covers 25 of 51 whitelisted callables.
 - [Diagnostics](./docs/operator/diagnostics.md): The twelve read-only checks that ask Docker, MariaDB, Redis and the kernel what is true — how to run them, what each failure means, and the four things they do not cover.
 
 ### Optional — running it for a team
