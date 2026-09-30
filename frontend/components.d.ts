@@ -52,6 +52,7 @@ declare module 'vue' {
     RenewDialog: typeof import('./src/components/lab/RenewDialog.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
+    SearchFilterBar: typeof import('./src/components/SearchFilterBar.vue')['default']
     SectionCard: typeof import('./src/components/SectionCard.vue')['default']
     SettingsDialog: typeof import('./src/components/settings/SettingsDialog.vue')['default']
     SitesCard: typeof import('./src/components/lab/SitesCard.vue')['default']

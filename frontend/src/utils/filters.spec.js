@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ALL, matches, optionsFrom } from "./filters";
+import { ALL, matches, matchesSearch, optionsFrom } from "./filters";
 
 describe("optionsFrom", () => {
 	it("leads with an all option and sorts the rest", () => {
@@ -38,5 +38,36 @@ describe("matches", () => {
 	it("otherwise requires an exact match", () => {
 		expect(matches("Running", "Running")).toBe(true);
 		expect(matches("Running", "Stopped")).toBe(false);
+	});
+
+	it("matches any member when the value is a list", () => {
+		expect(matches(["erpnext", "hrms"], "hrms")).toBe(true);
+		expect(matches(["erpnext", "hrms"], "crm")).toBe(false);
+	});
+
+	it("accepts an empty list when the filter is ALL", () => {
+		expect(matches([], ALL)).toBe(true);
+		expect(matches([], "crm")).toBe(false);
+	});
+});
+
+describe("matchesSearch", () => {
+	it("accepts everything when the query is blank", () => {
+		expect(matchesSearch(["CRM"], "")).toBe(true);
+		expect(matchesSearch([], "   ")).toBe(true);
+	});
+
+	it("matches any value by case-insensitive substring", () => {
+		expect(matchesSearch(["Sales pipeline", "crm"], "PIPE")).toBe(true);
+		expect(matchesSearch(["Sales pipeline", "crm"], "helpdesk")).toBe(false);
+	});
+
+	it("trims the query", () => {
+		expect(matchesSearch(["crm"], "  crm  ")).toBe(true);
+	});
+
+	it("skips empty and missing values", () => {
+		expect(matchesSearch([null, undefined, "", "crm"], "crm")).toBe(true);
+		expect(matchesSearch([null, undefined, ""], "crm")).toBe(false);
 	});
 });
