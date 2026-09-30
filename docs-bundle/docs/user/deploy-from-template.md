@@ -2,7 +2,7 @@
 title: Deploy from a template
 description: Turn a catalog template into a running bench, and read the eleven
   pipeline steps while they run.
-lastModified: "2026-09-29T04:59:40-04:00"
+lastModified: "2026-09-30T20:56:42+05:30"
 lastAuthor: Venkatesh
 ---
 # Deploy from a template

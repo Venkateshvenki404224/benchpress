@@ -2,7 +2,7 @@
 title: API
 description: Every whitelisted BenchPress endpoint, with arguments, what each
   returns, and the permission check each one makes for itself.
-lastModified: "2026-09-29T04:59:40-04:00"
+lastModified: "2026-09-30T20:56:42+05:30"
 lastAuthor: Venkatesh
 ---
 # API
