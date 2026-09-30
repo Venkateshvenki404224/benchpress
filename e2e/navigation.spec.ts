@@ -74,10 +74,6 @@ test.describe("Navigation & Routing", () => {
 
     await basePage.clickNav("overview");
     await expect(basePage.testId("overview")).toBeVisible();
-
-    // The Logs section is gone — history is reached from its object.
-    await expect(page.locator('[data-test="nav-deploy-logs"]')).toHaveCount(0);
-    await expect(page.locator('[data-test="nav-build-logs"]')).toHaveCount(0);
   });
 
   test("search and notifications sit above the nav, not in the header", async ({

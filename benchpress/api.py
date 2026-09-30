@@ -551,21 +551,6 @@ def get_deploy_logs(bench_name: str) -> list[dict]:
 
 
 @frappe.whitelist()
-def get_build_history() -> dict:
-	"""Image-build runs. Scoped in `run_history`: Build Log has no query condition."""
-	from benchpress.run_history import get_build_history as _get_build_history
-
-	return _get_build_history()
-
-
-@frappe.whitelist()
-def get_deploy_history() -> dict:
-	from benchpress.run_history import get_deploy_history as _get_deploy_history
-
-	return _get_deploy_history()
-
-
-@frappe.whitelist()
 @requires_admission(caps=(cap_devices,))
 def add_device(device_name: str, device_type: str, public_key: str | None = None) -> dict:
 	require_app_user()

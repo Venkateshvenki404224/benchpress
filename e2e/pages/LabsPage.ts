@@ -18,7 +18,6 @@ export class LabsPage extends BasePage {
   readonly clearFilters: Locator;
   readonly newLabButton: Locator;
   readonly templatesTab: Locator;
-  readonly buildHistoryButton: Locator;
 
   constructor(page: Page) {
     super(page);
@@ -34,7 +33,6 @@ export class LabsPage extends BasePage {
     this.clearFilters = this.testId("clear-filters");
     this.newLabButton = this.testId("new-lab");
     this.templatesTab = this.testId("labs-tabs").getByRole("tab", { name: "Templates" });
-    this.buildHistoryButton = this.testId("build-history");
   }
 
   async goto() {
@@ -83,11 +81,9 @@ export class LabsPage extends BasePage {
 
   async expectAdminActionsVisible() {
     await expect(this.newLabButton).toBeVisible({ timeout: 10_000 });
-    await expect(this.buildHistoryButton).toBeVisible();
   }
 
   async expectAdminActionsHidden() {
     await expect(this.newLabButton).toHaveCount(0);
-    await expect(this.buildHistoryButton).toHaveCount(0);
   }
 }

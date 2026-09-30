@@ -4,7 +4,7 @@ import { createRouter, createWebHistory } from "vue-router";
 import { session } from "./data/session";
 import { userContext, waitForUserContext } from "./data/userContext";
 
-const ADMIN_ONLY_ROUTES = new Set(["NewLab", "BuildLogs"]);
+const ADMIN_ONLY_ROUTES = new Set(["NewLab"]);
 
 // `meta.title` is the current crumb in the header breadcrumb.
 const routes = [
@@ -50,18 +50,8 @@ const routes = [
 		meta: { title: "Lab detail" },
 		component: () => import("@/pages/LabDetail.vue"),
 	},
-	{
-		path: "/deploy-logs",
-		name: "DeployLogs",
-		meta: { title: "Deploy history" },
-		component: () => import("@/pages/DeployLogs.vue"),
-	},
-	{
-		path: "/build-logs",
-		name: "BuildLogs",
-		meta: { title: "Build history" },
-		component: () => import("@/pages/BuildLogs.vue"),
-	},
+	{ path: "/build-logs", redirect: { name: "Labs" } },
+	{ path: "/deploy-logs", redirect: { name: "BenchInstances" } },
 	{
 		path: "/devices",
 		name: "Devices",

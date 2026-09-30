@@ -2,7 +2,7 @@
 title: API
 description: Every whitelisted BenchPress endpoint, with arguments, what each
   returns, and the permission check each one makes for itself.
-lastModified: "2026-09-27T19:10:03+05:30"
+lastModified: "2026-09-29T04:59:40-04:00"
 lastAuthor: Venkatesh
 ---
 # API
@@ -171,24 +171,6 @@ what actually happens.
 |Endpoint|Arguments|Returns|Checks|
 |--|--|--|--|
 |`get_deploy_logs`|`bench_name`|the log rows for one bench|`require_bench_access`|
-|`get_deploy_history`|—|up to 50 recent deploy runs|`require_app_user`, inside `run_history`|
-|`get_build_history`|—|up to 50 recent image builds|`require_app_user`, inside `run_history`|
-
-The two history endpoints do not check permissions in `api.py`. They delegate
-immediately to `benchpress/run_history.py`, and the check is the first statement
-there. This is the one place where the guard is a function call away, so the
-table names where it lives.
-
-Both are endpoints rather than a generic list read for a reason.
-`Build Log` had no query condition, and reading it through the generic list API
-served every user's image builds to everybody. Scoping cannot be added to a
-generic read, so it is applied here: deploy rows go through `frappe.get_list`
-and pick up `deploy_log_query_conditions`, and build rows are filtered by owner
-for anybody who is not an admin.
-
-Both answers carry `window_days`, `limit` and `truncated`. Logs are cleared
-after seven days, so neither table is complete, and the answer says so rather
-than implying otherwise.
 
 ## Devices
 

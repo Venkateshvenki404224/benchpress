@@ -261,7 +261,7 @@ function runText(stored, liveRun, liveLog) {
 	return base + liveLog.value;
 }
 
-// Credentials and deploy history belong to a bench, so both follow its identity.
+// Credentials and deploy logs belong to a bench, so both follow its identity.
 watch(
 	() => bench.value?.name,
 	(name) => {

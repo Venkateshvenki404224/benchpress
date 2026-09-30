@@ -10,9 +10,7 @@
 </template>
 
 <script setup>
-// The way back from a screen the sidebar does not carry. Build and deploy
-// history live under Labs and Instances rather than in the nav, so each one
-// states its parent instead of leaving the user on a dead end.
+// The way back from a screen the sidebar does not carry.
 import { useRouter } from "vue-router";
 
 import ChevronLeftIcon from "~icons/lucide/chevron-left";

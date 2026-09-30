@@ -2,7 +2,7 @@
 title: The image cache
 description: One image per lab, tagged benchpress/<lab_id>:lab — what it costs
   on disk, how the weekly prewarm and sweep work, and what is safe to prune.
-lastModified: "2026-08-28T22:10:21+05:30"
+lastModified: "2026-09-29T04:59:40-04:00"
 lastAuthor: Venkatesh
 ---
 # The image cache
@@ -85,17 +85,8 @@ occupies 54.74 GB, of which 19.12 GB is reclaimable.
 
    Both jobs also run weekly on their own.
 
-4. **Watch a build.** Open **Build history** at `/frontend/build-logs`,
-   reached from **Labs**. The screen is admin-only, and says so under its own
-   heading.
-
-   ![The Build history page in BenchPress, listing image builds across every lab in six columns — Lab, Image tag, Result, Last step, Duration and Started. The top row is Password Manager building benchpress/password-manager, Success, 26m 5s, 6 hours ago. One Frappe CRM row reads Failed after 44s, and several rows carry the image tag golden rather than a lab tag.](../images/operator/image-cache/01-build-logs.png)
-
-   Six columns: the lab, the image tag, the result, the last step reached, the
-   duration and when it started. The slowest build on this host took **26
-   minutes 5 seconds**, and one CRM row **failed after 44 seconds** at
-   `Build started`. Read the build history rather than the deploy log when a
-   deploy fails for a lab that has never been built.
+4. **Watch a build.** Open the lab and select the **Build log** tab. The tab
+   is admin-only. See [Logs and monitoring](/docs/user/logs-and-monitoring).
 
    **A row tagged `golden` is not an image build.** It is the pass that bakes
    the finished site's dump into an image that already exists. Those runs take

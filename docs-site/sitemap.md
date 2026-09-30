@@ -59,7 +59,7 @@ Structured documentation sitemap for BenchPress.
 ### Keep it safe
 
 - [Upgrading](/docs/operator/upgrading): Move a BenchPress install to a newer release — the backup gate, the five steps, the scripted path, rollback, and why lab images are a separate opt-in.
-- [Production safety](/docs/operator/production-safety): What BenchPress is and is not ready to carry — the alpha verdict, the container privilege boundary, what is backed up, and the release checklist that covers 25 of 52 whitelisted callables.
+- [Production safety](/docs/operator/production-safety): What BenchPress is and is not ready to carry — the alpha verdict, the container privilege boundary, what is backed up, and the release checklist that covers 25 of 50 whitelisted callables.
 - [Diagnostics](/docs/operator/diagnostics): The twelve read-only checks that ask Docker, MariaDB, Redis and the kernel what is true — how to run them, what each failure means, and the four things they do not cover.
 
 ### Optional — running it for a team
