@@ -43,6 +43,7 @@ const { default: DatabasesCard } = await import("./DatabasesCard.vue");
 
 const BENCH = {
 	name: "b1",
+	database_limit: 5,
 	databases: [{ db_name: "bp_dev_old00000", db_user: "bp_dev_old00000" }],
 };
 
@@ -56,25 +57,80 @@ describe("the databases card", () => {
 	let root;
 	let created;
 
-	beforeEach(async () => {
+	async function mountCard(bench) {
+		if (app) unmountCard();
 		created = vi.fn();
 		root = document.createElement("div");
 		document.body.append(root);
-		app = createApp(DatabasesCard, { bench: BENCH, onCreated: created });
+		app = createApp(DatabasesCard, { bench, onCreated: created });
 		app.mount(root);
 		await nextTick();
-	});
+	}
 
-	afterEach(() => {
+	function unmountCard() {
 		app.unmount();
 		root.remove();
+		app = null;
+	}
+
+	beforeEach(async () => {
+		await mountCard(BENCH);
 	});
+
+	afterEach(unmountCard);
 
 	it("lists each database with its user and no password", () => {
 		const row = root.querySelector('[data-test="database-bp_dev_old00000"]');
 
 		expect(row.textContent).toContain("bp_dev_old00000");
 		expect(root.textContent).not.toContain("old-password");
+	});
+
+	it("shows how many databases are left", () => {
+		expect(root.querySelector('[data-test="databases-left"]').textContent.trim()).toBe(
+			"4 of 5 left"
+		);
+		expect(root.querySelector('[data-test="create-database"]').disabled).toBe(false);
+	});
+
+	it("names the plus button for screen readers", () => {
+		expect(
+			root.querySelector('[data-test="create-database"]').getAttribute("aria-label")
+		).toBe("Create database");
+	});
+
+	it("disables the button when no database is left", async () => {
+		await mountCard({ ...BENCH, database_limit: 1 });
+
+		expect(root.querySelector('[data-test="databases-left"]').textContent.trim()).toBe(
+			"No databases left"
+		);
+		expect(root.querySelector('[data-test="create-database"]').disabled).toBe(true);
+	});
+
+	it("shows a full bench when the cap is lower than what the bench holds", async () => {
+		await mountCard({
+			...BENCH,
+			database_limit: 1,
+			databases: [
+				...BENCH.databases,
+				{ db_name: "bp_dev_new00000", db_user: "bp_dev_new00000" },
+			],
+		});
+
+		expect(root.querySelector('[data-test="databases-left"]').textContent.trim()).toBe(
+			"No databases left"
+		);
+		expect(root.querySelector('[data-test="create-database"]').disabled).toBe(true);
+	});
+
+	it("counts a new database before the lab reloads", async () => {
+		root.querySelector('[data-test="create-database"]').click();
+		await settle();
+
+		expect(root.querySelector('[data-test="databases-left"]').textContent.trim()).toBe(
+			"3 of 5 left"
+		);
 	});
 
 	it("creates a database and shows its password and command", async () => {

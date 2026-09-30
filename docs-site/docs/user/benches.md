@@ -3,7 +3,7 @@ title: Work on your own bench
 description: Prepare a Frappe develop bench, log in over SSH with your own key,
   create a database, make a site with bench new-site, and serve it with bench
   start on your VPN address.
-lastModified: "2026-09-27T19:10:03+05:30"
+lastModified: "2026-09-30T15:09:57-04:00"
 lastAuthor: Venkatesh
 ---
 # Work on your own bench
@@ -51,7 +51,7 @@ shell.
 
 ## Create a database
 
-1. Press **Create database** on the **Databases** card of the bench page.
+1. Press **+** on the **Databases** card of the bench page.
 2. Copy the command that the card shows.
 
 The card shows the database name, its user, the password and the full command.
@@ -69,7 +69,8 @@ To see the password and the command again, press **Show password** on the
 database row.
 
 A bench holds at most five databases. An operator changes this limit with
-**Databases per self-managed bench** in **BenchPress Settings**.
+**Databases per self-managed bench** in **BenchPress Settings**. The **Databases**
+card shows how many databases are left, and it disables **+** when none are left.
 
 ## Make a site and serve it
 

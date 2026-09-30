@@ -1307,3 +1307,32 @@ class TestBenchDatabases(IntegrationTestCase):
 		databases = lab_detail.get_lab(self.bench_lab.name)["bench"]["databases"]
 
 		self.assertEqual(databases, [{"db_name": created["db_name"], "db_user": created["db_user"]}])
+
+	def test_the_lab_screen_sends_the_database_limit(self, _sql):
+		frappe.set_user(BENCH_OWNER)
+
+		bench = lab_detail.get_lab(self.bench_lab.name)["bench"]
+
+		self.assertEqual(bench["database_limit"], 5)
+
+	def test_the_database_limit_follows_the_setting(self, sql):
+		previous = frappe.db.get_single_value("BenchPress Settings", "max_bench_databases")
+		frappe.db.set_single_value("BenchPress Settings", "max_bench_databases", 2)
+		self.addCleanup(frappe.db.set_single_value, "BenchPress Settings", "max_bench_databases", previous)
+		frappe.set_user(BENCH_OWNER)
+		for _ in range(2):
+			api.create_bench_database(self.bench.name)
+		sql.reset_mock()
+
+		self.assertEqual(lab_detail.get_lab(self.bench_lab.name)["bench"]["database_limit"], 2)
+		with self.assertRaisesRegex(frappe.ValidationError, "2 databases"):
+			api.create_bench_database(self.bench.name)
+		sql.assert_not_called()
+
+	def test_an_ordinary_labs_bench_sends_no_database_limit(self, _sql):
+		self._bench(self.plain_lab)
+		frappe.set_user(BENCH_OWNER)
+
+		bench = lab_detail.get_lab(self.plain_lab.name)["bench"]
+
+		self.assertNotIn("database_limit", bench)

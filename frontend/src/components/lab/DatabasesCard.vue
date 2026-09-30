@@ -1,15 +1,22 @@
 <template>
 	<SectionCard title="Databases" :padded="false" data-test="databases-card">
 		<template #action>
-			<Button
-				variant="solid"
-				size="sm"
-				:loading="createAction.loading"
-				data-test="create-database"
-				@click="createDatabase"
-			>
-				Create database
-			</Button>
+			<span class="text-2xs tabular-nums text-ink-gray-5" data-test="databases-left">
+				{{ leftLabel }}
+			</span>
+			<Tooltip text="Create database">
+				<Button
+					variant="solid"
+					size="sm"
+					aria-label="Create database"
+					:disabled="!left"
+					:loading="createAction.loading"
+					data-test="create-database"
+					@click="createDatabase"
+				>
+					<template #icon><PlusIcon class="size-3.5" /></template>
+				</Button>
+			</Tooltip>
 		</template>
 
 		<p class="border-b border-outline-gray-1 px-4 py-2.5 text-2xs text-ink-gray-5">
@@ -79,8 +86,10 @@
 import CopyButton from "@/components/CopyButton.vue";
 import EmptyState from "@/components/EmptyState.vue";
 import SectionCard from "@/components/SectionCard.vue";
-import { Button, ErrorMessage, createResource } from "frappe-ui";
+import { Button, ErrorMessage, Tooltip, createResource } from "frappe-ui";
 import { computed, ref } from "vue";
+
+import PlusIcon from "~icons/lucide/plus";
 
 const props = defineProps({
 	bench: { type: Object, required: true },
@@ -100,6 +109,12 @@ const databases = computed(() => {
 	if (!latest || listed.some((database) => database.db_name === latest.db_name)) return listed;
 	return [...listed, { db_name: latest.db_name, db_user: latest.db_user }];
 });
+
+const limit = computed(() => props.bench.database_limit);
+const left = computed(() => Math.max(0, limit.value - databases.value.length));
+const leftLabel = computed(() =>
+	left.value ? `${left.value} of ${limit.value} left` : "No databases left"
+);
 
 async function createDatabase() {
 	try {

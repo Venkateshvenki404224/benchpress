@@ -5,7 +5,6 @@ import frappe
 from frappe import _
 from frappe.query_builder import DocType, Order
 from frappe.query_builder.functions import Count
-from frappe.utils import cint
 
 from benchpress import (
 	addressing,
@@ -20,7 +19,6 @@ from benchpress import (
 from benchpress.benchpress.doctype.bench_instance.bench_instance import DEPLOY_JOB_TIMEOUT
 
 MY_BENCHES_LIMIT = 100
-MAX_BENCH_DATABASES = 5
 
 # Every field the renew path decides from, read once under the row lock.
 RENEW_FIELDS = [
@@ -775,7 +773,7 @@ def create_bench_database(bench: str) -> dict:
 	from benchpress import mariadb_manager
 
 	doc = _own_self_managed_bench(bench, for_update=True)
-	cap = cint(frappe.get_cached_doc("BenchPress Settings").get("max_bench_databases")) or MAX_BENCH_DATABASES
+	cap = lab_detail.database_limit()
 	if len(doc.databases) >= cap:
 		frappe.throw(_("This bench already has {0} databases, the most it can hold.").format(cap))
 
