@@ -25,35 +25,14 @@
 			<template #tab-panel="{ tab }">
 				<TemplateCatalog v-if="tab.key === 'templates'" class="pt-4" />
 				<div v-else class="pt-4">
-					<div v-if="labs.length" class="mb-3 flex flex-wrap items-center gap-2">
-						<FormControl
-							class="w-[240px]"
-							type="text"
-							placeholder="Search labs"
-							v-model="search"
-							data-test="labs-search"
-						>
-							<template #prefix
-								><SearchIcon class="size-3.5 text-ink-gray-4"
-							/></template>
-						</FormControl>
-						<Select
-							v-model="statusFilter"
-							:options="statusOptions"
-							data-test="filter-status"
-						/>
-						<Select
-							v-model="versionFilter"
-							:options="versionOptions"
-							data-test="filter-version"
-						/>
-						<Select
-							v-model="ownerFilter"
-							class="max-w-full overflow-hidden"
-							:options="ownerOptions"
-							data-test="filter-owner"
-						/>
-					</div>
+					<SearchFilterBar
+						v-if="labs.length"
+						v-model="search"
+						v-model:selected="selected"
+						:controls="controls"
+						search-placeholder="Search labs"
+						search-test-id="labs-search"
+					/>
 
 					<p
 						v-if="labsResource.loading && !labs.length"
@@ -147,36 +126,48 @@
 
 <script setup>
 import EmptyState from "@/components/EmptyState.vue";
+import SearchFilterBar from "@/components/SearchFilterBar.vue";
 import SectionCard from "@/components/SectionCard.vue";
 import StatusBadge from "@/components/StatusBadge.vue";
 import LeaseCountdown from "@/components/lab/LeaseCountdown.vue";
 import RecipeCard from "@/components/lab/RecipeCard.vue";
 import TemplateCatalog from "@/components/lab/TemplateCatalog.vue";
 import OnboardingPanel from "@/components/overview/OnboardingPanel.vue";
+import { useSearchFilters } from "@/composables/useSearchFilters";
 import { labsResource } from "@/data/labs";
 import { userContext } from "@/data/userContext";
-import { ALL, matches, optionsFrom } from "@/utils/filters";
 import { resourceChips } from "@/utils/labSpecs";
-import { Button, FormControl, Select, Tabs, dayjsLocal } from "frappe-ui";
-import { computed, onMounted, ref } from "vue";
+import { Button, Tabs, dayjsLocal } from "frappe-ui";
+import { computed, onMounted } from "vue";
 import { useRoute, useRouter } from "vue-router";
 
 import PlusIcon from "~icons/lucide/plus";
-import SearchIcon from "~icons/lucide/search";
 
 const TABS = [
 	{ key: "labs", label: "My labs", route: "/labs" },
 	{ key: "templates", label: "Templates", route: "/labs/templates" },
 ];
 
+const LAB_FILTERS = [
+	{ key: "status", label: "Status", value: (lab) => lab.status, testId: "filter-status" },
+	{
+		key: "version",
+		label: "Version",
+		value: (lab) => lab.frappe_version,
+		testId: "filter-version",
+	},
+	{
+		key: "owner",
+		label: "Owner",
+		value: (lab) => lab.owner,
+		testId: "filter-owner",
+		class: "max-w-full overflow-hidden",
+	},
+];
+
 const router = useRouter();
 const route = useRoute();
 const activeTab = computed(() => (route.name === "LabTemplates" ? 1 : 0));
-
-const search = ref("");
-const statusFilter = ref(ALL);
-const versionFilter = ref(ALL);
-const ownerFilter = ref(ALL);
 
 // `get_labs` returns every lab the caller may see in one bounded response, so
 // filtering here has no hidden page ceiling behind it.
@@ -184,48 +175,10 @@ onMounted(() => labsResource.reload());
 
 const labs = computed(() => labsResource.data ?? []);
 
-const statusOptions = computed(() =>
-	optionsFrom(
-		"Status",
-		labs.value.map((lab) => lab.status)
-	)
-);
-const versionOptions = computed(() =>
-	optionsFrom(
-		"Version",
-		labs.value.map((lab) => lab.frappe_version)
-	)
-);
-const ownerOptions = computed(() =>
-	optionsFrom(
-		"Owner",
-		labs.value.map((lab) => lab.owner)
-	)
-);
-
-const rows = computed(() =>
-	labs.value.filter(
-		(lab) =>
-			matches(lab.status, statusFilter.value) &&
-			matches(lab.frappe_version, versionFilter.value) &&
-			matches(lab.owner, ownerFilter.value) &&
-			matchesSearch(lab)
-	)
-);
-
-function matchesSearch(lab) {
-	const query = search.value.trim().toLowerCase();
-	if (!query) return true;
-	const haystack = [lab.lab_id, lab.title, lab.description, ...(lab.app_names ?? [])];
-	return haystack.some((value) => (value || "").toLowerCase().includes(query));
-}
-
-function clearFilters() {
-	search.value = "";
-	statusFilter.value = ALL;
-	versionFilter.value = ALL;
-	ownerFilter.value = ALL;
-}
+const { search, selected, controls, rows, clearFilters } = useSearchFilters(labs, {
+	searchIn: (lab) => [lab.lab_id, lab.title, lab.description, ...(lab.app_names ?? [])],
+	filters: LAB_FILTERS,
+});
 
 function openLab(lab) {
 	router.push({ name: "LabDetail", params: { labId: lab.name } });

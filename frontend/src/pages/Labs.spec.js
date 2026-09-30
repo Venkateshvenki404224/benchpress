@@ -26,7 +26,7 @@ const DRAFT = {
 	description: "A ticket desk to try before the rollout.",
 	frappe_version: "version-15",
 	status: "Draft",
-	owner: "Administrator",
+	owner: "support@example.com",
 	logo: "",
 	memory_limit: "2g",
 	cpu_cores: 1,
@@ -67,8 +67,34 @@ vi.mock("frappe-ui", () => {
 		Badge: passThrough("span"),
 		Button: passThrough("button"),
 		ErrorMessage: () => null,
-		FormControl: passThrough("input"),
-		Select: passThrough("div"),
+		FormControl: {
+			props: ["modelValue"],
+			emits: ["update:modelValue"],
+			setup(props, { emit }) {
+				return () =>
+					h("input", {
+						value: props.modelValue,
+						onInput: (event) => emit("update:modelValue", event.target.value),
+					});
+			},
+		},
+		Select: {
+			props: ["modelValue", "options"],
+			emits: ["update:modelValue"],
+			setup(props, { emit }) {
+				return () =>
+					h(
+						"select",
+						{
+							value: props.modelValue,
+							onChange: (event) => emit("update:modelValue", event.target.value),
+						},
+						props.options.map((option) =>
+							h("option", { value: option.value }, option.label)
+						)
+					);
+			},
+		},
 		Tabs,
 		createResource: () => ({ data: [], loading: false, error: null }),
 		dayjsLocal: () => ({ fromNow: () => "a day ago" }),
@@ -95,6 +121,7 @@ vi.mock("@/data/userContext", async () => {
 });
 
 const { useRoute } = await import("vue-router");
+const { labsResource } = await import("@/data/labs");
 const { userContext } = await import("@/data/userContext");
 const { default: Labs } = await import("./Labs.vue");
 
@@ -200,5 +227,109 @@ describe("the Labs page", () => {
 
 		expect(headerActions()).toEqual([]);
 		expect(find("from-template")).toBeNull();
+	});
+
+	const cards = () =>
+		[...root.querySelectorAll('[data-test^="lab-card-"]')].map((card) =>
+			card.dataset.test.replace("lab-card-", "")
+		);
+
+	async function type(query) {
+		const input = find("labs-search");
+		input.value = query;
+		input.dispatchEvent(new Event("input"));
+		await nextTick();
+	}
+
+	async function choose(test, value) {
+		const select = find(test);
+		select.value = value;
+		select.dispatchEvent(new Event("change"));
+		await nextTick();
+	}
+
+	it("keeps the labs-search and filter-* hooks the e2e suite drives", () => {
+		expect(find("labs-search").tagName).toBe("INPUT");
+		expect(find("labs-search").placeholder).toBe("Search labs");
+		expect(find("filter-status").tagName).toBe("SELECT");
+		expect(find("filter-version").tagName).toBe("SELECT");
+		expect(find("filter-owner").tagName).toBe("SELECT");
+	});
+
+	it("offers each filter only the values the labs have", () => {
+		const values = (test) => [...find(test).options].map((option) => option.value);
+
+		expect(values("filter-status")).toEqual(["__all__", "Draft", "Ready"]);
+		expect(values("filter-version")).toEqual(["__all__", "version-15", "version-16"]);
+		expect(find("filter-status").options[0].textContent).toBe("Status: all");
+	});
+
+	it("keeps the owner filter's overflow classes", () => {
+		expect(find("filter-owner").classList.contains("max-w-full")).toBe(true);
+		expect(find("filter-owner").classList.contains("overflow-hidden")).toBe(true);
+	});
+
+	it("searches a lab's app names", async () => {
+		await type("helpdesk");
+
+		expect(cards()).toEqual(["support-trial"]);
+	});
+
+	it("searches a lab's description", async () => {
+		await type("order-to-cash");
+
+		expect(cards()).toEqual(["sales-desk"]);
+	});
+
+	it("searches a lab's title", async () => {
+		await type("support trial");
+
+		expect(cards()).toEqual(["support-trial"]);
+	});
+
+	it("searches a lab's id, ignoring case", async () => {
+		await type("BARE");
+
+		expect(cards()).toEqual(["bare-bench"]);
+	});
+
+	it("narrows by version", async () => {
+		await choose("filter-version", "version-15");
+
+		expect(cards()).toEqual(["support-trial"]);
+	});
+
+	it("narrows by owner", async () => {
+		await choose("filter-owner", "Administrator");
+
+		expect(cards()).toEqual(["sales-desk", "bare-bench"]);
+	});
+
+	it("narrows by status, and Clear filters brings every lab back", async () => {
+		await choose("filter-status", "Ready");
+		expect(cards()).toEqual(["sales-desk", "bare-bench"]);
+
+		await type("no such lab");
+		expect(cards()).toEqual([]);
+		expect(root.textContent).toContain("No labs match these filters.");
+
+		find("clear-filters").click();
+		await nextTick();
+
+		expect(cards()).toEqual(["sales-desk", "support-trial", "bare-bench"]);
+		expect(find("labs-search").value).toBe("");
+		expect(find("filter-status").value).toBe("__all__");
+	});
+
+	it("hides the bar when there are no labs", async () => {
+		const labs = labsResource.data;
+		labsResource.data = [];
+		try {
+			await nextTick();
+
+			expect(find("labs-search")).toBeNull();
+		} finally {
+			labsResource.data = labs;
+		}
 	});
 });
