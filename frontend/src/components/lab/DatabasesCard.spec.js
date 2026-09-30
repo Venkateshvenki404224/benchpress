@@ -93,6 +93,12 @@ describe("the databases card", () => {
 		expect(root.querySelector('[data-test="create-database"]').disabled).toBe(false);
 	});
 
+	it("names the plus button for screen readers", () => {
+		expect(
+			root.querySelector('[data-test="create-database"]').getAttribute("aria-label")
+		).toBe("Create database");
+	});
+
 	it("disables the button when no database is left", async () => {
 		await mountCard({ ...BENCH, database_limit: 1 });
 
