@@ -2,11 +2,12 @@
 	<SectionCard title="Databases" :padded="false" data-test="databases-card">
 		<template #action>
 			<span class="text-2xs tabular-nums text-ink-gray-5" data-test="databases-left">
-				{{ left }} of {{ limit }} left
+				{{ leftLabel }}
 			</span>
 			<Button
 				variant="solid"
 				size="sm"
+				:disabled="!left"
 				:loading="createAction.loading"
 				data-test="create-database"
 				@click="createDatabase"
@@ -106,6 +107,9 @@ const databases = computed(() => {
 
 const limit = computed(() => props.bench.database_limit);
 const left = computed(() => Math.max(0, limit.value - databases.value.length));
+const leftLabel = computed(() =>
+	left.value ? `${left.value} of ${limit.value} left` : "No databases left"
+);
 
 async function createDatabase() {
 	try {
