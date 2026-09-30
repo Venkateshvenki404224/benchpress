@@ -65,6 +65,7 @@
 								v-if="showDatabases"
 								:bench="bench"
 								@created="refresh"
+								@deleted="refresh"
 							/>
 							<SitesCard
 								v-else-if="!lab.data.self_managed"
@@ -75,7 +76,12 @@
 					</div>
 
 					<div v-else-if="tab.key === 'sites'" class="pt-4">
-						<DatabasesCard v-if="showDatabases" :bench="bench" @created="refresh" />
+						<DatabasesCard
+							v-if="showDatabases"
+							:bench="bench"
+							@created="refresh"
+							@deleted="refresh"
+						/>
 						<SitesCard
 							v-else-if="!lab.data.self_managed"
 							v-bind="sitesProps"

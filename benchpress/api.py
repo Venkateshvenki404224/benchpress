@@ -795,11 +795,23 @@ def create_bench_database(bench: str) -> dict:
 @frappe.whitelist()
 def get_bench_database_password(bench: str, db_name: str) -> dict:
 	doc = _own_self_managed_bench(bench)
-	row = next((row for row in doc.databases if row.db_name == db_name), None)
-	if not row:
-		frappe.throw(_("Database {0} is not on this bench.").format(db_name), frappe.DoesNotExistError)
-	password = row.get_password("db_password")
+	password = _bench_database(doc, db_name).get_password("db_password")
 	return {"db_password": password, "command": _new_site_command(doc, db_name, password)}
+
+
+@frappe.whitelist(methods=["POST"])
+def delete_bench_database(bench: str, db_name: str) -> dict:
+	from frappe.utils.password import delete_all_passwords_for
+
+	from benchpress import mariadb_manager
+
+	doc = _own_self_managed_bench(bench, for_update=True)
+	row = _bench_database(doc, db_name)
+	mariadb_manager.drop_bench_database(doc.database_server, db_name)
+	doc.remove(row)
+	doc.save(ignore_permissions=True)
+	delete_all_passwords_for(row.doctype, row.name)
+	return {"db_name": db_name}
 
 
 def _own_self_managed_bench(bench_name: str, *, for_update: bool = False):
@@ -812,6 +824,13 @@ def _own_self_managed_bench(bench_name: str, *, for_update: bool = False):
 	if bench.status != "Running":
 		frappe.throw(_("Start the bench first. Databases are made on a running bench."))
 	return bench
+
+
+def _bench_database(bench, db_name: str):
+	row = next((row for row in bench.databases if row.db_name == db_name), None)
+	if not row:
+		frappe.throw(_("Database {0} is not on this bench.").format(db_name), frappe.DoesNotExistError)
+	return row
 
 
 def _new_site_command(bench, name: str, password: str) -> str:

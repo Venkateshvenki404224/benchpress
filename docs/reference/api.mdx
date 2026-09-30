@@ -205,14 +205,18 @@ document read. Reading the `Bench Instance` gives you nothing. Ask here.
 
 ## Bench databases
 
-Two endpoints serve the **Databases** card of a self-managed bench. Both refuse
-a caller who does not own the bench, a lab that is not self-managed, and a bench
-that is not `Running`. An admin who does not own the bench is refused too.
+Three endpoints serve the **Databases** card of a self-managed bench. All three
+refuse a caller who does not own the bench, a lab that is not self-managed, and a
+bench that is not `Running`. An admin who does not own the bench is refused too.
 
 | Endpoint | Arguments | Returns | Checks |
 |---|---|---|---|
 | `create_bench_database` | `bench` | `{db_name, db_user, db_password, command}` | POST only. `require_bench_access`, the owner, self-managed, `Running`, then `max_bench_databases` |
 | `get_bench_database_password` | `bench`, `db_name` | `{db_password, command}` | the same as `create_bench_database`, then the row must be on that bench |
+| `delete_bench_database` | `bench`, `db_name` | `{db_name}` | POST only. The same as `create_bench_database` without the cap, then the row must be on that bench |
+
+`delete_bench_database` drops the database and its user, then removes the row
+and its stored password. A failed drop keeps the row.
 
 `command` is the full `bench new-site` line, with `--no-setup-db` and the
 database server's container name as `--db-host`.
