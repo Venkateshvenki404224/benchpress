@@ -1245,6 +1245,61 @@ class TestBenchDatabases(IntegrationTestCase):
 		self.assertEqual(again["db_password"], created["db_password"])
 		self.assertEqual(again["command"], created["command"])
 
+	def test_the_owner_deletes_a_database_and_its_user(self, sql):
+		frappe.set_user(BENCH_OWNER)
+		created = api.create_bench_database(self.bench.name)
+		row_name = frappe.get_doc("Bench Instance", self.bench.name).databases[0].name
+		sql.reset_mock()
+
+		api.delete_bench_database(self.bench.name, created["db_name"])
+
+		script = sql.call_args.args[1]
+		self.assertIn(f"DROP DATABASE IF EXISTS `{created['db_name']}`", script)
+		self.assertIn(f"DROP USER IF EXISTS '{created['db_name']}'@'%'", script)
+		self.assertEqual(frappe.get_doc("Bench Instance", self.bench.name).databases, [])
+		self.assertEqual(frappe.db.count("__Auth", {"doctype": "Bench Database", "name": row_name}), 0)
+
+	def test_a_deleted_database_frees_its_slot(self, _sql):
+		frappe.set_user(BENCH_OWNER)
+		names = [api.create_bench_database(self.bench.name)["db_name"] for _ in range(5)]
+
+		api.delete_bench_database(self.bench.name, names[0])
+		api.create_bench_database(self.bench.name)
+
+		self.assertEqual(len(frappe.get_doc("Bench Instance", self.bench.name).databases), 5)
+
+	def test_a_database_that_is_not_on_the_bench_is_not_deleted(self, sql):
+		frappe.set_user(BENCH_OWNER)
+
+		with self.assertRaises(frappe.DoesNotExistError):
+			api.delete_bench_database(self.bench.name, "bp_someone_0a1b2c3d")
+		sql.assert_not_called()
+
+	def test_another_user_cannot_delete_a_database(self, sql):
+		frappe.set_user(BENCH_OWNER)
+		created = api.create_bench_database(self.bench.name)
+		sql.reset_mock()
+		frappe.set_user(BENCH_STRANGER)
+
+		with self.assertRaises(frappe.PermissionError):
+			api.delete_bench_database(self.bench.name, created["db_name"])
+		sql.assert_not_called()
+
+	def test_a_failed_drop_keeps_the_database(self, sql):
+		frappe.set_user(BENCH_OWNER)
+		created = api.create_bench_database(self.bench.name)
+		sql.return_value = (1, "server unreachable")
+
+		with self.assertRaisesRegex(frappe.ValidationError, "Failed to drop"):
+			api.delete_bench_database(self.bench.name, created["db_name"])
+
+		self.assertEqual(
+			[row.db_name for row in frappe.get_doc("Bench Instance", self.bench.name).databases],
+			[created["db_name"]],
+		)
+		again = api.get_bench_database_password(self.bench.name, created["db_name"])
+		self.assertEqual(again["db_password"], created["db_password"])
+
 	def test_a_database_of_another_bench_is_not_read(self, _sql):
 		frappe.set_user(BENCH_OWNER)
 

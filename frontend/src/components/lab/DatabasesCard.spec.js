@@ -1,4 +1,4 @@
-import { createApp, h, nextTick, reactive } from "vue";
+import { createApp, defineComponent, h, nextTick, reactive } from "vue";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const resources = {};
@@ -23,15 +23,33 @@ vi.mock("frappe-ui", () => {
 	return {
 		Button: passThrough("button"),
 		ErrorMessage: () => null,
+		Dialog: defineComponent({
+			props: { modelValue: Boolean, options: Object },
+			setup(props, { slots }) {
+				return () =>
+					props.modelValue
+						? h("div", { "data-test": "dialog" }, [
+								slots["body-content"]?.(),
+								slots.actions?.(),
+						  ])
+						: null;
+			},
+		}),
 		Tooltip: passThrough("span"),
 		createResource: (options) => {
 			const resource = reactive({
 				data: null,
 				loading: false,
 				error: null,
-				submit: vi.fn(async () =>
-					options.url === "benchpress.api.create_bench_database" ? CREATED : REVEALED
-				),
+				params: null,
+				reset: vi.fn(),
+				submit: vi.fn(async (params) => {
+					if (options.url === "benchpress.api.create_bench_database") return CREATED;
+					if (options.url === "benchpress.api.delete_bench_database") {
+						return { db_name: params.db_name };
+					}
+					return REVEALED;
+				}),
 			});
 			resources[options.url] = resource;
 			return resource;
@@ -40,6 +58,8 @@ vi.mock("frappe-ui", () => {
 });
 
 const { default: DatabasesCard } = await import("./DatabasesCard.vue");
+
+const DELETE = "benchpress.api.delete_bench_database";
 
 const BENCH = {
 	name: "b1",
@@ -56,13 +76,15 @@ describe("the databases card", () => {
 	let app;
 	let root;
 	let created;
+	let deleted;
 
 	async function mountCard(bench) {
 		if (app) unmountCard();
 		created = vi.fn();
+		deleted = vi.fn();
 		root = document.createElement("div");
 		document.body.append(root);
-		app = createApp(DatabasesCard, { bench, onCreated: created });
+		app = createApp(DatabasesCard, { bench, onCreated: created, onDeleted: deleted });
 		app.mount(root);
 		await nextTick();
 	}
@@ -78,6 +100,18 @@ describe("the databases card", () => {
 	});
 
 	afterEach(unmountCard);
+
+	const left = () => root.querySelector('[data-test="databases-left"]').textContent.trim();
+
+	async function click(selector) {
+		root.querySelector(selector).click();
+		await settle();
+	}
+
+	async function askToDelete(dbName) {
+		await click(`[data-test="toggle-${dbName}"]`);
+		await click(`[data-test="delete-${dbName}"]`);
+	}
 
 	it("lists each database closed, with its name only", () => {
 		const row = root.querySelector('[data-test="database-bp_dev_old00000"]');
@@ -216,5 +250,56 @@ describe("the databases card", () => {
 
 		expect(root.querySelector('[data-test="database-command"]')).toBeNull();
 		expect(created).not.toHaveBeenCalled();
+	});
+
+	it("asks before it deletes a database", async () => {
+		await askToDelete("bp_dev_old00000");
+
+		expect(root.querySelector('[data-test="delete-database-message"]').textContent).toContain(
+			"bp_dev_old00000"
+		);
+		expect(resources[DELETE].submit).not.toHaveBeenCalled();
+	});
+
+	it("keeps the database on Cancel", async () => {
+		await askToDelete("bp_dev_old00000");
+		await click('[data-test="cancel-delete-database"]');
+
+		expect(root.querySelector('[data-test="dialog"]')).toBeNull();
+		expect(resources[DELETE].submit).not.toHaveBeenCalled();
+		expect(root.querySelector('[data-test="database-bp_dev_old00000"]')).not.toBeNull();
+	});
+
+	it("deletes the database once confirmed and frees its slot", async () => {
+		await askToDelete("bp_dev_old00000");
+		await click('[data-test="confirm-delete-database"]');
+
+		expect(resources[DELETE].submit).toHaveBeenCalledWith({
+			bench: "b1",
+			db_name: "bp_dev_old00000",
+		});
+		expect(root.querySelector('[data-test="database-bp_dev_old00000"]')).toBeNull();
+		expect(left()).toBe("5 of 5 left");
+		expect(deleted).toHaveBeenCalled();
+	});
+
+	it("keeps the row when the delete is refused", async () => {
+		resources[DELETE].submit.mockRejectedValueOnce(new Error("Failed to drop database"));
+
+		await askToDelete("bp_dev_old00000");
+		await click('[data-test="confirm-delete-database"]');
+
+		expect(root.querySelector('[data-test="database-bp_dev_old00000"]')).not.toBeNull();
+		expect(left()).toBe("4 of 5 left");
+		expect(deleted).not.toHaveBeenCalled();
+	});
+
+	it("leaves no row behind when a new database is deleted before the reload", async () => {
+		await click('[data-test="create-database"]');
+		await click(`[data-test="delete-${CREATED.db_name}"]`);
+		await click('[data-test="confirm-delete-database"]');
+
+		expect(root.querySelector(`[data-test="database-${CREATED.db_name}"]`)).toBeNull();
+		expect(left()).toBe("4 of 5 left");
 	});
 });
