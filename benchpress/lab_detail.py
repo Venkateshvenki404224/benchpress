@@ -17,6 +17,7 @@ output — still only have `=== … ===` markers, so both are read.
 """
 
 import frappe
+from frappe.utils import cint
 
 from benchpress import addressing, ingress
 from benchpress.credits import config, lease
@@ -47,6 +48,8 @@ BENCH_FIELDS = [
 
 SITE_FIELDS = ["name", "site_name", "status"]
 
+MAX_BENCH_DATABASES = 5
+
 
 def get_lab(name: str) -> dict:
 	"""One lab, the caller's deployment of it, and why the last run failed."""
@@ -58,6 +61,7 @@ def get_lab(name: str) -> dict:
 	size = config.size_for_lab(lab)
 	if bench and lab.self_managed:
 		bench["databases"] = _databases(bench["name"])
+		bench["database_limit"] = database_limit()
 	return {
 		"name": lab.name,
 		"lab_id": lab.lab_id,
@@ -81,6 +85,13 @@ def get_lab(name: str) -> dict:
 		"sites": _sites(bench),
 		"failure": _failure(lab, bench),
 	}
+
+
+def database_limit() -> int:
+	"""The most databases one self-managed bench may hold."""
+	return (
+		cint(frappe.get_cached_doc("BenchPress Settings").get("max_bench_databases")) or MAX_BENCH_DATABASES
+	)
 
 
 def _lease_price(lab) -> dict | None:

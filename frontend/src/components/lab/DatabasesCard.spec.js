@@ -43,6 +43,7 @@ const { default: DatabasesCard } = await import("./DatabasesCard.vue");
 
 const BENCH = {
 	name: "b1",
+	database_limit: 5,
 	databases: [{ db_name: "bp_dev_old00000", db_user: "bp_dev_old00000" }],
 };
 
@@ -75,6 +76,21 @@ describe("the databases card", () => {
 
 		expect(row.textContent).toContain("bp_dev_old00000");
 		expect(root.textContent).not.toContain("old-password");
+	});
+
+	it("shows how many databases are left", () => {
+		expect(root.querySelector('[data-test="databases-left"]').textContent.trim()).toBe(
+			"4 of 5 left"
+		);
+	});
+
+	it("counts a new database before the lab reloads", async () => {
+		root.querySelector('[data-test="create-database"]').click();
+		await settle();
+
+		expect(root.querySelector('[data-test="databases-left"]').textContent.trim()).toBe(
+			"3 of 5 left"
+		);
 	});
 
 	it("creates a database and shows its password and command", async () => {

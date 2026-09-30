@@ -1,6 +1,9 @@
 <template>
 	<SectionCard title="Databases" :padded="false" data-test="databases-card">
 		<template #action>
+			<span class="text-2xs tabular-nums text-ink-gray-5" data-test="databases-left">
+				{{ left }} of {{ limit }} left
+			</span>
 			<Button
 				variant="solid"
 				size="sm"
@@ -100,6 +103,9 @@ const databases = computed(() => {
 	if (!latest || listed.some((database) => database.db_name === latest.db_name)) return listed;
 	return [...listed, { db_name: latest.db_name, db_user: latest.db_user }];
 });
+
+const limit = computed(() => props.bench.database_limit);
+const left = computed(() => Math.max(0, limit.value - databases.value.length));
 
 async function createDatabase() {
 	try {
