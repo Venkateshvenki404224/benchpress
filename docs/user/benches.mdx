@@ -51,8 +51,8 @@ shell.
 1. Press **+** on the **Databases** card of the bench page.
 2. Copy the command that the card shows.
 
-The card shows the database name, its user, the password and the full command.
-The command has this shape:
+The card opens the new database's row. The row shows the database user, the
+password and the full command, each with a copy button. The command has this shape:
 
 ```bash
 bench new-site <site> --set-default --no-setup-db --db-host benchpress-mariadb \
@@ -62,8 +62,8 @@ bench new-site <site> --set-default --no-setup-db --db-host benchpress-mariadb \
 The database user has all privileges on its own database and on no other
 database. It cannot create databases or users.
 
-To see the password and the command again, press **Show password** on the
-database row.
+To see the user, the password and the command again, open the database row on
+the card.
 
 A bench holds at most five databases. An operator changes this limit with
 **Databases per self-managed bench** in **BenchPress Settings**. The **Databases**

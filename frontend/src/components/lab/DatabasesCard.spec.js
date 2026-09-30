@@ -79,11 +79,17 @@ describe("the databases card", () => {
 
 	afterEach(unmountCard);
 
-	it("lists each database with its user and no password", () => {
+	it("lists each database closed, with its name only", () => {
 		const row = root.querySelector('[data-test="database-bp_dev_old00000"]');
 
 		expect(row.textContent).toContain("bp_dev_old00000");
+		expect(root.querySelector('[data-test="database-user"]')).toBeNull();
 		expect(root.textContent).not.toContain("old-password");
+		expect(
+			root
+				.querySelector('[data-test="toggle-bp_dev_old00000"]')
+				.getAttribute("aria-expanded")
+		).toBe("false");
 	});
 
 	it("shows how many databases are left", () => {
@@ -146,11 +152,16 @@ describe("the databases card", () => {
 		expect(root.querySelector('[data-test="database-command"]').textContent).toContain(
 			CREATED.command
 		);
+		expect(
+			root
+				.querySelector(`[data-test="toggle-${CREATED.db_name}"]`)
+				.getAttribute("aria-expanded")
+		).toBe("true");
 		expect(created).toHaveBeenCalled();
 	});
 
-	it("shows an existing database's password and command on request", async () => {
-		root.querySelector('[data-test="show-bp_dev_old00000"]').click();
+	it("opens a row to show its user, password and command", async () => {
+		root.querySelector('[data-test="toggle-bp_dev_old00000"]').click();
 		await settle();
 
 		expect(
@@ -158,6 +169,40 @@ describe("the databases card", () => {
 		).toHaveBeenCalledWith({ bench: "b1", db_name: "bp_dev_old00000" });
 		expect(root.querySelector('[data-test="database-command"]').textContent).toContain(
 			REVEALED.command
+		);
+		expect(root.querySelector('[data-test="database-user"]').textContent.trim()).toBe(
+			"bp_dev_old00000"
+		);
+		expect(
+			root
+				.querySelector('[data-test="toggle-bp_dev_old00000"]')
+				.getAttribute("aria-expanded")
+		).toBe("true");
+	});
+
+	it("closes an open row", async () => {
+		const toggle = root.querySelector('[data-test="toggle-bp_dev_old00000"]');
+		toggle.click();
+		await settle();
+		toggle.click();
+		await settle();
+
+		expect(root.querySelector('[data-test="panel-bp_dev_old00000"]')).toBeNull();
+		expect(toggle.getAttribute("aria-expanded")).toBe("false");
+	});
+
+	it("does not ask again when a row opens again", async () => {
+		const toggle = root.querySelector('[data-test="toggle-bp_dev_old00000"]');
+		for (let click = 0; click < 3; click++) {
+			toggle.click();
+			await settle();
+		}
+
+		expect(
+			resources["benchpress.api.get_bench_database_password"].submit
+		).toHaveBeenCalledTimes(1);
+		expect(root.querySelector('[data-test="database-password"]').textContent).toContain(
+			"old-password"
 		);
 	});
 

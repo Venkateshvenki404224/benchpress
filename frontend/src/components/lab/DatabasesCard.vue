@@ -30,50 +30,60 @@
 			<li
 				v-for="database in databases"
 				:key="database.db_name"
-				class="px-4 py-3"
 				:data-test="`database-${database.db_name}`"
 			>
-				<div class="flex items-center gap-3">
-					<div class="min-w-0 flex-1">
-						<p class="truncate font-mono text-xs text-ink-gray-9">
-							{{ database.db_name }}
-						</p>
-						<p class="truncate text-2xs text-ink-gray-5">
-							User {{ database.db_user }}
-						</p>
-					</div>
-					<Button
-						v-if="shown?.db_name !== database.db_name"
-						variant="subtle"
-						size="sm"
-						:loading="revealing === database.db_name"
-						:data-test="`show-${database.db_name}`"
-						@click="reveal(database.db_name)"
-					>
-						Show password
-					</Button>
-				</div>
+				<button
+					type="button"
+					class="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-surface-gray-1"
+					:aria-expanded="open === database.db_name"
+					:data-test="`toggle-${database.db_name}`"
+					@click="toggle(database.db_name)"
+				>
+					<span class="min-w-0 flex-1 truncate font-mono text-xs text-ink-gray-9">
+						{{ database.db_name }}
+					</span>
+					<ChevronRightIcon
+						class="size-3.5 flex-none text-ink-gray-5 transition-transform duration-150"
+						:class="open === database.db_name ? 'rotate-90' : ''"
+					/>
+				</button>
 
-				<div v-if="shown?.db_name === database.db_name" class="mt-2.5 flex flex-col gap-2">
+				<div
+					v-if="open === database.db_name"
+					class="flex flex-col gap-2 px-4 pb-3"
+					:data-test="`panel-${database.db_name}`"
+				>
 					<div class="flex items-center gap-2">
-						<span class="w-20 flex-none text-meta text-ink-gray-7">Password</span>
+						<span class="w-20 flex-none text-meta text-ink-gray-7">User</span>
 						<code
 							class="min-w-0 flex-1 break-all rounded bg-surface-gray-1 px-2.5 py-1.5 font-mono text-2xs text-ink-gray-8"
-							data-test="database-password"
+							data-test="database-user"
 						>
-							{{ shown.db_password }}
+							{{ database.db_user }}
 						</code>
-						<CopyButton label="password" :value="shown.db_password" />
+						<CopyButton label="user" :value="database.db_user" />
 					</div>
-					<div class="flex items-start gap-2">
-						<code
-							class="min-w-0 flex-1 whitespace-pre-wrap break-all rounded bg-surface-gray-1 px-2.5 py-1.5 font-mono text-2xs text-ink-gray-8"
-							data-test="database-command"
-						>
-							{{ shown.command }}
-						</code>
-						<CopyButton label="command" :value="shown.command" />
-					</div>
+					<template v-if="shown?.db_name === database.db_name">
+						<div class="flex items-center gap-2">
+							<span class="w-20 flex-none text-meta text-ink-gray-7">Password</span>
+							<code
+								class="min-w-0 flex-1 break-all rounded bg-surface-gray-1 px-2.5 py-1.5 font-mono text-2xs text-ink-gray-8"
+								data-test="database-password"
+							>
+								{{ shown.db_password }}
+							</code>
+							<CopyButton label="password" :value="shown.db_password" />
+						</div>
+						<div class="flex items-start gap-2">
+							<code
+								class="min-w-0 flex-1 whitespace-pre-wrap break-all rounded bg-surface-gray-1 px-2.5 py-1.5 font-mono text-2xs text-ink-gray-8"
+								data-test="database-command"
+							>
+								{{ shown.command }}
+							</code>
+							<CopyButton label="command" :value="shown.command" />
+						</div>
+					</template>
 				</div>
 			</li>
 		</ul>
@@ -89,6 +99,7 @@ import SectionCard from "@/components/SectionCard.vue";
 import { Button, ErrorMessage, Tooltip, createResource } from "frappe-ui";
 import { computed, ref } from "vue";
 
+import ChevronRightIcon from "~icons/lucide/chevron-right";
 import PlusIcon from "~icons/lucide/plus";
 
 const props = defineProps({
@@ -100,8 +111,8 @@ const emit = defineEmits(["created"]);
 const createAction = createResource({ url: "benchpress.api.create_bench_database" });
 const revealAction = createResource({ url: "benchpress.api.get_bench_database_password" });
 
+const open = ref("");
 const shown = ref(null);
-const revealing = ref("");
 
 const databases = computed(() => {
 	const listed = props.bench.databases ?? [];
@@ -122,15 +133,20 @@ async function createDatabase() {
 	} catch {
 		return;
 	}
+	open.value = shown.value.db_name;
 	emit("created");
 }
 
-async function reveal(dbName) {
-	revealing.value = dbName;
+async function toggle(dbName) {
+	if (open.value === dbName) {
+		open.value = "";
+		return;
+	}
+	open.value = dbName;
+	if (shown.value?.db_name === dbName) return;
 	const secret = await revealAction
 		.submit({ bench: props.bench.name, db_name: dbName })
 		.catch(() => null);
-	revealing.value = "";
-	if (secret) shown.value = { db_name: dbName, ...secret };
+	if (secret && open.value === dbName) shown.value = { db_name: dbName, ...secret };
 }
 </script>
