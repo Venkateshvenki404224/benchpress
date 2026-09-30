@@ -2,7 +2,7 @@
 title: Data model
 description: All 20 BenchPress DocTypes with their fields, links, naming and the
   permission rule that scopes each one — plus why there is no Device DocType.
-lastModified: "2026-09-30T20:56:42+05:30"
+lastModified: "2026-09-30T16:02:00-04:00"
 lastAuthor: Venkatesh
 ---
 # Data model
@@ -195,7 +195,8 @@ two disagreeing, and that difference is the record of it.
 Child table on `Bench Instance`, in the `databases` field. It holds `db_name`,
 `db_user` and `db_password`. The name and the user are the same string.
 `api.create_bench_database` adds a row, and only on a running self-managed
-bench.
+bench. `api.delete_bench_database` drops one row's database and user, then
+removes the row.
 
 The user has `ALL` on its own database and nothing global. A teardown drops
 every row's database and user, and a redeploy keeps them. `db_password` is a

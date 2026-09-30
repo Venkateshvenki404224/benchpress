@@ -3,7 +3,7 @@ title: Work on your own bench
 description: Prepare a Frappe develop bench, log in over SSH with your own key,
   create a database, make a site with bench new-site, and serve it with bench
   start on your VPN address.
-lastModified: "2026-09-30T15:45:47-04:00"
+lastModified: "2026-09-30T16:02:00-04:00"
 lastAuthor: Venkatesh
 ---
 # Work on your own bench
@@ -71,6 +71,7 @@ the card.
 A bench holds at most five databases. An operator changes this limit with
 **Databases per self-managed bench** in **BenchPress Settings**. The **Databases**
 card shows how many databases are left, and it disables **+** when none are left.
+Delete a database to free a slot.
 
 ## Make a site and serve it
 
@@ -94,10 +95,23 @@ curl http://<wg-ip>:8000/api/method/ping
 
 The reply is `{"message":"pong"}`.
 
+## Delete a database
+
+1. Open the database row on the **Databases** card.
+2. Press **Delete database**.
+3. Read the warning, then press **Delete**.
+
+BenchPress drops the database and its user. A site on that database stops
+working. The site's folder in `~/frappe-bench/sites` stays, but its database is
+gone. BenchPress cannot bring back a dropped database.
+
+The deleted database frees its slot, so the card shows one more database left.
+
 ## What happens to a database later
 
 |Action|The database|The site folder in `~/frappe-bench/sites`|
 |--|--|--|
+|Delete the database|Dropped, with its user|Kept, but the site no longer works|
 |Stop and start the bench|Kept|Kept|
 |Redeploy the bench|Kept|Gone, because the redeploy replaces the container|
 |The stopped bench is reaped after `reap_after_days`|Dropped, with its user|Gone|

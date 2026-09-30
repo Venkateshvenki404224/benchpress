@@ -1378,6 +1378,7 @@ the card.
 A bench holds at most five databases. An operator changes this limit with
 **Databases per self-managed bench** in **BenchPress Settings**. The **Databases**
 card shows how many databases are left, and it disables **+** when none are left.
+Delete a database to free a slot.
 
 ## Make a site and serve it
 
@@ -1401,10 +1402,23 @@ curl http://<wg-ip>:8000/api/method/ping
 
 The reply is `{"message":"pong"}`.
 
+## Delete a database
+
+1. Open the database row on the **Databases** card.
+2. Press **Delete database**.
+3. Read the warning, then press **Delete**.
+
+BenchPress drops the database and its user. A site on that database stops
+working. The site's folder in `~/frappe-bench/sites` stays, but its database is
+gone. BenchPress cannot bring back a dropped database.
+
+The deleted database frees its slot, so the card shows one more database left.
+
 ## What happens to a database later
 
 |Action|The database|The site folder in `~/frappe-bench/sites`|
 |--|--|--|
+|Delete the database|Dropped, with its user|Kept, but the site no longer works|
 |Stop and start the bench|Kept|Kept|
 |Redeploy the bench|Kept|Gone, because the redeploy replaces the container|
 |The stopped bench is reaped after `reap_after_days`|Dropped, with its user|Gone|
@@ -5523,7 +5537,8 @@ two disagreeing, and that difference is the record of it.
 Child table on `Bench Instance`, in the `databases` field. It holds `db_name`,
 `db_user` and `db_password`. The name and the user are the same string.
 `api.create_bench_database` adds a row, and only on a running self-managed
-bench.
+bench. `api.delete_bench_database` drops one row's database and user, then
+removes the row.
 
 The user has `ALL` on its own database and nothing global. A teardown drops
 every row's database and user, and a redeploy keeps them. `db_password` is a
@@ -5874,14 +5889,18 @@ document read. Reading the `Bench Instance` gives you nothing. Ask here.
 
 ## Bench databases
 
-Two endpoints serve the **Databases** card of a self-managed bench. Both refuse
-a caller who does not own the bench, a lab that is not self-managed, and a bench
-that is not `Running`. An admin who does not own the bench is refused too.
+Three endpoints serve the **Databases** card of a self-managed bench. All three
+refuse a caller who does not own the bench, a lab that is not self-managed, and a
+bench that is not `Running`. An admin who does not own the bench is refused too.
 
 |Endpoint|Arguments|Returns|Checks|
 |--|--|--|--|
 |`create_bench_database`|`bench`|`{db_name, db_user, db_password, command}`|POST only. `require_bench_access`, the owner, self-managed, `Running`, then `max_bench_databases`|
 |`get_bench_database_password`|`bench`, `db_name`|`{db_password, command}`|the same as `create_bench_database`, then the row must be on that bench|
+|`delete_bench_database`|`bench`, `db_name`|`{db_name}`|POST only. The same as `create_bench_database` without the cap, then the row must be on that bench|
+
+`delete_bench_database` drops the database and its user, then removes the row
+and its stored password. A failed drop keeps the row.
 
 `command` is the full `bench new-site` line, with `--no-setup-db` and the
 database server's container name as `--db-host`.
