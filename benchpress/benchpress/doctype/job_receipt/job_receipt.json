@@ -1,0 +1,94 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "hash",
+ "creation": "2026-10-02 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "field_order": [
+  "logical_id",
+  "status",
+  "column_break_identity",
+  "expected_effect",
+  "minted_at",
+  "claimed_at",
+  "completed_at"
+ ],
+ "fields": [
+  {
+   "description": "Caller-chosen id minted BEFORE enqueue, independent of any RQ job_id. The ledger row a reader trusts.",
+   "fieldname": "logical_id",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Logical ID",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "default": "Pending",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Status",
+   "options": "Pending\nCompleted\nUnknown\nFailed",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_identity",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "What this job is supposed to produce, e.g. 'traefik route file written for bench X'. Human-readable, not a hash.",
+   "fieldname": "expected_effect",
+   "fieldtype": "Small Text",
+   "label": "Expected Effect",
+   "reqd": 1
+  },
+  {
+   "fieldname": "minted_at",
+   "fieldtype": "Datetime",
+   "label": "Minted At",
+   "read_only": 1
+  },
+  {
+   "description": "Set only by the independent checker, never by the worker itself, when it reads the artifact back by logical_id.",
+   "fieldname": "claimed_at",
+   "fieldtype": "Datetime",
+   "label": "Claimed At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "completed_at",
+   "fieldtype": "Datetime",
+   "label": "Completed At",
+   "read_only": 1
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-10-02 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Benchpress",
+ "name": "Job Receipt",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}
