@@ -43,6 +43,11 @@ vi.mock("frappe-ui", () => {
 	return {
 		Badge: passThrough("span"),
 		Button: passThrough("button"),
+		Dialog: (props, { slots }) =>
+			props.modelValue ? h("div", { "data-test": "dialog" }, [
+				slots["body-content"]?.(),
+				slots.actions?.(),
+			]) : null,
 		ErrorMessage: () => null,
 		FormControl: passThrough("input"),
 		Select: passThrough("div"),
@@ -150,5 +155,22 @@ describe("the template catalog", () => {
 		expect(find("templates-new-lab")).toBeNull();
 		expect(root.textContent).toContain("ask an admin to add a template");
 		expect(root.textContent).not.toContain("create a lab from scratch");
+	});
+
+	it("opens a preview of what the template contains when its card is clicked", async () => {
+		expect(find("dialog")).toBeNull();
+
+		find("template-crm").click();
+		await nextTick();
+
+		expect(find("dialog")).not.toBeNull();
+		expect(root.textContent).toContain("Leads, deals and a sales pipeline.");
+	});
+
+	it("does not open the preview when the action button itself is clicked", async () => {
+		find("use-template-crm").click();
+		await nextTick();
+
+		expect(find("dialog")).toBeNull();
 	});
 });
