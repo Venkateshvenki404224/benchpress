@@ -32,6 +32,7 @@ is done.
 - [Open the bench site](./docs/user/open-your-site.md): The Sites card, the three states of its Open button, and logging in to the Frappe site a deploy created.
 - [Connect over SSH and the VPN](./docs/user/connect-ssh-vpn.md): The connection card on a lab page — two addresses, the SSH command, the three passwords, and which of them work without the tunnel.
 - [Use code-server](./docs/user/code-server.md): Open the browser VS Code session on a bench, find its password, hand the session to a teammate, and restart it when it stops answering.
+- [Work on your own bench](./docs/user/benches.md): Prepare a Frappe develop bench, log in over SSH with your own key, create a database, make a site with bench new-site, and serve it with bench start on your VPN address.
 - [Read logs and container stats](./docs/user/logs-and-monitoring.md): The deploy stepper, the raw log and its step markers, the build log, and the CPU and memory bars on a running bench.
 - [Leases and credits](./docs/user/leases-and-credits.md): The countdown on a running bench, the renew dialog and its plans, the credit meter, the ledger, and where a purchase hands off to the payment gateway.
 - [Troubleshooting](./docs/user/troubleshooting.md): Every symptom a BenchPress user meets, its cause, and the page that fixes it — deploys, the VPN, SSH, code-server, logs and credits.
@@ -49,7 +50,7 @@ is done.
 - [The image cache](./docs/operator/image-cache.md): One image per lab, tagged benchpress/<lab_id>:lab — what it costs on disk, how the weekly prewarm and sweep work, and what is safe to prune.
 - [Users and roles](./docs/operator/users-and-roles.md): The two BenchPress roles, what each one may read and write, which screens are admin-only, and how ownership rather than a role decides who sees a bench.
 - [Upgrading](./docs/operator/upgrading.md): Move a BenchPress install to a newer release — the backup gate, the five steps, the scripted path, rollback, and why lab images are a separate opt-in.
-- [Production safety](./docs/operator/production-safety.md): What BenchPress is and is not ready to carry — the alpha verdict, the container privilege boundary, what is backed up, and the release checklist that covers 25 of 52 whitelisted callables.
+- [Production safety](./docs/operator/production-safety.md): What BenchPress is and is not ready to carry — the alpha verdict, the container privilege boundary, what is backed up, and the release checklist that covers 25 of 50 whitelisted callables.
 - [Diagnostics](./docs/operator/diagnostics.md): The twelve read-only checks that ask Docker, MariaDB, Redis and the kernel what is true — how to run them, what each failure means, and the four things they do not cover.
 - [Credits and billing](./docs/operator/credits-and-billing.md): Optional and off by default — the metering half of BenchPress, covering leases, balances, the ledger, admin adjustments, and the optional Razorpay handoff.
 - [Admission and limits](./docs/operator/admission-and-limits.md): Optional and off by default — concurrency caps, size ceilings, device and build quotas, how a slot is claimed as a row, and the acceptance run that proves access still works.
@@ -81,6 +82,7 @@ Route by the task, not by the track:
 - Open the bench site in a browser -> `/docs/user/open-your-site`
 - Put a laptop or phone on the VPN -> `/docs/user/vpn-devices`
 - Open the browser VS Code session -> `/docs/user/code-server`
+- Make a site on your own bench, with its own database -> `/docs/user/benches`
 - A bench stopped, or a countdown ran out -> `/docs/user/leases-and-credits`
 - Any user-facing symptom, with its cause -> `/docs/user/troubleshooting`
 - Install BenchPress on a new host -> `/docs/operator/install`
@@ -123,6 +125,7 @@ so `enable_credits` is `0` and no page about billing applies to a plain install.
 - [Open the bench site](./docs/user/open-your-site.md): The Sites card, the three states of its Open button, and logging in to the Frappe site a deploy created.
 - [Connect over SSH and the VPN](./docs/user/connect-ssh-vpn.md): The connection card on a lab page — two addresses, the SSH command, the three passwords, and which of them work without the tunnel.
 - [Use code-server](./docs/user/code-server.md): Open the browser VS Code session on a bench, find its password, hand the session to a teammate, and restart it when it stops answering.
+- [Work on your own bench](./docs/user/benches.md): Prepare a Frappe develop bench, log in over SSH with your own key, create a database, make a site with bench new-site, and serve it with bench start on your VPN address.
 
 ### Watch it and pay for it
 
@@ -160,7 +163,7 @@ so `enable_credits` is `0` and no page about billing applies to a plain install.
 ### Keep it safe
 
 - [Upgrading](./docs/operator/upgrading.md): Move a BenchPress install to a newer release — the backup gate, the five steps, the scripted path, rollback, and why lab images are a separate opt-in.
-- [Production safety](./docs/operator/production-safety.md): What BenchPress is and is not ready to carry — the alpha verdict, the container privilege boundary, what is backed up, and the release checklist that covers 25 of 52 whitelisted callables.
+- [Production safety](./docs/operator/production-safety.md): What BenchPress is and is not ready to carry — the alpha verdict, the container privilege boundary, what is backed up, and the release checklist that covers 25 of 50 whitelisted callables.
 - [Diagnostics](./docs/operator/diagnostics.md): The twelve read-only checks that ask Docker, MariaDB, Redis and the kernel what is true — how to run them, what each failure means, and the four things they do not cover.
 
 ### Optional — running it for a team

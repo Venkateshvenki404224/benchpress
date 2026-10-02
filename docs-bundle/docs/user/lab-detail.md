@@ -2,7 +2,7 @@
 title: Read a lab page
 description: Every field on the lab page, and why container status and container
   health can disagree.
-lastModified: "2026-08-30T20:13:11+05:30"
+lastModified: "2026-09-27T21:09:56+05:30"
 lastAuthor: Venkatesh
 ---
 # Read a lab page
@@ -18,7 +18,7 @@ page is telling them.
 
 ## Steps
 
-1. Open **Labs**, then press a lab. The route is `/frontend/labs/<lab-id>`.
+1. Open **Labs**, then press a lab's card. The route is `/frontend/labs/<lab-id>`.
 
 2. Read the header. It describes the **lab**, not the bench.
 

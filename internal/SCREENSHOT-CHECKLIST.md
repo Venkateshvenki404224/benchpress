@@ -54,9 +54,9 @@ agent-browser screenshot docs/images/user/quick-tour/01-overview.png
 agent-browser close
 ```
 
-Two logins are needed to photograph the whole app. `NewLab`, `LabTemplates`,
-`Settings` and `BuildLogs` are admin-only, and `Credits` renders only while
-credits are switched on. A user-track page captured as an admin shows controls
+Two logins are needed to photograph the whole app. `NewLab`, `LabTemplates`
+and `Settings` are admin-only, and `Credits` renders only while credits are
+switched on. A user-track page captured as an admin shows controls
 the reader will never have.
 
 Record an animation as WebM, then convert it:

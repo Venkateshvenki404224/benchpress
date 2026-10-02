@@ -199,8 +199,6 @@ refusing on one would take every golden on the host out of service on a routine 
 | **NewLab** | `/labs/new` | Form to create a lab with apps |
 | **LabDetail** | `/labs/:labId` | Tabbed: Dashboard, Sites, Deploy/Build Log. Confirmation dialogs for Deploy/Stop |
 | **BenchInstances** | `/bench-instances` | Table of all bench containers with status, IP, CPU/memory |
-| **DeployLogs** | `/deploy-logs` | Deploy log list with expandable entries |
-| **BuildLogs** | `/build-logs` | Build log list with expandable entries |
 | **Devices** | `/devices` | VPN device management: add, remove, download config |
 | **Settings** | `/settings` | Global settings dialog using createDocumentResource |
 
@@ -239,7 +237,7 @@ this.$socket.on("bench_deploy_log", (data) => { this.logs.push(data) })
 There is **no web terminal in this app**: no `ttyd`, no `xterm.js`, no PTY endpoint. A user gets a shell
 in exactly two ways, both over the WireGuard tunnel:
 
-1. **SSH** — `ssh <ssh_username>@<wg_ip>` with the SSH password from Connection details. `linkuser.sh`
+1. **SSH** — `ssh <ssh_username>@<wg_ip>` with the SSH password from Connection details. `provision-user.sh`
    renames the image's `frappe` user to the lab's own username, sets the password, grants passwordless
    `sudo` for `bench`/`supervisord`/`supervisorctl`/`service` only, and appends the nvm node path plus
    `frappe-bench/env/bin` to its `.bashrc` — so `bench` resolves on login with no PATH fix.

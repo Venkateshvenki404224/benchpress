@@ -764,3 +764,74 @@ class TestListSiteDatabases(IntegrationTestCase):
 			list_site_databases("db-server-name")
 
 		self.assertEqual(sql.call_args.args[1], "SHOW DATABASES")
+
+
+class TestBenchDatabase(IntegrationTestCase):
+	def test_the_script_grants_on_its_own_database_only(self):
+		from benchpress.mariadb_manager import bench_database_script
+
+		sql = bench_database_script("bp_x_test", "*HASH")
+
+		self.assertIn("GRANT ALL PRIVILEGES ON `bp_x_test`.* TO 'bp_x_test'@'%'", sql)
+		self.assertNotIn("*.*", sql)
+		self.assertIn("USING '*HASH'", sql)
+
+	@patch("benchpress.mariadb_manager.execute_sql", return_value=(0, ""))
+	def test_create_sends_the_hash_and_never_the_plaintext(self, mock_exec):
+		from benchpress.mariadb_manager import _native_password_hash, create_bench_database
+
+		name, password = create_bench_database("db-server", "dev")
+
+		sql = mock_exec.call_args.args[1]
+		self.assertIn(_native_password_hash(password), sql)
+		self.assertNotIn(password, sql)
+		self.assertIn(f"ON `{name}`.*", sql)
+
+	@patch("benchpress.mariadb_manager.execute_sql", return_value=(0, ""))
+	def test_the_name_is_a_safe_identifier_that_keeps_its_random_part(self, _exec):
+		from benchpress.mariadb_manager import create_bench_database
+
+		name, _ = create_bench_database("db-server", "A-very-long.prefix_that-overflows@example.com")
+
+		self.assertRegex(name, r"^bp_[a-z0-9]+_[0-9a-f]{8}$")
+		self.assertLessEqual(len(name), 32)
+
+	@patch("benchpress.mariadb_manager.execute_sql", return_value=(0, ""))
+	def test_two_databases_get_two_names(self, _exec):
+		from benchpress.mariadb_manager import create_bench_database
+
+		self.assertNotEqual(
+			create_bench_database("db-server", "dev")[0], create_bench_database("db-server", "dev")[0]
+		)
+
+	@patch(
+		"benchpress.mariadb_manager.execute_sql", side_effect=[(1, "ERROR 1396: CREATE USER failed"), (0, "")]
+	)
+	def test_a_failed_create_drops_what_it_made_before_it_throws(self, mock_exec):
+		from benchpress.mariadb_manager import create_bench_database
+
+		with self.assertRaises(frappe.ValidationError):
+			create_bench_database("db-server", "dev")
+
+		self.assertEqual(mock_exec.call_count, 2)
+		self.assertIn("DROP DATABASE IF EXISTS", mock_exec.call_args.args[1])
+
+	@patch("benchpress.mariadb_manager.execute_sql", return_value=(0, ""))
+	def test_a_name_that_is_not_a_bench_database_is_refused(self, mock_exec):
+		from benchpress.mariadb_manager import drop_bench_database
+
+		for name in ("_0f466d815af80ea5", "bp_dev_1a2b3c4d`; DROP DATABASE mysql; --", "mysql"):
+			with self.assertRaises(frappe.ValidationError):
+				drop_bench_database("db-server", name)
+		mock_exec.assert_not_called()
+
+	@patch("benchpress.mariadb_manager.execute_sql", return_value=(0, ""))
+	def test_drop_removes_that_database_and_user_only(self, mock_exec):
+		from benchpress.mariadb_manager import drop_bench_database
+
+		drop_bench_database("db-server", "bp_dev_1a2b3c4d")
+
+		sql = mock_exec.call_args.args[1]
+		self.assertIn("DROP DATABASE IF EXISTS `bp_dev_1a2b3c4d`", sql)
+		self.assertIn("DROP USER IF EXISTS 'bp_dev_1a2b3c4d'@'%'", sql)
+		self.assertNotIn("*", sql)

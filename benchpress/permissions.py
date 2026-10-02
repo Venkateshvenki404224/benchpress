@@ -119,7 +119,6 @@ def bench_event_has_permission(doc, ptype=None, user=None) -> bool:
 
 
 def build_log_query_conditions(user):
-	"""`run_history._build_filters` applied this rule by hand; it belongs here."""
 	return _own_rows_only(user, "`tabBuild Log`.owner")
 
 

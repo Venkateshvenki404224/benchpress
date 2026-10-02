@@ -31,9 +31,13 @@ from benchpress.docker_manager import (
 )
 from benchpress.mariadb_manager import ensure_infrastructure, wait_for_mariadb
 from benchpress.notifications import notify_owner
+from benchpress.user import ssh_keys_of
 
 NOTHING_TO_ROLL_BACK = "Cleanup: nothing to roll back — no container was created"
 GONE = "gone"
+SELF_MANAGED_SKIPPED = "skipped: self-managed bench"
+NO_SSH_KEYS = "no SSH keys on file; SSH is closed until you add one"
+SELF_MANAGED_PROVISION = Path(__file__).parent / "bench-templates" / "base" / "scripts" / "provision-user.sh"
 
 
 def running(bench, *, action: str = "start") -> None:
@@ -105,7 +109,7 @@ def _deactivate_bench_sites(bench) -> None:
 	frappe.db.set_value("Bench Site", {"bench": bench.name}, "status", "Inactive", update_modified=False)
 
 
-def torn_down(bench, *, release_admission: bool = True) -> dict[str, str]:
+def torn_down(bench, *, release_admission: bool = True, keep_databases: bool = False) -> dict[str, str]:
 	"""Return an instance to `Draft`, removing its container, site database, route and VPN peer.
 
 	Never raises; each removal reports `GONE` or its failure, and `release_admission=False` holds the slot.
@@ -117,6 +121,8 @@ def torn_down(bench, *, release_admission: bool = True) -> dict[str, str]:
 		"database": _drop_site_database(bench),
 		"vpn_peer": _remove_bench_peer(bench),
 	}
+	if not keep_databases:
+		removals["bench_databases"] = _drop_bench_databases(bench)
 	bench.container_id = None
 	bench.container_image = None
 	bench.container_ip = None
@@ -215,6 +221,23 @@ def _drop_site_database(bench) -> str:
 	return _removed(drop_site_database, bench.database_server, bench.site_name)
 
 
+def _drop_bench_databases(bench) -> str:
+	from frappe.utils.password import delete_all_passwords_for
+
+	from benchpress.mariadb_manager import drop_bench_database
+
+	kept, failed = [], []
+	for row in bench.databases:
+		result = _removed(drop_bench_database, bench.database_server, row.db_name)
+		if result == GONE:
+			delete_all_passwords_for(row.doctype, row.name)
+		else:
+			kept.append(row)
+			failed.append(f"{row.db_name} {result}")
+	bench.set("databases", kept)
+	return "; ".join(failed) or GONE
+
+
 def _log_limits(pipeline, size, created) -> None:
 	"""Name the size and the knobs it applied, then every quota this host would not enforce."""
 	label = size.size_label if size else "no size"
@@ -276,6 +299,7 @@ def _deploy_bench(bench_name: str, size_name: str | None = None, deploy_log: str
 	# creation are the remainder `deploy_manager` keeps, and importing them at module scope
 	# would make a cycle the moment anything there needs a transition.
 	from benchpress.deploy_manager import (
+		PROVISION_SCRIPT,
 		_assert_runtime_registered,
 		_forget_code_server_url,
 		_golden_matches_server,
@@ -285,9 +309,9 @@ def _deploy_bench(bench_name: str, size_name: str | None = None, deploy_log: str
 		_setup_container_vpn,
 		_site_outcome,
 		_start_code_server,
-		build_linkuser_args,
+		build_provision_args,
 		create_site_in_container,
-		linkuser_command,
+		provision_command,
 	)
 
 	bench = frappe.get_doc("Bench Instance", bench_name)
@@ -314,8 +338,10 @@ def _deploy_bench(bench_name: str, size_name: str | None = None, deploy_log: str
 		bench.save(ignore_permissions=True)
 		frappe.db.commit()  # nosemgrep -- `Deploying` has to be visible while the minutes below run
 
-		admin_password = secrets.token_urlsafe(10)
-		bench.admin_password = admin_password
+		admin_password = None
+		if not lab.get("self_managed"):
+			admin_password = secrets.token_urlsafe(10)
+			bench.admin_password = admin_password
 
 		pipeline.step("infrastructure")
 		db_server_name = ensure_infrastructure()
@@ -347,7 +373,8 @@ def _deploy_bench(bench_name: str, size_name: str | None = None, deploy_log: str
 		# exists: the site database is the other thing a redeploy replaces, and dropping a
 		# few hundred tables is teardown, not part of creating the site that follows.
 		_remove_stale_container(bench)
-		_drop_site_database(bench)
+		if not lab.get("self_managed"):
+			_drop_site_database(bench)
 		pipeline.step("container")
 		# Resolved here and recorded, never copied onto the Lab: a size edited in Desk reaches
 		# this deploy, and billing keeps pricing what Docker was actually given.
@@ -387,90 +414,93 @@ def _deploy_bench(bench_name: str, size_name: str | None = None, deploy_log: str
 
 		_setup_container_vpn(bench, container_id, pipeline)
 
-		bench_dir = "/home/frappe/frappe-bench"
-		site_name = bench.site_name
-		config = {
-			**db_server.get_connection_config(),
-			"redis_cache": "redis://benchpress-redis:6379/0",
-			"redis_queue": "redis://benchpress-redis:6379/1",
-			"redis_socketio": "redis://benchpress-redis:6379/2",
-			"socketio_port": 9000,
-			"webserver_port": addressing.SITE_HTTP_PORT,
-			"default_site": site_name,
-			"developer_mode": 1,
-		}
-		pipeline.step("site_config")
-		write_file_to_container(
-			container_id, json.dumps(config, indent=2), f"{bench_dir}/sites/common_site_config.json"
-		)
-		pipeline.log(f"{bench_dir}/sites/common_site_config.json written")
-
-		pipeline.step("site")
-		apps_csv = ",".join(a.app_name for a in lab.apps if a.app_name.lower() != "frappe")
-		pipeline.log(f"Site {site_name} with {apps_csv or 'frappe'}")
-		use_golden, refusal = _golden_matches_server(lab.image_tag, db_server)
-		if refusal:
-			pipeline.log(refusal)
-		exit_code, output = create_site_in_container(
-			container_id, db_server, site_name, admin_password, apps_csv, use_golden=use_golden
-		)
-		if exit_code != 0:
-			raise Exception(f"Site setup failed (exit {exit_code}): {output}")
-		pipeline.log(_site_outcome(output, site_name))
-		_record_primary_site(bench, lab, admin_password)
-
-		pipeline.step("assets")
-		# Deploy never builds; rebuilding the lab image is how a stale bundle is refreshed.
-		pipeline.log("Assets ship in the image — bundled at build time")
-
-		if not bench.ssh_username:
-			bench.ssh_username = bench._derive_username(bench.owner)
-
-		ssh_password = secrets.token_urlsafe(12)
-		linkuser_args = build_linkuser_args(bench, lab, settings)
-		pipeline.step("ssh_user")
-		pipeline.log(f"linkuser.sh {bench.ssh_username}")
-		# The app's copy of linkuser.sh is authoritative over the one baked into the image.
-		linkuser_script = (
-			Path(frappe.get_app_path("benchpress")) / "lab-templates" / "scripts" / "linkuser.sh"
-		)
-		write_file_to_container(
-			container_id, linkuser_script.read_text(), "/opt/benchpress/scripts/linkuser.sh"
-		)
-		linkuser_cmd = linkuser_command(linkuser_args)
-		exit_code, output = exec_in_container(
-			container_id, linkuser_cmd, user="root", environment={"SSH_PASSWORD": ssh_password}
-		)
-		if output:
-			pipeline.log(output.strip())
-		if exit_code != 0:
-			raise Exception(f"linkuser.sh failed (exit {exit_code}): {output}")
-
-		bench.ssh_password = ssh_password
-
-		# Emitted even when the lab has code-server off: a step the run decided
-		# to skip is information, and a stepper missing its tenth row is not.
-		pipeline.step("code_server")
-
-		# After linkuser.sh, not after site creation: that renames the bench user, and
-		# `usermod --login` refuses to rename a user owning a running process. The account is
-		# named here rather than derived inside the container from a path the tenant owns.
-		exit_code, output = exec_in_container(
-			container_id,
-			f"bash /opt/benchpress/scripts/serve.sh {shlex.quote(bench.ssh_username)}",
-			user="root",
-		)
-		if exit_code != 0:
-			raise Exception(f"serve.sh failed (exit {exit_code}): {output}")
-		pipeline.log(f"Site served on port {addressing.SITE_HTTP_PORT}")
-
-		# The same resolver the route file was written from, so the router and the process
-		# cannot disagree about whether this bench has an IDE.
-		if ingress.has_ide(bench.name):
-			_start_code_server(bench, container_id, pipeline, settings)
+		if lab.get("self_managed"):
+			_deploy_self_managed(bench, lab, container_id, pipeline, settings)
 		else:
-			_forget_code_server_url(bench)
-			pipeline.log("Code server is disabled for this lab or its instance size — skipped")
+			bench_dir = "/home/frappe/frappe-bench"
+			site_name = bench.site_name
+			config = {
+				**db_server.get_connection_config(),
+				"redis_cache": "redis://benchpress-redis:6379/0",
+				"redis_queue": "redis://benchpress-redis:6379/1",
+				"redis_socketio": "redis://benchpress-redis:6379/2",
+				"socketio_port": 9000,
+				"webserver_port": addressing.SITE_HTTP_PORT,
+				"default_site": site_name,
+				"developer_mode": 1,
+			}
+			pipeline.step("site_config")
+			write_file_to_container(
+				container_id, json.dumps(config, indent=2), f"{bench_dir}/sites/common_site_config.json"
+			)
+			pipeline.log(f"{bench_dir}/sites/common_site_config.json written")
+
+			pipeline.step("site")
+			apps_csv = ",".join(a.app_name for a in lab.apps if a.app_name.lower() != "frappe")
+			pipeline.log(f"Site {site_name} with {apps_csv or 'frappe'}")
+			use_golden, refusal = _golden_matches_server(lab.image_tag, db_server)
+			if refusal:
+				pipeline.log(refusal)
+			exit_code, output = create_site_in_container(
+				container_id, db_server, site_name, admin_password, apps_csv, use_golden=use_golden
+			)
+			if exit_code != 0:
+				raise Exception(f"Site setup failed (exit {exit_code}): {output}")
+			pipeline.log(_site_outcome(output, site_name))
+			_record_primary_site(bench, lab, admin_password)
+
+			pipeline.step("assets")
+			# Deploy never builds; rebuilding the lab image is how a stale bundle is refreshed.
+			pipeline.log("Assets ship in the image — bundled at build time")
+
+			if not bench.ssh_username:
+				bench.ssh_username = bench._derive_username(bench.owner)
+
+			ssh_password = secrets.token_urlsafe(12)
+			provision_args = build_provision_args(bench, lab, settings)
+			pipeline.step("ssh_user")
+			pipeline.log(f"provision-user.sh {bench.ssh_username}")
+			# The app's copy of provision-user.sh is authoritative over the one baked into the image.
+			provision_script = (
+				Path(frappe.get_app_path("benchpress")) / "lab-templates" / "scripts" / "provision-user.sh"
+			)
+			write_file_to_container(container_id, provision_script.read_text(), PROVISION_SCRIPT)
+			exit_code, output = exec_in_container(
+				container_id,
+				provision_command(provision_args),
+				user="root",
+				environment={"SSH_PASSWORD": ssh_password},
+			)
+			if output:
+				pipeline.log(output.strip())
+			if exit_code != 0:
+				raise Exception(f"provision-user.sh failed (exit {exit_code}): {output}")
+
+			bench.ssh_password = ssh_password
+
+			# Emitted even when the lab has code-server off: a step the run decided
+			# to skip is information, and a stepper missing its tenth row is not.
+			pipeline.step("code_server")
+
+			# After provision-user.sh, not after site creation: that renames the bench user, and
+			# `usermod --login` refuses to rename a user owning a running process. The account is
+			# named here rather than derived inside the container from a path the tenant owns.
+			exit_code, output = exec_in_container(
+				container_id,
+				f"bash /opt/benchpress/scripts/serve.sh {shlex.quote(bench.ssh_username)}",
+				user="root",
+			)
+			if exit_code != 0:
+				raise Exception(f"serve.sh failed (exit {exit_code}): {output}")
+			pipeline.log(f"Site served on port {addressing.SITE_HTTP_PORT}")
+
+			# The same resolver the route file was written from, so the router and the process
+			# cannot disagree about whether this bench has an IDE.
+			if ingress.has_ide(bench.name):
+				_start_code_server(bench, container_id, pipeline, settings)
+			else:
+				_forget_code_server_url(bench)
+				pipeline.log("Code server is disabled for this lab or its instance size — skipped")
 
 		# Everything above this line is free however long it took, because a deploy that never
 		# gets here never reaches `Running`.
@@ -505,6 +535,48 @@ def _deploy_bench(bench_name: str, size_name: str | None = None, deploy_log: str
 		notify_owner(bench.owner, f"Lab deploy failed: {lab.title}", "Bench Instance", bench.name)
 
 
+def _deploy_self_managed(bench, lab, container_id: str, pipeline, settings) -> None:
+	"""The tail of a deploy for a bench with no site: its user, then code-server."""
+	from benchpress.deploy_manager import (
+		PROVISION_SCRIPT,
+		_forget_code_server_url,
+		_start_code_server,
+		build_provision_args,
+		provision_command,
+	)
+
+	for step in ("site_config", "site", "assets"):
+		pipeline.step(step)
+		pipeline.log(SELF_MANAGED_SKIPPED)
+
+	if not bench.ssh_username:
+		bench.ssh_username = bench._derive_username(bench.owner)
+	pipeline.step("ssh_user")
+	pipeline.log(f"provision-user.sh {bench.ssh_username}")
+	write_file_to_container(container_id, SELF_MANAGED_PROVISION.read_text(), PROVISION_SCRIPT)
+	ssh_keys = ssh_keys_of(bench.owner)
+	if not ssh_keys:
+		pipeline.log(NO_SSH_KEYS)
+	exit_code, output = exec_in_container(
+		container_id,
+		provision_command(build_provision_args(bench, lab, settings)),
+		user="root",
+		environment={"SSH_KEYS": ssh_keys},
+	)
+	if output:
+		pipeline.log(output.strip())
+	if exit_code != 0:
+		raise Exception(f"provision-user.sh failed (exit {exit_code}): {output}")
+	bench.ssh_password = None
+
+	pipeline.step("code_server")
+	if ingress.has_ide(bench.name):
+		_start_code_server(bench, container_id, pipeline, settings)
+	else:
+		_forget_code_server_url(bench)
+		pipeline.log("Code server is disabled for this lab or its instance size — skipped")
+
+
 def redeploy_bench(bench_name: str) -> None:
 	from benchpress.deploy_manager import _log_deploy_skipped
 
@@ -518,5 +590,5 @@ def redeploy_bench(bench_name: str) -> None:
 def _redeploy_bench(bench_name: str) -> None:
 	# The slot is held across the whole redeploy: releasing between the two halves would hand it
 	# to somebody else and leave this caller one over their limit when their own deploy lands.
-	torn_down(frappe.get_doc("Bench Instance", bench_name), release_admission=False)
+	torn_down(frappe.get_doc("Bench Instance", bench_name), release_admission=False, keep_databases=True)
 	_deploy_bench(bench_name)

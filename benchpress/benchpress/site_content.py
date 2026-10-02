@@ -489,7 +489,7 @@ LANDING_SEED = {
 			"title": "Pull or build the image",
 			"detail": (
 				"A matching layer is pulled from the registry. Custom labs run a real image "
-				"build, and its log is streamed into Deploy history line by line."
+				"build, and its log is streamed into the Build log line by line."
 			),
 			"command": "docker build --build-arg APPS_JSON_BASE64=…\n  -t bp/erpnext-v15 .",
 		},
@@ -574,7 +574,7 @@ LANDING_SEED = {
 	"console_title": "Status you can read at a glance.",
 	"console_body": (
 		"Bench status and container health are separate columns, because they fail "
-		"separately. Deploy history keeps every log line. Devices shows who is on the mesh."
+		"separately. The deploy log keeps every line. Devices shows who is on the mesh."
 	),
 	"console_callouts": [
 		{

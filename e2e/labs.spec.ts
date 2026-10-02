@@ -21,26 +21,27 @@ test.describe("Labs Page", () => {
     }
   });
 
-  test("loads the table and its filters", async ({ page }) => {
+  test("loads the grid and its filters", async ({ page }) => {
     const labsPage = new LabsPage(page);
     await labsPage.goto();
 
-    await expect(labsPage.table).toBeVisible();
+    await expect(labsPage.grid).toBeVisible();
     await expect(labsPage.searchInput).toBeVisible();
     await expect(labsPage.statusFilter).toBeVisible();
     await expect(labsPage.versionFilter).toBeVisible();
     await expect(labsPage.ownerFilter).toBeVisible();
   });
 
-  test("shows the columns the old table omitted", async ({ page }) => {
+  test("the fixture card shows its version, its badge and where it is deployed", async ({
+    page,
+  }) => {
     const labsPage = new LabsPage(page);
     await labsPage.goto();
 
-    for (const column of ["Lab", "Version", "Apps", "Status", "Deployed as", "Last run"]) {
-      await expect(labsPage.table).toContainText(column);
-    }
-    // Memory and CPU moved to the lab detail header.
-    await expect(labsPage.table).not.toContainText("Memory");
+    const card = labsPage.card(labName);
+    await expect(card).toContainText("version-16");
+    await expect(card.locator('[data-test="status-Draft"]')).toBeVisible();
+    await expect(card).toContainText("Never deployed");
   });
 
   test("renders every status as a badge, never grey text", async ({ page }) => {
@@ -54,7 +55,7 @@ test.describe("Labs Page", () => {
     const labsPage = new LabsPage(page);
     await labsPage.goto();
 
-    await expect(labsPage.table).toContainText("Never deployed");
+    await expect(labsPage.grid).toContainText("Never deployed");
   });
 
   test("search narrows the list without a page reload", async ({ page }) => {
@@ -62,10 +63,10 @@ test.describe("Labs Page", () => {
     await labsPage.goto();
 
     await labsPage.search("E2E Test Lab");
-    await labsPage.expectRowVisible(labName);
+    await labsPage.expectCardVisible(labName);
 
     await labsPage.search("nonexistent-lab-xyz-12345");
-    await labsPage.expectRowHidden(labName);
+    await labsPage.expectCardHidden(labName);
     await expect(labsPage.clearFilters).toBeVisible();
   });
 
@@ -76,7 +77,7 @@ test.describe("Labs Page", () => {
     await labsPage.search("nonexistent-lab-xyz-12345");
     await labsPage.clearFilters.click();
 
-    await labsPage.expectRowVisible(labName);
+    await labsPage.expectCardVisible(labName);
   });
 
   test("the filters keep matching labs and drop the rest", async ({ page }) => {
@@ -86,11 +87,11 @@ test.describe("Labs Page", () => {
     // The fixture lab is Draft on version-16. Each dropdown only offers values
     // that some lab actually has, so filtering to another one must empty it out.
     await labsPage.filterByStatus("Draft");
-    await labsPage.expectRowVisible(labName);
+    await labsPage.expectCardVisible(labName);
 
     await labsPage.filterByStatus("Status: all");
     await labsPage.filterByVersion("version-15");
-    await labsPage.expectRowHidden(labName);
+    await labsPage.expectCardHidden(labName);
   });
 
   test("admin header actions are present for an admin", async ({ page }) => {
@@ -98,14 +99,22 @@ test.describe("Labs Page", () => {
     await labsPage.goto();
 
     await labsPage.expectAdminActionsVisible();
-    await expect(labsPage.fromTemplateButton).toBeVisible();
+  });
+
+  test("the Templates tab opens the catalog at its own URL", async ({ page }) => {
+    const labsPage = new LabsPage(page);
+    await labsPage.goto();
+
+    await labsPage.templatesTab.click();
+    await page.waitForURL("**/labs/templates");
+    await expect(labsPage.testId("templates")).toBeVisible();
   });
 
   test("clicking a lab opens its detail page", async ({ page }) => {
     const labsPage = new LabsPage(page);
     await labsPage.goto();
 
-    await labsPage.row(labName).click();
+    await labsPage.card(labName).click();
     await page.waitForURL(`**/labs/${labName}`);
   });
 });

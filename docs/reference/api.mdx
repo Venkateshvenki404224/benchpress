@@ -169,24 +169,6 @@ what actually happens.
 | Endpoint | Arguments | Returns | Checks |
 |---|---|---|---|
 | `get_deploy_logs` | `bench_name` | the log rows for one bench | `require_bench_access` |
-| `get_deploy_history` | — | up to 50 recent deploy runs | `require_app_user`, inside `run_history` |
-| `get_build_history` | — | up to 50 recent image builds | `require_app_user`, inside `run_history` |
-
-The two history endpoints do not check permissions in `api.py`. They delegate
-immediately to `benchpress/run_history.py`, and the check is the first statement
-there. This is the one place where the guard is a function call away, so the
-table names where it lives.
-
-Both are endpoints rather than a generic list read for a reason.
-`Build Log` had no query condition, and reading it through the generic list API
-served every user's image builds to everybody. Scoping cannot be added to a
-generic read, so it is applied here: deploy rows go through `frappe.get_list`
-and pick up `deploy_log_query_conditions`, and build rows are filtered by owner
-for anybody who is not an admin.
-
-Both answers carry `window_days`, `limit` and `truncated`. Logs are cleared
-after seven days, so neither table is complete, and the answer says so rather
-than implying otherwise.
 
 ## Devices
 
@@ -220,6 +202,24 @@ that bench.
 
 These exist because Frappe does not return `Password` fields in an ordinary
 document read. Reading the `Bench Instance` gives you nothing. Ask here.
+
+## Bench databases
+
+Three endpoints serve the **Databases** card of a self-managed bench. All three
+refuse a caller who does not own the bench, a lab that is not self-managed, and a
+bench that is not `Running`. An admin who does not own the bench is refused too.
+
+| Endpoint | Arguments | Returns | Checks |
+|---|---|---|---|
+| `create_bench_database` | `bench` | `{db_name, db_user, db_password, command}` | POST only. `require_bench_access`, the owner, self-managed, `Running`, then `max_bench_databases` |
+| `get_bench_database_password` | `bench`, `db_name` | `{db_password, command}` | the same as `create_bench_database`, then the row must be on that bench |
+| `delete_bench_database` | `bench`, `db_name` | `{db_name}` | POST only. The same as `create_bench_database` without the cap, then the row must be on that bench |
+
+`delete_bench_database` drops the database and its user, then removes the row
+and its stored password. A failed drop keeps the row.
+
+`command` is the full `bench new-site` line, with `--no-setup-db` and the
+database server's container name as `--db-host`.
 
 ## Credits
 

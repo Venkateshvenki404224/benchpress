@@ -3,7 +3,7 @@ title: Architecture
 description: The moving parts of BenchPress — the control plane, the bench
   containers, the shared infrastructure, and which Python module owns each
   concern.
-lastModified: "2026-08-30T17:48:34+05:30"
+lastModified: "2026-09-30T20:56:42+05:30"
 lastAuthor: Venkatesh
 ---
 # Architecture
@@ -68,7 +68,7 @@ One concern for each module. The table is the whole `benchpress/` package.
 |`docker_events.py`|the Docker event stream, and the incidents it records|
 |`stats_collector.py`|CPU, memory and health, sampled for each running bench|
 |`permissions.py`|the role helpers and the six query conditions|
-|`overview.py`, `labs.py`, `lab_detail.py`, `run_history.py`|one screen each, assembled in a fixed number of queries|
+|`overview.py`, `labs.py`, `lab_detail.py`|one screen each, assembled in a fixed number of queries|
 |`waitlist.py`, `signup.py`|the two doors open to a guest|
 |`diagnostics.py`|twelve read-only environment checks|
 |`notifications.py`|one desk alert and one email to a document owner|
@@ -122,21 +122,21 @@ A Vue 3 single-page app in `frontend/`, built with frappe-ui, vue-router and
 Tailwind. It is served from the same origin as the API, so a socket connection
 needs no separate host.
 
-Eleven routes exist. Four of them are admin-only, and one renders only while
-credits are on.
+Ten routes exist. One of them is admin-only, and one renders only while
+credits are on. Old `/build-logs` and `/deploy-logs` links open Labs and
+Instances.
 
 |Route|Screen|Who sees it|
 |--|--|--|
 |`/`|Overview|any app user|
 |`/labs`|Labs|any app user|
+|`/benches`|Benches|any app user|
 |`/bench-instances`|Instances|any app user|
 |`/labs/:labId`|Lab detail|the owner, and any admin|
 |`/devices`|Devices|any app user|
-|`/deploy-logs`|Deploy history|any app user, scoped to their benches|
 |`/labs/new`|New lab|admin only|
-|`/labs/templates`|Templates|admin only|
-|`/build-logs`|Build history|admin only|
-|`/settings`|Settings|admin only|
+|`/labs/templates`|The Templates tab of Labs|any app user|
+|`/settings`|Settings|any app user. Only an admin sees the Server groups|
 |`/credits`|Credits|any app user, and only while credits are on|
 
 A guard in `frontend/src/router.js` sends a non-admin who reaches an admin-only

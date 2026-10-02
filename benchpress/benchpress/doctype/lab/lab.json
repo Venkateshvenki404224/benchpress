@@ -11,6 +11,8 @@
   "title",
   "column_break_basic",
   "frappe_version",
+  "self_managed",
+  "dockerfile",
   "status",
   "template",
   "description",
@@ -63,6 +65,21 @@
    "label": "Frappe Version",
    "options": "version-15\nversion-14\nversion-16\ndevelop",
    "reqd": 1
+  },
+  {
+   "default": "0",
+   "description": "Deploys an empty bench the user manages. No site is created.",
+   "fieldname": "self_managed",
+   "fieldtype": "Check",
+   "label": "Self-managed bench",
+   "read_only": 1
+  },
+  {
+   "depends_on": "self_managed",
+   "fieldname": "dockerfile",
+   "fieldtype": "Code",
+   "label": "Dockerfile",
+   "read_only": 1
   },
   {
    "default": "Draft",
@@ -247,7 +264,7 @@
    "link_fieldname": "lab"
   }
  ],
- "modified": "2026-04-14 02:51:00.304485",
+ "modified": "2026-09-26 10:00:00.000000",
  "modified_by": "Administrator",
  "module": "Benchpress",
  "name": "Lab",

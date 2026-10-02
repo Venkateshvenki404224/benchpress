@@ -11,7 +11,6 @@ export class BenchInstancesPage extends BasePage {
   readonly root: Locator;
   readonly table: Locator;
   readonly scopeLine: Locator;
-  readonly deployHistoryButton: Locator;
 
   constructor(page: Page) {
     super(page);
@@ -19,7 +18,6 @@ export class BenchInstancesPage extends BasePage {
     this.root = this.testId("instances");
     this.table = this.testId("instances-table");
     this.scopeLine = this.testId("instances-scope");
-    this.deployHistoryButton = this.testId("deploy-history");
   }
 
   async goto() {

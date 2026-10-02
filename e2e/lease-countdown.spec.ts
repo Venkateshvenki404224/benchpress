@@ -25,11 +25,11 @@ function inSeconds(seconds: number): number {
   return Math.floor(Date.now() / 1000) + seconds;
 }
 
-/** Filter the table down to one lab, so a countdown on somebody else's row cannot answer for it. */
+/** Filter the grid down to one lab, so a countdown on somebody else's card cannot answer for it. */
 async function showOnly(labsPage: LabsPage, labId: string) {
   await labsPage.goto();
   await labsPage.search(labId);
-  await expect(labsPage.table.locator('[data-test^="lab-"]')).toHaveCount(1);
+  await expect(labsPage.grid.locator('[data-test^="lab-card-"]')).toHaveCount(1);
 }
 
 async function labWithBench(page, benchOverrides: Record<string, unknown>) {

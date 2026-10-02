@@ -5,23 +5,27 @@
 				<nav
 					class="hidden w-[196px] flex-none flex-col border-r border-outline-gray-1 bg-surface-gray-1 p-2 sm:flex"
 				>
-					<p class="px-2 py-1.5 text-xs text-ink-gray-5">Server</p>
-					<button
-						v-for="group in SETTINGS_GROUPS"
-						:key="group.key"
-						type="button"
-						class="flex items-center gap-2 rounded px-2 py-1.5 text-left text-base"
-						:class="
-							group.key === activeGroup.key
-								? 'bg-surface-selected text-ink-gray-9 shadow-sm'
-								: 'text-ink-gray-7 hover:bg-surface-gray-2'
-						"
-						:data-test="`tab-${group.tab}`"
-						@click="activeKey = group.key"
-					>
-						<component :is="group.icon" class="size-4 flex-none text-ink-gray-6" />
-						{{ group.title }}
-					</button>
+					<template v-for="section in navSections" :key="section.label">
+						<p class="mt-2 px-2 py-1.5 text-xs text-ink-gray-5 first:mt-0">
+							{{ section.label }}
+						</p>
+						<button
+							v-for="group in section.groups"
+							:key="group.key"
+							type="button"
+							class="flex items-center gap-2 rounded px-2 py-1.5 text-left text-base"
+							:class="
+								group.key === activeGroup.key
+									? 'bg-surface-selected text-ink-gray-9 shadow-sm'
+									: 'text-ink-gray-7 hover:bg-surface-gray-2'
+							"
+							:data-test="`tab-${group.tab}`"
+							@click="activeSettingsKey = group.key"
+						>
+							<component :is="group.icon" class="size-4 flex-none text-ink-gray-6" />
+							{{ group.title }}
+						</button>
+					</template>
 				</nav>
 
 				<section class="flex min-w-0 flex-1 flex-col">
@@ -40,7 +44,11 @@
 					</header>
 
 					<div class="flex-1 overflow-auto px-5 py-1" :data-test="activeGroup.key">
-						<p v-if="!settingsResource.doc" class="py-4 text-body text-ink-gray-5">
+						<SshKeysPanel v-if="activeGroup.key === SSH_KEYS_GROUP" />
+						<p
+							v-else-if="!settingsResource.doc"
+							class="py-4 text-body text-ink-gray-5"
+						>
 							Loading settings…
 						</p>
 						<div
@@ -71,6 +79,7 @@
 					</div>
 
 					<footer
+						v-if="isServerGroup"
 						class="flex flex-none flex-wrap items-center gap-2.5 border-t border-outline-gray-1 px-5 py-3"
 					>
 						<span class="text-xs text-ink-gray-5" data-test="last-saved">
@@ -107,13 +116,17 @@
 </template>
 
 <script setup>
-// Server settings, shaped like frappe-ui's SettingsDialog: grouped nav on the
+// Account and server settings, shaped like frappe-ui's SettingsDialog: grouped nav on the
 // left, one panel per group on the right, header pinned while the body
 // scrolls. The component itself only exists in frappe-ui's 1.0 beta, which
 // drops ListView and ConfirmDialog this app still uses, so the layout is
 // rebuilt here on 0.1.278 primitives.
+import SshKeysPanel from "@/components/settings/SshKeysPanel.vue";
 import {
+	ACCOUNT_GROUPS,
 	SETTINGS_GROUPS,
+	SSH_KEYS_GROUP,
+	activeSettingsKey,
 	discardSettings,
 	errorFor,
 	form,
@@ -123,19 +136,27 @@ import {
 	saveSettings,
 	settingsResource,
 } from "@/data/benchpressSettings";
+import { userContext } from "@/data/userContext";
 import { Button, Dialog, ErrorMessage, FormControl } from "frappe-ui";
-import { computed, ref, watch } from "vue";
+import { computed, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 
 import XIcon from "~icons/lucide/x";
 
 const route = useRoute();
 const router = useRouter();
-const activeKey = ref(SETTINGS_GROUPS[0].key);
 
+const navSections = computed(() => [
+	{ label: "Account", groups: ACCOUNT_GROUPS },
+	...(userContext.isAdmin ? [{ label: "Server", groups: SETTINGS_GROUPS }] : []),
+]);
+const visibleGroups = computed(() => navSections.value.flatMap((section) => section.groups));
 const activeGroup = computed(
-	() => SETTINGS_GROUPS.find((group) => group.key === activeKey.value) ?? SETTINGS_GROUPS[0]
+	() =>
+		visibleGroups.value.find((group) => group.key === activeSettingsKey.value) ??
+		ACCOUNT_GROUPS[0]
 );
+const isServerGroup = computed(() => SETTINGS_GROUPS.includes(activeGroup.value));
 
 // `/settings` still resolves — it opens this dialog over Overview — so closing
 // it has to take the URL off that route rather than leave it lying.

@@ -90,8 +90,7 @@ primary action fills the row. Other actions keep their place while they fit on
 one line; when they do not, every action but the primary moves into the ellipsis
 menu lab detail already uses.
 
-Worked through: Overview has two, both stay. Labs has three, so New lab fills
-and Build history and From template go into the ellipsis. Lab detail's two
+Worked through: Overview has two, both stay. Labs has one. Lab detail's two
 buttons plus the ellipsis do fit, so all three stay. Templates and New lab have
 one each.
 

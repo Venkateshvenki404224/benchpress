@@ -18,6 +18,14 @@ test.describe("Navigation & Routing", () => {
     await expect(page.locator("h1", { hasText: "Labs" })).toBeVisible();
   });
 
+  test("/labs/templates opens the Templates tab under Labs", async ({ page }) => {
+    const basePage = new BasePage(page);
+    await basePage.gotoFrontend("/labs/templates");
+
+    await expect(basePage.testId("templates")).toBeVisible();
+    await expect(basePage.testId("nav-labs")).toHaveAttribute("aria-current", "page");
+  });
+
   test("/bench-instances route loads the instances page", async ({ page }) => {
     await page.goto("/frontend/bench-instances");
     await page.waitForLoadState("networkidle");
@@ -32,10 +40,28 @@ test.describe("Navigation & Routing", () => {
     await expect(page.locator('[data-test="devices"]')).toBeVisible();
   });
 
+  test("/benches route loads the benches page", async ({ page }) => {
+    await page.goto("/frontend/benches");
+    await page.waitForLoadState("networkidle");
+
+    await expect(page.locator('[data-test="benches"]')).toBeVisible();
+    await expect(
+      page.locator('[data-test="bench-template-frappe-develop"]'),
+    ).toBeVisible();
+  });
+
   test("sidebar is five items and each one navigates", async ({ page }) => {
     const basePage = new BasePage(page);
     await basePage.gotoFrontend("/labs");
     await basePage.waitForUserContext();
+
+    const navItems = page.locator(
+      '[data-test^="nav-"]:not([data-test="nav-search"]):not([data-test="nav-notifications"])',
+    );
+    await expect(navItems).toHaveCount(5);
+
+    await basePage.clickNav("benches");
+    await expect(basePage.testId("benches")).toBeVisible();
 
     await basePage.clickNav("instances");
     await expect(basePage.testId("instances")).toBeVisible();
@@ -48,10 +74,6 @@ test.describe("Navigation & Routing", () => {
 
     await basePage.clickNav("overview");
     await expect(basePage.testId("overview")).toBeVisible();
-
-    // The Logs section is gone — history is reached from its object.
-    await expect(page.locator('[data-test="nav-deploy-logs"]')).toHaveCount(0);
-    await expect(page.locator('[data-test="nav-build-logs"]')).toHaveCount(0);
   });
 
   test("search and notifications sit above the nav, not in the header", async ({

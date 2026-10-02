@@ -178,7 +178,7 @@ class TestReconcileSchedule(IntegrationTestCase):
 	"""The `*/5` tick. The entry is the enqueuer and never the pass."""
 
 	def test_the_tick_hands_the_pass_to_the_long_queue(self):
-		with patch("frappe.enqueue") as enqueue:
+		with patch("frappe.enqueue") as enqueue, patch.object(reconcile.job_receipt, "mint") as mint:
 			reconcile.enqueue_run()
 
 		args, kwargs = enqueue.call_args
@@ -188,6 +188,11 @@ class TestReconcileSchedule(IntegrationTestCase):
 		# would let a job queued under the old one run beside a new one.
 		self.assertEqual(kwargs["job_id"], "route_reconcile")
 		self.assertTrue(kwargs["deduplicate"])
+		# Mint-before-enqueue: the receipt is opened before frappe.enqueue is called, and the
+		# same logical_id is the one handed to the worker, not a second value computed later.
+		mint.assert_called_once()
+		self.assertEqual(kwargs["logical_id"], mint.call_args[0][0])
+		self.assertTrue(kwargs["logical_id"].startswith("route_reconcile:"))
 
 	def test_the_cron_entry_is_the_enqueuer_and_never_the_pass(self):
 		"""Frappe sends cron to `default`, which `queue-short` also consumes — and that container
@@ -234,6 +239,38 @@ class TestRunReportsEveryStep(unittest.TestCase):
 		)
 		# The verification reads the ids the reap issued, not its own idea of what to check.
 		verify.assert_called_once_with([LIVE_ID])
+
+	def test_no_logical_id_means_no_receipt_claim(self):
+		"""Called by hand (`bench execute`), with no receipt minted for it, must not raise."""
+		with (
+			patch("benchpress.placement.repair", return_value={}),
+			patch.object(reconcile, "_converge_routes", return_value={}),
+			patch.object(reconcile, "_reap_orphan_containers", return_value=dict(NO_CONTAINERS)),
+			patch.object(reconcile, "_report_orphan_databases", return_value={}),
+			patch.object(reconcile, "_trim_deploy_records", return_value={}),
+			patch.object(reconcile, "_verify_reaped", return_value={}),
+			patch.object(reconcile.job_receipt, "mark_completed") as mark_completed,
+		):
+			reconcile.run()
+
+		mark_completed.assert_not_called()
+
+	def test_logical_id_claims_the_receipt_only_after_every_step_returns(self):
+		"""The checker-owns-status rule: `run()` claims its own receipt only once it has reached
+		the end without raising — a mid-pass crash must leave the row Pending for the next tick,
+		never Completed on a pass that did not finish."""
+		with (
+			patch("benchpress.placement.repair", return_value={}),
+			patch.object(reconcile, "_converge_routes", return_value={}),
+			patch.object(reconcile, "_reap_orphan_containers", return_value=dict(NO_CONTAINERS)),
+			patch.object(reconcile, "_report_orphan_databases", return_value={}),
+			patch.object(reconcile, "_trim_deploy_records", return_value={}),
+			patch.object(reconcile, "_verify_reaped", return_value={}),
+			patch.object(reconcile.job_receipt, "mark_completed") as mark_completed,
+		):
+			reconcile.run(logical_id="route_reconcile:2026-10-02T00:00:00")
+
+		mark_completed.assert_called_once_with("route_reconcile:2026-10-02T00:00:00")
 
 
 class TestReapOrphanContainers(unittest.TestCase):
@@ -408,6 +445,20 @@ class TestOrphanDatabases(unittest.TestCase):
 		report = self._report(["backups", "_bbbb111111111111"])
 
 		self.assertEqual(report["names"], {"db-one": ["_bbbb111111111111"]})
+
+
+class TestClaimedDatabases(IntegrationTestCase):
+	LAB = "test-lab-reconcile-bench-db"
+
+	def test_a_bench_database_is_claimed(self):
+		lab = _make_lab(self.LAB)
+		self.addCleanup(frappe.db.commit)
+		self.addCleanup(frappe.delete_doc, "Lab", lab.name, force=True, ignore_permissions=True)
+		bench = _fresh_bench(self, lab.name)
+		bench.append("databases", {"db_name": "bp_dev_aaaa1111", "db_user": "bp_dev_aaaa1111"})
+		bench.save(ignore_permissions=True)
+
+		self.assertIn("bp_dev_aaaa1111", reconcile._claimed_databases())
 
 
 class TestTrimDeployRecords(IntegrationTestCase):

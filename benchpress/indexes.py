@@ -39,9 +39,7 @@ def ensure_bench_site_index() -> None:
 def ensure_log_indexes() -> None:
 	"""The two log tables, each read by its scoping column and shown newest first.
 
-	`Build Log` is read by lab on the lab page and by owner in the run history, and its owner is
-	now also its permission rule, so both orders earn an index. `Deploy Log` is only ever read
-	one bench at a time.
+	`Build Log` is read by lab, and by owner through its permission rule. `Deploy Log` is read by bench.
 	"""
 	frappe.db.add_index("Build Log", ["lab", "owner"])
 	frappe.db.add_index("Build Log", ["owner", "timestamp"])

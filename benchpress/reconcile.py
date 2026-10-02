@@ -10,9 +10,9 @@ from datetime import UTC, datetime, timedelta
 
 import frappe
 from frappe.query_builder.functions import Count
-from frappe.utils import cint
+from frappe.utils import cint, now_datetime
 
-from benchpress import docker_manager, ingress, mariadb_manager, placement
+from benchpress import docker_manager, ingress, job_receipt, mariadb_manager, placement
 
 # Matches `admission_repair.CLAIM_GRACE_MINUTES`, and for the same reason: `_deploy_bench` creates
 # the container before it writes `container_id`, so every deploy passes through a state that looks
@@ -39,21 +39,42 @@ def configured_deploy_log_cap() -> int:
 
 
 def enqueue_run() -> None:
-	"""Convergence cron: hand the whole pass to `queue-long`."""
+	"""Convergence cron: hand the whole pass to `queue-long`.
+
+	Mints the Job Receipt row BEFORE calling `frappe.enqueue`, same mint-before-enqueue /
+	checker-owns-status pattern already in production for `enqueue_route_sync` and
+	`enqueue_health_check`. `logical_id` is timestamp-suffixed, not bench- or action-keyed —
+	same reasoning as `enqueue_health_check`: this cron fires every five minutes and each run
+	converges against *current* state (every helper below re-reads live Docker/DB/filesystem
+	state rather than trusting a prior pass's report), so it is a one-shot independent check,
+	not a retry of a previous tick that needs to collide into the same row. RQ's own
+	`job_id="route_reconcile"` + `deduplicate=True` already collapses overlapping *enqueue*
+	calls; this receipt only needs to answer "did the most recently claimed pass finish",
+	never "did this exact invocation finish".
+	"""
 	# Scheduled jobs land on `default`, which `queue-short` also consumes — and that worker has
 	# neither the Docker socket nor the route mount. So the cron entry is this and never `run`.
+	logical_id = f"route_reconcile:{now_datetime().isoformat()}"
+	job_receipt.mint(logical_id, expected_effect="fleet converged: routes/orphans/databases/deploy logs")
 	frappe.enqueue(
 		"benchpress.reconcile.run",
 		queue="long",
 		job_id="route_reconcile",
+		logical_id=logical_id,
 		deduplicate=True,
 	)
 
 
-def run() -> dict:
+def run(logical_id: str | None = None) -> dict:
 	"""Converge the fleet, reporting a count for each of six steps rather than a bare success.
 
 	By hand: `bench --site frontend execute benchpress.reconcile.run`.
+
+	`logical_id`, when given, is the Job Receipt row minted BEFORE this job was enqueued (see
+	`enqueue_run`). This function only performs the convergence steps; it never flips its own
+	receipt to Completed — that is `_claim_reconcile_receipt`'s job, called below only after
+	every step has actually returned, so a raise partway through this function correctly leaves
+	the row Pending rather than claiming a pass that never finished.
 	"""
 	# Bridges first: a bench that cannot reach MariaDB is broken on a dev checkout too, where
 	# there is no routing at all.
@@ -62,7 +83,7 @@ def run() -> dict:
 	containers = _reap_orphan_containers()
 	databases = _report_orphan_databases()
 	deploy_records = _trim_deploy_records()
-	return {
+	result = {
 		"bridges": bridges,
 		"routes": routes,
 		"containers": containers,
@@ -70,6 +91,22 @@ def run() -> dict:
 		"deploy_records": deploy_records,
 		"verified": _verify_reaped(containers["removed"]),
 	}
+	if logical_id:
+		_claim_reconcile_receipt(logical_id)
+	return result
+
+
+def _claim_reconcile_receipt(logical_id: str) -> None:
+	"""Claim the receipt only once every convergence step has returned without raising.
+
+	Unlike `mariadb_manager._claim_health_check_receipt`, there is no independent live re-check
+	here beyond "did `run()` reach its final line" — the six steps above are themselves each
+	already a live-state convergence (not a self-report of a prior claim), so reaching this
+	point already means the daemon/DB/filesystem were read fresh this pass. What this receipt
+	still guards against is a worker dying mid-pass (killed, OOM) with no raise at all: that
+	leaves the row Pending, correctly distinguishable from a pass that actually completed.
+	"""
+	job_receipt.mark_completed(logical_id)
 
 
 def compare(rows: list[dict], containers: list[dict], *, grace_minutes: int | None = None) -> dict:
@@ -244,7 +281,8 @@ def _claimed_databases() -> set[str]:
 	names = frappe.get_all("Bench Site", pluck="site_name") + frappe.get_all(
 		"Bench Instance", pluck="site_name"
 	)
-	return {mariadb_manager.get_database_name(name) for name in names if name}
+	bench_databases = frappe.get_all("Bench Database", pluck="db_name", parent_doctype="Bench Instance")
+	return {mariadb_manager.get_database_name(name) for name in names if name} | set(bench_databases)
 
 
 def _site_databases(server: str) -> list[str]:
