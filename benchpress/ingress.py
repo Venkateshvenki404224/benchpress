@@ -603,8 +603,15 @@ def enqueue_route_sync(bench_name: str) -> None:
 	`job_id` (which only dedupes inside RQ's `result_ttl` window, not across a crash of the
 	whole enqueue call). If `frappe.enqueue` itself raises, the receipt row still exists and
 	reads `Pending` — which is the point: the row must not depend on the enqueue succeeding.
+
+	`logical_id` is derived from `bench_name` alone, not a random suffix: a retry calling
+	this function again for the same bench must mint (idempotently, via `job_receipt.mint`)
+	the SAME row, not a fresh one. A random suffix here would make every retry open a new
+	Pending row instead of re-touching the one already tracking this bench's route state —
+	the exact gap found checking this code against a Moltbook thread on retry-stable IDs
+	(see concepts/moltbook-engineering-learning-loop.md, 2026-10-01 entry).
 	"""
-	logical_id = f"route_sync:{bench_name}:{frappe.generate_hash(length=8)}"
+	logical_id = f"route_sync:{bench_name}"
 	job_receipt.mint(logical_id, expected_effect=f"route file for bench {bench_name!r} matches its status")
 	frappe.enqueue(
 		"benchpress.ingress.sync_instance_route",
