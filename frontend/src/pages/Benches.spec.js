@@ -11,6 +11,7 @@ const FRAPPE_DEVELOP = {
 	memory_limit: "2g",
 	cpu_cores: 2,
 	image_ready: false,
+	existing_bench: null,
 };
 
 const LAUNCHED = {
@@ -49,6 +50,10 @@ vi.mock("frappe-ui", () => {
 	};
 });
 
+vi.mock("vue-router", () => ({
+	RouterLink: (props, { slots, attrs }) => h("a", { href: props.to, ...attrs }, slots.default?.()),
+}));
+
 function initialData(url) {
 	if (url === "benchpress.api.get_bench_templates") return [FRAPPE_DEVELOP];
 	return [];
@@ -86,6 +91,7 @@ describe("the Benches page", () => {
 		app.unmount();
 		root.remove();
 		hasSshKey.value = true;
+		resources["benchpress.api.get_bench_templates"].data = [FRAPPE_DEVELOP];
 	});
 
 	it("renders a card for each bench template", () => {
@@ -165,5 +171,52 @@ describe("the Benches page", () => {
 		expect(loadSshKeys).toHaveBeenCalled();
 		expect(root.querySelector("textarea")).toBeNull();
 		expect(root.querySelector('[data-test="ssh-keys"]')).toBeNull();
+	});
+
+	it("shows Open bench when the existing bench is Running", async () => {
+		resources["benchpress.api.get_bench_templates"].data = [
+			{ ...FRAPPE_DEVELOP, existing_bench: { name: "b1", lab: "lab-1", status: "Running" } },
+		];
+		await nextTick();
+
+		expect(root.querySelector('[data-test="open-bench-frappe-develop"]')).not.toBeNull();
+		expect(root.querySelector('[data-test="prepare-bench-frappe-develop"]')).toBeNull();
+	});
+
+	it("shows Start bench and calls bench_action start when the existing bench is Stopped", async () => {
+		resources["benchpress.api.get_bench_templates"].data = [
+			{
+				...FRAPPE_DEVELOP,
+				existing_bench: { name: "b1", lab: "lab-1", status: "Stopped" },
+			},
+		];
+		await nextTick();
+
+		const btn = root.querySelector('[data-test="start-bench-frappe-develop"]');
+		expect(btn).not.toBeNull();
+
+		btn.click();
+		await nextTick();
+		await nextTick();
+
+		expect(resources["benchpress.api.bench_action"].submit).toHaveBeenCalledWith({
+			bench_name: "b1",
+			action: "start",
+		});
+	});
+
+	it("shows a disabled spinner for a Deploying bench", async () => {
+		resources["benchpress.api.get_bench_templates"].data = [
+			{
+				...FRAPPE_DEVELOP,
+				existing_bench: { name: "b1", lab: "lab-1", status: "Deploying" },
+			},
+		];
+		await nextTick();
+
+		const btn = root.querySelector('[data-test="transitioning-bench-frappe-develop"]');
+		expect(btn).not.toBeNull();
+		expect(btn.disabled).toBe(true);
+		expect(root.querySelector('[data-test="prepare-bench-frappe-develop"]')).toBeNull();
 	});
 });

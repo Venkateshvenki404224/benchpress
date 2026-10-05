@@ -55,7 +55,7 @@
 
 				<div class="mt-auto flex items-center gap-2 border-t border-outline-gray-1 pt-2.5">
 					<button
-						v-if="!hasSshKey"
+						v-if="!hasSshKey && !template.existing_bench"
 						type="button"
 						class="min-w-0 text-meta text-ink-gray-6 underline underline-offset-2 hover:text-ink-gray-8"
 						data-test="add-ssh-key-link"
@@ -63,14 +63,48 @@
 					>
 						Add an SSH key first
 					</button>
-					<span v-else class="min-w-0 text-meta text-ink-gray-4">
+					<span v-else-if="!template.existing_bench" class="min-w-0 text-meta text-ink-gray-4">
 						{{
 							template.image_ready
 								? "About a minute"
 								: "First launch builds, about 30 minutes"
 						}}
 					</span>
+					<span v-else class="min-w-0 text-meta text-ink-gray-4">
+						<StatusBadge :status="template.existing_bench.status" />
+					</span>
+
+					<RouterLink
+						v-if="isRunningOrStarting(template.existing_bench)"
+						:to="`/labs/${template.existing_bench.lab}`"
+						class="ml-auto flex-none"
+						:data-test="`open-bench-${template.key}`"
+					>
+						<Button variant="solid">Open bench</Button>
+					</RouterLink>
 					<Button
+						v-else-if="isStartable(template.existing_bench)"
+						class="ml-auto flex-none"
+						variant="solid"
+						:loading="pendingKey === template.key"
+						:disabled="Boolean(pendingKey)"
+						:data-test="`start-bench-${template.key}`"
+						@click="startBench(template)"
+					>
+						Start bench
+					</Button>
+					<Button
+						v-else-if="isTransitioning(template.existing_bench)"
+						class="ml-auto flex-none"
+						variant="solid"
+						:loading="true"
+						disabled
+						:data-test="`transitioning-bench-${template.key}`"
+					>
+						{{ template.existing_bench.status }}…
+					</Button>
+					<Button
+						v-else
 						class="ml-auto flex-none"
 						variant="solid"
 						:loading="pendingKey === template.key"
@@ -133,6 +167,7 @@ import { labsResource } from "@/data/labs";
 import { hasSshKey, loadSshKeys } from "@/data/sshKeys";
 import { benchLabel, resourceChips } from "@/utils/labSpecs";
 import { Button, ErrorMessage, createResource, dayjsLocal, toast } from "frappe-ui";
+import { RouterLink } from "vue-router";
 import { computed, ref } from "vue";
 
 const COLUMNS = [
@@ -146,11 +181,40 @@ const pendingKey = ref("");
 const templates = createResource({ url: "benchpress.api.get_bench_templates", auto: true });
 const benches = createResource({ url: "benchpress.api.get_my_benches", auto: true });
 const launchAction = createResource({ url: "benchpress.api.launch_template" });
+const benchActionResource = createResource({ url: "benchpress.api.bench_action" });
 
 const allTemplates = computed(() => templates.data ?? []);
 const myBenches = computed(() => benches.data ?? []);
 
 loadSshKeys();
+
+function isRunningOrStarting(existing) {
+	return existing && (existing.status === "Running" || existing.status === "Starting");
+}
+
+function isStartable(existing) {
+	return existing && (existing.status === "Stopped" || existing.status === "Error");
+}
+
+function isTransitioning(existing) {
+	return existing && (existing.status === "Deploying" || existing.status === "Stopping");
+}
+
+async function startBench(template) {
+	pendingKey.value = template.key;
+	try {
+		await benchActionResource.submit({
+			bench_name: template.existing_bench.name,
+			action: "start",
+		});
+		if (benchActionResource.error) return;
+		templates.reload();
+		benches.reload();
+		toast.success(`Starting ${template.title}.`);
+	} finally {
+		pendingKey.value = "";
+	}
+}
 
 async function prepareBench(template) {
 	pendingKey.value = template.key;

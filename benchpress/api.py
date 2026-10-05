@@ -93,7 +93,11 @@ def get_lab_templates() -> list[dict]:
 def get_bench_templates() -> list[dict]:
 	require_app_user()
 	return [
-		{**template, "image_ready": _template_image_ready(template["key"])}
+		{
+			**template,
+			"image_ready": _template_image_ready(template["key"]),
+			"existing_bench": _existing_bench_for_template(template["key"]),
+		}
 		for template in lab_templates.get_catalog()
 		if template["self_managed"]
 	]
@@ -102,6 +106,26 @@ def get_bench_templates() -> list[dict]:
 def _template_image_ready(template_key: str) -> bool:
 	lab = _matching_lab(template_key)
 	return bool(lab) and frappe.get_cached_doc("Lab", lab).status == "Ready"
+
+
+def _existing_bench_for_template(template_key: str) -> dict | None:
+	lab = _matching_lab(template_key)
+	if not lab:
+		return None
+	bench = DocType("Bench Instance")
+	rows = (
+		frappe.qb.from_(bench)
+		.select(bench.name, bench.lab, bench.status)
+		.where(
+			(bench.owner == frappe.session.user)
+			& (bench.lab == lab)
+			& (bench.status != "Torn Down")
+		)
+		.orderby(bench.creation, order=Order.desc)
+		.limit(1)
+		.run(as_dict=True)
+	)
+	return rows[0] if rows else None
 
 
 @frappe.whitelist()
