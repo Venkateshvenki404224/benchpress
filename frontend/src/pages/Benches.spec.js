@@ -51,7 +51,8 @@ vi.mock("frappe-ui", () => {
 });
 
 vi.mock("vue-router", () => ({
-	RouterLink: (props, { slots, attrs }) => h("a", { href: props.to, ...attrs }, slots.default?.()),
+	RouterLink: (props, { slots, attrs }) =>
+		h("a", { href: props.to, ...attrs }, slots.default?.()),
 }));
 
 function initialData(url) {

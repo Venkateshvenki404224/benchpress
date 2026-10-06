@@ -116,11 +116,7 @@ def _existing_bench_for_template(template_key: str) -> dict | None:
 	rows = (
 		frappe.qb.from_(bench)
 		.select(bench.name, bench.lab, bench.status)
-		.where(
-			(bench.owner == frappe.session.user)
-			& (bench.lab == lab)
-			& (bench.status != "Torn Down")
-		)
+		.where((bench.owner == frappe.session.user) & (bench.lab == lab) & (bench.status != "Torn Down"))
 		.orderby(bench.creation, order=Order.desc)
 		.limit(1)
 		.run(as_dict=True)

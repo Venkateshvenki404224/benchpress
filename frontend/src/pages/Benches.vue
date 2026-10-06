@@ -63,7 +63,10 @@
 					>
 						Add an SSH key first
 					</button>
-					<span v-else-if="!template.existing_bench" class="min-w-0 text-meta text-ink-gray-4">
+					<span
+						v-else-if="!template.existing_bench"
+						class="min-w-0 text-meta text-ink-gray-4"
+					>
 						{{
 							template.image_ready
 								? "About a minute"
