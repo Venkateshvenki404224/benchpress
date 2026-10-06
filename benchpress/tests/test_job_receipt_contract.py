@@ -72,7 +72,9 @@ class TestJobReceiptContract(unittest.TestCase):
 		sys.modules["frappe.utils"] = fake_utils
 
 		import importlib
+
 		import benchpress.job_receipt as jr
+
 		importlib.reload(jr)
 		self.jr = jr
 
@@ -116,7 +118,9 @@ class TestJobReceiptContract(unittest.TestCase):
 		lid = self._mint()
 		self.jr.mark_completed(lid)
 		status = self.jr.mark_unknown_if_overdue(lid)
-		self.assertEqual(status, "Completed", "a job that already completed must not be downgraded to Unknown")
+		self.assertEqual(
+			status, "Completed", "a job that already completed must not be downgraded to Unknown"
+		)
 
 	def test_mark_failed_requires_an_observed_signal_and_logs(self):
 		lid = self._mint()
