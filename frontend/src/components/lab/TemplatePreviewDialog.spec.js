@@ -13,7 +13,7 @@ vi.mock("frappe-ui", () => {
 				? h("div", { "data-test": "dialog", title: props.options?.title }, [
 						slots["body-content"]?.(),
 						slots.actions?.(),
-					])
+				  ])
 				: null,
 		ErrorMessage: () => null,
 	};
@@ -35,7 +35,12 @@ const CRM = {
 	lab: null,
 };
 
-const HELPDESK = { ...CRM, key: "helpdesk", title: "Helpdesk", lab: { name: "helpdesk", status: "Ready" } };
+const HELPDESK = {
+	...CRM,
+	key: "helpdesk",
+	title: "Helpdesk",
+	lab: { name: "helpdesk", status: "Ready" },
+};
 
 describe("the template preview dialog", () => {
 	let app;

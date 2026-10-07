@@ -45,11 +45,7 @@
 				</div>
 			</div>
 
-			<p
-				v-if="footnote"
-				class="mt-4 text-meta text-ink-gray-5"
-				data-test="preview-footnote"
-			>
+			<p v-if="footnote" class="mt-4 text-meta text-ink-gray-5" data-test="preview-footnote">
 				{{ footnote }}
 			</p>
 

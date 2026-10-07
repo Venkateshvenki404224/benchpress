@@ -44,10 +44,12 @@ vi.mock("frappe-ui", () => {
 		Badge: passThrough("span"),
 		Button: passThrough("button"),
 		Dialog: (props, { slots }) =>
-			props.modelValue ? h("div", { "data-test": "dialog" }, [
-				slots["body-content"]?.(),
-				slots.actions?.(),
-			]) : null,
+			props.modelValue
+				? h("div", { "data-test": "dialog" }, [
+						slots["body-content"]?.(),
+						slots.actions?.(),
+				  ])
+				: null,
 		ErrorMessage: () => null,
 		FormControl: passThrough("input"),
 		Select: passThrough("div"),

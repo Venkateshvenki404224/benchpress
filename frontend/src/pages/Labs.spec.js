@@ -71,7 +71,7 @@ vi.mock("frappe-ui", () => {
 				? h("div", { "data-test": "dialog" }, [
 						slots["body-content"]?.(),
 						slots.actions?.(),
-					])
+				  ])
 				: null,
 		ErrorMessage: () => null,
 		FormControl: passThrough("input"),
