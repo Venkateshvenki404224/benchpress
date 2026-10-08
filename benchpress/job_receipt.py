@@ -157,8 +157,12 @@ def _open_reconciliation_obligation(doc) -> None:
 			"assign_to": [owner],
 			"description": (
 				f"Job Receipt {doc.name} ({doc.logical_id}) landed Unknown: "
-				f"{doc.expected_effect}. Confirm by deadline whether the effect happened; "
-				"do not auto-requeue or auto-remediate on a guess."
+				f"{doc.expected_effect}. Baseline policy_hash recorded at mint: "
+				f"{'yes' if doc.policy_hash else 'no'}. Confirm by deadline whether the "
+				"effect happened; do not auto-requeue or auto-remediate on a guess. "
+				"(This flags only whether a comparison baseline exists, not the eventual "
+				"requeue/remediate/unknown verdict — that depends on requeue_or_remediate's "
+				"current_policy_hash, which is not known at this point in time.)"
 			),
 			"date": add_to_date(now_datetime(), hours=RECONCILE_SLA_HOURS),
 		}
