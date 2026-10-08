@@ -32,6 +32,11 @@ from benchpress.credits import account, config
 
 ADMISSION = "Bench Admission"
 
+# Stable identifier for the instance-count refusal, independent of the human-readable
+# message below. A future decision-envelope record should cite this, not the message
+# string, so a wording change to the throw never reads as a different rule in an audit.
+RULE_ID_INSTANCE_COUNT_CAP = "instance_count_cap"
+
 
 def claim(user: str, bench_name: str | None, limit: int, cost: float = 0.0) -> bool:
 	"""Take a slot and hold `cost` for `bench_name`, or refuse by name. True when this call took it.
