@@ -155,6 +155,16 @@ def _record_denial(rule_id: str, limit: int, count: int) -> None:
 		# already happened and is not in question here; this classifies a *second*, distinct
 		# failure -- the evidence boundary itself breaking -- so it reads as its own thing in
 		# a log or alert instead of blending into whatever generic DB error class fired.
+		#
+		# Logged explicitly here, not left to whatever generic handler eventually catches
+		# DenialRecordError: `claim()` has no except clause for it today, so without this
+		# call the only trace of "the evidence write itself broke" is whatever ends up in
+		# the web worker's own crash log -- not searchable in the Frappe Error Log the way
+		# every other BenchPress fault is.
+		frappe.log_error(
+			title=f"admission: denial record write failed for rule_id {rule_id!r}",
+			message=frappe.get_traceback(),
+		)
 		raise DenialRecordError(f"admission: failed to record denial for rule_id {rule_id!r}") from exc
 
 

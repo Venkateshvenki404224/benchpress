@@ -200,6 +200,19 @@ class TestAdmission(IntegrationTestCase):
 				admission._record_denial(admission.RULE_ID_INSTANCE_COUNT_CAP, limit=1, count=1)
 		self.assertIsInstance(caught.exception.__cause__, RuntimeError)
 
+	def test_a_denial_record_write_failure_logs_a_searchable_error(self):
+		"""M471's gap: `DenialRecordError` alone only reaches whatever generic handler the
+		caller has, which `claim()` doesn't. Without a `frappe.log_error` call, the only
+		trace of "the evidence write itself broke" is the web worker's own crash log, not
+		the Frappe Error Log every other BenchPress fault lands in. Asserts the log call
+		fires with the rule_id in the title, before the typed fault propagates."""
+		with patch("frappe.get_doc", side_effect=RuntimeError("disk full")):
+			with patch("frappe.log_error") as mock_log_error:
+				with self.assertRaises(admission.DenialRecordError):
+					admission._record_denial(admission.RULE_ID_INSTANCE_COUNT_CAP, limit=1, count=1)
+		mock_log_error.assert_called_once()
+		self.assertIn(admission.RULE_ID_INSTANCE_COUNT_CAP, mock_log_error.call_args.kwargs["title"])
+
 	def test_a_denial_record_write_failure_still_takes_no_slot(self):
 		"""The other half of the same ask: a broken evidence write must not accidentally let
 		the refusal fall through into an admission. `claim()` still raises before any slot is
