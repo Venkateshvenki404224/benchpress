@@ -5,6 +5,8 @@ These assert the five-part contract directly against the implementation function
 minimal in-memory fake of the two `frappe` calls `job_receipt.py` touches, so the shape of
 the pattern (mint-before-enqueue, checker-owns-status, unknown-not-failed) is pinned down
 even without a live site.
+
+Also covers the policy-hash / requeue-vs-remediate contract added in TASK-03652.
 """
 
 import sys
@@ -22,6 +24,7 @@ class _FakeDoc:
 		self.minted_at = None
 		self.claimed_at = None
 		self.completed_at = None
+		self.policy_hash = None
 
 	def insert(self, ignore_permissions=True):
 		self._store[self.logical_id] = self
@@ -82,8 +85,8 @@ class TestJobReceiptContract(unittest.TestCase):
 		sys.modules.pop("frappe", None)
 		sys.modules.pop("frappe.utils", None)
 
-	def _mint(self, lid="route_sync:bench-1", effect="route written"):
-		self.jr.mint(lid, effect)
+	def _mint(self, lid="route_sync:bench-1", effect="route written", policy_hash=None):
+		self.jr.mint(lid, effect, policy_hash=policy_hash)
 		return lid
 
 	def test_mint_is_idempotent_on_logical_id(self):
@@ -127,6 +130,67 @@ class TestJobReceiptContract(unittest.TestCase):
 		self.jr.mark_failed(lid, "RQ worker record shows dead process")
 		self.assertEqual(self.store[lid].status, "Failed")
 		self.fake_frappe.log_error.assert_called_once()
+
+	# --- policy_hash / requeue-vs-remediate tests (TASK-03652) ---
+
+	def test_mint_stores_policy_hash(self):
+		lid = self._mint(policy_hash="abc123")
+		self.assertEqual(self.store[lid].policy_hash, "abc123")
+
+	def test_mint_without_policy_hash_stores_none(self):
+		lid = self._mint()
+		self.assertIsNone(self.store[lid].policy_hash)
+
+	def test_requeue_or_remediate_requeues_when_hashes_match(self):
+		lid = self._mint(policy_hash="aabbcc")
+		self.jr.mark_unknown_if_overdue(lid)
+		result = self.jr.requeue_or_remediate(lid, current_policy_hash="aabbcc")
+		self.assertEqual(result, "requeue")
+
+	def test_requeue_or_remediate_remediates_when_hashes_differ(self):
+		lid = self._mint(policy_hash="aabbcc")
+		self.jr.mark_unknown_if_overdue(lid)
+		result = self.jr.requeue_or_remediate(lid, current_policy_hash="ddeeff")
+		self.assertEqual(result, "remediate")
+
+	def test_requeue_or_remediate_requeues_when_neither_side_has_hash(self):
+		lid = self._mint()
+		self.jr.mark_unknown_if_overdue(lid)
+		result = self.jr.requeue_or_remediate(lid, current_policy_hash=None)
+		self.assertEqual(result, "requeue")
+
+	def test_requeue_or_remediate_remediates_when_hash_added_at_retry_time(self):
+		lid = self._mint()
+		self.jr.mark_unknown_if_overdue(lid)
+		result = self.jr.requeue_or_remediate(lid, current_policy_hash="newhash")
+		self.assertEqual(result, "remediate", "minted without hash but current has one — context changed")
+
+	def test_requeue_or_remediate_remediates_when_hash_only_at_mint_time(self):
+		lid = self._mint(policy_hash="oldhash")
+		self.jr.mark_unknown_if_overdue(lid)
+		result = self.jr.requeue_or_remediate(lid, current_policy_hash=None)
+		self.assertEqual(result, "remediate", "minted with hash but current has none — context changed")
+
+	def test_requeue_or_remediate_works_on_failed_receipts(self):
+		lid = self._mint(policy_hash="abc")
+		self.jr.mark_failed(lid, "worker crashed")
+		result = self.jr.requeue_or_remediate(lid, current_policy_hash="abc")
+		self.assertEqual(result, "requeue")
+
+	def test_requeue_or_remediate_raises_on_pending(self):
+		lid = self._mint(policy_hash="abc")
+		with self.assertRaises(ValueError):
+			self.jr.requeue_or_remediate(lid, current_policy_hash="abc")
+
+	def test_requeue_or_remediate_raises_on_completed(self):
+		lid = self._mint(policy_hash="abc")
+		self.jr.mark_completed(lid)
+		with self.assertRaises(ValueError):
+			self.jr.requeue_or_remediate(lid, current_policy_hash="abc")
+
+	def test_requeue_or_remediate_raises_on_unknown_logical_id(self):
+		with self.assertRaises(self.fake_frappe.DoesNotExistError):
+			self.jr.requeue_or_remediate("never-minted", current_policy_hash="abc")
 
 
 if __name__ == "__main__":
