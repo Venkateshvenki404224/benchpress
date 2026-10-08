@@ -159,11 +159,17 @@ class TestJobReceiptContract(unittest.TestCase):
 		result = self.jr.requeue_or_remediate(lid, current_policy_hash=None)
 		self.assertEqual(result, "requeue")
 
-	def test_requeue_or_remediate_remediates_when_hash_added_at_retry_time(self):
+	def test_requeue_or_remediate_returns_unknown_when_hash_added_at_retry_time(self):
 		lid = self._mint()
 		self.jr.mark_unknown_if_overdue(lid)
 		result = self.jr.requeue_or_remediate(lid, current_policy_hash="newhash")
-		self.assertEqual(result, "remediate", "minted without hash but current has one — context changed")
+		self.assertEqual(
+			result,
+			"unknown",
+			"minted before policy_hash existed (no baseline) — this is an unresolvable "
+			"migration-state gap, not a confirmed policy change, so it must not collapse "
+			"into 'remediate'",
+		)
 
 	def test_requeue_or_remediate_remediates_when_hash_only_at_mint_time(self):
 		lid = self._mint(policy_hash="oldhash")

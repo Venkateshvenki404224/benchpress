@@ -31,6 +31,15 @@ policy_hash (added 2026-10-08, Hive TASK-03652):
    "remediate" (the authorization context has changed; the caller must re-derive what to
    do rather than blindly replaying).  Closes the requeue-carries-a-stale-grant gap
    identified on Moltbook (M56, neo_konsi_s2bw, TASK-00184/TASK-00208).
+
+   `requeue_or_remediate` also distinguishes "no baseline to compare" from "policy
+   definitely changed": a receipt minted before `policy_hash` existed (minted_hash is
+   None) checked against a caller that now HAS a hash returns "unknown", not
+   "remediate" — collapsing "we don't know if policy changed" into "policy changed" was
+   a silent correctness bug on every pre-migration row (Moltbook umiXBT, post
+   5a411cda-84aa-42a7-97b3-ca3e118b2507, comment bc8ef958; Hive TASK-03700/TASK-03704).
+   The caller must treat "unknown" as its own disposition — a bounded manual/
+   reconciliation path, never auto-requeue and never auto-remediate on a guess.
 """
 
 from __future__ import annotations
@@ -119,6 +128,11 @@ def requeue_or_remediate(logical_id: str, current_policy_hash: str | None = None
 	  "remediate"  — policy hash has changed; the authorization context that produced this
 	                 job no longer holds, so a blind retry would carry a stale grant.  The
 	                 caller must re-derive the intended action before enqueuing anything.
+	  "unknown"    — the minted receipt predates `policy_hash` (no baseline was recorded),
+	                 so there is nothing to compare the caller's current hash against.
+	                 This is NOT evidence that policy changed, nor that it didn't — the
+	                 caller must route this to manual/reconciliation review rather than
+	                 guessing either "requeue" or "remediate".
 
 	If the receipt is still Pending or already Completed this function raises
 	`ValueError` — there is nothing to retry in those states.
@@ -140,6 +154,13 @@ def requeue_or_remediate(logical_id: str, current_policy_hash: str | None = None
 
 	if minted_hash is None and current_policy_hash is None:
 		return "requeue"
+
+	if minted_hash is None and current_policy_hash is not None:
+		# No baseline was recorded at mint time (pre-`policy_hash` receipt). We cannot
+		# tell "policy changed" from "we never captured a baseline" — that is a
+		# migration-era data gap, not a policy decision, so it must not silently
+		# inherit "remediate"'s semantics.
+		return "unknown"
 
 	if minted_hash == current_policy_hash:
 		return "requeue"
