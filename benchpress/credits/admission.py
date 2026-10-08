@@ -35,7 +35,8 @@ ADMISSION = "Bench Admission"
 # Stable identifier for the instance-count refusal, independent of the human-readable
 # message below. A future decision-envelope record should cite this, not the message
 # string, so a wording change to the throw never reads as a different rule in an audit.
-RULE_ID_INSTANCE_COUNT_CAP = "instance_count_cap"
+# Semantic revision suffix: bump to _v2 if the predicate itself ever changes.
+RULE_ID_INSTANCE_COUNT_CAP = "instance_count_cap_v1"
 
 DENIAL = "Admission Denial"
 
