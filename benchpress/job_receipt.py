@@ -45,9 +45,18 @@ policy_hash (added 2026-10-08, Hive TASK-03652):
 from __future__ import annotations
 
 import frappe
+from frappe.desk.form.assign_to import add as assign_to_add
 from frappe.utils import add_to_date, now_datetime
 
 DOCTYPE = "Job Receipt"
+
+# How long a reconciliation obligation gets before it is itself overdue. Separate from
+# OVERDUE_GRACE_MINUTES below: that constant decides when a Pending row becomes Unknown; this
+# one decides how long a human has to resolve an Unknown row once it exists. Named on Moltbook
+# (umiXBT, post 5a411cda-84aa-42a7-97b3-ca3e118b2507, comment 03cbb6d7): "an unknown disposition
+# must create a reconciliation obligation with an owner and deadline, so a future caller cannot
+# silently collapse it back into either automatic action."
+RECONCILE_SLA_HOURS = 24
 
 # How long a Pending receipt is given before the sweep below calls it Unknown. No single
 # caller's job runtime is authoritative here (reconcile.run, health checks, and future
@@ -108,6 +117,10 @@ def mark_unknown_if_overdue(logical_id: str) -> str:
 	Returns the resulting status. Never writes Failed here — Failed is reserved for an
 	actually-observed failure signal (an error artifact, a dead worker record), which this
 	function has no way to see; it only knows "not found yet by this deadline".
+
+	The transition itself also opens the reconciliation obligation (see
+	`_open_reconciliation_obligation`) — an Unknown row with nobody assigned to look at it is
+	indistinguishable from one nobody noticed, which is the exact silent-collapse umiXBT named.
 	"""
 	name = frappe.db.get_value(DOCTYPE, {"logical_id": logical_id}, "name")
 	if not name:
@@ -116,7 +129,40 @@ def mark_unknown_if_overdue(logical_id: str) -> str:
 	if doc.status == "Pending":
 		doc.status = "Unknown"
 		doc.save(ignore_permissions=True)
+		_open_reconciliation_obligation(doc)
 	return doc.status
+
+
+def _open_reconciliation_obligation(doc) -> None:
+	"""Assign a ToDo (owner + deadline) the moment a receipt lands in Unknown.
+
+	Deliberately a `ToDo` via `assign_to.add` rather than a bare field on `Job Receipt` —
+	`frappe.desk.form.assign_to` is the one path that produces a real, assignee-filtered,
+	due-date-bearing row Desk's own "My Assignments" view surfaces, which is what makes the
+	obligation visible instead of a status value nobody is ever shown. The caller (`mark_unknown_if_overdue`)
+	only invokes this once, on the Pending->Unknown transition itself, so this never double-assigns
+	on a re-run against an already-Unknown row — the guard below exists so a direct call against
+	the wrong status fails loudly instead of silently assigning twice.
+	"""
+	if doc.status != "Unknown":
+		raise ValueError("_open_reconciliation_obligation called on a non-Unknown receipt")
+	owners = frappe.get_all(
+		"Has Role", filters={"role": "System Manager", "parenttype": "User"}, pluck="parent"
+	)
+	owner = owners[0] if owners else "Administrator"
+	assign_to_add(
+		{
+			"doctype": DOCTYPE,
+			"name": doc.name,
+			"assign_to": [owner],
+			"description": (
+				f"Job Receipt {doc.name} ({doc.logical_id}) landed Unknown: "
+				f"{doc.expected_effect}. Confirm by deadline whether the effect happened; "
+				"do not auto-requeue or auto-remediate on a guess."
+			),
+			"date": add_to_date(now_datetime(), hours=RECONCILE_SLA_HOURS),
+		}
+	)
 
 
 def sweep_overdue_pending() -> dict:

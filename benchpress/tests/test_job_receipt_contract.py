@@ -63,17 +63,25 @@ class TestJobReceiptContract(unittest.TestCase):
 			raise self.fake_frappe.DoesNotExistError(name)
 
 		self.fake_frappe.new_doc = new_doc
+		self.fake_frappe.get_all = MagicMock(return_value=["Administrator"])
 		self.fake_frappe.db = MagicMock(get_value=db_get_value, exists=db_exists)
 		self.fake_frappe.get_doc = get_doc
 		self.fake_frappe.log_error = MagicMock()
 
 		fake_utils = types.ModuleType("frappe.utils")
 		fake_utils.now_datetime = MagicMock(return_value="2026-10-02T00:00:00")
-		fake_utils.add_to_date = MagicMock(side_effect=lambda dt, minutes=0, **kw: f"{dt}-minus-{minutes}")
+		fake_utils.add_to_date = MagicMock(side_effect=lambda dt, minutes=0, hours=0, **kw: f"{dt}-plus-{minutes or hours}")
 		self.fake_frappe.utils = fake_utils
+
+		fake_assign_to = types.ModuleType("frappe.desk.form.assign_to")
+		self.assign_to_add = MagicMock()
+		fake_assign_to.add = self.assign_to_add
 
 		sys.modules["frappe"] = self.fake_frappe
 		sys.modules["frappe.utils"] = fake_utils
+		sys.modules["frappe.desk"] = types.ModuleType("frappe.desk")
+		sys.modules["frappe.desk.form"] = types.ModuleType("frappe.desk.form")
+		sys.modules["frappe.desk.form.assign_to"] = fake_assign_to
 
 		import importlib
 
@@ -85,6 +93,9 @@ class TestJobReceiptContract(unittest.TestCase):
 	def tearDown(self):
 		sys.modules.pop("frappe", None)
 		sys.modules.pop("frappe.utils", None)
+		sys.modules.pop("frappe.desk", None)
+		sys.modules.pop("frappe.desk.form", None)
+		sys.modules.pop("frappe.desk.form.assign_to", None)
 
 	def _mint(self, lid="route_sync:bench-1", effect="route written", policy_hash=None):
 		self.jr.mint(lid, effect, policy_hash=policy_hash)
@@ -117,6 +128,36 @@ class TestJobReceiptContract(unittest.TestCase):
 		status = self.jr.mark_unknown_if_overdue(lid)
 		self.assertEqual(status, "Unknown")
 		self.assertEqual(self.store[lid].status, "Unknown")
+
+	# --- reconciliation obligation on Unknown (TASK-03744) ---
+
+	def test_unknown_transition_opens_a_reconciliation_assignment(self):
+		lid = self._mint()
+		self.jr.mark_unknown_if_overdue(lid)
+		self.assign_to_add.assert_called_once()
+		kwargs = self.assign_to_add.call_args.args[0]
+		self.assertEqual(kwargs["doctype"], self.jr.DOCTYPE)
+		self.assertEqual(kwargs["name"], self.store[lid].name)
+		self.assertEqual(kwargs["assign_to"], ["Administrator"])
+		self.assertIn("date", kwargs)
+
+	def test_reconciliation_assignment_not_opened_twice_on_repeat_call(self):
+		lid = self._mint()
+		self.jr.mark_unknown_if_overdue(lid)
+		self.jr.mark_unknown_if_overdue(lid)  # already Unknown: no-op per the Pending-only guard
+		self.assign_to_add.assert_called_once()
+
+	def test_reconciliation_assignment_not_opened_on_completion(self):
+		lid = self._mint()
+		self.jr.mark_completed(lid)
+		self.jr.mark_unknown_if_overdue(lid)  # no-op: already Completed
+		self.assign_to_add.assert_not_called()
+
+	def test_open_reconciliation_obligation_rejects_non_unknown_doc(self):
+		lid = self._mint()
+		doc = self.store[lid]  # still Pending
+		with self.assertRaises(ValueError):
+			self.jr._open_reconciliation_obligation(doc)
 
 	def test_overdue_check_is_a_noop_once_completed(self):
 		lid = self._mint()
