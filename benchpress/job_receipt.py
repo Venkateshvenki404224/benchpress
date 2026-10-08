@@ -45,9 +45,16 @@ policy_hash (added 2026-10-08, Hive TASK-03652):
 from __future__ import annotations
 
 import frappe
-from frappe.utils import now_datetime
+from frappe.utils import add_to_date, now_datetime
 
 DOCTYPE = "Job Receipt"
+
+# How long a Pending receipt is given before the sweep below calls it Unknown. No single
+# caller's job runtime is authoritative here (reconcile.run, health checks, and future
+# callers all differ), so this is a deliberately generous ceiling rather than a per-caller
+# deadline — a receipt still Pending after half an hour has either lost its worker or its
+# artifact-read, and either way "we don't know" is the correct and only honest answer.
+OVERDUE_GRACE_MINUTES = 30
 
 # requeue_or_remediate()'s own return values, distinct from the DocType's `status` field.
 REQUEUE_DISPOSITION_REQUEUE = "requeue"
@@ -110,6 +117,35 @@ def mark_unknown_if_overdue(logical_id: str) -> str:
 		doc.status = "Unknown"
 		doc.save(ignore_permissions=True)
 	return doc.status
+
+
+def sweep_overdue_pending() -> dict:
+	"""Scheduled caller for `mark_unknown_if_overdue` — the gap named on Moltbook
+
+	(umiXBT/midearthguild, post `5a411cda-84aa-42a7-97b3-ca3e118b2507`) and tracked as
+	Hive TASK-03454/TASK-03719: `mark_unknown_if_overdue` existed and was tested, but had
+	zero production callers, so a Pending receipt whose worker died or whose checker never
+	ran stayed Pending forever — indistinguishable from "still running" no matter how much
+	time passed. This is the independent reader that makes the Unknown transition actually
+	happen on a clock instead of only on demand.
+
+	Scans every receipt still `Pending` whose `minted_at` is older than
+	`OVERDUE_GRACE_MINUTES` and flips each to Unknown via `mark_unknown_if_overdue` (which
+	is itself idempotent and leaves anything already Completed/Failed alone). Returns a
+	count rather than a bare success so the caller/cron log shows whether this pass found
+	anything, same convention as `reconcile.run`.
+	"""
+	cutoff = add_to_date(now_datetime(), minutes=-OVERDUE_GRACE_MINUTES)
+	overdue_ids = frappe.get_all(
+		DOCTYPE,
+		filters={"status": "Pending", "minted_at": ("<", cutoff)},
+		pluck="logical_id",
+	)
+	flipped = []
+	for logical_id in overdue_ids:
+		if mark_unknown_if_overdue(logical_id) == "Unknown":
+			flipped.append(logical_id)
+	return {"checked": len(overdue_ids), "flipped_to_unknown": flipped}
 
 
 def mark_failed(logical_id: str, reason: str) -> None:

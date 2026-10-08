@@ -69,6 +69,7 @@ class TestJobReceiptContract(unittest.TestCase):
 
 		fake_utils = types.ModuleType("frappe.utils")
 		fake_utils.now_datetime = MagicMock(return_value="2026-10-02T00:00:00")
+		fake_utils.add_to_date = MagicMock(side_effect=lambda dt, minutes=0, **kw: f"{dt}-minus-{minutes}")
 		self.fake_frappe.utils = fake_utils
 
 		sys.modules["frappe"] = self.fake_frappe
@@ -197,6 +198,38 @@ class TestJobReceiptContract(unittest.TestCase):
 	def test_requeue_or_remediate_raises_on_unknown_logical_id(self):
 		with self.assertRaises(self.fake_frappe.DoesNotExistError):
 			self.jr.requeue_or_remediate("never-minted", current_policy_hash="abc")
+
+	# --- sweep_overdue_pending() (TASK-03454/TASK-03719) ---
+
+	def test_sweep_flips_overdue_pending_to_unknown(self):
+		lid = self._mint()
+		self.store[lid].minted_at = "2000-01-01T00:00:00"  # ancient, always overdue
+
+		def get_all(doctype, filters=None, pluck=None):
+			return [doc.logical_id for doc in self.store.values() if doc.status == "Pending"]
+
+		self.fake_frappe.get_all = get_all
+		result = self.jr.sweep_overdue_pending()
+		self.assertEqual(result["checked"], 1)
+		self.assertEqual(result["flipped_to_unknown"], [lid])
+		self.assertEqual(self.store[lid].status, "Unknown")
+
+	def test_sweep_does_not_touch_completed_or_already_unknown(self):
+		completed_lid = self._mint(lid="route_sync:bench-2")
+		self.jr.mark_completed(completed_lid)
+		unknown_lid = self._mint(lid="route_sync:bench-3")
+		self.jr.mark_unknown_if_overdue(unknown_lid)
+
+		def get_all(doctype, filters=None, pluck=None):
+			# A real query only ever returns Pending rows matching the filter; this fake
+			# mirrors that by returning only genuinely-Pending logical_ids.
+			return [doc.logical_id for doc in self.store.values() if doc.status == "Pending"]
+
+		self.fake_frappe.get_all = get_all
+		result = self.jr.sweep_overdue_pending()
+		self.assertEqual(result["checked"], 0)
+		self.assertEqual(self.store[completed_lid].status, "Completed")
+		self.assertEqual(self.store[unknown_lid].status, "Unknown")
 
 
 if __name__ == "__main__":
