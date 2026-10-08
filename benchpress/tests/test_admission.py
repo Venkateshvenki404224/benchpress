@@ -224,6 +224,25 @@ class TestAdmission(IntegrationTestCase):
 				admission.claim(USER, self.benches[1].name, 1)
 		self.assertEqual(self.counter(), before)
 
+	def test_a_cap_refusal_never_reaches_the_insert_or_the_counter_write(self):
+		"""M472's regression test: the throw on the refusal path is a genuine stop, not just
+		a final state that happens to match. `test_the_cap_refuses_the_next_bench` already
+		proves the counter doesn't move, but a counter that doesn't move could in principle
+		still be preceded by `_insert`/`account.save_account` running and then being undone
+		by something else -- this asserts the two calls that take a slot are never invoked
+		at all once `_record_denial` + `frappe.throw()` fire, closing the gap the AST guard
+		(`test_claim_refusal_order_guard.py`) checks at the source level but a live call
+		never had a test asserting at runtime."""
+		admission.claim(USER, self.benches[0].name, 1)
+		with (
+			patch.object(admission, "_insert") as mock_insert,
+			patch("benchpress.credits.account.save_account") as mock_save,
+			self.assertRaises(frappe.ValidationError),
+		):
+			admission.claim(USER, self.benches[1].name, 1)
+		mock_insert.assert_not_called()
+		mock_save.assert_not_called()
+
 	def test_a_successful_claim_writes_no_denial_row(self):
 		"""The positive control this module's own docstring asks for: a claim that writes an
 		envelope on every call, not only a refusing one, would hide a bug behind what looks
