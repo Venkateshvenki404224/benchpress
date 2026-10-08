@@ -161,10 +161,19 @@ def _record_denial(rule_id: str, limit: int, count: int) -> None:
 		# call the only trace of "the evidence write itself broke" is whatever ends up in
 		# the web worker's own crash log -- not searchable in the Frappe Error Log the way
 		# every other BenchPress fault is.
-		frappe.log_error(
-			title=f"admission: denial record write failed for rule_id {rule_id!r}",
-			message=frappe.get_traceback(),
-		)
+		# Guarded separately from the raise below: frappe.log_error() does its own DB
+		# write (Error Log doctype) and can itself raise under the same outage that
+		# broke the denial-record insert (disk full, DB unreachable). Letting that
+		# second failure propagate would replace the typed DenialRecordError with a
+		# raw, unclassified exception from the logging attempt -- the exact "fails
+		# safely but not legibly" gap this error type exists to close.
+		try:
+			frappe.log_error(
+				title=f"admission: denial record write failed for rule_id {rule_id!r}",
+				message=frappe.get_traceback(),
+			)
+		except Exception:
+			pass
 		raise DenialRecordError(f"admission: failed to record denial for rule_id {rule_id!r}") from exc
 
 
