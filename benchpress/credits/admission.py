@@ -38,6 +38,15 @@ ADMISSION = "Bench Admission"
 # Semantic revision suffix: bump to _v2 if the predicate itself ever changes.
 RULE_ID_INSTANCE_COUNT_CAP = "instance_count_cap_v1"
 
+# Every rule id a denial row is allowed to carry. `_record_denial` checks against this set
+# before it writes, so a typo in a future call site (`_v1` vs `_vl`, a copy-pasted constant
+# from the wrong module) fails loudly at the call that would have minted a bad row, instead of
+# silently landing in `Admission Denial` as an unrecognized string nothing downstream can join
+# back to a real predicate. Extend this set in the same commit that adds a new RULE_ID_* constant
+# above -- a constant with no entry here is unreachable from claim() but still available for a
+# future caller to misuse.
+KNOWN_RULE_IDS = frozenset({RULE_ID_INSTANCE_COUNT_CAP})
+
 DENIAL = "Admission Denial"
 
 
@@ -102,7 +111,14 @@ def _record_denial(rule_id: str, limit: int, count: int) -> None:
 	held. A commit inside any other locked section of this module would release the lock
 	early and reopen the race the lock exists to close; this one does not, because there is no
 	"after" on this path.
+
+	Raises `frappe.ValidationError` for a `rule_id` outside `KNOWN_RULE_IDS` before anything is
+	written -- a typo'd or stale rule id (`_v1` vs `_vl`, a constant copied from the wrong call
+	site) is a bug in the caller, not a new kind of denial, and it must fail where it is made
+	rather than mint a row an audit can never resolve to a real predicate.
 	"""
+	if rule_id not in KNOWN_RULE_IDS:
+		frappe.throw(f"admission: unrecognized rule_id {rule_id!r}, not in KNOWN_RULE_IDS")
 	correlation_id = None
 	try:
 		correlation_id = frappe.request.headers.get("X-Frappe-Request-Id")

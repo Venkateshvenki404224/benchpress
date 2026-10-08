@@ -180,6 +180,15 @@ class TestAdmission(IntegrationTestCase):
 		self.assertEqual(rows[0].count, 1)
 		self.assertTrue(rows[0].correlation_id)
 
+	def test_an_unrecognized_rule_id_is_refused_before_any_write(self):
+		"""The typo-safety half of M457's rule-id work: a bad constant must fail at the call
+		that would have minted the bad row, not land in Admission Denial as an unresolved string."""
+		before = frappe.db.count("Admission Denial")
+		with self.assertRaises(frappe.ValidationError) as refusal:
+			admission._record_denial("instance_count_cap_vl", limit=1, count=1)
+		self.assertIn("unrecognized rule_id", str(refusal.exception))
+		self.assertEqual(frappe.db.count("Admission Denial"), before)
+
 	def test_a_successful_claim_writes_no_denial_row(self):
 		"""The positive control this module's own docstring asks for: a claim that writes an
 		envelope on every call, not only a refusing one, would hide a bug behind what looks
