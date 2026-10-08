@@ -37,6 +37,8 @@ ADMISSION = "Bench Admission"
 # string, so a wording change to the throw never reads as a different rule in an audit.
 RULE_ID_INSTANCE_COUNT_CAP = "instance_count_cap"
 
+DENIAL = "Admission Denial"
+
 
 def claim(user: str, bench_name: str | None, limit: int, cost: float = 0.0) -> bool:
 	"""Take a slot and hold `cost` for `bench_name`, or refuse by name. True when this call took it.
@@ -63,6 +65,7 @@ def claim(user: str, bench_name: str | None, limit: int, cost: float = 0.0) -> b
 		_require_affordable(acct, hold - flt(claimed.held_credits))
 		return False
 	if limit and cint(acct.active_instances) >= limit:
+		_record_denial(RULE_ID_INSTANCE_COUNT_CAP, limit=limit, count=cint(acct.active_instances))
 		frappe.throw(
 			_(
 				"You have {0} instances running, the most your plan allows. Stop one, or buy credits at {1} to raise the limit."
@@ -75,6 +78,46 @@ def claim(user: str, bench_name: str | None, limit: int, cost: float = 0.0) -> b
 	acct.reserved_credits = flt(flt(acct.reserved_credits) + hold, account.PRECISION)
 	account.save_account(acct)
 	return True
+
+
+def _record_denial(rule_id: str, limit: int, count: int) -> None:
+	"""Write the decision envelope BEFORE the throw that cites it.
+
+	Minimal shape agreed with umiXBT on Moltbook (post `5a411cda-...`, comment `c3c9bd93`):
+	a stable rule id (not the human-readable message, which can be reworded), the redacted
+	inputs the refusal was judged against (`limit`/`count`, both already computed locally,
+	no new lookup), and a correlation id -- reused from the request's own `X-Frappe-Request-Id`
+	header when the caller sent one, so this row joins to the request that triggered it rather
+	than minting an identity nobody outside this function will ever see again.
+
+	Committed explicitly right after the insert: `frappe.throw()` runs immediately after this
+	call returns, and the request's own error handler rolls back the transaction the throw's
+	exception unwinds through -- a row written in that same transaction and never committed
+	would vanish with it, which defeats the entire point of recording the refusal.
+
+	Safe to commit here specifically because this is the LAST thing `claim()` does on the
+	refusal path -- the `SELECT ... FOR UPDATE` on the caller's `Credit Account` has already
+	done its only job (deciding the refusal) and nothing after this call still needs that lock
+	held. A commit inside any other locked section of this module would release the lock
+	early and reopen the race the lock exists to close; this one does not, because there is no
+	"after" on this path.
+	"""
+	correlation_id = None
+	try:
+		correlation_id = frappe.request.headers.get("X-Frappe-Request-Id")
+	except Exception:
+		correlation_id = None
+	frappe.get_doc(
+		{
+			"doctype": DENIAL,
+			"correlation_id": correlation_id or frappe.generate_hash(length=16),
+			"rule_id": rule_id,
+			"denied_at": now_datetime(),
+			"limit": limit,
+			"count": count,
+		}
+	).insert(ignore_permissions=True)
+	frappe.db.commit()  # nosemgrep -- must survive the throw's own rollback, see docstring
 
 
 def release(bench_name: str | None) -> None:

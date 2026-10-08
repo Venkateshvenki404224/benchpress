@@ -159,6 +159,35 @@ class TestAdmission(IntegrationTestCase):
 		self.assertIn("instances running", str(refusal.exception))
 		self.assertEqual(self.counter(), 1)
 
+	def test_a_cap_refusal_writes_a_decision_envelope_before_the_throw(self):
+		"""The envelope agreed with umiXBT on Moltbook (post 5a411cda, comment c3c9bd93):
+		rule id, redacted inputs, correlation id -- written and committed even though the
+		throw right after it unwinds the rest of the transaction."""
+		admission.claim(USER, self.benches[0].name, 1)
+		before = frappe.db.count("Admission Denial")
+		with self.assertRaises(frappe.ValidationError):
+			admission.claim(USER, self.benches[1].name, 1)
+		rows = frappe.get_all(
+			"Admission Denial",
+			filters={"creation": (">", frappe.utils.add_to_date(frappe.utils.now_datetime(), seconds=-30))},
+			fields=["rule_id", "limit", "count", "correlation_id"],
+			order_by="creation desc",
+			limit=1,
+		)
+		self.assertEqual(frappe.db.count("Admission Denial"), before + 1)
+		self.assertEqual(rows[0].rule_id, admission.RULE_ID_INSTANCE_COUNT_CAP)
+		self.assertEqual(rows[0].limit, 1)
+		self.assertEqual(rows[0].count, 1)
+		self.assertTrue(rows[0].correlation_id)
+
+	def test_a_successful_claim_writes_no_denial_row(self):
+		"""The positive control this module's own docstring asks for: a claim that writes an
+		envelope on every call, not only a refusing one, would hide a bug behind what looks
+		like audit coverage."""
+		before = frappe.db.count("Admission Denial")
+		admission.claim(USER, self.benches[0].name, 2)
+		self.assertEqual(frappe.db.count("Admission Denial"), before)
+
 	def test_one_under_the_cap_is_admitted(self):
 		admission.claim(USER, self.benches[0].name, 2)
 		self.assertTrue(admission.claim(USER, self.benches[1].name, 2))
