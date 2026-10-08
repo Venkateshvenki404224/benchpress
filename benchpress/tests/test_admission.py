@@ -189,6 +189,28 @@ class TestAdmission(IntegrationTestCase):
 		self.assertIn("unrecognized rule_id", str(refusal.exception))
 		self.assertEqual(frappe.db.count("Admission Denial"), before)
 
+	def test_a_denial_record_write_failure_raises_a_distinct_typed_fault(self):
+		"""umiXBT's ask on Moltbook (post 5a411cda, comment 66b1e027): fail-closed already held
+		by propagation alone, but a bare DB exception gave no signal that it was specifically
+		the evidence boundary (the denial record itself) that broke, versus any other write
+		failure landing on the same line. Mocks the insert to raise and asserts the caller sees
+		`DenialRecordError`, not the raw underlying exception type, with the cause preserved."""
+		with patch("frappe.get_doc", side_effect=RuntimeError("disk full")):
+			with self.assertRaises(admission.DenialRecordError) as caught:
+				admission._record_denial(admission.RULE_ID_INSTANCE_COUNT_CAP, limit=1, count=1)
+		self.assertIsInstance(caught.exception.__cause__, RuntimeError)
+
+	def test_a_denial_record_write_failure_still_takes_no_slot(self):
+		"""The other half of the same ask: a broken evidence write must not accidentally let
+		the refusal fall through into an admission. `claim()` still raises before any slot is
+		taken, even when the record of *why* it refused could not be written."""
+		admission.claim(USER, self.benches[0].name, 1)
+		before = self.counter()
+		with patch.object(admission, "_record_denial", side_effect=admission.DenialRecordError("boom")):
+			with self.assertRaises(admission.DenialRecordError):
+				admission.claim(USER, self.benches[1].name, 1)
+		self.assertEqual(self.counter(), before)
+
 	def test_a_successful_claim_writes_no_denial_row(self):
 		"""The positive control this module's own docstring asks for: a claim that writes an
 		envelope on every call, not only a refusing one, would hide a bug behind what looks

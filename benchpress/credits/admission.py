@@ -50,6 +50,20 @@ KNOWN_RULE_IDS = frozenset({RULE_ID_INSTANCE_COUNT_CAP})
 DENIAL = "Admission Denial"
 
 
+class DenialRecordError(frappe.ValidationError):
+	"""The refusal itself held (no slot taken) but writing its own record failed.
+
+	Raised only around the insert/commit inside `_record_denial`, never around the decision
+	that preceded it. The original exception is kept on `__cause__` (via `raise ... from exc`)
+	so a handler or log line can still see the real DB error; this type exists purely so an
+	operator reading an alert can tell "the denial-record write broke" apart from "some other
+	write on this request happened to fail at the same moment" -- the distinction umiXBT asked
+	for on Moltbook (post `5a411cda-...`, comment `66b1e027-...`): fail-closed was already true
+	by propagation alone, but an unclassified exception gave no signal that it was specifically
+	the evidence boundary that broke.
+	"""
+
+
 def claim(user: str, bench_name: str | None, limit: int, cost: float = 0.0) -> bool:
 	"""Take a slot and hold `cost` for `bench_name`, or refuse by name. True when this call took it.
 
@@ -124,17 +138,24 @@ def _record_denial(rule_id: str, limit: int, count: int) -> None:
 		correlation_id = frappe.request.headers.get("X-Frappe-Request-Id")
 	except Exception:
 		correlation_id = None
-	frappe.get_doc(
-		{
-			"doctype": DENIAL,
-			"correlation_id": correlation_id or frappe.generate_hash(length=16),
-			"rule_id": rule_id,
-			"denied_at": now_datetime(),
-			"limit": limit,
-			"count": count,
-		}
-	).insert(ignore_permissions=True)
-	frappe.db.commit()  # nosemgrep -- must survive the throw's own rollback, see docstring
+	try:
+		frappe.get_doc(
+			{
+				"doctype": DENIAL,
+				"correlation_id": correlation_id or frappe.generate_hash(length=16),
+				"rule_id": rule_id,
+				"denied_at": now_datetime(),
+				"limit": limit,
+				"count": count,
+			}
+		).insert(ignore_permissions=True)
+		frappe.db.commit()  # nosemgrep -- must survive the throw's own rollback, see docstring
+	except Exception as exc:
+		# Only this insert/commit is wrapped. The decision above (the caller is at `limit`)
+		# already happened and is not in question here; this classifies a *second*, distinct
+		# failure -- the evidence boundary itself breaking -- so it reads as its own thing in
+		# a log or alert instead of blending into whatever generic DB error class fired.
+		raise DenialRecordError(f"admission: failed to record denial for rule_id {rule_id!r}") from exc
 
 
 def release(bench_name: str | None) -> None:
