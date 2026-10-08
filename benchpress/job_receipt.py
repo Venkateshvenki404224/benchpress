@@ -49,6 +49,11 @@ from frappe.utils import now_datetime
 
 DOCTYPE = "Job Receipt"
 
+# requeue_or_remediate()'s own return values, distinct from the DocType's `status` field.
+REQUEUE_DISPOSITION_REQUEUE = "requeue"
+REQUEUE_DISPOSITION_REMEDIATE = "remediate"
+REQUEUE_DISPOSITION_UNKNOWN = "unknown"
+
 
 def mint(logical_id: str, expected_effect: str, policy_hash: str | None = None) -> None:
 	"""Open the ledger row BEFORE the enqueue call. Idempotent on `logical_id`.
@@ -153,16 +158,16 @@ def requeue_or_remediate(logical_id: str, current_policy_hash: str | None = None
 	minted_hash = doc.policy_hash or None
 
 	if minted_hash is None and current_policy_hash is None:
-		return "requeue"
+		return REQUEUE_DISPOSITION_REQUEUE
 
 	if minted_hash is None and current_policy_hash is not None:
 		# No baseline was recorded at mint time (pre-`policy_hash` receipt). We cannot
 		# tell "policy changed" from "we never captured a baseline" — that is a
 		# migration-era data gap, not a policy decision, so it must not silently
 		# inherit "remediate"'s semantics.
-		return "unknown"
+		return REQUEUE_DISPOSITION_UNKNOWN
 
 	if minted_hash == current_policy_hash:
-		return "requeue"
+		return REQUEUE_DISPOSITION_REQUEUE
 
-	return "remediate"
+	return REQUEUE_DISPOSITION_REMEDIATE
