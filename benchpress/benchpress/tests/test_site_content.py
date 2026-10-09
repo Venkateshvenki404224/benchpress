@@ -51,7 +51,11 @@ class TestSiteContent(IntegrationTestCase):
 		# `set_switches` call in this module left live bled into every module that ran after
 		# this one in the same `bench run-tests` process (e.g. `test_signup.py`/`test_waitlist.py`
 		# both read `enable_credits`/`waitlist_open` off this same live singleton). Same shape as
-		# `TestAdmission`'s `tearDownClass` fix (TASK-04117/M481) for `Credit Settings`.
+		# Same shape as `TestAdmission`'s `tearDownClass` fix (TASK-04117/M481) for `Credit
+		# Settings`. Rollback first: a `frappe.db.commit()` below would otherwise commit any
+		# other uncommitted write still pending in this class's open transaction, not just the
+		# two singleton values this restore is scoped to.
+		frappe.db.rollback()
 		frappe.set_user("Administrator")
 		frappe.db.set_single_value(BENCHPRESS_SETTINGS, "enable_credits", cls.credits_at_start)
 		frappe.db.set_single_value(CREDIT_SETTINGS, "waitlist_open", cls.waitlist_at_start)

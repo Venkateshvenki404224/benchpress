@@ -113,7 +113,10 @@ class TestSelfServeSignup(IntegrationTestCase):
 		# `test_waitlist.py`'s `require_waitlist_open()` throws `ValidationError` for every
 		# `waitlist.join()` call once this class has run first, because the singleton row is
 		# not scoped to this class's own transaction -- same shape as `TestAdmission`'s
-		# `tearDownClass` fix (TASK-04117/M481) for `Credit Settings`.
+		# `tearDownClass` fix (TASK-04117/M481) for `Credit Settings`. Rollback first: a
+		# `frappe.db.commit()` below would otherwise commit anything still pending in this
+		# class's open transaction, not just the three settings this restore targets.
+		frappe.db.rollback()
 		frappe.set_user("Administrator")
 		for field, value in cls.settings_at_start.items():
 			frappe.db.set_single_value(CREDIT_SETTINGS, field, value)

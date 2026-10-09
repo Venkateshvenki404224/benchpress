@@ -145,6 +145,13 @@ class TestCreditSweep(IntegrationTestCase):
 		# the class, so whichever value the last test method left (`enable_credits=1` from
 		# `test_reaping_removes_the_container_and_database_and_keeps_the_lab`) bled into every
 		# module that ran after this one in the same `bench run-tests` process.
+		# The actual per-class rollback runs later, via `addClassCleanup` registered in
+		# `setUpClass` -- it fires *after* this whole method returns, not when
+		# `super().tearDownClass()` is called. So a `frappe.db.commit()` anywhere in this
+		# override would commit this class's own deliberately-uncommitted fixtures (`fund()`,
+		# `wipe_credits()`) permanently, with no later rollback to undo it. Roll back first,
+		# discarding those fixtures, then write and commit only the restore.
+		frappe.db.rollback()
 		frappe.set_user("Administrator")
 		frappe.db.set_single_value(BENCHPRESS_SETTINGS, "enable_credits", cls.switch_at_start)
 		for field, value in cls.settings_at_start.items():

@@ -192,7 +192,10 @@ class TestCreditGuard(IntegrationTestCase):
 		# TASK-04117/M481). `setUp`'s `restore_economics` only restores before each test *inside*
 		# this class -- nothing restored these after the class, so whatever the last test method
 		# left bled into every module that ran after this one in the same `bench run-tests`
-		# process.
+		# process. Rollback first: a `frappe.db.commit()` below would otherwise commit this
+		# class's own deliberately-uncommitted fixtures (`guard-lab`, `guard-lab-other`, both
+		# benches, both users) permanently, not just the three settings this restore targets.
+		frappe.db.rollback()
 		frappe.set_user("Administrator")
 		frappe.db.set_single_value(BENCHPRESS_SETTINGS, "enable_credits", cls.switch_at_start)
 		for field, value in cls.settings_at_start.items():
