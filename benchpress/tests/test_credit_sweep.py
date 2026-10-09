@@ -151,6 +151,7 @@ class TestCreditSweep(IntegrationTestCase):
 			frappe.db.set_single_value(CREDIT_SETTINGS, field, value)
 		frappe.clear_cache(doctype=BENCHPRESS_SETTINGS)
 		frappe.clear_cache(doctype=CREDIT_SETTINGS)
+		frappe.db.commit()  # nosemgrep -- the restore must outlive the per-class rollback
 		super().tearDownClass()
 
 	def setUp(self):

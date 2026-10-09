@@ -203,6 +203,7 @@ class TestCreditGuard(IntegrationTestCase):
 		frappe.clear_cache(doctype=BENCHPRESS_SETTINGS)
 		frappe.clear_cache(doctype=CREDIT_SETTINGS)
 		config.clear_size_index()
+		frappe.db.commit()  # nosemgrep -- the restore must outlive the per-class rollback
 		super().tearDownClass()
 
 	def setUp(self):

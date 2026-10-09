@@ -57,6 +57,7 @@ class TestSiteContent(IntegrationTestCase):
 		frappe.db.set_single_value(CREDIT_SETTINGS, "waitlist_open", cls.waitlist_at_start)
 		frappe.clear_cache(doctype=BENCHPRESS_SETTINGS)
 		frappe.clear_cache(doctype=CREDIT_SETTINGS)
+		frappe.db.commit()  # nosemgrep -- the restore must outlive the per-class rollback
 		super().tearDownClass()
 
 	def setUp(self):

@@ -122,6 +122,7 @@ class TestSelfServeSignup(IntegrationTestCase):
 		frappe.clear_cache(doctype=CREDIT_SETTINGS)
 		frappe.clear_cache(doctype=BENCHPRESS_SETTINGS)
 		frappe.clear_cache(doctype=WEBSITE_SETTINGS)
+		frappe.db.commit()  # nosemgrep -- the restore must outlive the per-class rollback
 		super().tearDownClass()
 
 	def setUp(self):
