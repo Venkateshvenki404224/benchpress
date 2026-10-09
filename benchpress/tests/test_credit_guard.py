@@ -197,7 +197,9 @@ class TestCreditGuard(IntegrationTestCase):
 		frappe.db.set_single_value(BENCHPRESS_SETTINGS, "enable_credits", cls.switch_at_start)
 		for field, value in cls.settings_at_start.items():
 			frappe.db.set_single_value(CREDIT_SETTINGS, field, value)
-		frappe.db.set_value("Instance Size", "Small", "max_sites", cls.max_sites_at_start, update_modified=False)
+		frappe.db.set_value(
+			"Instance Size", "Small", "max_sites", cls.max_sites_at_start, update_modified=False
+		)
 		frappe.clear_cache(doctype=BENCHPRESS_SETTINGS)
 		frappe.clear_cache(doctype=CREDIT_SETTINGS)
 		config.clear_size_index()
