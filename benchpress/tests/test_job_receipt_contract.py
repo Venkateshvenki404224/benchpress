@@ -70,7 +70,9 @@ class TestJobReceiptContract(unittest.TestCase):
 
 		fake_utils = types.ModuleType("frappe.utils")
 		fake_utils.now_datetime = MagicMock(return_value="2026-10-02T00:00:00")
-		fake_utils.add_to_date = MagicMock(side_effect=lambda dt, minutes=0, hours=0, **kw: f"{dt}-plus-{minutes or hours}")
+		fake_utils.add_to_date = MagicMock(
+			side_effect=lambda dt, minutes=0, hours=0, **kw: f"{dt}-plus-{minutes or hours}"
+		)
 		self.fake_frappe.utils = fake_utils
 
 		fake_assign_to = types.ModuleType("frappe.desk.form.assign_to")
