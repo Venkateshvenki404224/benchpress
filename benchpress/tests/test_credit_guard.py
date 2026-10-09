@@ -183,6 +183,32 @@ class TestCreditGuard(IntegrationTestCase):
 		# which takes these fixtures with it — and a commit anywhere in this module would make every
 		# retuned price and cap durable on the site instead.
 
+	@classmethod
+	def tearDownClass(cls):
+		# `set_credits_enabled`/`set_setting`/`set_size_field` write `BenchPress Settings`,
+		# `Credit Settings` and `Instance Size` directly via `frappe.db.set_single_value`/
+		# `frappe.db.set_value`, neither of which is scoped to this class's IntegrationTestCase
+		# rollback (both commit immediately, same mechanism documented for TestAdmission in
+		# TASK-04117/M481). `setUp`'s `restore_economics` only restores before each test *inside*
+		# this class -- nothing restored these after the class, so whatever the last test method
+		# left bled into every module that ran after this one in the same `bench run-tests`
+		# process. Rollback first: a `frappe.db.commit()` below would otherwise commit this
+		# class's own deliberately-uncommitted fixtures (`guard-lab`, `guard-lab-other`, both
+		# benches, both users) permanently, not just the three settings this restore targets.
+		frappe.db.rollback()
+		frappe.set_user("Administrator")
+		frappe.db.set_single_value(BENCHPRESS_SETTINGS, "enable_credits", cls.switch_at_start)
+		for field, value in cls.settings_at_start.items():
+			frappe.db.set_single_value(CREDIT_SETTINGS, field, value)
+		frappe.db.set_value(
+			"Instance Size", "Small", "max_sites", cls.max_sites_at_start, update_modified=False
+		)
+		frappe.clear_cache(doctype=BENCHPRESS_SETTINGS)
+		frappe.clear_cache(doctype=CREDIT_SETTINGS)
+		config.clear_size_index()
+		frappe.db.commit()  # nosemgrep -- the restore must outlive the per-class rollback
+		super().tearDownClass()
+
 	def setUp(self):
 		"""Start every test from the economics the module found, not from what a sibling left.
 

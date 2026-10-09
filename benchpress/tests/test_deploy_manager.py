@@ -472,6 +472,22 @@ class TestDeployStepMarkers(IntegrationTestCase):
 	def setUpClass(cls):
 		super().setUpClass()
 		frappe.set_user("Administrator")
+		# Every test here runs a real deploy through `lifecycle`, which charges a real lease
+		# via `metering.on_bench_running` the moment the mocked container reaches `Running`.
+		# With credits on (the fixture default from `seed_defaults`/earlier modules), ~30
+		# deploys in this class debit Administrator's real `Credit Account` with nothing to
+		# reset it, leaking a large negative balance into every module that runs after this
+		# one in the same `bench run-tests` process (TASK-04108/TASK-04117: the real
+		# mechanism was this class's unmetered real deploys, not a `claim()`/`release()`
+		# refusal-path bug in admission.py). This class tests deploy step markers, not
+		# billing, so it runs with credits off, same as every other non-credits module.
+		cls._credits_at_start = frappe.db.get_single_value("BenchPress Settings", "enable_credits")
+		frappe.db.set_single_value("BenchPress Settings", "enable_credits", 0)
+		frappe.clear_cache(doctype="BenchPress Settings")
+		cls.addClassCleanup(frappe.clear_cache, doctype="BenchPress Settings")
+		cls.addClassCleanup(
+			frappe.db.set_single_value, "BenchPress Settings", "enable_credits", cls._credits_at_start
+		)
 		cls.lab = _make_lab("test-lab-steps")
 		cls.addClassCleanup(frappe.db.commit)
 		cls.addClassCleanup(cls.lab.delete, ignore_permissions=True)
