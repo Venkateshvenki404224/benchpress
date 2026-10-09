@@ -61,12 +61,35 @@
 								:connected="vpnStatus.connected"
 								@register="router.push('/devices')"
 							/>
-							<SitesCard v-bind="sitesProps" @open="openSite" />
+							<DatabasesCard
+								v-if="showDatabases"
+								:bench="bench"
+								@created="refresh"
+								@deleted="refresh"
+							/>
+							<SitesCard
+								v-else-if="!lab.data.self_managed"
+								v-bind="sitesProps"
+								@open="openSite"
+							/>
 						</div>
 					</div>
 
 					<div v-else-if="tab.key === 'sites'" class="pt-4">
-						<SitesCard v-bind="sitesProps" @open="openSite" />
+						<DatabasesCard
+							v-if="showDatabases"
+							:bench="bench"
+							@created="refresh"
+							@deleted="refresh"
+						/>
+						<SitesCard
+							v-else-if="!lab.data.self_managed"
+							v-bind="sitesProps"
+							@open="openSite"
+						/>
+						<SectionCard v-else :padded="false">
+							<EmptyState message="Start the bench to create a database." />
+						</SectionCard>
 					</div>
 
 					<div v-else class="pt-4">
@@ -113,6 +136,7 @@ import CodeServerDialog from "@/components/lab/CodeServerDialog.vue";
 import ConnectionCard from "@/components/lab/ConnectionCard.vue";
 import ConnectionDetails from "@/components/lab/ConnectionDetails.vue";
 import ContainerStatusCard from "@/components/lab/ContainerStatusCard.vue";
+import DatabasesCard from "@/components/lab/DatabasesCard.vue";
 import LabErrorBanner from "@/components/lab/LabErrorBanner.vue";
 import LabHeader from "@/components/lab/LabHeader.vue";
 import SitesCard from "@/components/lab/SitesCard.vue";
@@ -191,6 +215,9 @@ const bench = computed(() => lab.data?.bench ?? null);
 const held = ref(null);
 const sites = computed(() => lab.data?.sites ?? []);
 const siteAddress = computed(() => siteUrl(bench.value));
+const showDatabases = computed(
+	() => !!lab.data?.self_managed && bench.value?.status === "Running"
+);
 const busy = computed(
 	() => buildAction.loading || deployAction.loading || benchAction.loading || !!building.value
 );
@@ -219,7 +246,7 @@ const healthAgeSeconds = computed(() => {
 const tabs = computed(() => {
 	const list = [
 		{ key: "dashboard", label: "Dashboard" },
-		{ key: "sites", label: "Sites" },
+		{ key: "sites", label: lab.data?.self_managed ? "Databases" : "Sites" },
 		{ key: "deploy", label: "Deploy log" },
 	];
 	// A deploy that misses the image cache builds too, so the tab follows the log, not the role.
@@ -240,7 +267,7 @@ function runText(stored, liveRun, liveLog) {
 	return base + liveLog.value;
 }
 
-// Credentials and deploy history belong to a bench, so both follow its identity.
+// Credentials and deploy logs belong to a bench, so both follow its identity.
 watch(
 	() => bench.value?.name,
 	(name) => {

@@ -5,6 +5,7 @@ import os
 import subprocess
 
 import frappe
+from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
 from frappe.installer import update_site_config
 
 from benchpress.credits.seed import seed_defaults
@@ -12,6 +13,7 @@ from benchpress.indexes import ensure_indexes
 from benchpress.lab_templates import seed_lab_templates
 from benchpress.public_site import CONFIG_KEY
 from benchpress.public_site.seed import seed_public_site
+from benchpress.user import SSH_KEYS_FIELD
 from benchpress.vpn_access import grant_vpn_access
 
 
@@ -31,6 +33,7 @@ def after_install():
 	seed_lab_templates()
 	seed_public_site()
 	ensure_indexes()
+	ensure_ssh_key_field()
 
 	# setup.sh requires host-level access (docker group, sysctl, sudoers).
 	# Skip it when running inside a container.
@@ -55,6 +58,23 @@ def after_install():
 
 	if frappe.conf.get("developer_mode"):
 		create_test_users()
+
+
+def ensure_ssh_key_field():
+	create_custom_fields(
+		{
+			"User": [
+				{
+					"fieldname": SSH_KEYS_FIELD,
+					"label": "SSH public keys",
+					"fieldtype": "Small Text",
+					"insert_after": "api_secret",
+					"hidden": 1,
+				}
+			]
+		},
+		update=True,
+	)
 
 
 def create_test_users():

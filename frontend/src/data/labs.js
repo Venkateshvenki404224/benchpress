@@ -2,7 +2,7 @@ import { createResource } from "frappe-ui";
 
 /**
  * Every lab the session user may see, with its apps, its deployment and its
- * last run. Shared by the Labs table and the ⌘K palette so the palette never
+ * last run. Shared by the Labs page and the ⌘K palette so the palette never
  * issues a second, differently-scoped read.
  */
 export const labsResource = createResource({

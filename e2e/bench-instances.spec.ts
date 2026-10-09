@@ -10,15 +10,6 @@ test.describe("Bench Instances Page", () => {
     await instancesPage.expectScopedTo(/across all owners|Containers you own/);
   });
 
-  test("carries the Deploy history action", async ({ page }) => {
-    const instancesPage = new BenchInstancesPage(page);
-    await instancesPage.goto();
-
-    await expect(instancesPage.deployHistoryButton).toBeVisible();
-    await instancesPage.deployHistoryButton.click();
-    await page.waitForURL("**/deploy-logs");
-  });
-
   test("shows the six columns, or an empty state that offers a next step", async ({
     page,
   }) => {

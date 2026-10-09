@@ -35,7 +35,13 @@ PUBLIC_ROUTES = (
 EMAIL = "gate@example.com"
 
 # Structure only Frappe's own login card renders. The branded template carries none of it.
-FRAMEWORK_MARKERS = ("page-card-actions", "app-logo", "es-line-email")
+# Not the bare string `icon-eye` (frappe/frappe's icon-sprite rename, pinned at d07fff88):
+# `login.js` itself contains the literal text `"#icon-eye"` inside its show/hide toggle, and
+# both templates `{% include %}` that same shared login.js in their script block — so the bare
+# string leaks into the branded page's rendered HTML too and false-fails this exact assertion.
+# The actual framework-only signal is the `<use href="#icon-eye">` markup tag, which only exists
+# in frappe/www/login.html's own sprite-reference icon, never in BenchPress's inline-SVG icons.
+FRAMEWORK_MARKERS = ("page-card-actions", "app-logo", '<use href="#icon-eye">')
 # Anchored on the attribute, and never on `/assets/benchpress/` wholesale: the `app_logo_url` hook
 # is app-wide, and Frappe's own page serialises the whole build manifest into `frappe.boot`, so
 # both the logo and every bundle path are on the framework page too.
@@ -47,14 +53,17 @@ BRANDED_MARKERS = (
 	LOGIN_SEED["login_panel_title"],
 )
 # `login.js` binds against these ids and classes, so both templates have to carry them.
+# Matched as a substring, not an exact `class="..."` value: frappe/frappe's d07fff88 pin added
+# trailing utility classes (`flex flex-col gap-8`) after `form-login`/`form-forgot hide`/etc, so
+# an exact-quote match broke the moment the framework template picked up more classes.
 FLOW_MARKERS = (
 	'id="login_email"',
 	'id="login_password"',
 	'id="forgot_email"',
 	'id="login_with_email_link_email"',
-	'class="form-signin form-login"',
-	'class="form-signin form-forgot hide"',
-	'class="form-signin form-login-with-email-link hide"',
+	'class="form-signin form-login',
+	'class="form-signin form-forgot hide',
+	'class="form-signin form-login-with-email-link hide',
 	"btn-login-option",
 	"btn-login-with-email-link",
 	"for-signup",

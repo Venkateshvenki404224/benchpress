@@ -6,13 +6,13 @@ description: The deploy stepper, the raw log and its step markers, the build log
 # Read logs and container stats
 
 Every deploy and every image build writes a log you can read while it runs and
-months after it finished. This page finds those logs and reads them.
+for seven days after it finished. This page finds those logs and reads them.
 
 **Who this is for.** Anybody whose deploy failed, or who wants to know where
 the time went.
 
 **Before you start.** Nothing. A log exists as soon as a run starts. Build logs
-and build history are admin-only.
+are admin-only.
 
 ## Steps
 
@@ -91,9 +91,9 @@ and build history are admin-only.
    than a live meter. `checked 58s ago` is the honest age of the reading.
 
 5. Open the **Build log** tab for the image the bench was made from. This tab
-   and the build history are admin-only.
+   is admin-only.
 
-   ![The Build log tab of the Frappe CRM lab, seen as an admin at 1280 by 800 pixels. The sidebar carries an extra Templates entry that a non-admin does not see. Six collapsible rows each carry a green dot: Build started, Step 1 of 4 FROM benchpress slash crm colon lab, Step 2 of 4 COPY golden to slash opt slash benchpress slash golden, Step 3 of 4 COPY setup-site.sh, Step 4 of 4 LABEL benchpress.golden equals 1 and benchpress.golden.mariadb equals 10.6.28-MariaDB-ubu2204, and Build complete, golden in benchpress slash crm colon lab. The last row is expanded and reads No output.](../images/user/logs-and-monitoring/04-build-log.png)
+   ![The Build log tab of the Frappe CRM lab, seen as an admin at 1280 by 800 pixels. The sidebar still carries a Templates entry, from before Templates moved to a tab on the Labs page. Six collapsible rows each carry a green dot: Build started, Step 1 of 4 FROM benchpress slash crm colon lab, Step 2 of 4 COPY golden to slash opt slash benchpress slash golden, Step 3 of 4 COPY setup-site.sh, Step 4 of 4 LABEL benchpress.golden equals 1 and benchpress.golden.mariadb equals 10.6.28-MariaDB-ubu2204, and Build complete, golden in benchpress slash crm colon lab. The last row is expanded and reads No output.](../images/user/logs-and-monitoring/04-build-log.png)
 
    Each Docker step is one collapsible row with a status dot. Expand a row to
    read its output. A row with nothing to show says `No output` rather than
@@ -106,18 +106,8 @@ and build history are admin-only.
 
 ## Find an older run
 
-Neither history is in the sidebar. Both hang off the list they belong to.
-
-| History | Where | Who |
-|---|---|---|
-| Deploy history | **Instances** page | everybody, for the benches they can see |
-| Build history | **Labs** page, beside **From template** | admins |
-
-Each row carries the run, a result badge, the last step the run opened, the
-duration and when it started. Clicking a row opens the lab.
-
-A run recorded before the pipeline emitted step markers shows an em dash for
-its last step and its duration. The table does not guess.
+The app shows the latest run for each lab and each bench. An admin reads older
+runs in Desk, at `/app/deploy-log` and `/app/build-log`.
 
 ## Verify
 
@@ -132,8 +122,7 @@ its last step and its duration. The table does not guess.
 |---|---|---|
 | The Deploy log tab is empty | The bench has never been deployed | Deploy the lab |
 | The log stops mid-run and never finishes | The live stream dropped | Reload the tab. The record is complete either way |
-| A run is missing from Deploy history | Logs are cleared after 7 days | Nothing to recover. Read a newer run |
-| A row shows an em dash for duration | The run predates the step markers | Read the raw log instead |
+| An older run is missing | Logs are cleared after 7 days | Nothing to recover. Read a newer run |
 | No **Build log** tab | Build logs are admin-only | Ask an admin |
 | CPU and MEMORY read a dash | The container is not running | Start the bench |
 | Health reads `Healthy` on a stopped bench | The last probe ran before the stop | Read the `checked … ago` age |
@@ -146,9 +135,7 @@ its last step and its duration. The table does not guess.
 | Log | Tab | Scope |
 |---|---|---|
 | Deploy log | **Deploy log** on the lab page | the latest run for that bench |
-| Deploy history | **Instances** page | your benches, or all of them for an admin |
 | Build log | **Build log** on the lab page | the latest image build for that lab. Admins |
-| Build history | **Labs** page | every build. Admins |
 
 ### Retention
 

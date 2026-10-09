@@ -2,14 +2,14 @@ import { type Locator, type Page, expect } from "@playwright/test";
 import { BasePage } from "./BasePage";
 
 /**
- * Labs table. Every locator is a `data-test` hook, so the next redesign of the
+ * Labs grid. Every locator is a `data-test` hook, so the next redesign of the
  * markup does not break this suite — the previous version matched a search
  * placeholder string and a heading tag, both of which changed in phase 2.
  */
 export class LabsPage extends BasePage {
   readonly page: Page;
   readonly root: Locator;
-  readonly table: Locator;
+  readonly grid: Locator;
   readonly searchInput: Locator;
   readonly statusFilter: Locator;
   readonly versionFilter: Locator;
@@ -17,14 +17,13 @@ export class LabsPage extends BasePage {
   readonly onboardingPanel: Locator;
   readonly clearFilters: Locator;
   readonly newLabButton: Locator;
-  readonly fromTemplateButton: Locator;
-  readonly buildHistoryButton: Locator;
+  readonly templatesTab: Locator;
 
   constructor(page: Page) {
     super(page);
     this.page = page;
     this.root = this.testId("labs");
-    this.table = this.testId("labs-table");
+    this.grid = this.testId("labs-grid");
     // FormControl forwards attributes to the input itself, so the hook is the input.
     this.searchInput = this.testId("labs-search");
     this.statusFilter = this.testId("filter-status");
@@ -33,8 +32,7 @@ export class LabsPage extends BasePage {
     this.onboardingPanel = this.testId("onboarding-panel");
     this.clearFilters = this.testId("clear-filters");
     this.newLabButton = this.testId("new-lab");
-    this.fromTemplateButton = this.testId("from-template");
-    this.buildHistoryButton = this.testId("build-history");
+    this.templatesTab = this.testId("labs-tabs").getByRole("tab", { name: "Templates" });
   }
 
   async goto() {
@@ -42,8 +40,8 @@ export class LabsPage extends BasePage {
     await this.root.waitFor({ timeout: 15_000 });
   }
 
-  row(labName: string): Locator {
-    return this.testId(`lab-${labName}`);
+  card(labName: string): Locator {
+    return this.testId(`lab-card-${labName}`);
   }
 
   async search(query: string) {
@@ -68,26 +66,24 @@ export class LabsPage extends BasePage {
     await this.selectFilter(this.versionFilter, version);
   }
 
-  async expectRowVisible(labName: string) {
-    await expect(this.row(labName)).toBeVisible({ timeout: 10_000 });
+  async expectCardVisible(labName: string) {
+    await expect(this.card(labName)).toBeVisible({ timeout: 10_000 });
   }
 
-  async expectRowHidden(labName: string) {
-    await expect(this.row(labName)).toHaveCount(0);
+  async expectCardHidden(labName: string) {
+    await expect(this.card(labName)).toHaveCount(0);
   }
 
-  /** The status pill for a row — proves the status is a badge, not grey text. */
+  /** The status pill for a card — proves the status is a badge, not grey text. */
   statusBadge(labName: string, status: string): Locator {
     return this.testId(`status-${status}`);
   }
 
   async expectAdminActionsVisible() {
     await expect(this.newLabButton).toBeVisible({ timeout: 10_000 });
-    await expect(this.buildHistoryButton).toBeVisible();
   }
 
   async expectAdminActionsHidden() {
     await expect(this.newLabButton).toHaveCount(0);
-    await expect(this.buildHistoryButton).toHaveCount(0);
   }
 }

@@ -5,6 +5,7 @@ import base64
 import hashlib
 import io
 import os
+import re
 import secrets
 import subprocess
 import tarfile
@@ -13,12 +14,17 @@ from pathlib import Path
 
 import frappe
 from frappe import _
+from frappe.utils import now_datetime
 
+from benchpress import job_receipt
 from benchpress.docker_manager import ensure_network, get_client
 
 BACKUP_TIMEOUT = 3600
 
 REDIS_CONTAINER_NAME = "benchpress-redis"
+
+BENCH_DATABASE_PREFIX_LENGTH = 16
+BENCH_DATABASE_NAME = re.compile(r"bp_[a-z0-9]{1,16}_[0-9a-f]{8}")
 
 # `Database Server` statuses. A bench carries its own, spelled the same and meaning
 # something else, and only `lifecycle` writes that one.
@@ -354,6 +360,56 @@ def drop_site_database(db_server_name: str, site_name: str, database: str | None
 	)
 
 
+def bench_database_script(name: str, password_hash: str) -> str:
+	"""SQL for one database and a user limited to it."""
+	return _script(
+		f"CREATE DATABASE `{name}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci",
+		f"CREATE USER '{name}'@'%' IDENTIFIED VIA mysql_native_password USING '{password_hash}'",
+		f"GRANT ALL PRIVILEGES ON `{name}`.* TO '{name}'@'%'",
+		"FLUSH PRIVILEGES",
+	)
+
+
+def bench_new_site_command(db_host: str, name: str, password: str) -> str:
+	return (
+		f"bench new-site {name.replace('_', '-')}.localhost --set-default --no-setup-db "
+		f"--db-host {db_host} --db-name {name} --db-user {name} --db-password {password}"
+	)
+
+
+def create_bench_database(db_server_name: str, prefix: str) -> tuple[str, str]:
+	"""Create a database and its limited user; returns (name, password)."""
+	prefix = re.sub(r"[^a-z0-9]", "", prefix.lower())[:BENCH_DATABASE_PREFIX_LENGTH] or "bench"
+	name = f"bp_{prefix}_{frappe.generate_hash(length=8)}"
+	password = frappe.generate_hash(length=32)
+	exit_code, output = execute_sql(
+		db_server_name, bench_database_script(name, _native_password_hash(password))
+	)
+	if exit_code != 0:
+		drop_bench_database(db_server_name, name)
+		frappe.throw(_("Failed to create database {0}: {1}").format(name, output))
+	return name, password
+
+
+def drop_bench_database(db_server_name: str, name: str) -> None:
+	_assert_bench_database_name(name)
+	exit_code, output = execute_sql(
+		db_server_name,
+		_script(
+			f"DROP DATABASE IF EXISTS `{name}`",
+			f"DROP USER IF EXISTS '{name}'@'%'",
+			"FLUSH PRIVILEGES",
+		),
+	)
+	if exit_code != 0:
+		frappe.throw(_("Failed to drop database {0}: {1}").format(name, output))
+
+
+def _assert_bench_database_name(name: str) -> None:
+	if not BENCH_DATABASE_NAME.fullmatch(name or ""):
+		frappe.throw(_("{0} is not a bench database name.").format(name))
+
+
 # What `SHOW DATABASES` returns that no site ever owns. `backups` is not a schema at all —
 # `backup_database_server` writes into the data directory and the server lists every directory
 # there — so a reconciler that reported it could never reach zero.
@@ -460,13 +516,26 @@ def get_container_logs(db_server_name: str, tail: int = 100) -> str:
 
 
 def enqueue_health_check() -> None:
-	"""Convergence cron: hand the health check to `queue-long`."""
+	"""Convergence cron: hand the health check to `queue-long`.
+
+	Mints the Job Receipt row BEFORE calling `frappe.enqueue`, same mint-before-enqueue /
+	checker-owns-status pattern already in production for `enqueue_route_sync`. `logical_id`
+	is a fixed string, not time- or retry-suffixed: this cron fires every five minutes and
+	each run is its own independent health check, so unlike `route_sync` there is no retry to
+	stay stable across — RQ's own `job_id`+`deduplicate=True` already collapses overlapping
+	runs, and the receipt only needs to answer "did the most recently claimed run finish
+	healthy", not "did this specific invocation finish". A fresh `logical_id` is minted each
+	call so a stale Pending row from a crashed run does not block the next run's claim.
+	"""
 	# The enqueuer, never `scheduled_health_check` itself — see the rule above `scheduler_events`
 	# in `hooks.py`.
+	logical_id = f"mariadb_health_check:{now_datetime().isoformat()}"
+	job_receipt.mint(logical_id, expected_effect="every Active/Error Database Server reports healthy")
 	frappe.enqueue(
 		"benchpress.mariadb_manager.scheduled_health_check",
 		queue="long",
 		job_id="mariadb_health_check",
+		logical_id=logical_id,
 		deduplicate=True,
 	)
 
@@ -565,10 +634,18 @@ def _log_new_drift(lines: list[str], hit_rate: str) -> None:
 		)
 
 
-def scheduled_health_check() -> list[str]:
+def scheduled_health_check(logical_id: str | None = None) -> list[str]:
 	"""Cron job — restart any DB server that is down, then report shared-setting drift.
 
 	Returns the current drift, so `bench execute` shows it even when the log row is a repeat.
+
+	`logical_id`, when given, is the Job Receipt row minted BEFORE this job was enqueued
+	(see `enqueue_health_check`). This function only performs the restart attempts and the
+	drift read — it never flips its own receipt to Completed. That is `_claim_health_check_
+	receipt`'s job, called by an independent reader that re-checks every server's live health
+	before trusting this function's own report, per the mint-before-enqueue /
+	checker-owns-status pattern already used for `enqueue_route_sync`/`sync_instance_route`
+	(see `benchpress/job_receipt.py`).
 	"""
 	servers = frappe.get_all(
 		"Database Server",
@@ -589,12 +666,30 @@ def scheduled_health_check() -> list[str]:
 				message=frappe.get_traceback(),
 			)
 
+	if logical_id:
+		_claim_health_check_receipt(logical_id, [s.name for s in servers])
+
 	if not servers:
 		return []
 
 	drift, hit_rate = shared_setting_drift(servers[0].name)
 	_log_new_drift(drift, hit_rate)
 	return drift
+
+
+def _claim_health_check_receipt(logical_id: str, server_names: list[str]) -> None:
+	"""The independent-checker half of the retrofit: re-derive health, then claim the row.
+
+	Deliberately re-checks `check_mariadb_health` for every server rather than trusting that
+	`scheduled_health_check` ran to completion without raising — the same self-report class
+	the mint-before-enqueue pattern exists to not trust (see `benchpress/job_receipt.py`
+	module docstring, point 2). A server still unhealthy after the function's own restart
+	attempt leaves the receipt Pending for the next pass rather than claiming Completed on a
+	run that merely finished without raising.
+	"""
+	if any(not check_mariadb_health(name) for name in server_names):
+		return  # at least one server is still down — leave Pending, let the next cron pass retry
+	job_receipt.mark_completed(logical_id)
 
 
 def _host_backup_dir() -> str:

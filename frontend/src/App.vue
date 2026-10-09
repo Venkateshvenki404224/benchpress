@@ -31,6 +31,7 @@
 						:icon="item.icon"
 						:to="item.to"
 						:isActive="item.isActive"
+						:aria-current="item.isActive ? 'page' : undefined"
 						:data-test="item.dataTest"
 					/>
 				</template>
@@ -82,7 +83,7 @@
 		     sidebar's own dialogs are mounted here for the same reason. -->
 		<DeployDialog />
 		<AppSearch />
-		<SettingsDialog v-if="userContext.isAdmin" />
+		<SettingsDialog />
 	</FrappeUIProvider>
 </template>
 
@@ -116,13 +117,13 @@ import { useRoute } from "vue-router";
 import BellIcon from "~icons/lucide/bell";
 import FlaskConicalIcon from "~icons/lucide/flask-conical";
 import LayoutDashboardIcon from "~icons/lucide/layout-dashboard";
-import LayoutTemplateIcon from "~icons/lucide/layout-template";
 import LogOutIcon from "~icons/lucide/log-out";
 import MoonIcon from "~icons/lucide/moon";
 import SearchIcon from "~icons/lucide/search";
 import ServerIcon from "~icons/lucide/server";
 import SettingsIcon from "~icons/lucide/settings";
 import ShieldIcon from "~icons/lucide/shield";
+import SquareTerminalIcon from "~icons/lucide/square-terminal";
 
 // useTheme reads the stored choice on mount and honours prefers-color-scheme;
 // the hand-rolled toggle it replaces always resolved to dark on first click.
@@ -162,20 +163,13 @@ function logout() {
 // Everything that acts on the account rather than on a lab lives behind the
 // sidebar header chevron — Settings included, so the nav stays object-shaped.
 const accountMenu = computed(() => {
-	const account = [];
+	const account = [{ label: "Settings", icon: SettingsIcon, onClick: () => openSettings() }];
 	if (userContext.isAdmin) {
-		account.push(
-			{
-				label: "Settings",
-				icon: SettingsIcon,
-				onClick: openSettings,
-			},
-			{
-				label: "Switch to Desk",
-				icon: LayoutDashboardIcon,
-				onClick: switchToDesk,
-			}
-		);
+		account.push({
+			label: "Switch to Desk",
+			icon: LayoutDashboardIcon,
+			onClick: switchToDesk,
+		});
 	}
 	account.push({ label: "Toggle theme", icon: MoonIcon, onClick: toggleTheme });
 	return [
@@ -208,8 +202,7 @@ const utilityItems = computed(() => [
 	},
 ]);
 
-// Five flat items. Deploy and build history are reached from the objects they
-// belong to, so the old Logs section is gone; Settings is in the header menu.
+// Five flat items. Settings is in the header menu.
 const NAV_ITEMS = [
 	{
 		label: "Overview",
@@ -223,22 +216,21 @@ const NAV_ITEMS = [
 		icon: FlaskConicalIcon,
 		to: "/labs",
 		dataTest: "nav-labs",
-		routes: ["Labs", "LabDetail", "NewLab", "BuildLogs"],
+		routes: ["Labs", "LabTemplates", "LabDetail", "NewLab"],
 	},
 	{
-		label: "Templates",
-		icon: LayoutTemplateIcon,
-		to: "/labs/templates",
-		dataTest: "nav-templates",
-		routes: ["LabTemplates"],
-		adminOnly: true,
+		label: "Benches",
+		icon: SquareTerminalIcon,
+		to: "/benches",
+		dataTest: "nav-benches",
+		routes: ["Benches"],
 	},
 	{
 		label: "Instances",
 		icon: ServerIcon,
 		to: "/bench-instances",
 		dataTest: "nav-instances",
-		routes: ["BenchInstances", "DeployLogs"],
+		routes: ["BenchInstances"],
 	},
 	{
 		label: "Devices",
@@ -250,12 +242,10 @@ const NAV_ITEMS = [
 ];
 
 const sections = computed(() => {
-	const items = NAV_ITEMS.filter((item) => !item.adminOnly || userContext.isAdmin).map(
-		(item) => ({
-			...item,
-			isActive: item.routes.includes(route.name),
-		})
-	);
+	const items = NAV_ITEMS.map((item) => ({
+		...item,
+		isActive: item.routes.includes(route.name),
+	}));
 	return [{ label: "", items }];
 });
 

@@ -125,6 +125,26 @@ class TestAdmission(IntegrationTestCase):
 		cls.plan = _ensure_plan()
 		cls.labs = [_ensure_lab(lab_id, cls.plan) for lab_id in LABS]
 
+	@classmethod
+	def tearDownClass(cls):
+		# `setUp` restores these before every test *inside* this class, but nothing restored
+		# them *after* the class -- so whatever the last test method left in the `Credit
+		# Settings` singleton (e.g. `max_concurrent_uncredited=1` from
+		# `test_the_gate_refuses_at_the_uncredited_cap`) bled into every module that ran after
+		# this one in the same `bench run-tests` process, since this is a live singleton row,
+		# not something scoped to this class's own transaction. Found live: TestLaunch's
+		# `test_a_lab_edited_away_from_its_template_is_not_reused` failed in total isolation
+		# (run alone, nothing else in the same process) with `active_instances=0` but
+		# `max_concurrent_uncredited=1` still set from a prior TestAdmission run against this
+		# same site -- not the cross-test-class `active_instances` leak TASK-04117 assumed.
+		frappe.set_user("Administrator")
+		for field, value in cls.settings_at_start.items():
+			frappe.db.set_single_value(CREDIT_SETTINGS, field, value)
+		frappe.db.set_single_value(BENCHPRESS_SETTINGS, "enable_credits", cls.switch_at_start)
+		frappe.clear_cache(doctype=CREDIT_SETTINGS)
+		frappe.db.commit()
+		super().tearDownClass()
+
 	def setUp(self):
 		frappe.set_user("Administrator")
 		self.set_credits_enabled(self.switch_at_start)
@@ -158,6 +178,98 @@ class TestAdmission(IntegrationTestCase):
 			admission.claim(USER, self.benches[1].name, 1)
 		self.assertIn("instances running", str(refusal.exception))
 		self.assertEqual(self.counter(), 1)
+
+	def test_a_cap_refusal_writes_a_decision_envelope_before_the_throw(self):
+		"""The envelope agreed with umiXBT on Moltbook (post 5a411cda, comment c3c9bd93):
+		rule id, redacted inputs, correlation id -- written and committed even though the
+		throw right after it unwinds the rest of the transaction."""
+		admission.claim(USER, self.benches[0].name, 1)
+		before = frappe.db.count("Admission Denial")
+		with self.assertRaises(frappe.ValidationError):
+			admission.claim(USER, self.benches[1].name, 1)
+		rows = frappe.get_all(
+			"Admission Denial",
+			filters={"creation": (">", frappe.utils.add_to_date(frappe.utils.now_datetime(), seconds=-30))},
+			fields=["rule_id", "limit", "count", "correlation_id"],
+			order_by="creation desc",
+			limit=1,
+		)
+		self.assertEqual(frappe.db.count("Admission Denial"), before + 1)
+		self.assertEqual(rows[0].rule_id, admission.RULE_ID_INSTANCE_COUNT_CAP)
+		self.assertEqual(rows[0].limit, 1)
+		self.assertEqual(rows[0].count, 1)
+		self.assertTrue(rows[0].correlation_id)
+
+	def test_an_unrecognized_rule_id_is_refused_before_any_write(self):
+		"""The typo-safety half of M457's rule-id work: a bad constant must fail at the call
+		that would have minted the bad row, not land in Admission Denial as an unresolved string."""
+		before = frappe.db.count("Admission Denial")
+		with self.assertRaises(frappe.ValidationError) as refusal:
+			admission._record_denial("instance_count_cap_vl", limit=1, count=1)
+		self.assertIn("unrecognized rule_id", str(refusal.exception))
+		self.assertEqual(frappe.db.count("Admission Denial"), before)
+
+	def test_a_denial_record_write_failure_raises_a_distinct_typed_fault(self):
+		"""umiXBT's ask on Moltbook (post 5a411cda, comment 66b1e027): fail-closed already held
+		by propagation alone, but a bare DB exception gave no signal that it was specifically
+		the evidence boundary (the denial record itself) that broke, versus any other write
+		failure landing on the same line. Mocks the insert to raise and asserts the caller sees
+		`DenialRecordError`, not the raw underlying exception type, with the cause preserved."""
+		with patch("frappe.get_doc", side_effect=RuntimeError("disk full")):
+			with self.assertRaises(admission.DenialRecordError) as caught:
+				admission._record_denial(admission.RULE_ID_INSTANCE_COUNT_CAP, limit=1, count=1)
+		self.assertIsInstance(caught.exception.__cause__, RuntimeError)
+
+	def test_a_denial_record_write_failure_logs_a_searchable_error(self):
+		"""M471's gap: `DenialRecordError` alone only reaches whatever generic handler the
+		caller has, which `claim()` doesn't. Without a `frappe.log_error` call, the only
+		trace of "the evidence write itself broke" is the web worker's own crash log, not
+		the Frappe Error Log every other BenchPress fault lands in. Asserts the log call
+		fires with the rule_id in the title, before the typed fault propagates."""
+		with patch("frappe.get_doc", side_effect=RuntimeError("disk full")):
+			with patch("frappe.log_error") as mock_log_error:
+				with self.assertRaises(admission.DenialRecordError):
+					admission._record_denial(admission.RULE_ID_INSTANCE_COUNT_CAP, limit=1, count=1)
+		mock_log_error.assert_called_once()
+		self.assertIn(admission.RULE_ID_INSTANCE_COUNT_CAP, mock_log_error.call_args.kwargs["title"])
+
+	def test_a_denial_record_write_failure_still_takes_no_slot(self):
+		"""The other half of the same ask: a broken evidence write must not accidentally let
+		the refusal fall through into an admission. `claim()` still raises before any slot is
+		taken, even when the record of *why* it refused could not be written."""
+		admission.claim(USER, self.benches[0].name, 1)
+		before = self.counter()
+		with patch.object(admission, "_record_denial", side_effect=admission.DenialRecordError("boom")):
+			with self.assertRaises(admission.DenialRecordError):
+				admission.claim(USER, self.benches[1].name, 1)
+		self.assertEqual(self.counter(), before)
+
+	def test_a_cap_refusal_never_reaches_the_insert_or_the_counter_write(self):
+		"""M472's regression test: the throw on the refusal path is a genuine stop, not just
+		a final state that happens to match. `test_the_cap_refuses_the_next_bench` already
+		proves the counter doesn't move, but a counter that doesn't move could in principle
+		still be preceded by `_insert`/`account.save_account` running and then being undone
+		by something else -- this asserts the two calls that take a slot are never invoked
+		at all once `_record_denial` + `frappe.throw()` fire, closing the gap the AST guard
+		(`test_claim_refusal_order_guard.py`) checks at the source level but a live call
+		never had a test asserting at runtime."""
+		admission.claim(USER, self.benches[0].name, 1)
+		with (
+			patch.object(admission, "_insert") as mock_insert,
+			patch("benchpress.credits.account.save_account") as mock_save,
+			self.assertRaises(frappe.ValidationError),
+		):
+			admission.claim(USER, self.benches[1].name, 1)
+		mock_insert.assert_not_called()
+		mock_save.assert_not_called()
+
+	def test_a_successful_claim_writes_no_denial_row(self):
+		"""The positive control this module's own docstring asks for: a claim that writes an
+		envelope on every call, not only a refusing one, would hide a bug behind what looks
+		like audit coverage."""
+		before = frappe.db.count("Admission Denial")
+		admission.claim(USER, self.benches[0].name, 2)
+		self.assertEqual(frappe.db.count("Admission Denial"), before)
 
 	def test_one_under_the_cap_is_admitted(self):
 		admission.claim(USER, self.benches[0].name, 2)

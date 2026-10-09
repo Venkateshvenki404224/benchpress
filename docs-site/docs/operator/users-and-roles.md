@@ -3,7 +3,7 @@ title: Users and roles
 description: The two BenchPress roles, what each one may read and write, which
   screens are admin-only, and how ownership rather than a role decides who sees
   a bench.
-lastModified: "2026-08-28T22:10:21+05:30"
+lastModified: "2026-09-30T20:56:42+05:30"
 lastAuthor: Venkatesh
 ---
 # Users and roles
@@ -62,9 +62,9 @@ bench --site <site> execute frappe.client.get_list \
 
 Then confirm what the person will actually see. `benchpress.api.get_user_context`
 returns the caller's identity and roles, and the SPA renders the sidebar from
-it. The user-facing proof is simpler still: **Templates** is in the sidebar
-for an admin and absent for a user, and the **New lab** button in the Overview
-header appears only for an admin.
+it. The user-facing proof is simpler still. Only an admin sees the **New lab**
+button on the **Labs** page. Only an admin sees **New lab** in the Overview
+header.
 
 ## What each role may do
 
@@ -122,15 +122,19 @@ Confirmed by looking at both roles in the running app:
 
 |Surface|Why it is admin-only|
 |--|--|
-|**Templates** in the sidebar|curating the catalog|
 |**New lab** in the Overview and Labs header|creating a lab is a write on `Lab`|
-|**Settings** in the account menu|`BenchPress Settings` is not readable by a user|
+|The **Server** groups in **Settings**|`BenchPress Settings` is not readable by a user|
 |The **Build log** tab on a lab|build output can name private repositories|
 |**Rebuild image** in the overflow menu|it costs an image build|
 |**Delete bench** in the overflow menu|delete is admin-gated even for the bench's owner|
 
+The **Templates** tab on the **Labs** page is not admin-only. Every user can
+open the catalog and launch a template.
+
 A `BenchPress User` gets exactly two items in the bench overflow menu: **Stop**
 and **Redeploy**.
+
+A user can open **Settings** too. It shows them only **SSH keys**.
 
 ## How the checks are written
 
@@ -151,7 +155,7 @@ that would let a new endpoint ship unguarded by omission.
 |The app refuses at login with no roles|The user has none of the three roles|Add `BenchPress User`|
 |A user cannot see a bench a colleague described|They see only their own benches|Have the owner share, or use an admin account|
 |A user sees a lab but has no **Deploy**|Deploy writes a `Bench Instance` they will own. Check the caps instead|See [Admission and limits](/docs/operator/admission-and-limits)|
-|An admin cannot open Settings|They hold `BenchPress User` only|Change the role, then have them reload|
+|An admin sees no **Server** groups in Settings|They hold `BenchPress User` only|Change the role, then have them reload|
 |A `BenchPress Admin` cannot open `/app/user`|The role grants no `User` doctype access|Grant roles as a `System Manager`|
 |A user can reach Desk|They hold a role with desk access, such as `BenchPress Admin`|Give them `BenchPress User` instead|
 |Deleting a bench is refused for its owner|Delete is admin-only by design|An admin deletes it|

@@ -7,8 +7,8 @@
  * timed in the browser: the prototype advanced a fake step every 520ms, and a
  * progress bar that moves while the server is stuck is worse than none.
  *
- * The same derivation serves a live stream, a page reloaded mid-run and a run
- * opened from history months later, because all three are the same string.
+ * The same derivation serves a live stream, a page reloaded mid-run and a
+ * stored run, because all three are the same string.
  *
  * `DEPLOY_STEPS` mirrors `DEPLOY_STEPS` in `benchpress/deploy_pipeline.py`,
  * including the order — the WireGuard peer is step 5 because the code

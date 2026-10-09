@@ -13,6 +13,7 @@
 - [Open the bench site](https://benchpress.cloud/docs/user/open-your-site): The Sites card, the three states of its Open button, and logging in to the Frappe site a deploy created.
 - [Connect over SSH and the VPN](https://benchpress.cloud/docs/user/connect-ssh-vpn): The connection card on a lab page — two addresses, the SSH command, the three passwords, and which of them work without the tunnel.
 - [Use code-server](https://benchpress.cloud/docs/user/code-server): Open the browser VS Code session on a bench, find its password, hand the session to a teammate, and restart it when it stops answering.
+- [Work on your own bench](https://benchpress.cloud/docs/user/benches): Prepare a Frappe develop bench, log in over SSH with your own key, create a database, make a site with bench new-site, and serve it with bench start on your VPN address.
 - [Read logs and container stats](https://benchpress.cloud/docs/user/logs-and-monitoring): The deploy stepper, the raw log and its step markers, the build log, and the CPU and memory bars on a running bench.
 - [Leases and credits](https://benchpress.cloud/docs/user/leases-and-credits): The countdown on a running bench, the renew dialog and its plans, the credit meter, the ledger, and where a purchase hands off to the payment gateway.
 - [Troubleshooting](https://benchpress.cloud/docs/user/troubleshooting): Every symptom a BenchPress user meets, its cause, and the page that fixes it — deploys, the VPN, SSH, code-server, logs and credits.
@@ -27,7 +28,7 @@
 - [Golden images](https://benchpress.cloud/docs/operator/golden-images): A lab's finished site is baked into its own image as a database dump, so a deploy restores it instead of creating tables — the measured numbers, the two settings, and why a golden gets refused.
 - [The image cache](https://benchpress.cloud/docs/operator/image-cache): One image per lab, tagged benchpress/<lab_id>:lab — what it costs on disk, how the weekly prewarm and sweep work, and what is safe to prune.
 - [Upgrading](https://benchpress.cloud/docs/operator/upgrading): Move a BenchPress install to a newer release — the backup gate, the five steps, the scripted path, rollback, and why lab images are a separate opt-in.
-- [Production safety](https://benchpress.cloud/docs/operator/production-safety): What BenchPress is and is not ready to carry — the alpha verdict, the container privilege boundary, what is backed up, and the release checklist that covers 25 of 52 whitelisted callables.
+- [Production safety](https://benchpress.cloud/docs/operator/production-safety): What BenchPress is and is not ready to carry — the alpha verdict, the container privilege boundary, what is backed up, and the release checklist that covers 25 of 50 whitelisted callables.
 - [Diagnostics](https://benchpress.cloud/docs/operator/diagnostics): The twelve read-only checks that ask Docker, MariaDB, Redis and the kernel what is true — how to run them, what each failure means, and the four things they do not cover.
 - [Credits and billing](https://benchpress.cloud/docs/operator/credits-and-billing): Optional and off by default — the metering half of BenchPress, covering leases, balances, the ledger, admin adjustments, and the optional Razorpay handoff.
 - [Admission and limits](https://benchpress.cloud/docs/operator/admission-and-limits): Optional and off by default — concurrency caps, size ceilings, device and build quotas, how a slot is claimed as a row, and the acceptance run that proves access still works.
@@ -106,8 +107,8 @@ says where to fix that.
    is 4096, below the 9024 that 1000 benches need. That check names the host
    command that fixes it.
 
-3. Move through the sidebar. Five items, top to bottom, and each one owns a
-   different object.
+3. Move through the sidebar. It has five items: Overview, Labs, Benches,
+   Instances and Devices. Each one owns a different object.
 
    Watch the chip in the header while you go. Green and reading **VPN
    connected** means bench sites open. Amber and reading **VPN off** means they
@@ -129,7 +130,7 @@ You have read the tour correctly when all four are true.
 |`/frontend` returns to the login page|You have no session, or it expired|Sign in at `/login`, then open `/frontend` again|
 |The VPN chip is amber and reads VPN off|This device has no WireGuard tunnel|Open **Devices**, register the device, install the config it gives you|
 |**Open site** opens nothing|The site has no public name, so it answers only on the VPN|Connect the VPN, then click again|
-|**Templates** is missing from the sidebar|Templates is admin-only|Ask an admin, or start a bench from **Labs**|
+|**Templates** is missing from the sidebar|Templates is a tab on the **Labs** page|Open **Labs**, then click the **Templates** tab|
 |**Needs attention** is above zero|A bench errored or stopped answering|Open **Instances**, open the bench, read its deploy log|
 |**Credits** is missing everywhere|Credits are off on this server|Nothing to fix. A self-hosted server runs without them|
 
@@ -140,9 +141,9 @@ You have read the tour correctly when all four are true.
 |Item|Route|What it holds|Who sees it|
 |--|--|--|--|
 |Overview|`/`|The dashboard on this page|Everybody|
-|Labs|`/labs`|Lab definitions, and the deploy button|Everybody|
-|Templates|`/labs/templates`|The catalog a lab is built from|Admins|
-|Instances|`/bench-instances`|Every running container, and deploy history|Everybody|
+|Labs|`/labs`|Lab definitions, the deploy button, and the **Templates** tab at `/labs/templates`|Everybody|
+|Benches|`/benches`|Develop benches you manage yourself, with SSH and code-server|Everybody|
+|Instances|`/bench-instances`|Every running container|Everybody|
 |Devices|`/devices`|Your WireGuard devices and their configs|Everybody|
 
 ### Everything else on the shell
@@ -151,7 +152,7 @@ You have read the tour correctly when all four are true.
 |--|--|--|
 |Search|Above the nav|Opens the command palette. The shortcut is `Ctrl K`|
 |Notifications|Above the nav|Opens the panel. The badge counts items that need you|
-|Account menu|Sidebar header chevron|Settings and Switch to Desk for admins, theme toggle and log out for everybody|
+|Account menu|Sidebar header chevron|Settings, theme toggle and log out for everybody, and Switch to Desk for admins|
 |VPN chip|Header, right|States the tunnel status and links to **Devices**|
 |Credit meter|Sidebar footer|The balance. It renders only while credits are on|
 
@@ -164,7 +165,7 @@ BenchPress User.
 |--|--|--|
 |Primary button|New lab|New environment|
 |Instance card heading|All instances|My environments|
-|Templates in the sidebar|Shown|Hidden|
+|**New lab** on Labs|Shown|Hidden|
 |Shared infrastructure card|Shown|Hidden|
 
 A user also sees only their own benches. An admin sees every bench on the
@@ -184,30 +185,29 @@ catalog to a bench you can open, without filling in a form.
 **Who this is for.** Anybody who needs a working bench and does not care how the
 image was built.
 
-**Before you start.** You need a login. **Templates** is admin-only, so ask an
-admin if the item is missing from your sidebar. You do not need the VPN to
+**Before you start.** You need a login. Every user sees the **Templates** tab
+on the **Labs** page. You do not need the VPN to
 deploy. You need it to open the bench afterwards.
 
 ## Steps
 
-1. Open **Templates** in the sidebar, or go to `/frontend/labs/templates`.
+1. Open the **Templates** tab on the **Labs** page. Its URL is
+   `/frontend/labs/templates`.
 
-   ![The BenchPress Templates catalog at 1280 by 800 pixels, showing eight template cards in a three-column grid. Each card carries a logo, a title, a Frappe version, a description, app chips and resource chips. VPN Management and ERPNext are tagged Most used. The first four cards read Already used and offer a Go to lab button. Google, ChatGPT, Claude and BenchPress read a deploy estimate such as 12 min to deploy and offer a Use template button instead.](../images/user/deploy-from-template/01-templates.png)
+   ![The Labs page at 1280 by 800 pixels with the Templates tab open, seen as an administrator. The sidebar holds Overview, Labs, Benches, Instances and Devices, and Labs is highlighted. The header breadcrumb reads BenchPress / Templates. The Labs heading has one button at the right, New lab. Below it, the My labs and Templates tabs sit above a line that reads Ready-made recipes, a search box, and Apps and Version filters. Nine template cards fill a three-column grid, and the bottom edge cuts off the third row. Each card carries a logo, a title, a Frappe version, a description, app chips and resource chips. ERPNext on version-15 is tagged Most used. Each card reads a deploy estimate such as ~3 min to deploy and offers a Use template button.](../images/user/deploy-from-template/01-templates.png)
 
    Every card names the same five things: the app list, the Frappe version, the
    memory and CPU the bench gets, and either a deploy estimate or the lab that
    already exists.
 
-   |Template in the frame|Version|Size|Estimate|
+   |Template in the first two rows|Version|Size|Estimate|
    |--|--|--|--|
-   |VPN Management|version-16|1 GB, 1 vCPU|already used|
-   |ERPNext|version-15|2 GB, 2 vCPU|already used|
-   |Frappe CRM|version-15|1 GB, 1 vCPU|already used|
-   |Frappe|version-16|4 GB, 4 vCPU|already used|
-   |Google|version-16|2 GB, 2 vCPU|\~12 min|
-   |ChatGPT|version-16|2 GB, 2 vCPU|\~12 min|
-   |Claude|version-16|4 GB, 4 vCPU|\~20 min|
-   |BenchPress|version-16|2 GB, 2 vCPU|\~8 min|
+   |Frappe Framework|version-15|1 GB, 1 vCPU|\~3 min|
+   |ERPNext|version-15|2 GB, 2 vCPU|\~6 min|
+   |Frappe CRM|version-15|1 GB, 1 vCPU|\~4 min|
+   |Frappe HR|version-15|2 GB, 2 vCPU|\~5 min|
+   |Frappe Learning|version-15|1 GB, 1 vCPU|\~4 min|
+   |Frappe Helpdesk|version-15|1 GB, 1 vCPU|\~4 min|
 
    Use the three controls above the grid to narrow it: a search box, an **Apps**
    filter and a **Version** filter.
@@ -279,7 +279,7 @@ The deploy worked when all four are true.
 
 |Symptom|Cause|Fix|
 |--|--|--|
-|**Templates** is missing from the sidebar|The catalog is admin-only|Ask an admin, or deploy an existing lab from **Labs**|
+|**Templates** is missing from the sidebar|Templates is a tab on the **Labs** page|Open **Labs**, then click the **Templates** tab|
 |Step 2 fails with `No built image for lab`|The lab has no image, or its recipe changed after the last build|Ask an admin to press **Rebuild image** on the lab|
 |The log stops at `Waiting for the worker to pick the deploy up…`|No worker is running, so nothing has started|Ask the operator to check `queue-long`|
 |Step 7 runs for minutes|The image has no golden dump, so the site is built from scratch|Nothing to fix. Read step 2, which reports the same thing|
@@ -330,7 +330,8 @@ limits. This page fills that recipe in by hand.
 **Who this is for.** Admins. **New lab** is admin-only, because saving it can
 start an image build.
 
-**Before you start.** Check [Templates](/docs/user/deploy-from-template) first.
+**Before you start.** Check the **Templates** tab on the **Labs** page first.
+See [Deploy from a template](/docs/user/deploy-from-template).
 A template is faster and its image usually exists already. Use this form only
 when no template carries the app list you need.
 
@@ -454,7 +455,7 @@ page is telling them.
 
 ## Steps
 
-1. Open **Labs**, then press a lab. The route is `/frontend/labs/<lab-id>`.
+1. Open **Labs**, then press a lab's card. The route is `/frontend/labs/<lab-id>`.
 
 2. Read the header. It describes the **lab**, not the bench.
 
@@ -1310,18 +1311,134 @@ benches.
 * [Start, stop and redeploy](/docs/user/lifecycle) — which action replaces the IDE password.
 * [Read a lab page](/docs/user/lab-detail) — the chips that say whether a lab has an IDE.
 
+# Work on your own bench
+URL: https://benchpress.cloud/docs/user/benches
+Prepare a Frappe develop bench, log in over SSH with your own key, create a database, make a site with bench new-site, and serve it with bench start on your VPN address.
+
+A bench from the **Benches** page is an Ubuntu box with a Frappe develop bench
+at `~/frappe-bench`. It has no site. You make the sites yourself, on databases
+that the dashboard creates for you.
+
+**Who this is for.** A Frappe developer who wants a bench they manage like their
+own machine: SSH, root through `sudo`, and code-server.
+
+**Before you start.** Your laptop must be on the VPN. See
+[Register a VPN device](/docs/user/vpn-devices). You also need an SSH key
+pair on your laptop, for example `~/.ssh/id_ed25519` and `~/.ssh/id_ed25519.pub`.
+
+## Prepare the bench
+
+1. Open the menu under your name at the top of the sidebar.
+2. Choose **Settings**.
+3. In **SSH keys**, press **Add SSH key**.
+4. Paste the contents of `~/.ssh/id_ed25519.pub`.
+5. Press **Add key**.
+6. Open **Benches** in the sidebar.
+7. Press **Prepare bench** on the **Frappe develop bench** card.
+
+Settings shows each saved key as its fingerprint. Run
+`ssh-keygen -lf ~/.ssh/id_ed25519.pub` on your laptop to see the same fingerprint.
+
+To remove a key, press **Remove** on its row in **SSH keys**. Press **Remove**
+again in the confirm dialog. A bench accepts the key until the bench deploys again.
+
+The deploy dialog shows each step. When the image is already built, the bench
+is ready in about a minute. The first launch builds the image and takes about
+30 minutes.
+
+## Log in over SSH
+
+1. Open the bench from **Your benches** on the **Benches** page.
+2. Copy the **SSH** line from **Connection details**. It reads
+   `ssh <user>@<wg-ip>`.
+3. Run that line in a terminal on your laptop.
+
+The login uses your key. A password login is refused. Run `sudo -i` for a root
+shell.
+
+## Create a database
+
+1. Press **+** on the **Databases** card of the bench page.
+2. Copy the command that the card shows.
+
+The card opens the new database's row. The row shows the database user, the
+password and the full command, each with a copy button. The command has this shape:
+
+```bash
+bench new-site <site> --set-default --no-setup-db --db-host benchpress-mariadb \
+  --db-name <db> --db-user <user> --db-password <password>
+```
+
+The database user has all privileges on its own database and on no other
+database. It cannot create databases or users.
+
+To see the user, the password and the command again, open the database row on
+the card.
+
+A bench holds at most five databases. An operator changes this limit with
+**Databases per self-managed bench** in **BenchPress Settings**. The **Databases**
+card shows how many databases are left, and it disables **+** when none are left.
+Delete a database to free a slot.
+
+## Make a site and serve it
+
+1. Paste the command in your SSH session.
+2. Type an administrator password for the new site when `bench new-site` asks.
+3. Run `bench start` in `~/frappe-bench`.
+4. Open `http://<wg-ip>:8000` in a browser on your laptop.
+
+`--set-default` makes the new site the bench's default site. `bench start` then
+serves it on the bench's VPN address, whatever host name the request carries.
+
+Each command sets its own site as the default. After a second site, the VPN
+address serves the newer one. To serve an earlier site again, run
+`bench use <site>` and restart `bench start`.
+
+To check the site from a terminal, run this command on your laptop:
+
+```bash
+curl http://<wg-ip>:8000/api/method/ping
+```
+
+The reply is `{"message":"pong"}`.
+
+## Delete a database
+
+1. Open the database row on the **Databases** card.
+2. Press **Delete database**.
+3. Read the warning, then press **Delete**.
+
+BenchPress drops the database and its user. A site on that database stops
+working. The site's folder in `~/frappe-bench/sites` stays, but its database is
+gone. BenchPress cannot bring back a dropped database.
+
+The deleted database frees its slot, so the card shows one more database left.
+
+## What happens to a database later
+
+|Action|The database|The site folder in `~/frappe-bench/sites`|
+|--|--|--|
+|Delete the database|Dropped, with its user|Kept, but the site no longer works|
+|Stop and start the bench|Kept|Kept|
+|Redeploy the bench|Kept|Gone, because the redeploy replaces the container|
+|The stopped bench is reaped after `reap_after_days`|Dropped, with its user|Gone|
+|Delete the bench|Dropped, with its user|Gone|
+
+Delete a bench only when you no longer need its sites. BenchPress cannot bring
+back a dropped database.
+
 # Read logs and container stats
 URL: https://benchpress.cloud/docs/user/logs-and-monitoring
 The deploy stepper, the raw log and its step markers, the build log, and the CPU and memory bars on a running bench.
 
 Every deploy and every image build writes a log you can read while it runs and
-months after it finished. This page finds those logs and reads them.
+for seven days after it finished. This page finds those logs and reads them.
 
 **Who this is for.** Anybody whose deploy failed, or who wants to know where
 the time went.
 
 **Before you start.** Nothing. A log exists as soon as a run starts. Build logs
-and build history are admin-only.
+are admin-only.
 
 ## Steps
 
@@ -1400,9 +1517,9 @@ and build history are admin-only.
    than a live meter. `checked 58s ago` is the honest age of the reading.
 
 5. Open the **Build log** tab for the image the bench was made from. This tab
-   and the build history are admin-only.
+   is admin-only.
 
-   ![The Build log tab of the Frappe CRM lab, seen as an admin at 1280 by 800 pixels. The sidebar carries an extra Templates entry that a non-admin does not see. Six collapsible rows each carry a green dot: Build started, Step 1 of 4 FROM benchpress slash crm colon lab, Step 2 of 4 COPY golden to slash opt slash benchpress slash golden, Step 3 of 4 COPY setup-site.sh, Step 4 of 4 LABEL benchpress.golden equals 1 and benchpress.golden.mariadb equals 10.6.28-MariaDB-ubu2204, and Build complete, golden in benchpress slash crm colon lab. The last row is expanded and reads No output.](../images/user/logs-and-monitoring/04-build-log.png)
+   ![The Build log tab of the Frappe CRM lab, seen as an admin at 1280 by 800 pixels. The sidebar still carries a Templates entry, from before Templates moved to a tab on the Labs page. Six collapsible rows each carry a green dot: Build started, Step 1 of 4 FROM benchpress slash crm colon lab, Step 2 of 4 COPY golden to slash opt slash benchpress slash golden, Step 3 of 4 COPY setup-site.sh, Step 4 of 4 LABEL benchpress.golden equals 1 and benchpress.golden.mariadb equals 10.6.28-MariaDB-ubu2204, and Build complete, golden in benchpress slash crm colon lab. The last row is expanded and reads No output.](../images/user/logs-and-monitoring/04-build-log.png)
 
    Each Docker step is one collapsible row with a status dot. Expand a row to
    read its output. A row with nothing to show says `No output` rather than
@@ -1415,18 +1532,8 @@ and build history are admin-only.
 
 ## Find an older run
 
-Neither history is in the sidebar. Both hang off the list they belong to.
-
-|History|Where|Who|
-|--|--|--|
-|Deploy history|**Instances** page|everybody, for the benches they can see|
-|Build history|**Labs** page, beside **From template**|admins|
-
-Each row carries the run, a result badge, the last step the run opened, the
-duration and when it started. Clicking a row opens the lab.
-
-A run recorded before the pipeline emitted step markers shows an em dash for
-its last step and its duration. The table does not guess.
+The app shows the latest run for each lab and each bench. An admin reads older
+runs in Desk, at `/app/deploy-log` and `/app/build-log`.
 
 ## Verify
 
@@ -1441,8 +1548,7 @@ its last step and its duration. The table does not guess.
 |--|--|--|
 |The Deploy log tab is empty|The bench has never been deployed|Deploy the lab|
 |The log stops mid-run and never finishes|The live stream dropped|Reload the tab. The record is complete either way|
-|A run is missing from Deploy history|Logs are cleared after 7 days|Nothing to recover. Read a newer run|
-|A row shows an em dash for duration|The run predates the step markers|Read the raw log instead|
+|An older run is missing|Logs are cleared after 7 days|Nothing to recover. Read a newer run|
 |No **Build log** tab|Build logs are admin-only|Ask an admin|
 |CPU and MEMORY read a dash|The container is not running|Start the bench|
 |Health reads `Healthy` on a stopped bench|The last probe ran before the stop|Read the `checked … ago` age|
@@ -1455,9 +1561,7 @@ its last step and its duration. The table does not guess.
 |Log|Tab|Scope|
 |--|--|--|
 |Deploy log|**Deploy log** on the lab page|the latest run for that bench|
-|Deploy history|**Instances** page|your benches, or all of them for an admin|
 |Build log|**Build log** on the lab page|the latest image build for that lab. Admins|
-|Build history|**Labs** page|every build. Admins|
 
 ### Retention
 
@@ -1525,8 +1629,8 @@ Two things, and the Credits screen says so at the top.
 
 ## Steps
 
-1. Find the countdown. Every running bench with a lease shows one on the
-   **Labs** list, under the instance it is deployed as.
+1. Find the countdown. Every running bench with a lease shows one on its
+   lab's card on the **Labs** page, under the site it is deployed as.
 
    ![The BenchPress Labs list at 1280 by 800 pixels with credits switched on. Ten labs are listed. The Frappe CRM demo row reads version-15, the app chip CRM, a green Running badge, the bench hostname, bench-crm-demo Running, a green line reading Lease ends in 29:48, and 23 minutes ago in the Last run column. Every other lab reads Ready or Draft with Never deployed and an em dash. At the foot of the sidebar a credit meter reads 60 of 65 with a green progress bar, which only appears while credits are on.](../images/user/leases-and-credits/01-labs-countdown.png)
 
@@ -1643,7 +1747,8 @@ credits buy time.
 
 ## Verify
 
-* The Labs row for a running bench shows `Lease ends in …`.
+* On the **Labs** page, the card of a lab with a running bench shows
+  `Lease ends in …`.
 * The countdown falls by one second a second.
 * After a renewal the countdown jumps by the plan's duration and the meter
   falls by its price.
@@ -1777,7 +1882,7 @@ from a browser and have nothing to do with each other.
 |Symptom|Cause|Fix|
 |--|--|--|
 |`/frontend` sends you to `/login`|No session|Sign in, then open `/frontend` again|
-|The sidebar has no **Templates**, **New lab** or **Settings**|Those screens are admin-only|Ask an admin. See [Quick tour](/docs/user/quick-tour)|
+|**Labs** has no **New lab** button, and **Settings** has no **Server** groups|Those are admin-only|Ask an admin. See [Quick tour](/docs/user/quick-tour)|
 |The sidebar has no credit meter and `/frontend/credits` bounces to Labs|Credits are switched off on this server|Nothing to do. See [Leases and credits](/docs/user/leases-and-credits)|
 |A lab you were shown is not in your list|A user sees only their own benches|Ask the owner, or an admin|
 
@@ -1827,8 +1932,7 @@ from a browser and have nothing to do with each other.
 |--|--|--|
 |The Deploy log tab is empty|The bench has never been deployed|Deploy the lab|
 |The log stopped streaming mid-run|The live connection dropped|Reload the tab. The record is written either way|
-|A run is missing from Deploy history|Logs are cleared after 7 days|Read a newer run, or download the ones you need|
-|A history row shows an em dash for duration|The run predates the step markers|Read the raw log|
+|An older run is missing|Logs are cleared after 7 days|Read a newer run|
 |No **Build log** tab|Build logs are admin-only|Ask an admin|
 |CPU and MEMORY read a dash|The container is not running|Start the bench|
 |Health reads `Healthy` on a stopped bench|The last probe ran before the stop|Read the `checked … ago` age beside it|
@@ -2309,10 +2413,9 @@ Throughout, replace `<site>` with your real site name.
    button reads `Open site — VPN off`. See
    [Register a VPN device](/docs/user/vpn-devices).
 
-   The sidebar is five items — Overview, Labs, Templates, Instances and
-   Devices — with Settings in the account menu for admins. Build history and
-   deploy history are not in the sidebar. They are reached from Labs and
-   Instances.
+   The sidebar is five items — Overview, Labs, Benches, Instances and
+   Devices — with Settings in the account menu. Templates is a tab on the
+   Labs page.
 
 ## Verify
 
@@ -2334,8 +2437,8 @@ Every row should read `pass`. A `fail` row names the fix. See
 
 ## Your first bench
 
-The fastest route is **Templates**: pick a recipe and BenchPress creates the
-lab and deploys it in one action. See
+The fastest route is the **Templates** tab on the **Labs** page. Pick a recipe
+and BenchPress creates the lab and deploys it in one action. See
 [Deploy from a template](/docs/user/deploy-from-template). To describe an
 environment yourself, see [Create a lab](/docs/user/create-a-lab).
 
@@ -2675,6 +2778,7 @@ Applied to a new lab unless the lab overrides them.
 |`container_cpu_quota`|`100000`|same|CPU quota in microseconds. `100000` is one core|
 |`code_server_version`|`4.96.4`|same|The browser VS Code build installed into a bench|
 |`stop_grace_seconds`|`5`|same|Seconds a container gets to exit cleanly before it is killed|
+|`max_bench_databases`|`5`|same|Databases one self-managed bench may hold. `0` reads as the default|
 
 ### Reconciliation and events
 
@@ -2812,7 +2916,7 @@ wrap it in a single `exec()` call.
 |A field you cleared behaved as before|`0` falls back to the built-in for that field|See [Reconciliation and events](#reconciliation-and-events). Set the number you want|
 |Every user is refused a deploy|`enable_credits` was switched on and nobody has an account|Switch it back to `0`, or read [Credits and billing](/docs/operator/credits-and-billing)|
 |The Settings dialog does not show a field you read about|The dialog carries 10 of 26 fields|Edit it at `/app/benchpress-settings`|
-|The Settings item is missing from the account menu|The screen is admin-only|See [Users and roles](/docs/operator/users-and-roles)|
+|Settings shows only **SSH keys**|The Server groups are admin-only|See [Users and roles](/docs/operator/users-and-roles)|
 
 ## Related
 
@@ -3215,9 +3319,9 @@ bench --site <site> execute frappe.client.get_list \
 
 Then confirm what the person will actually see. `benchpress.api.get_user_context`
 returns the caller's identity and roles, and the SPA renders the sidebar from
-it. The user-facing proof is simpler still: **Templates** is in the sidebar
-for an admin and absent for a user, and the **New lab** button in the Overview
-header appears only for an admin.
+it. The user-facing proof is simpler still. Only an admin sees the **New lab**
+button on the **Labs** page. Only an admin sees **New lab** in the Overview
+header.
 
 ## What each role may do
 
@@ -3275,15 +3379,19 @@ Confirmed by looking at both roles in the running app:
 
 |Surface|Why it is admin-only|
 |--|--|
-|**Templates** in the sidebar|curating the catalog|
 |**New lab** in the Overview and Labs header|creating a lab is a write on `Lab`|
-|**Settings** in the account menu|`BenchPress Settings` is not readable by a user|
+|The **Server** groups in **Settings**|`BenchPress Settings` is not readable by a user|
 |The **Build log** tab on a lab|build output can name private repositories|
 |**Rebuild image** in the overflow menu|it costs an image build|
 |**Delete bench** in the overflow menu|delete is admin-gated even for the bench's owner|
 
+The **Templates** tab on the **Labs** page is not admin-only. Every user can
+open the catalog and launch a template.
+
 A `BenchPress User` gets exactly two items in the bench overflow menu: **Stop**
 and **Redeploy**.
+
+A user can open **Settings** too. It shows them only **SSH keys**.
 
 ## How the checks are written
 
@@ -3304,7 +3412,7 @@ that would let a new endpoint ship unguarded by omission.
 |The app refuses at login with no roles|The user has none of the three roles|Add `BenchPress User`|
 |A user cannot see a bench a colleague described|They see only their own benches|Have the owner share, or use an admin account|
 |A user sees a lab but has no **Deploy**|Deploy writes a `Bench Instance` they will own. Check the caps instead|See [Admission and limits](/docs/operator/admission-and-limits)|
-|An admin cannot open Settings|They hold `BenchPress User` only|Change the role, then have them reload|
+|An admin sees no **Server** groups in Settings|They hold `BenchPress User` only|Change the role, then have them reload|
 |A `BenchPress Admin` cannot open `/app/user`|The role grants no `User` doctype access|Grant roles as a `System Manager`|
 |A user can reach Desk|They hold a role with desk access, such as `BenchPress Admin`|Give them `BenchPress User` instead|
 |Deleting a bench is refused for its owner|Delete is admin-only by design|An admin deletes it|
@@ -3585,17 +3693,8 @@ occupies 54.74 GB, of which 19.12 GB is reclaimable.
 
    Both jobs also run weekly on their own.
 
-4. **Watch a build.** Open **Build history** at `/frontend/build-logs`,
-   reached from **Labs**. The screen is admin-only, and says so under its own
-   heading.
-
-   ![The Build history page in BenchPress, listing image builds across every lab in six columns — Lab, Image tag, Result, Last step, Duration and Started. The top row is Password Manager building benchpress/password-manager, Success, 26m 5s, 6 hours ago. One Frappe CRM row reads Failed after 44s, and several rows carry the image tag golden rather than a lab tag.](../images/operator/image-cache/01-build-logs.png)
-
-   Six columns: the lab, the image tag, the result, the last step reached, the
-   duration and when it started. The slowest build on this host took **26
-   minutes 5 seconds**, and one CRM row **failed after 44 seconds** at
-   `Build started`. Read the build history rather than the deploy log when a
-   deploy fails for a lab that has never been built.
+4. **Watch a build.** Open the lab and select the **Build log** tab. The tab
+   is admin-only. See [Logs and monitoring](/docs/user/logs-and-monitoring).
 
    **A row tagged `golden` is not an image build.** It is the pass that bakes
    the finished site's dump into an image that already exists. Those runs take
@@ -3881,7 +3980,7 @@ and never skip the step 0 gate.
 
 # Production safety
 URL: https://benchpress.cloud/docs/operator/production-safety
-What BenchPress is and is not ready to carry — the alpha verdict, the container privilege boundary, what is backed up, and the release checklist that covers 25 of 52 whitelisted callables.
+What BenchPress is and is not ready to carry — the alpha verdict, the container privilege boundary, what is backed up, and the release checklist that covers 25 of 50 whitelisted callables.
 
 Whether BenchPress is safe to run on your host, and what has to be true first.
 
@@ -3911,9 +4010,9 @@ ERPNext environments. It is not built to host customer data. Concretely:
   up. See [Backup and restore](/docs/operator/backup-and-restore).
 * **Single-tenant assumption.** Quotas, rate limits and audit trails are still
   in progress. Run BenchPress for people you trust, on a host dedicated to it.
-* **The security review is partial.** It covers 25 of the app's 52 whitelisted
+* **The security review is partial.** It covers 25 of the app's 50 whitelisted
   callables. The credit-purchase path and the per-bench credential endpoint are
-  among the 27 it never reached. See
+  among the 25 it never reached. See
   [the release checklist](#the-release-checklist).
 
 Use it on a dedicated dev box, a VM, or a cloud instance you can rebuild. Not
@@ -3977,10 +4076,10 @@ and secret-handling path. Every row below was re-checked against the code on
 2026-08-30. Two findings had been fixed, one described an endpoint that never
 existed, and several guard descriptions were wrong.
 
-**What the audit covered.** The app exposes **52** whitelisted callables. This
+**What the audit covered.** The app exposes **50** whitelisted callables. This
 checklist covers **25** of them: 16 endpoints and 9 controller methods. It also
 carried a row for a `create_site` endpoint, which does not exist in the code —
-that row is gone. **27 whitelisted callables have never been reviewed**, and
+that row is gone. **25 whitelisted callables have never been reviewed**, and
 that is the largest gap on this page. They are:
 
 |Never reviewed|Where|
@@ -3990,7 +4089,7 @@ that is the largest gap on this page. They are:
 |`launch_template`, `launch_lab`, `build_lab_golden`, `prewarm_catalog`|the one-click deploy and golden-build path|
 |`sign_up`, `join`, `notify_of_signup`, `approve`|`signup.py` and `waitlist.py`, the only self-service entry points|
 |`Credit Account.post_adjustment`, `post_refund`|controller methods that move a balance|
-|`server_time`, `get_lab_form_options`, `get_device_types`, `get_build_history`, `get_deploy_history`, `get_overview`, `get_vpn_status`, `run_connection_test`, `run_diagnostics`, `preflight_runtime`|the rest|
+|`server_time`, `get_lab_form_options`, `get_device_types`, `get_overview`, `get_vpn_status`, `run_connection_test`, `run_diagnostics`, `preflight_runtime`|the rest|
 
 Treat an unreviewed endpoint as unreviewed, not as safe.
 
@@ -4049,7 +4148,7 @@ Read the verdicts as: **Ready**, **Ready with a follow-up**, **Not ready**.
 
 1. **The container privilege boundary.** Ship only on a host that closes it.
    This is a deployment precondition, not an app default.
-2. **The 27 unreviewed endpoints.** Review them, starting with `buy_credits`,
+2. **The 25 unreviewed endpoints.** Review them, starting with `buy_credits`,
    which takes money, and `get_bench_credentials`, which decrypts passwords.
 3. **`Database Server` state-changing methods.** They call
    `frappe.has_permission` with no `ptype`, which checks `read`. Move them to
@@ -4080,9 +4179,9 @@ any password. The `create_site` item described an endpoint that does not exist.
 |Backed up|the shared MariaDB, nightly, 7 dumps|
 |Not backed up|bench Docker volumes|
 |Checklist reviewed|2026-07-02, re-verified against the code 2026-08-30|
-|Whitelisted callables|52|
+|Whitelisted callables|50|
 |Covered by this checklist|25|
-|Never reviewed|27|
+|Never reviewed|25|
 
 ## Related
 
@@ -5149,7 +5248,7 @@ One concern for each module. The table is the whole `benchpress/` package.
 |`docker_events.py`|the Docker event stream, and the incidents it records|
 |`stats_collector.py`|CPU, memory and health, sampled for each running bench|
 |`permissions.py`|the role helpers and the six query conditions|
-|`overview.py`, `labs.py`, `lab_detail.py`, `run_history.py`|one screen each, assembled in a fixed number of queries|
+|`overview.py`, `labs.py`, `lab_detail.py`|one screen each, assembled in a fixed number of queries|
 |`waitlist.py`, `signup.py`|the two doors open to a guest|
 |`diagnostics.py`|twelve read-only environment checks|
 |`notifications.py`|one desk alert and one email to a document owner|
@@ -5203,21 +5302,21 @@ A Vue 3 single-page app in `frontend/`, built with frappe-ui, vue-router and
 Tailwind. It is served from the same origin as the API, so a socket connection
 needs no separate host.
 
-Eleven routes exist. Four of them are admin-only, and one renders only while
-credits are on.
+Ten routes exist. One of them is admin-only, and one renders only while
+credits are on. Old `/build-logs` and `/deploy-logs` links open Labs and
+Instances.
 
 |Route|Screen|Who sees it|
 |--|--|--|
 |`/`|Overview|any app user|
 |`/labs`|Labs|any app user|
+|`/benches`|Benches|any app user|
 |`/bench-instances`|Instances|any app user|
 |`/labs/:labId`|Lab detail|the owner, and any admin|
 |`/devices`|Devices|any app user|
-|`/deploy-logs`|Deploy history|any app user, scoped to their benches|
 |`/labs/new`|New lab|admin only|
-|`/labs/templates`|Templates|admin only|
-|`/build-logs`|Build history|admin only|
-|`/settings`|Settings|admin only|
+|`/labs/templates`|The Templates tab of Labs|any app user|
+|`/settings`|Settings|any app user. Only an admin sees the Server groups|
 |`/credits`|Credits|any app user, and only while credits are on|
 
 A guard in `frontend/src/router.js` sends a non-admin who reaches an admin-only
@@ -5256,11 +5355,11 @@ to read a row.
 **Who this is for.** Somebody reading rows directly, writing a report, or adding
 a field.
 
-**Before you start.** The counts here are the whole module. Twenty DocTypes
-exist, three of them are child tables and two are Singles. Read
+**Before you start.** The counts here are the whole module. Twenty-one DocTypes
+exist, four of them are child tables and two are Singles. Read
 [How a row is scoped](#how-a-row-is-scoped) before you trust a query.
 
-## The 20 DocTypes
+## The 21 DocTypes
 
 |DocType|Kind|Named by|Holds|
 |--|--|--|--|
@@ -5270,6 +5369,7 @@ exist, three of them are child tables and two are Singles. Read
 |[Bench Instance](#bench-instance)|document|controller|one deployed bench|
 |[Bench Site](#bench-site)|document|`field:site_name`|a site inside a bench|
 |[Bench App](#bench-app)|child table|parent row|one app on a bench|
+|[Bench Database](#bench-database)|child table|parent row|one database a developer made on a self-managed bench|
 |[Bench Event](#bench-event)|document|`hash`|an incident seen on a bench|
 |[Bench Admission](#bench-admission)|document|`field:bench`|the concurrency and credit claim a bench holds|
 |[Site App](#site-app)|child table|parent row|one app installed on a site|
@@ -5395,7 +5495,7 @@ secrets.
 |Address|`domain`, `public_url`, `container_ip`, `wg_ip`, `vpn_peer`, `bridge_network`|
 |Container|`container_id`, `container_image`, `runtime`, `node`, `started_at`, `instance_size`|
 |Health|`cpu_usage`, `memory_usage`, `container_health`, `last_health_check`|
-|Data|`database_server`, `apps`|
+|Data|`database_server`, `apps`, `databases`|
 |Lease|`expires_at_ts`, `lease_state`, `stop_claimed_at`, `stop_started_at`, `container_stopped_at`, `expiry_attempts`, `expiry_lateness`|
 |Reaper|`reap_warned_at`|
 
@@ -5431,6 +5531,18 @@ Child table on `Bench Instance`. The same four fields as
 The two are separate on purpose. `Lab App` is what the lab asks for, and
 `Bench App` is what a bench actually got. A lab edited after a deploy leaves the
 two disagreeing, and that difference is the record of it.
+
+## Bench Database
+
+Child table on `Bench Instance`, in the `databases` field. It holds `db_name`,
+`db_user` and `db_password`. The name and the user are the same string.
+`api.create_bench_database` adds a row, and only on a running self-managed
+bench. `api.delete_bench_database` drops one row's database and user, then
+removes the row.
+
+The user has `ALL` on its own database and nothing global. A teardown drops
+every row's database and user, and a redeploy keeps them. `db_password` is a
+`Password` field, so read it through `get_bench_database_password`.
 
 ## Bench Event
 
@@ -5485,9 +5597,7 @@ the run is going.
 The same four fields, with `lab` in place of `bench`. One row for each image
 build.
 
-Both log DocTypes are cleared after seven days. Neither is a complete record,
-and [Build history and deploy history](/docs/reference/api#history) states the
-window rather than implying completeness.
+Both log DocTypes are cleared after seven days. Neither is a complete record.
 
 ## Instance Size
 
@@ -5543,7 +5653,7 @@ switch and the lease sweep numbers. Every field is documented in the
 
 ## BenchPress Settings
 
-A Single. Twenty-six fields. The Settings dialog in the app shows ten of them,
+A Single. Twenty-seven fields. The Settings dialog in the app shows ten of them,
 and the rest are at `/app/benchpress-settings`.
 
 `enable_credits` lives here, and it ships as `0`. Nothing in
@@ -5743,24 +5853,6 @@ what actually happens.
 |Endpoint|Arguments|Returns|Checks|
 |--|--|--|--|
 |`get_deploy_logs`|`bench_name`|the log rows for one bench|`require_bench_access`|
-|`get_deploy_history`|—|up to 50 recent deploy runs|`require_app_user`, inside `run_history`|
-|`get_build_history`|—|up to 50 recent image builds|`require_app_user`, inside `run_history`|
-
-The two history endpoints do not check permissions in `api.py`. They delegate
-immediately to `benchpress/run_history.py`, and the check is the first statement
-there. This is the one place where the guard is a function call away, so the
-table names where it lives.
-
-Both are endpoints rather than a generic list read for a reason.
-`Build Log` had no query condition, and reading it through the generic list API
-served every user's image builds to everybody. Scoping cannot be added to a
-generic read, so it is applied here: deploy rows go through `frappe.get_list`
-and pick up `deploy_log_query_conditions`, and build rows are filtered by owner
-for anybody who is not an admin.
-
-Both answers carry `window_days`, `limit` and `truncated`. Logs are cleared
-after seven days, so neither table is complete, and the answer says so rather
-than implying otherwise.
 
 ## Devices
 
@@ -5794,6 +5886,24 @@ that bench.
 
 These exist because Frappe does not return `Password` fields in an ordinary
 document read. Reading the `Bench Instance` gives you nothing. Ask here.
+
+## Bench databases
+
+Three endpoints serve the **Databases** card of a self-managed bench. All three
+refuse a caller who does not own the bench, a lab that is not self-managed, and a
+bench that is not `Running`. An admin who does not own the bench is refused too.
+
+|Endpoint|Arguments|Returns|Checks|
+|--|--|--|--|
+|`create_bench_database`|`bench`|`{db_name, db_user, db_password, command}`|POST only. `require_bench_access`, the owner, self-managed, `Running`, then `max_bench_databases`|
+|`get_bench_database_password`|`bench`, `db_name`|`{db_password, command}`|the same as `create_bench_database`, then the row must be on that bench|
+|`delete_bench_database`|`bench`, `db_name`|`{db_name}`|POST only. The same as `create_bench_database` without the cap, then the row must be on that bench|
+
+`delete_bench_database` drops the database and its user, then removes the row
+and its stored password. A failed drop keeps the row.
+
+`command` is the full `bench new-site` line, with `--no-setup-db` and the
+database server's container name as `--db-host`.
 
 ## Credits
 
@@ -6028,7 +6138,7 @@ runs ten of them, and `deploy_manager` runs the fifth.
 |6|`site_config`|Writing common\_site\_config.json|`docker_manager.write_file_to_container`|
 |7|`site`|Creating the site|`docker_manager.create_site_in_container`|
 |8|`assets`|Preparing assets|`lifecycle._deploy_bench`|
-|9|`ssh_user`|Provisioning the SSH user|`linkuser.sh`, in the container|
+|9|`ssh_user`|Provisioning the SSH user|`provision-user.sh`, in the container|
 |10|`code_server`|Starting the lab's services|`serve.sh`, then `_start_code_server`|
 |11|`complete`|Deploy complete|`lifecycle._deploy_bench`|
 
@@ -6145,11 +6255,11 @@ builds assets, and a deploy will not fix a stale one.
 
 ## Step 9. Provisioning the SSH user
 
-Runs `linkuser.sh` in the container to create the Linux account, using a
+Runs `provision-user.sh` in the container to create the Linux account, using a
 username derived from the owner's email address. The part before the `@` is
 lowercased, stripped of invalid characters and capped at 32 characters.
 
-The app's copy of `linkuser.sh` wins over the copy baked into the image.
+The app's copy of `provision-user.sh` wins over the copy baked into the image.
 
 The SSH password is generated for this run and stored on the bench as a
 `Password` field. Read it with

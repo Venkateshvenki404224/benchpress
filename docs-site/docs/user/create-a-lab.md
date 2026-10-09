@@ -2,7 +2,7 @@
 title: Create a lab
 description: Fill in the New lab form when no catalog template matches the app
   list you need.
-lastModified: "2026-08-28T22:10:21+05:30"
+lastModified: "2026-09-27T21:09:56+05:30"
 lastAuthor: Venkatesh
 ---
 # Create a lab
@@ -13,7 +13,8 @@ limits. This page fills that recipe in by hand.
 **Who this is for.** Admins. **New lab** is admin-only, because saving it can
 start an image build.
 
-**Before you start.** Check [Templates](/docs/user/deploy-from-template) first.
+**Before you start.** Check the **Templates** tab on the **Labs** page first.
+See [Deploy from a template](/docs/user/deploy-from-template).
 A template is faster and its image usually exists already. Use this form only
 when no template carries the app list you need.
 
