@@ -35,8 +35,13 @@ PUBLIC_ROUTES = (
 EMAIL = "gate@example.com"
 
 # Structure only Frappe's own login card renders. The branded template carries none of it.
-# `icon-eye` (not `es-line-email`) since frappe/frappe's icon-sprite rename, pinned at d07fff88.
-FRAMEWORK_MARKERS = ("page-card-actions", "app-logo", "icon-eye")
+# Not the bare string `icon-eye` (frappe/frappe's icon-sprite rename, pinned at d07fff88):
+# `login.js` itself contains the literal text `"#icon-eye"` inside its show/hide toggle, and
+# both templates `{% include %}` that same shared login.js in their script block — so the bare
+# string leaks into the branded page's rendered HTML too and false-fails this exact assertion.
+# The actual framework-only signal is the `<use href="#icon-eye">` markup tag, which only exists
+# in frappe/www/login.html's own sprite-reference icon, never in BenchPress's inline-SVG icons.
+FRAMEWORK_MARKERS = ("page-card-actions", "app-logo", '<use href="#icon-eye">')
 # Anchored on the attribute, and never on `/assets/benchpress/` wholesale: the `app_logo_url` hook
 # is app-wide, and Frappe's own page serialises the whole build manifest into `frappe.boot`, so
 # both the logo and every bundle path are on the framework page too.
