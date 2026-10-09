@@ -149,6 +149,11 @@ jobs:
           # 2026-10-07/08: an upstream login-page/workspace-fixture change broke
           # 3 unrelated tests here with zero benchpress-side change).
           # Update the SHA only after reviewing the new upstream commit.
+          # bench init's own clone is --depth 1, so the pinned SHA (not
+          # necessarily the shallow tip) is almost never present locally yet --
+          # fetch it explicitly before checkout, or this fails with "fatal:
+          # unable to read tree" even though the SHA is a real upstream commit.
+          git -C ~/frappe-bench/apps/frappe fetch --depth 1 upstream d07fff8874be88c3e3de3eeae90ca57e77c204bc
           git -C ~/frappe-bench/apps/frappe checkout d07fff8874be88c3e3de3eeae90ca57e77c204bc
 
       # benchpress declares required_apps = ["vpn_management"], a public repo,
