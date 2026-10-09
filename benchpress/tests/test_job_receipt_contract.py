@@ -38,6 +38,17 @@ class TestJobReceiptContract(unittest.TestCase):
 	"""Exercises job_receipt.py against a fake `frappe` module injected into sys.modules."""
 
 	def setUp(self):
+		self._real_modules = {
+			name: sys.modules.get(name)
+			for name in (
+				"frappe",
+				"frappe.utils",
+				"frappe.desk",
+				"frappe.desk.form",
+				"frappe.desk.form.assign_to",
+			)
+		}
+
 		self.store = {}
 		self.fake_frappe = types.ModuleType("frappe")
 		self.fake_frappe.DoesNotExistError = type("DoesNotExistError", (Exception,), {})
@@ -93,11 +104,11 @@ class TestJobReceiptContract(unittest.TestCase):
 		self.jr = jr
 
 	def tearDown(self):
-		sys.modules.pop("frappe", None)
-		sys.modules.pop("frappe.utils", None)
-		sys.modules.pop("frappe.desk", None)
-		sys.modules.pop("frappe.desk.form", None)
-		sys.modules.pop("frappe.desk.form.assign_to", None)
+		for name, mod in self._real_modules.items():
+			if mod is None:
+				sys.modules.pop(name, None)
+			else:
+				sys.modules[name] = mod
 
 	def _mint(self, lid="route_sync:bench-1", effect="route written", policy_hash=None):
 		self.jr.mint(lid, effect, policy_hash=policy_hash)
