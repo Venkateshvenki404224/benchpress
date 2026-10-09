@@ -125,6 +125,26 @@ class TestAdmission(IntegrationTestCase):
 		cls.plan = _ensure_plan()
 		cls.labs = [_ensure_lab(lab_id, cls.plan) for lab_id in LABS]
 
+	@classmethod
+	def tearDownClass(cls):
+		# `setUp` restores these before every test *inside* this class, but nothing restored
+		# them *after* the class -- so whatever the last test method left in the `Credit
+		# Settings` singleton (e.g. `max_concurrent_uncredited=1` from
+		# `test_the_gate_refuses_at_the_uncredited_cap`) bled into every module that ran after
+		# this one in the same `bench run-tests` process, since this is a live singleton row,
+		# not something scoped to this class's own transaction. Found live: TestLaunch's
+		# `test_a_lab_edited_away_from_its_template_is_not_reused` failed in total isolation
+		# (run alone, nothing else in the same process) with `active_instances=0` but
+		# `max_concurrent_uncredited=1` still set from a prior TestAdmission run against this
+		# same site -- not the cross-test-class `active_instances` leak TASK-04117 assumed.
+		frappe.set_user("Administrator")
+		for field, value in cls.settings_at_start.items():
+			frappe.db.set_single_value(CREDIT_SETTINGS, field, value)
+		frappe.db.set_single_value(BENCHPRESS_SETTINGS, "enable_credits", cls.switch_at_start)
+		frappe.clear_cache(doctype=CREDIT_SETTINGS)
+		frappe.db.commit()
+		super().tearDownClass()
+
 	def setUp(self):
 		frappe.set_user("Administrator")
 		self.set_credits_enabled(self.switch_at_start)
