@@ -104,6 +104,26 @@ class TestSelfServeSignup(IntegrationTestCase):
 		}
 		cls.signup_disabled_at_start = frappe.db.get_single_value(WEBSITE_SETTINGS, "disable_signup")
 
+	@classmethod
+	def tearDownClass(cls):
+		# `setUp` restores these before every test *inside* this class, but nothing restored
+		# them *after* the class -- so `open_signup`'s `waitlist_open=0` (the last state any
+		# test method here leaves on the live `Credit Settings` singleton) bled into every
+		# module that ran after this one in the same `bench run-tests` process. Found live:
+		# `test_waitlist.py`'s `require_waitlist_open()` throws `ValidationError` for every
+		# `waitlist.join()` call once this class has run first, because the singleton row is
+		# not scoped to this class's own transaction -- same shape as `TestAdmission`'s
+		# `tearDownClass` fix (TASK-04117/M481) for `Credit Settings`.
+		frappe.set_user("Administrator")
+		for field, value in cls.settings_at_start.items():
+			frappe.db.set_single_value(CREDIT_SETTINGS, field, value)
+		frappe.db.set_single_value(BENCHPRESS_SETTINGS, "enable_credits", cls.switch_at_start)
+		frappe.db.set_single_value(WEBSITE_SETTINGS, "disable_signup", cls.signup_disabled_at_start)
+		frappe.clear_cache(doctype=CREDIT_SETTINGS)
+		frappe.clear_cache(doctype=BENCHPRESS_SETTINGS)
+		frappe.clear_cache(doctype=WEBSITE_SETTINGS)
+		super().tearDownClass()
+
 	def setUp(self):
 		frappe.set_user("Administrator")
 		self.silence_outgoing_mail()
