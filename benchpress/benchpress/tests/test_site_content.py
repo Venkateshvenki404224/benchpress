@@ -41,6 +41,23 @@ class TestSiteContent(IntegrationTestCase):
 	def setUpClass(cls):
 		super().setUpClass()
 		frappe.set_user("Administrator")
+		cls.credits_at_start = frappe.db.get_single_value(BENCHPRESS_SETTINGS, "enable_credits")
+		cls.waitlist_at_start = frappe.db.get_single_value(CREDIT_SETTINGS, "waitlist_open")
+
+	@classmethod
+	def tearDownClass(cls):
+		# `set_switches` writes both singletons directly and `forget_switches` only clears the
+		# cached doc, never restores the row -- so whichever (credits, waitlist) pair the last
+		# `set_switches` call in this module left live bled into every module that ran after
+		# this one in the same `bench run-tests` process (e.g. `test_signup.py`/`test_waitlist.py`
+		# both read `enable_credits`/`waitlist_open` off this same live singleton). Same shape as
+		# `TestAdmission`'s `tearDownClass` fix (TASK-04117/M481) for `Credit Settings`.
+		frappe.set_user("Administrator")
+		frappe.db.set_single_value(BENCHPRESS_SETTINGS, "enable_credits", cls.credits_at_start)
+		frappe.db.set_single_value(CREDIT_SETTINGS, "waitlist_open", cls.waitlist_at_start)
+		frappe.clear_cache(doctype=BENCHPRESS_SETTINGS)
+		frappe.clear_cache(doctype=CREDIT_SETTINGS)
+		super().tearDownClass()
 
 	def setUp(self):
 		super().setUp()
