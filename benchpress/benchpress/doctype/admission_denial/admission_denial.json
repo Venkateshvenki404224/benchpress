@@ -1,0 +1,89 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "hash",
+ "creation": "2026-10-08 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "field_order": [
+  "correlation_id",
+  "rule_id",
+  "column_break_identity",
+  "denied_at",
+  "redacted_inputs_section",
+  "limit",
+  "count"
+ ],
+ "fields": [
+  {
+   "description": "The caller's own request/correlation id when one is available (reused, never minted fresh), so this row joins the throw to the request that triggered it. A fresh hash when the caller carries none.",
+   "fieldname": "correlation_id",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Correlation ID",
+   "reqd": 1
+  },
+  {
+   "description": "The stable rule identifier that fired, e.g. admission.RULE_ID_INSTANCE_COUNT_CAP -- never the human-readable throw message, which can be reworded without changing the rule.",
+   "fieldname": "rule_id",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Rule ID",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_identity",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "denied_at",
+   "fieldtype": "Datetime",
+   "label": "Denied At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "redacted_inputs_section",
+   "fieldtype": "Section Break",
+   "label": "Redacted Inputs"
+  },
+  {
+   "description": "The plan's instance cap this call was judged against -- already computed locally before the throw, no new lookup needed.",
+   "fieldname": "limit",
+   "fieldtype": "Int",
+   "label": "Limit"
+  },
+  {
+   "description": "The caller's active_instances count at the moment of refusal.",
+   "fieldname": "count",
+   "fieldtype": "Int",
+   "label": "Count"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-10-08 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Benchpress",
+ "name": "Admission Denial",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

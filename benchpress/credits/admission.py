@@ -32,6 +32,37 @@ from benchpress.credits import account, config
 
 ADMISSION = "Bench Admission"
 
+# Stable identifier for the instance-count refusal, independent of the human-readable
+# message below. A future decision-envelope record should cite this, not the message
+# string, so a wording change to the throw never reads as a different rule in an audit.
+# Semantic revision suffix: bump to _v2 if the predicate itself ever changes.
+RULE_ID_INSTANCE_COUNT_CAP = "instance_count_cap_v1"
+
+# Every rule id a denial row is allowed to carry. `_record_denial` checks against this set
+# before it writes, so a typo in a future call site (`_v1` vs `_vl`, a copy-pasted constant
+# from the wrong module) fails loudly at the call that would have minted a bad row, instead of
+# silently landing in `Admission Denial` as an unrecognized string nothing downstream can join
+# back to a real predicate. Extend this set in the same commit that adds a new RULE_ID_* constant
+# above -- a constant with no entry here is unreachable from claim() but still available for a
+# future caller to misuse.
+KNOWN_RULE_IDS = frozenset({RULE_ID_INSTANCE_COUNT_CAP})
+
+DENIAL = "Admission Denial"
+
+
+class DenialRecordError(frappe.ValidationError):
+	"""The refusal itself held (no slot taken) but writing its own record failed.
+
+	Raised only around the insert/commit inside `_record_denial`, never around the decision
+	that preceded it. The original exception is kept on `__cause__` (via `raise ... from exc`)
+	so a handler or log line can still see the real DB error; this type exists purely so an
+	operator reading an alert can tell "the denial-record write broke" apart from "some other
+	write on this request happened to fail at the same moment" -- the distinction umiXBT asked
+	for on Moltbook (post `5a411cda-...`, comment `66b1e027-...`): fail-closed was already true
+	by propagation alone, but an unclassified exception gave no signal that it was specifically
+	the evidence boundary that broke.
+	"""
+
 
 def claim(user: str, bench_name: str | None, limit: int, cost: float = 0.0) -> bool:
 	"""Take a slot and hold `cost` for `bench_name`, or refuse by name. True when this call took it.
@@ -58,6 +89,7 @@ def claim(user: str, bench_name: str | None, limit: int, cost: float = 0.0) -> b
 		_require_affordable(acct, hold - flt(claimed.held_credits))
 		return False
 	if limit and cint(acct.active_instances) >= limit:
+		_record_denial(RULE_ID_INSTANCE_COUNT_CAP, limit=limit, count=cint(acct.active_instances))
 		frappe.throw(
 			_(
 				"You have {0} instances running, the most your plan allows. Stop one, or buy credits at {1} to raise the limit."
@@ -70,6 +102,79 @@ def claim(user: str, bench_name: str | None, limit: int, cost: float = 0.0) -> b
 	acct.reserved_credits = flt(flt(acct.reserved_credits) + hold, account.PRECISION)
 	account.save_account(acct)
 	return True
+
+
+def _record_denial(rule_id: str, limit: int, count: int) -> None:
+	"""Write the decision envelope BEFORE the throw that cites it.
+
+	Minimal shape agreed with umiXBT on Moltbook (post `5a411cda-...`, comment `c3c9bd93`):
+	a stable rule id (not the human-readable message, which can be reworded), the redacted
+	inputs the refusal was judged against (`limit`/`count`, both already computed locally,
+	no new lookup), and a correlation id -- reused from the request's own `X-Frappe-Request-Id`
+	header when the caller sent one, so this row joins to the request that triggered it rather
+	than minting an identity nobody outside this function will ever see again.
+
+	Committed explicitly right after the insert: `frappe.throw()` runs immediately after this
+	call returns, and the request's own error handler rolls back the transaction the throw's
+	exception unwinds through -- a row written in that same transaction and never committed
+	would vanish with it, which defeats the entire point of recording the refusal.
+
+	Safe to commit here specifically because this is the LAST thing `claim()` does on the
+	refusal path -- the `SELECT ... FOR UPDATE` on the caller's `Credit Account` has already
+	done its only job (deciding the refusal) and nothing after this call still needs that lock
+	held. A commit inside any other locked section of this module would release the lock
+	early and reopen the race the lock exists to close; this one does not, because there is no
+	"after" on this path.
+
+	Raises `frappe.ValidationError` for a `rule_id` outside `KNOWN_RULE_IDS` before anything is
+	written -- a typo'd or stale rule id (`_v1` vs `_vl`, a constant copied from the wrong call
+	site) is a bug in the caller, not a new kind of denial, and it must fail where it is made
+	rather than mint a row an audit can never resolve to a real predicate.
+	"""
+	if rule_id not in KNOWN_RULE_IDS:
+		frappe.throw(f"admission: unrecognized rule_id {rule_id!r}, not in KNOWN_RULE_IDS")
+	correlation_id = None
+	try:
+		correlation_id = frappe.request.headers.get("X-Frappe-Request-Id")
+	except Exception:
+		correlation_id = None
+	try:
+		frappe.get_doc(
+			{
+				"doctype": DENIAL,
+				"correlation_id": correlation_id or frappe.generate_hash(length=16),
+				"rule_id": rule_id,
+				"denied_at": now_datetime(),
+				"limit": limit,
+				"count": count,
+			}
+		).insert(ignore_permissions=True)
+		frappe.db.commit()  # nosemgrep -- must survive the throw's own rollback, see docstring
+	except Exception as exc:
+		# Only this insert/commit is wrapped. The decision above (the caller is at `limit`)
+		# already happened and is not in question here; this classifies a *second*, distinct
+		# failure -- the evidence boundary itself breaking -- so it reads as its own thing in
+		# a log or alert instead of blending into whatever generic DB error class fired.
+		#
+		# Logged explicitly here, not left to whatever generic handler eventually catches
+		# DenialRecordError: `claim()` has no except clause for it today, so without this
+		# call the only trace of "the evidence write itself broke" is whatever ends up in
+		# the web worker's own crash log -- not searchable in the Frappe Error Log the way
+		# every other BenchPress fault is.
+		# Guarded separately from the raise below: frappe.log_error() does its own DB
+		# write (Error Log doctype) and can itself raise under the same outage that
+		# broke the denial-record insert (disk full, DB unreachable). Letting that
+		# second failure propagate would replace the typed DenialRecordError with a
+		# raw, unclassified exception from the logging attempt -- the exact "fails
+		# safely but not legibly" gap this error type exists to close.
+		try:
+			frappe.log_error(
+				title=f"admission: denial record write failed for rule_id {rule_id!r}",
+				message=frappe.get_traceback(),
+			)
+		except Exception:
+			pass
+		raise DenialRecordError(f"admission: failed to record denial for rule_id {rule_id!r}") from exc
 
 
 def release(bench_name: str | None) -> None:
