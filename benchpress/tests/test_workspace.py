@@ -107,12 +107,20 @@ class TestWorkspaceFixtures(IntegrationTestCase):
 		]
 
 	def test_fixtures_are_synced_to_the_database(self):
-		"""bench migrate skips a fixture whose `modified` is not newer than the DB row."""
+		"""bench migrate skips a fixture whose `modified` is not newer than the DB row.
+
+		Compared as parsed JSON, not raw text: `Workspace.before_validate` runs every write
+		(including a fixture import) through `sanitize_content`, which re-serializes with
+		`json.dumps`'s default spaced separators — the fixture on disk stays compact. Same
+		blocks, different whitespace, so a byte comparison here would fail on every fresh
+		install regardless of whether the import actually ran.
+		"""
 		for filename, workspace in self.workspaces:
 			with self.subTest(fixture=filename):
+				db_content = frappe.db.get_value("Workspace", workspace["name"], "content")
 				self.assertEqual(
-					frappe.db.get_value("Workspace", workspace["name"], "content"),
-					workspace["content"],
+					json.loads(db_content) if db_content else db_content,
+					json.loads(workspace["content"]),
 					f"{filename}: disk content differs from the synced Workspace — bump `modified`",
 				)
 		for doctype, filename, widget in self.widgets:
