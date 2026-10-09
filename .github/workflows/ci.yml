@@ -142,6 +142,14 @@ jobs:
           # defaults to frappe's develop branch, so the suite tracked a branch this app does
           # not ship on and broke on upstream changes no pull request here contained.
           bench init --frappe-branch version-16 --skip-redis-config-generation --skip-assets --python "$(which python)" ~/frappe-bench
+          # bench init only accepts a branch, not a commit, so pin the resulting
+          # checkout to a reviewed SHA afterward. Without this, every upstream
+          # frappe/frappe commit to version-16 is an unreviewed, unannounced
+          # change to this app's own test pass/fail boundary (confirmed
+          # 2026-10-07/08: an upstream login-page/workspace-fixture change broke
+          # 3 unrelated tests here with zero benchpress-side change).
+          # Update the SHA only after reviewing the new upstream commit.
+          git -C ~/frappe-bench/apps/frappe checkout d07fff8874be88c3e3de3eeae90ca57e77c204bc
 
       # benchpress declares required_apps = ["vpn_management"], a public repo,
       # so install-app benchpress only resolves if the app is already on the bench.
