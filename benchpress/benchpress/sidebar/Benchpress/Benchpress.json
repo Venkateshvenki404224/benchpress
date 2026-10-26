@@ -2,7 +2,7 @@
  "app": "benchpress",
  "creation": "2026-07-26 19:00:00.000000",
  "docstatus": 0,
- "doctype": "Workspace Sidebar",
+ "doctype": "Sidebar",
  "header_icon": "server",
  "idx": 0,
  "items": [
@@ -274,7 +274,6 @@
  "modified": "2026-08-17 08:35:00.000000",
  "modified_by": "Administrator",
  "module": "Benchpress",
- "module_onboarding": "Lets set up BenchPress",
  "name": "BenchPress",
  "owner": "Administrator",
  "standard": 1,

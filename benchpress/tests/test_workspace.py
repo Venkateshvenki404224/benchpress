@@ -237,7 +237,10 @@ class TestOnboardingFixtures(IntegrationTestCase):
 		super().setUpClass()
 		cls.steps = load_fixtures("onboarding_step")
 		cls.onboardings = load_fixtures("module_onboarding")
-		cls.sidebars = load_app_fixtures("workspace_sidebar")
+		# `Sidebar` is module-rooted on frappe version-16 (the retired `Workspace Sidebar`
+		# was the last app-rooted fixture of this shape), so it loads via load_fixtures like
+		# any other module doctype now, not load_app_fixtures's flat app-root walk.
+		cls.sidebars = load_fixtures("sidebar")
 
 	@property
 	def steps_by_name(self):
@@ -291,15 +294,27 @@ class TestOnboardingFixtures(IntegrationTestCase):
 				self.assertEqual(onboarding["module"], MODULE_LABEL, f"{filename}: wrong module")
 
 	def test_sidebar_onboarding_is_shipped_and_synced(self):
-		"""An empty `module_onboarding` on the DB row means a stale `modified` skipped the import."""
-		shipped = {onboarding["name"] for _filename, onboarding in self.onboardings}
+		"""`module_onboarding` is not a stored field on `Sidebar` (frappe version-16) — it is
+		computed at resolve time by matching `Module Onboarding.module` against the sidebar's
+		own `module` field (see `SidebarContext.for_modules` / `get_permitted_onboardings`).
+
+		So this guards the thing that actually has to be true for resolution to work: every
+		shipped sidebar's `module` names a module some shipped onboarding also claims, and the
+		synced DB row agrees. A mismatch here is silent at runtime — the sidebar just resolves
+		with no onboarding link — so the only way to catch it is this explicit check.
+		"""
+		onboarding_modules = {onboarding["module"] for _filename, onboarding in self.onboardings}
 		for filename, sidebar in self.sidebars:
-			named = sidebar.get("module_onboarding")
+			module = sidebar.get("module")
+			if not module:
+				continue
 			with self.subTest(fixture=filename):
-				self.assertIn(named, shipped, f"{filename}: no Module Onboarding {named!r}")
+				self.assertIn(
+					module, onboarding_modules, f"{filename}: no Module Onboarding claims module {module!r}"
+				)
 				self.assertEqual(
-					frappe.db.get_value("Workspace Sidebar", sidebar["name"], "module_onboarding"),
-					named,
+					frappe.db.get_value("Sidebar", sidebar["name"], "module"),
+					module,
 					f"{filename}: the synced sidebar does not name it — bump `modified`",
 				)
 
