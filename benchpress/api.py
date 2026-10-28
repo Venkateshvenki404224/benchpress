@@ -624,7 +624,6 @@ def renew_bench(bench_name: str, plan: str, request_id: str) -> dict:
 	the charge last. Raises `ValidationError` when the sweep already claimed the row, when the
 	plan would push the lease past the lab's ceiling, or when the grace window has closed.
 	"""
-	require_bench_access(bench_name)
 	if not config.credits_enabled():
 		frappe.throw(_("Credits are switched off on this site, so there is nothing to renew."))
 	if not frappe.utils.cstr(request_id).strip():
@@ -635,6 +634,7 @@ def renew_bench(bench_name: str, plan: str, request_id: str) -> dict:
 	# decision below reads from this row and not from a cached document — under REPEATABLE READ
 	# only the locking read is guaranteed to see a stop that committed a moment ago.
 	bench = frappe.db.get_value("Bench Instance", bench_name, RENEW_FIELDS, as_dict=True, for_update=True)
+	require_bench_access(bench_name)
 	if bench.lease_state == lease.STOPPING:
 		frappe.throw(_("This bench is already stopping. Start it again once it has, then renew."))
 
