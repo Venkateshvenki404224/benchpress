@@ -158,7 +158,7 @@ def _deny(bench_name: str, acct, reason: str, **figures) -> None:
 	for field, value in figures.items():
 		setattr(row, field, value)
 	row.insert(ignore_permissions=True)
-	frappe.db.commit()
+	frappe.db.commit()  # nosemgrep -- a denial has to survive the caller's own rollback
 
 
 def _insert(account_name: str, bench_name: str, cost: float) -> bool:
