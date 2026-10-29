@@ -31,6 +31,7 @@ from frappe.utils import cint, flt, now_datetime
 from benchpress.credits import account, config
 
 ADMISSION = "Bench Admission"
+DENIAL = "Admission Denial"
 
 
 def claim(user: str, bench_name: str | None, limit: int, cost: float = 0.0) -> bool:
@@ -41,7 +42,10 @@ def claim(user: str, bench_name: str | None, limit: int, cost: float = 0.0) -> b
 	ones. Such a call is still priced, because the start it asks for will still be charged.
 
 	Raises `frappe.ValidationError` when the caller is at `limit` (`0` means unlimited), when the
-	account is suspended, or when the cost is more than the account can still commit.
+	account is suspended, or when the cost is more than the account can still commit. Each of
+	those three refusals first writes and commits an `Admission Denial` row describing the
+	candidate action, the limit it hit and the figures it was judged against — see `_deny`, and
+	why this has to commit before the throw rather than after it.
 	"""
 	if not bench_name:
 		return False
@@ -55,15 +59,22 @@ def claim(user: str, bench_name: str | None, limit: int, cost: float = 0.0) -> b
 		ADMISSION, bench_name, ["name", "held_credits"], as_dict=True, for_update=True
 	)
 	if claimed:
-		_require_affordable(acct, hold - flt(claimed.held_credits))
+		_require_affordable(acct, hold - flt(claimed.held_credits), bench_name)
 		return False
 	if limit and cint(acct.active_instances) >= limit:
+		_deny(
+			bench_name,
+			acct,
+			"Cap",
+			limit_at_decision=limit,
+			active_instances_at_decision=cint(acct.active_instances),
+		)
 		frappe.throw(
 			_(
 				"You have {0} instances running, the most your plan allows. Stop one, or buy credits at {1} to raise the limit."
 			).format(limit, config.TOP_UP_ROUTE)
 		)
-	_require_affordable(acct, hold)
+	_require_affordable(acct, hold, bench_name)
 	if not _insert(acct.name, bench_name, hold):
 		return False
 	acct.active_instances = cint(acct.active_instances) + 1
@@ -113,7 +124,7 @@ def release_hold(bench_name: str | None) -> float:
 	return held
 
 
-def _require_affordable(acct, cost: float) -> None:
+def _require_affordable(acct, cost: float, bench_name: str) -> None:
 	"""Refuse a caller who cannot commit `cost` on top of what they have already reserved.
 
 	`cost` is what this call adds, so a bench that already holds part of it is judged on the
@@ -122,10 +133,32 @@ def _require_affordable(acct, cost: float) -> None:
 	if not config.credits_enabled():
 		return
 	if acct.is_suspended:
+		_deny(bench_name, acct, "Suspended")
 		frappe.throw(_("This account is suspended, so nothing new can be started."))
 	spendable = account.spendable(acct)
 	if flt(cost) > spendable:
+		_deny(bench_name, acct, "Shortfall", requested_cost=flt(cost), available_at_decision=spendable)
 		frappe.throw(account.shortfall_message(flt(cost), spendable))
+
+
+def _deny(bench_name: str, acct, reason: str, **figures) -> None:
+	"""Write and commit one `Admission Denial` row before the caller's throw unwinds it.
+
+	A refusal raises inside the caller's own locked transaction, and that transaction rolls back
+	on the way out — so a row inserted the ordinary way, as part of it, would vanish with
+	everything else the refused call touched. `frappe.db.commit()` here closes this row's own
+	transaction immediately, before `claim` returns control to whatever raises next, so the
+	denial survives a rollback that erases the claim attempt itself.
+	"""
+	row = frappe.new_doc(DENIAL)
+	row.bench = bench_name
+	row.account = acct.name
+	row.reason = reason
+	row.denied_at = now_datetime()
+	for field, value in figures.items():
+		setattr(row, field, value)
+	row.insert(ignore_permissions=True)
+	frappe.db.commit()
 
 
 def _insert(account_name: str, bench_name: str, cost: float) -> bool:
