@@ -347,7 +347,12 @@ class TestSelfServeSignup(IntegrationTestCase):
 
 		account.ensure_account(EMAIL)
 		frappe.db.set_value("Credit Account", EMAIL, "active_instances", FREE_CEILING, update_modified=False)
-		with self.assertRaises(frappe.ValidationError) as refusal:
+		# admission.claim's cap refusal now writes+commits an Admission Denial row via _deny()
+		# before it throws, so this real frappe.db.commit() must be patched the same way every
+		# other refusal call site in this suite is (see test_admission.py) -- otherwise it closes
+		# the whole test transaction mid-test, past the class-level rollback this suite relies on
+		# for isolation, and leaks this test's fixture state into every test that runs after it.
+		with patch("frappe.db.commit"), self.assertRaises(frappe.ValidationError) as refusal:
 			admission.claim(EMAIL, "signup-ceiling-bench", FREE_CEILING)
 
 		self.assertIn(str(FREE_CEILING), str(refusal.exception))

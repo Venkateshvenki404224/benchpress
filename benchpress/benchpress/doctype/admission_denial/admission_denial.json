@@ -1,0 +1,148 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "hash",
+ "creation": "2026-10-30 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "field_order": [
+  "bench",
+  "account",
+  "reason",
+  "column_break_denial",
+  "denied_at",
+  "candidate_action_section",
+  "limit_at_decision",
+  "active_instances_at_decision",
+  "column_break_figures",
+  "requested_cost",
+  "available_at_decision"
+ ],
+ "fields": [
+  {
+   "description": "The Bench Instance name the refused call was trying to start. Data rather than a Link, same reason as Bench Admission.bench: the instance row may not exist yet.",
+   "fieldname": "bench",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Bench",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "account",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Account",
+   "options": "Credit Account",
+   "read_only": 1,
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "description": "Which guard inside admission.claim() refused the call.",
+   "fieldname": "reason",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Reason",
+   "options": "Cap\nSuspended\nShortfall",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_denial",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "When the refusal happened, inside the same locked transaction that decided it.",
+   "fieldname": "denied_at",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "label": "Denied At",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "candidate_action_section",
+   "fieldtype": "Section Break",
+   "label": "What was checked, and against what"
+  },
+  {
+   "description": "The plan's instance cap at the moment of refusal. Blank for a Shortfall reason — the cap guard never ran.",
+   "fieldname": "limit_at_decision",
+   "fieldtype": "Int",
+   "label": "Limit At Decision",
+   "read_only": 1
+  },
+  {
+   "description": "The account's active_instances count the Cap guard compared against the limit. Blank for a Shortfall or Suspended reason.",
+   "fieldname": "active_instances_at_decision",
+   "fieldtype": "Int",
+   "label": "Active Instances At Decision",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_figures",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "The credit hold this claim was asking to take. Blank or zero for a Cap or Suspended reason — the Shortfall guard is the only one that compares a cost.",
+   "fieldname": "requested_cost",
+   "fieldtype": "Float",
+   "label": "Requested Cost",
+   "precision": "6",
+   "read_only": 1
+  },
+  {
+   "description": "What account.spendable() returned for the Shortfall guard's comparison. Blank for a Cap or Suspended reason.",
+   "fieldname": "available_at_decision",
+   "fieldtype": "Float",
+   "label": "Available At Decision",
+   "precision": "6",
+   "read_only": 1
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-10-30 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Benchpress",
+ "name": "Admission Denial",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "BenchPress Admin",
+   "share": 1
+  },
+  {
+   "if_owner": 1,
+   "read": 1,
+   "role": "BenchPress User"
+  }
+ ],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "denied_at",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 0
+}

@@ -25,6 +25,7 @@ from benchpress.credits.seed import seed_defaults
 
 ACCOUNT = "Credit Account"
 ADMISSION = "Bench Admission"
+DENIAL = "Admission Denial"
 BENCH = "Bench Instance"
 BENCHPRESS_SETTINGS = "BenchPress Settings"
 CREDIT_SETTINGS = "Credit Settings"
@@ -154,10 +155,37 @@ class TestAdmission(IntegrationTestCase):
 
 	def test_the_cap_refuses_the_next_bench(self):
 		admission.claim(USER, self.benches[0].name, 1)
-		with self.assertRaises(frappe.ValidationError) as refusal:
+		# Cap refusal via _deny()'s real commit -- patched like every other real-commit
+		# refusal site in this suite.
+		with patch("frappe.db.commit"), self.assertRaises(frappe.ValidationError) as refusal:
 			admission.claim(USER, self.benches[1].name, 1)
 		self.assertIn("instances running", str(refusal.exception))
 		self.assertEqual(self.counter(), 1)
+
+	def test_a_cap_refusal_leaves_a_denial_row_naming_the_candidate_and_the_limit(self):
+		"""The artifact this whole feature exists for: a refusal that an empty execution trace
+		cannot be told apart from a planner that never tried, unless something is written and
+		committed before the throw unwinds the attempt.
+
+		`_deny()`'s own `frappe.db.commit()` is patched out here the same way every other real
+		commit in this suite is (see `test_stopping_a_bench_frees_its_slot`) — otherwise it
+		closes the whole test transaction mid-test, past the class-level rollback this suite
+		relies on for isolation, and leaks this test's fixture state into every test that runs
+		after it in the same process."""
+		admission.claim(USER, self.benches[0].name, 1)
+		with patch("frappe.db.commit"), self.assertRaises(frappe.ValidationError):
+			admission.claim(USER, self.benches[1].name, 1)
+		rows = frappe.get_all(
+			DENIAL,
+			filters={"bench": self.benches[1].name},
+			fields=["reason", "limit_at_decision", "active_instances_at_decision", "account"],
+		)
+		self.assertEqual(len(rows), 1)
+		row = rows[0]
+		self.assertEqual(row.reason, "Cap")
+		self.assertEqual(row.limit_at_decision, 1)
+		self.assertEqual(row.active_instances_at_decision, 1)
+		self.assertEqual(row.account, self.opened_account())
 
 	def test_one_under_the_cap_is_admitted(self):
 		admission.claim(USER, self.benches[0].name, 2)
@@ -270,10 +298,31 @@ class TestAdmission(IntegrationTestCase):
 		self.enable_credits()
 		self.set_balance(10)
 		admission.claim(USER, self.benches[0].name, 0, cost=6.0)
-		with self.assertRaises(frappe.ValidationError) as refusal:
+		# This Shortfall refusal now runs through _deny()'s real frappe.db.commit() (see
+		# test_a_shortfall_refusal_leaves_a_denial_row... below) -- patched the same way,
+		# otherwise it closes the whole test transaction past the class-level rollback this
+		# suite relies on for isolation, leaking fixture state into every test that runs after.
+		with patch("frappe.db.commit"), self.assertRaises(frappe.ValidationError) as refusal:
 			admission.claim(USER, self.benches[1].name, 0, cost=6.0)
 		self.assertIn("Not enough credits", str(refusal.exception))
 		self.assertEqual(self.balance(), 10.0)
+
+	def test_a_shortfall_refusal_leaves_a_denial_row_with_the_figures_it_was_judged_against(self):
+		self.enable_credits()
+		self.set_balance(10)
+		admission.claim(USER, self.benches[0].name, 0, cost=6.0)
+		with patch("frappe.db.commit"), self.assertRaises(frappe.ValidationError):
+			admission.claim(USER, self.benches[1].name, 0, cost=6.0)
+		rows = frappe.get_all(
+			DENIAL,
+			filters={"bench": self.benches[1].name},
+			fields=["reason", "requested_cost", "available_at_decision"],
+		)
+		self.assertEqual(len(rows), 1)
+		row = rows[0]
+		self.assertEqual(row.reason, "Shortfall")
+		self.assertEqual(flt(row.requested_cost), 6.0)
+		self.assertEqual(flt(row.available_at_decision), 4.0)
 
 	def test_the_same_call_is_admitted_with_nothing_in_the_way(self):
 		"""The positive control: the same cost against the same balance, no hold held."""
@@ -292,10 +341,30 @@ class TestAdmission(IntegrationTestCase):
 		self.enable_credits()
 		self.set_balance(100)
 		frappe.db.set_value(ACCOUNT, USER, "is_suspended", 1, update_modified=False)
-		with self.assertRaises(frappe.ValidationError) as refusal:
+		# Suspended refusal via _deny()'s real commit -- patched like every other real-commit
+		# refusal site in this suite.
+		with patch("frappe.db.commit"), self.assertRaises(frappe.ValidationError) as refusal:
 			admission.claim(USER, self.benches[0].name, 0, cost=LEASE_COST)
 		self.assertIn("suspended", str(refusal.exception))
 		self.assertEqual(self.rows(), [])
+
+	def test_a_suspended_refusal_leaves_a_denial_row_with_no_figures(self):
+		"""Suspended is checked before the cost comparison, so the row carries no requested_cost
+		or available_at_decision — those fields belong to the Shortfall reason only."""
+		self.enable_credits()
+		self.set_balance(100)
+		frappe.db.set_value(ACCOUNT, USER, "is_suspended", 1, update_modified=False)
+		with patch("frappe.db.commit"), self.assertRaises(frappe.ValidationError):
+			admission.claim(USER, self.benches[0].name, 0, cost=LEASE_COST)
+		rows = frappe.get_all(
+			DENIAL,
+			filters={"bench": self.benches[0].name},
+			fields=["reason", "requested_cost", "available_at_decision"],
+		)
+		self.assertEqual(len(rows), 1)
+		self.assertEqual(rows[0].reason, "Suspended")
+		self.assertFalse(flt(rows[0].requested_cost))
+		self.assertFalse(flt(rows[0].available_at_decision))
 
 	def test_a_start_that_costs_nothing_is_admitted_at_zero_credits(self):
 		"""A lab no lease plan reaches is free, and free is what it has to afford."""
@@ -326,7 +395,9 @@ class TestAdmission(IntegrationTestCase):
 		admission.claim(USER, self.benches[0].name, 0, cost=LEASE_COST)
 		admission.release_hold(self.benches[0].name)
 		self.set_balance(LEASE_COST / 2)
-		with self.assertRaises(frappe.ValidationError) as refusal:
+		# Shortfall refusal via _deny()'s real commit -- see test_a_shortfall_refusal_leaves_a_
+		# denial_row... for why this must be patched like every other real-commit site here.
+		with patch("frappe.db.commit"), self.assertRaises(frappe.ValidationError) as refusal:
 			admission.claim(USER, self.benches[0].name, 0, cost=LEASE_COST)
 		self.assertIn("Not enough credits", str(refusal.exception))
 
@@ -407,7 +478,9 @@ class TestAdmission(IntegrationTestCase):
 		self.set_setting("max_concurrent_uncredited", 1)
 		admission.claim(USER, self.benches[0].name, 1)
 		frappe.set_user(USER)
-		with self.assertRaises(frappe.ValidationError), patch("frappe.enqueue"):
+		# Cap refusal via _deny()'s real commit -- patched like every other real-commit
+		# refusal site in this suite.
+		with patch("frappe.db.commit"), self.assertRaises(frappe.ValidationError), patch("frappe.enqueue"):
 			frappe.get_doc(BENCH, self.benches[1].name).enqueue_deploy()
 
 	def test_zero_uncredited_admits_everything_and_still_claims(self):
@@ -427,7 +500,9 @@ class TestAdmission(IntegrationTestCase):
 		admission.claim(USER, self.benches[0].name, 1)
 		self.running_bench(self.benches[1])
 		frappe.set_user(USER)
-		with self.assertRaises(frappe.ValidationError) as refusal:
+		# Cap refusal via _deny()'s real commit -- patched like every other real-commit
+		# refusal site in this suite.
+		with patch("frappe.db.commit"), self.assertRaises(frappe.ValidationError) as refusal:
 			api.bench_action(self.benches[1].name, "start")
 		self.assertIn("instances running", str(refusal.exception))
 
@@ -476,7 +551,9 @@ class TestAdmission(IntegrationTestCase):
 		self.set_balance(75.0, OTHER)
 		bench = self.running_bench(self.benches[0])
 		frappe.set_user(OTHER)
-		with self.assertRaises(frappe.ValidationError) as refusal:
+		# Shortfall refusal via _deny()'s real commit -- patched like every other real-commit
+		# refusal site in this suite.
+		with patch("frappe.db.commit"), self.assertRaises(frappe.ValidationError) as refusal:
 			frappe.get_doc(BENCH, bench.name).enqueue_start()
 		frappe.set_user("Administrator")
 		self.assertIn("3.0 short", str(refusal.exception))
@@ -509,7 +586,9 @@ class TestAdmission(IntegrationTestCase):
 		admission.claim(USER, self.benches[0].name, 1)
 		bench = self.running_bench(self.benches[1])
 		frappe.set_user(OTHER)
-		with self.assertRaises(frappe.ValidationError) as refusal:
+		# Cap refusal via _deny()'s real commit -- patched like every other real-commit
+		# refusal site in this suite.
+		with patch("frappe.db.commit"), self.assertRaises(frappe.ValidationError) as refusal:
 			frappe.get_doc(BENCH, bench.name).enqueue_start()
 		frappe.set_user("Administrator")
 		self.assertIn("instances running", str(refusal.exception))
@@ -691,5 +770,6 @@ class TestAdmission(IntegrationTestCase):
 		"""The ledger blocks updates, not deletes, and the suite still cleans up after itself."""
 		for email in (USER, OTHER):
 			frappe.db.delete(ADMISSION, {"account": email})
+			frappe.db.delete(DENIAL, {"account": email})
 			frappe.db.delete(LEDGER, {"account": email})
 			frappe.db.delete(ACCOUNT, {"user": email})
