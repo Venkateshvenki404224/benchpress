@@ -434,7 +434,7 @@ class TestCreditGuard(IntegrationTestCase):
 		self.set_balance(BIG_LEASE_COST - 1)
 		frappe.set_user(self.user)
 
-		with self.assertRaises(frappe.ValidationError) as refusal:
+		with patch("frappe.db.commit"), self.assertRaises(frappe.ValidationError) as refusal:
 			self.deploy_at(BIG_SIZE)
 
 		message = str(refusal.exception)
@@ -481,7 +481,10 @@ class TestCreditGuard(IntegrationTestCase):
 		self.set_balance(BIG_LEASE_COST - 1)
 		frappe.set_user(self.user)
 
-		self.assertRaises(frappe.ValidationError, self.deploy_at, BIG_SIZE)
+		# Shortfall refusal via admission._deny()'s real commit (PR #438) -- patched like
+		# every other real-commit refusal site in this module.
+		with patch("frappe.db.commit"):
+			self.assertRaises(frappe.ValidationError, self.deploy_at, BIG_SIZE)
 		with patch("frappe.enqueue"):
 			api.create_bench(json.dumps({"lab": self.lab.name}))
 
