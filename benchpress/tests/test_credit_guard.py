@@ -236,7 +236,10 @@ class TestCreditGuard(IntegrationTestCase):
 		self.set_balance(0)
 		frappe.set_user(self.user)
 
-		with self.assertRaises(frappe.ValidationError) as refusal:
+		# Shortfall refusal via admission._deny()'s real commit (PR #438) -- patched like
+		# every other real-commit refusal site, else it closes this class's whole rollback-
+		# backed transaction mid-test and leaks fixture state into every test after it.
+		with patch("frappe.db.commit"), self.assertRaises(frappe.ValidationError) as refusal:
 			api.create_bench(json.dumps({"lab": self.lab.name}))
 
 		message = str(refusal.exception)
@@ -257,7 +260,10 @@ class TestCreditGuard(IntegrationTestCase):
 		self.enable_credits()
 		self.set_balance(LEASE_COST / 2)
 		frappe.set_user(self.user)
-		self.assertRaises(frappe.ValidationError, self.bench_document().enqueue_start)
+		# Shortfall refusal via admission._deny()'s real commit (PR #438) -- patched like
+		# every other real-commit refusal site in this module.
+		with patch("frappe.db.commit"):
+			self.assertRaises(frappe.ValidationError, self.bench_document().enqueue_start)
 
 	def test_exactly_the_lease_price_is_enough(self):
 		self.enable_credits()
@@ -271,7 +277,9 @@ class TestCreditGuard(IntegrationTestCase):
 		self.set_balance(GRANT)
 		frappe.db.set_value(ACCOUNT, self.user, "is_suspended", 1, update_modified=False)
 		frappe.set_user(self.user)
-		with self.assertRaises(frappe.ValidationError) as refusal:
+		# Suspended refusal via admission._deny()'s real commit (PR #438) -- patched like
+		# every other real-commit refusal site in this module.
+		with patch("frappe.db.commit"), self.assertRaises(frappe.ValidationError) as refusal:
 			self.bench_document().enqueue_start()
 		self.assertIn("suspended", str(refusal.exception))
 
