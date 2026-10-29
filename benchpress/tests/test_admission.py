@@ -163,9 +163,15 @@ class TestAdmission(IntegrationTestCase):
 	def test_a_cap_refusal_leaves_a_denial_row_naming_the_candidate_and_the_limit(self):
 		"""The artifact this whole feature exists for: a refusal that an empty execution trace
 		cannot be told apart from a planner that never tried, unless something is written and
-		committed before the throw unwinds the attempt."""
+		committed before the throw unwinds the attempt.
+
+		`_deny()`'s own `frappe.db.commit()` is patched out here the same way every other real
+		commit in this suite is (see `test_stopping_a_bench_frees_its_slot`) — otherwise it
+		closes the whole test transaction mid-test, past the class-level rollback this suite
+		relies on for isolation, and leaks this test's fixture state into every test that runs
+		after it in the same process."""
 		admission.claim(USER, self.benches[0].name, 1)
-		with self.assertRaises(frappe.ValidationError):
+		with patch("frappe.db.commit"), self.assertRaises(frappe.ValidationError):
 			admission.claim(USER, self.benches[1].name, 1)
 		rows = frappe.get_all(
 			DENIAL,
@@ -299,7 +305,7 @@ class TestAdmission(IntegrationTestCase):
 		self.enable_credits()
 		self.set_balance(10)
 		admission.claim(USER, self.benches[0].name, 0, cost=6.0)
-		with self.assertRaises(frappe.ValidationError):
+		with patch("frappe.db.commit"), self.assertRaises(frappe.ValidationError):
 			admission.claim(USER, self.benches[1].name, 0, cost=6.0)
 		rows = frappe.get_all(
 			DENIAL,
@@ -340,7 +346,7 @@ class TestAdmission(IntegrationTestCase):
 		self.enable_credits()
 		self.set_balance(100)
 		frappe.db.set_value(ACCOUNT, USER, "is_suspended", 1, update_modified=False)
-		with self.assertRaises(frappe.ValidationError):
+		with patch("frappe.db.commit"), self.assertRaises(frappe.ValidationError):
 			admission.claim(USER, self.benches[0].name, 0, cost=LEASE_COST)
 		rows = frappe.get_all(
 			DENIAL,
