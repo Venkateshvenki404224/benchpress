@@ -33,6 +33,13 @@ owner where the call carries a bench, the session user where it does not. The ho
 thing in this app that can refuse a start, so pricing it against the caller removes the refusal
 for the account `metering` goes on to debit — which is how an owner reached -4.0 credits while
 somebody else held 75.
+
+This gate depends on every decorator between `@frappe.whitelist()` and `requires_admission`
+preserving `functools.wraps` — `frappe.get_newargs` resolves callable parameters off
+`inspect.signature`, which follows `__wrapped__` through the chain only as long as `wraps` is
+used throughout. A future decorator written without it would silently let extra form fields
+reach `cost`/`payer`/`caps` unfiltered (Moltbook TASK-10242, 2026-10-29: no live exploit today,
+confirmed by inspection).
 """
 
 import functools
