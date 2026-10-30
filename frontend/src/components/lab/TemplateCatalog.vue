@@ -42,6 +42,7 @@
 				:apps="templateApps(template)"
 				:chips="resourceChips(template)"
 				:data-test="`template-${template.key}`"
+				@click="openPreview(template)"
 			>
 				<template #badge>
 					<Badge
@@ -66,7 +67,7 @@
 						class="ml-auto flex-none"
 						variant="solid"
 						:data-test="`open-lab-${template.key}`"
-						@click="router.push(`/labs/${template.lab.name}`)"
+						@click.stop="router.push(`/labs/${template.lab.name}`)"
 					>
 						Go to lab
 					</Button>
@@ -77,7 +78,7 @@
 						:loading="pendingKey === template.key"
 						:disabled="Boolean(pendingKey)"
 						:data-test="`use-template-${template.key}`"
-						@click="useTemplate(template)"
+						@click.stop="useTemplate(template)"
 					>
 						Use template
 					</Button>
@@ -115,6 +116,16 @@
 		</SectionCard>
 
 		<ErrorMessage class="mt-3" :message="launchAction.error" />
+
+		<TemplatePreviewDialog
+			v-model="previewOpen"
+			:template="previewTemplate"
+			:pending="Boolean(previewTemplate) && pendingKey === previewTemplate.key"
+			:error="launchAction.error"
+			:footnote="previewTemplate ? footnote(previewTemplate) : ''"
+			@use="useTemplateFromPreview"
+			@go-to-lab="goToLabFromPreview"
+		/>
 	</div>
 </template>
 
@@ -122,6 +133,7 @@
 import EmptyState from "@/components/EmptyState.vue";
 import SectionCard from "@/components/SectionCard.vue";
 import RecipeCard from "@/components/lab/RecipeCard.vue";
+import TemplatePreviewDialog from "@/components/lab/TemplatePreviewDialog.vue";
 import { openDeployRun } from "@/data/deployRun";
 import { labsResource } from "@/data/labs";
 import { userContext } from "@/data/userContext";
@@ -147,6 +159,8 @@ import SearchIcon from "~icons/lucide/search";
 // about a template is restated in this file.
 const router = useRouter();
 const pendingKey = ref("");
+const previewOpen = ref(false);
+const previewTemplate = ref(null);
 
 const LAB_STATES = {
 	Draft: "not built yet",
@@ -220,6 +234,21 @@ function footnote(template) {
 	if (!template.lab) return etaLabel(template.eta_minutes);
 	const status = template.lab.status || "";
 	return `Already used — ${LAB_STATES[status] || status.toLowerCase() || "created"}`;
+}
+
+function openPreview(template) {
+	previewTemplate.value = template;
+	previewOpen.value = true;
+}
+
+async function useTemplateFromPreview(template) {
+	await useTemplate(template);
+	if (!launchAction.error) previewOpen.value = false;
+}
+
+function goToLabFromPreview(template) {
+	previewOpen.value = false;
+	router.push(`/labs/${template.lab.name}`);
 }
 
 // One click is one call: the server chains the build and the deploy into a

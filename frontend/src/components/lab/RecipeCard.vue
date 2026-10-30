@@ -1,6 +1,7 @@
 <template>
 	<article
-		class="flex flex-col rounded-card border border-outline-gray-1 bg-surface-white px-4 pb-3 pt-4 transition-shadow duration-150 ease-out hover:shadow-card-hover"
+		class="flex flex-col rounded-card border border-outline-gray-1 bg-surface-white px-4 pb-3 pt-4 transition-shadow duration-150 ease-out hover:shadow-card-hover cursor-pointer"
+		@click="emit('click')"
 	>
 		<div class="flex items-center gap-2.5">
 			<span
@@ -54,6 +55,8 @@ const props = defineProps({
 	apps: { type: Array, default: () => [] },
 	chips: { type: Array, default: () => [] },
 });
+
+const emit = defineEmits(["click"]);
 
 const shownApps = computed(() => installedApps(props.apps));
 const mark = computed(() => markApp(props.apps));
