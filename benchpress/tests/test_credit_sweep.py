@@ -135,6 +135,32 @@ class TestCreditSweep(IntegrationTestCase):
 		# Not committed: the class rollback takes these with it, and one commit here would make
 		# every retuned cap and price durable on the site.
 
+	@classmethod
+	def tearDownClass(cls):
+		# `set_credits_enabled`/`set_setting` write `BenchPress Settings`/`Credit Settings`
+		# directly via `frappe.db.set_single_value`, which is NOT scoped to this class's
+		# IntegrationTestCase rollback (a Frappe Single row commits immediately, same mechanism
+		# documented for TestAdmission in TASK-04117/M481). `setUp`'s `restore_economics` only
+		# restores before each test *inside* this class -- nothing restored the switch *after*
+		# the class, so whichever value the last test method left (`enable_credits=1` from
+		# `test_reaping_removes_the_container_and_database_and_keeps_the_lab`) bled into every
+		# module that ran after this one in the same `bench run-tests` process.
+		# The actual per-class rollback runs later, via `addClassCleanup` registered in
+		# `setUpClass` -- it fires *after* this whole method returns, not when
+		# `super().tearDownClass()` is called. So a `frappe.db.commit()` anywhere in this
+		# override would commit this class's own deliberately-uncommitted fixtures (`fund()`,
+		# `wipe_credits()`) permanently, with no later rollback to undo it. Roll back first,
+		# discarding those fixtures, then write and commit only the restore.
+		frappe.db.rollback()
+		frappe.set_user("Administrator")
+		frappe.db.set_single_value(BENCHPRESS_SETTINGS, "enable_credits", cls.switch_at_start)
+		for field, value in cls.settings_at_start.items():
+			frappe.db.set_single_value(CREDIT_SETTINGS, field, value)
+		frappe.clear_cache(doctype=BENCHPRESS_SETTINGS)
+		frappe.clear_cache(doctype=CREDIT_SETTINGS)
+		frappe.db.commit()  # nosemgrep -- the restore must outlive the per-class rollback
+		super().tearDownClass()
+
 	def setUp(self):
 		frappe.set_user("Administrator")
 		self.restore_economics()

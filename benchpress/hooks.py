@@ -300,6 +300,11 @@ scheduler_events = {
 			# Docker socket, which only `queue-long` and `backend` carry. A listener that stays
 			# down then degrades to the convergence BenchPress had before it, not to silence.
 			"benchpress.docker_events.enqueue_reconcile",
+			# Pure DB read + conditional writes, no Docker call — safe on `queue-short` for the
+			# same reason `admission_repair.reconcile_admissions` is. Named gap closed here:
+			# `mark_unknown_if_overdue` existed with full test coverage but zero scheduled
+			# caller, so a Pending receipt whose worker died never actually became Unknown.
+			"benchpress.job_receipt.sweep_overdue_pending",
 		],
 		"0 2 * * *": [
 			"benchpress.mariadb_manager.enqueue_backup",

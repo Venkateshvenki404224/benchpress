@@ -19,7 +19,7 @@ import frappe
 import yaml
 from frappe.utils import cint
 
-from benchpress import addressing
+from benchpress import addressing, job_receipt
 
 # By name rather than `from benchpress.credits import config`: a route mapping is what
 # `config` wants to name in this file, and a module bound to that name turns the next such
@@ -543,10 +543,16 @@ def _wildcard_anchor_config(base_domain: str) -> dict:
 	}
 
 
-def sync_instance_route(bench_name: str) -> str:
+def sync_instance_route(bench_name: str, logical_id: str | None = None) -> str:
 	"""Make this bench's route file agree with its status.
 
 	Returns `written`, `deleted`, `skipped` (no public domain) or `unmounted` (no route directory).
+
+	`logical_id`, when given, is the Job Receipt row minted BEFORE this job was enqueued
+	(see `enqueue_route_sync`). This function writes only the artifact (the route file) — it
+	never flips its own receipt to Completed. That is `_claim_route_sync_receipt`'s job, called
+	by an independent reader that re-checks the artifact exists before trusting it, per the
+	mint-before-enqueue / checker-owns-status pattern (see `benchpress/job_receipt.py`).
 	"""
 	# The one decision point for whether a bench should own a route at all, so a lifecycle
 	# transition has one thing to remember rather than a write call in the start path and a
@@ -556,27 +562,61 @@ def sync_instance_route(bench_name: str) -> str:
 	# Reach it through `enqueue_route_sync`, never directly from a web request.
 	base_domain = frappe.get_cached_doc("BenchPress Settings").base_domain
 	if not base_domain or base_domain == "localhost":
-		return "skipped"
-
-	# Its own result, never folded into `skipped`: `skipped` is an operator who advertises no
-	# public URL, and this is one who advertises a URL the host cannot serve. A job that raised
-	# here failed on every start, stop and restart of every bench on such a host.
-	if not record_directory_state()["mounted"]:
-		return "unmounted"
-
-	if frappe.db.get_value("Bench Instance", bench_name, "status") == "Running":
+		result = "skipped"
+	elif not record_directory_state()["mounted"]:
+		# Its own result, never folded into `skipped`: `skipped` is an operator who advertises
+		# no public URL, and this is one who advertises a URL the host cannot serve. A job that
+		# raised here failed on every start, stop and restart of every bench on such a host.
+		result = "unmounted"
+	elif frappe.db.get_value("Bench Instance", bench_name, "status") == "Running":
 		publish(bench_name, base_domain)
-		return "written"
+		result = "written"
+	else:
+		withdraw(bench_name)
+		result = "deleted"
 
-	withdraw(bench_name)
-	return "deleted"
+	if logical_id:
+		_claim_route_sync_receipt(bench_name, logical_id, result)
+	return result
+
+
+def _claim_route_sync_receipt(bench_name: str, logical_id: str, result: str) -> None:
+	"""The independent-checker half of the retrofit: re-read the artifact, then claim the row.
+
+	Deliberately re-derives truth from the filesystem/DB rather than trusting `result`, the
+	same return value the worker just computed — a worker's own belief about what it did is
+	exactly the self-report class this pattern exists to not trust. `written`/`deleted` are
+	re-verified against `published()`; `skipped`/`unmounted` have no artifact to check, so the
+	worker's own report is the only signal available for those branches and is accepted as-is.
+	"""
+	if result == "written" and bench_name not in published():
+		return  # artifact doesn't match the claimed effect yet — leave Pending for the next pass
+	if result == "deleted" and bench_name in published():
+		return  # route file is still present — the delete has not actually landed
+	job_receipt.mark_completed(logical_id)
 
 
 def enqueue_route_sync(bench_name: str) -> None:
-	"""Hand the route write to `queue-long` — see `TraefikRouteDirectoryMissing`."""
+	"""Hand the route write to `queue-long` — see `TraefikRouteDirectoryMissing`.
+
+	Mints the Job Receipt row BEFORE calling `frappe.enqueue`, independent of RQ's own
+	`job_id` (which only dedupes inside RQ's `result_ttl` window, not across a crash of the
+	whole enqueue call). If `frappe.enqueue` itself raises, the receipt row still exists and
+	reads `Pending` — which is the point: the row must not depend on the enqueue succeeding.
+
+	`logical_id` is derived from `bench_name` alone, not a random suffix: a retry calling
+	this function again for the same bench must mint (idempotently, via `job_receipt.mint`)
+	the SAME row, not a fresh one. A random suffix here would make every retry open a new
+	Pending row instead of re-touching the one already tracking this bench's route state —
+	the exact gap found checking this code against a Moltbook thread on retry-stable IDs
+	(see concepts/moltbook-engineering-learning-loop.md, 2026-10-01 entry).
+	"""
+	logical_id = f"route_sync:{bench_name}"
+	job_receipt.mint(logical_id, expected_effect=f"route file for bench {bench_name!r} matches its status")
 	frappe.enqueue(
 		"benchpress.ingress.sync_instance_route",
 		bench_name=bench_name,
+		logical_id=logical_id,
 		queue="long",
 		job_id=f"route_sync:{bench_name}",
 		deduplicate=True,
