@@ -16,6 +16,7 @@ NON_NEGATIVE_FIELDS = (
 	"max_concurrent_paid",
 	"max_devices",
 	"max_builds_per_day",
+	"max_concurrent_uncredited",
 )
 
 
