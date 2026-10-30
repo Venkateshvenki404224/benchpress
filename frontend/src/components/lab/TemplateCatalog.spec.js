@@ -11,7 +11,7 @@ const CRM = {
 	description: "Leads, deals and a sales pipeline.",
 	frappe_version: "version-16",
 	logo: "",
-	apps: [{ app_name: "crm" }],
+	apps: [{ app_name: "crm" }, { app_name: "erpnext" }],
 	memory_limit: "2g",
 	cpu_cores: 1,
 	eta_minutes: 6,
@@ -23,7 +23,7 @@ const HELPDESK = {
 	key: "helpdesk",
 	title: "Helpdesk",
 	description: "A ticket desk with an agent portal.",
-	frappe_version: "version-16",
+	frappe_version: "version-15",
 	logo: "",
 	apps: [{ app_name: "helpdesk" }],
 	memory_limit: "2g",
@@ -44,8 +44,34 @@ vi.mock("frappe-ui", () => {
 		Badge: passThrough("span"),
 		Button: passThrough("button"),
 		ErrorMessage: () => null,
-		FormControl: passThrough("input"),
-		Select: passThrough("div"),
+		FormControl: {
+			props: ["modelValue"],
+			emits: ["update:modelValue"],
+			setup(props, { emit }) {
+				return () =>
+					h("input", {
+						value: props.modelValue,
+						onInput: (event) => emit("update:modelValue", event.target.value),
+					});
+			},
+		},
+		Select: {
+			props: ["modelValue", "options"],
+			emits: ["update:modelValue"],
+			setup(props, { emit }) {
+				return () =>
+					h(
+						"select",
+						{
+							value: props.modelValue,
+							onChange: (event) => emit("update:modelValue", event.target.value),
+						},
+						props.options.map((option) =>
+							h("option", { value: option.value }, option.label)
+						)
+					);
+			},
+		},
 		toast: { success: vi.fn() },
 		createResource: (options) => {
 			const resource = reactive({
@@ -150,5 +176,80 @@ describe("the template catalog", () => {
 		expect(find("templates-new-lab")).toBeNull();
 		expect(root.textContent).toContain("ask an admin to add a template");
 		expect(root.textContent).not.toContain("create a lab from scratch");
+	});
+
+	const cards = () =>
+		[...root.querySelectorAll('[data-test^="template-"]:not([data-test*="-footnote-"])')].map(
+			(card) => card.dataset.test.replace("template-", "")
+		);
+
+	async function type(query) {
+		const input = find("templates-search");
+		input.value = query;
+		input.dispatchEvent(new Event("input"));
+		await nextTick();
+	}
+
+	async function choose(test, value) {
+		const select = find(test);
+		select.value = value;
+		select.dispatchEvent(new Event("change"));
+		await nextTick();
+	}
+
+	it("keeps the templates-* hooks", () => {
+		expect(find("templates-search").tagName).toBe("INPUT");
+		expect(find("templates-search").placeholder).toBe("Search templates");
+		expect(find("templates-filter-apps").tagName).toBe("SELECT");
+		expect(find("templates-filter-version").tagName).toBe("SELECT");
+	});
+
+	it("labels the apps filter with each app's friendly name", () => {
+		const labels = [...find("templates-filter-apps").options].map(
+			(option) => option.textContent
+		);
+
+		expect(labels).toEqual(["Apps: all", "CRM", "ERPNext", "Helpdesk"]);
+	});
+
+	it("searches a template's app names", async () => {
+		await type("erpnext");
+
+		expect(cards()).toEqual(["crm"]);
+	});
+
+	it("searches a template's description", async () => {
+		await type("agent portal");
+
+		expect(cards()).toEqual(["helpdesk"]);
+	});
+
+	it("keeps only the templates on the chosen version", async () => {
+		await choose("templates-filter-version", "version-16");
+
+		expect(cards()).toEqual(["crm"]);
+	});
+
+	it("keeps only the templates that install the chosen app", async () => {
+		await choose("templates-filter-apps", "helpdesk");
+
+		expect(cards()).toEqual(["helpdesk"]);
+	});
+
+	it("offers Clear filters when nothing matches, and it brings every template back", async () => {
+		await type("no such template");
+		expect(cards()).toEqual([]);
+
+		find("templates-clear-filters").click();
+		await nextTick();
+
+		expect(cards()).toEqual(["crm", "helpdesk"]);
+		expect(find("templates-search").value).toBe("");
+	});
+
+	it("shows no bar when the catalog is empty", async () => {
+		await remountEmpty();
+
+		expect(find("templates-search")).toBeNull();
 	});
 });

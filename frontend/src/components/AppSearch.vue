@@ -63,6 +63,7 @@
 import { benchesResource } from "@/data/benches";
 import { labsResource } from "@/data/labs";
 import { isSearchOpen, openSearch } from "@/data/searchPalette";
+import { matchesSearch } from "@/utils/filters";
 import { benchLabel } from "@/utils/labSpecs";
 import { Dialog } from "frappe-ui";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
@@ -112,15 +113,10 @@ const benchItems = computed(() =>
 );
 
 function matching(rows, toItem) {
-	const needle = query.value.trim().toLowerCase();
 	return (rows ?? [])
 		.map(toItem)
-		.filter((item) => !needle || item.haystack.some((value) => hit(value, needle)))
+		.filter((item) => matchesSearch(item.haystack, query.value))
 		.slice(0, RESULTS_PER_GROUP);
-}
-
-function hit(value, needle) {
-	return (value || "").toLowerCase().includes(needle);
 }
 
 watch(query, () => {

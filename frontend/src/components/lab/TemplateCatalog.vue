@@ -5,23 +5,14 @@
 			in.
 		</p>
 
-		<div v-if="allTemplates.length" class="mb-3 flex flex-wrap items-center gap-2">
-			<FormControl
-				class="w-[240px]"
-				type="text"
-				placeholder="Search templates"
-				v-model="search"
-				data-test="templates-search"
-			>
-				<template #prefix><SearchIcon class="size-3.5 text-ink-gray-4" /></template>
-			</FormControl>
-			<Select v-model="appsFilter" :options="appOptions" data-test="templates-filter-apps" />
-			<Select
-				v-model="versionFilter"
-				:options="versionOptions"
-				data-test="templates-filter-version"
-			/>
-		</div>
+		<SearchFilterBar
+			v-if="allTemplates.length"
+			v-model="search"
+			v-model:selected="selected"
+			:controls="controls"
+			search-placeholder="Search templates"
+			search-test-id="templates-search"
+		/>
 
 		<p v-if="templates.loading && !allTemplates.length" class="text-body text-ink-gray-5">
 			Loading templates…
@@ -120,27 +111,18 @@
 
 <script setup>
 import EmptyState from "@/components/EmptyState.vue";
+import SearchFilterBar from "@/components/SearchFilterBar.vue";
 import SectionCard from "@/components/SectionCard.vue";
 import RecipeCard from "@/components/lab/RecipeCard.vue";
+import { useSearchFilters } from "@/composables/useSearchFilters";
 import { openDeployRun } from "@/data/deployRun";
 import { labsResource } from "@/data/labs";
 import { userContext } from "@/data/userContext";
 import { labelFor as appLabel } from "@/utils/appIcons";
-import { ALL, matches, optionsFrom } from "@/utils/filters";
 import { etaLabel, installedApps, resourceChips } from "@/utils/labSpecs";
-import {
-	Badge,
-	Button,
-	ErrorMessage,
-	FormControl,
-	Select,
-	createResource,
-	toast,
-} from "frappe-ui";
+import { Badge, Button, ErrorMessage, createResource, toast } from "frappe-ui";
 import { computed, ref } from "vue";
 import { useRouter } from "vue-router";
-
-import SearchIcon from "~icons/lucide/search";
 
 // The catalog is `benchpress/lab_templates.py` — every entry, its apps, its
 // resources, its estimate and the "Most used" flag come from there. Nothing
@@ -165,50 +147,29 @@ const emptyCatalogMessage = computed(() =>
 		: "The template catalog is empty — ask an admin to add a template."
 );
 
-const search = ref("");
-const appsFilter = ref(ALL);
-const versionFilter = ref(ALL);
-
-const appOptions = computed(() =>
-	optionsFrom("Apps", allTemplates.value.flatMap(templateApps), appLabel)
-);
-const versionOptions = computed(() =>
-	optionsFrom(
-		"Version",
-		allTemplates.value.map((template) => template.frappe_version)
-	)
-);
-
-const rows = computed(() =>
-	allTemplates.value.filter(
-		(template) =>
-			matches(template.frappe_version, versionFilter.value) &&
-			matchesApps(template) &&
-			matchesSearch(template)
-	)
-);
-
-function matchesApps(template) {
-	return appsFilter.value === ALL || templateApps(template).includes(appsFilter.value);
-}
-
-function matchesSearch(template) {
-	const query = search.value.trim().toLowerCase();
-	if (!query) return true;
-	const haystack = [
+const { search, selected, controls, rows, clearFilters } = useSearchFilters(allTemplates, {
+	searchIn: (template) => [
 		template.key,
 		template.title,
 		template.description,
 		...templateApps(template),
-	];
-	return haystack.some((value) => (value || "").toLowerCase().includes(query));
-}
-
-function clearFilters() {
-	search.value = "";
-	appsFilter.value = ALL;
-	versionFilter.value = ALL;
-}
+	],
+	filters: [
+		{
+			key: "apps",
+			label: "Apps",
+			value: templateApps,
+			labelFor: appLabel,
+			testId: "templates-filter-apps",
+		},
+		{
+			key: "version",
+			label: "Version",
+			value: (template) => template.frappe_version,
+			testId: "templates-filter-version",
+		},
+	],
+});
 
 const launchAction = createResource({ url: "benchpress.api.launch_template" });
 
