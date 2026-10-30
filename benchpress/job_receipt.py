@@ -70,6 +70,14 @@ REQUEUE_DISPOSITION_REQUEUE = "requeue"
 REQUEUE_DISPOSITION_REMEDIATE = "remediate"
 REQUEUE_DISPOSITION_UNKNOWN = "unknown"
 
+# sweep_overdue_reconciliation() severity tiers, keyed on `reconciliation_lapse_count`
+# AFTER this escalation increments it (so the first lapse is lapse_count==1, not 0).
+# Named as a real, unbuilt gap by spiritofthefleet (post d1670e43, reply to own comment
+# f3751d86): "the sweep currently treats every lapse identically... so it genuinely
+# cannot yet tell a one-time slip from an ignored pattern." Hive TASK-10899.
+RECONCILE_SEVERITY_WARN_AT = 2   # second lapse: still routine, but worth a visible flag
+RECONCILE_SEVERITY_CRITICAL_AT = 4  # fourth+ lapse: ignored pattern, not a one-time slip
+
 
 def mint(logical_id: str, expected_effect: str, policy_hash: str | None = None) -> None:
 	"""Open the ledger row BEFORE the enqueue call. Idempotent on `logical_id`.
@@ -169,6 +177,20 @@ def _open_reconciliation_obligation(doc) -> None:
 	)
 
 
+def _reconciliation_severity(lapse_count: int) -> str:
+	"""Map a post-increment lapse count to a severity label.
+
+	Pure function (no frappe calls) so it's trivially unit-testable and so the
+	threshold logic can be reused by a future measurement/reporting pass without
+	re-deriving it from the sweep's own side effects.
+	"""
+	if lapse_count >= RECONCILE_SEVERITY_CRITICAL_AT:
+		return "critical"
+	if lapse_count >= RECONCILE_SEVERITY_WARN_AT:
+		return "warn"
+	return "routine"
+
+
 def sweep_overdue_reconciliation() -> dict:
 	"""Unknown-side mirror of `sweep_overdue_pending` — closes the gap named on Moltbook
 
@@ -187,12 +209,23 @@ def sweep_overdue_reconciliation() -> dict:
 	deadline and a note that the prior one lapsed unresolved, so an ignored obligation
 	compounds into a louder one instead of silently expiring. Returns a count, same
 	convention as `sweep_overdue_pending`.
+
+	Severity tiering (Hive TASK-10899, spiritofthefleet's second named gap: "the sweep
+	currently treats every lapse identically... so it genuinely cannot yet tell a
+	one-time slip from an ignored pattern"): each re-escalation increments
+	`reconciliation_lapse_count` on the receipt itself (durable, survives restarts,
+	unlike a counter kept only in this function's call stack) and the fresh ToDo's
+	description is tagged with the resulting severity (`routine`/`warn`/`critical`
+	per `_reconciliation_severity`), so a human triaging the assignment list can tell
+	a first-time slip from a row that keeps coming back without opening each ToDo.
+	This still does not resolve spiritofthefleet's OTHER named gap (no measurement of
+	false-positive rate vs. genuine signal) — see `measure_reconciliation_false_positive_rate`.
 	"""
 	now = now_datetime()
 	overdue_unknown = frappe.get_all(
 		DOCTYPE,
 		filters={"status": "Unknown"},
-		fields=["name", "logical_id", "expected_effect"],
+		fields=["name", "logical_id", "expected_effect", "reconciliation_lapse_count"],
 	)
 	escalated = []
 	for row in overdue_unknown:
@@ -208,6 +241,9 @@ def sweep_overdue_reconciliation() -> dict:
 		)
 		if not open_todos:
 			continue  # either no obligation was ever opened, or it isn't overdue yet
+		lapse_count = (row.get("reconciliation_lapse_count") or 0) + 1
+		severity = _reconciliation_severity(lapse_count)
+		frappe.db.set_value(DOCTYPE, row["name"], "reconciliation_lapse_count", lapse_count)
 		for todo in open_todos:
 			frappe.db.set_value("ToDo", todo["name"], "status", "Cancelled")
 			assign_to_add(
@@ -216,8 +252,9 @@ def sweep_overdue_reconciliation() -> dict:
 					"name": row["name"],
 					"assign_to": [todo["allocated_to"]] if todo["allocated_to"] else ["Administrator"],
 					"description": (
-						f"Job Receipt {row['name']} ({row['logical_id']}) has been Unknown "
+						f"[{severity}] Job Receipt {row['name']} ({row['logical_id']}) has been Unknown "
 						f"past its reconciliation deadline ({todo['date']}) with no resolution. "
+						f"This is lapse #{lapse_count} on this receipt. "
 						f"Re-escalating: {row['expected_effect']}. Still do not auto-requeue or "
 						"auto-remediate on a guess — this exists to make the lapse visible, not "
 						"to decide the disposition."
@@ -227,6 +264,48 @@ def sweep_overdue_reconciliation() -> dict:
 			)
 		escalated.append(row["logical_id"])
 	return {"checked": len(overdue_unknown), "re_escalated": escalated}
+
+
+def measure_reconciliation_false_positive_rate(since: str | None = None) -> dict:
+	"""Report whether the reconciliation sweep is mostly noise or mostly signal.
+
+	Names, not silently assumes, the measurement gap spiritofthefleet flagged
+	alongside severity tiering (Hive TASK-10899): "there is no measurement anywhere
+	of how many overdue-Unknown rows the sweep would have caught historically vs.
+	how many were already resolved by a human who just never closed the ToDo."
+
+	Walks every `Job Receipt` that has ever lapsed at least once
+	(`reconciliation_lapse_count > 0`) and buckets it:
+	  - "resolved_without_escalation": status is Completed/Failed despite having
+	    lapsed — a human acted on the underlying job even though the specific ToDo
+	    chain was never formally closed. This is the "mostly noise" case: the sweep
+	    fired, but the real work was already done through a different channel.
+	  - "still_unresolved": status is still Unknown — the sweep is the only thing
+	    keeping the obligation visible; this is the "mostly signal" case.
+	Returns raw counts and a ratio, not a verdict — the caller (a human reviewing
+	the sweep's real-world value) decides what ratio is acceptable; this function's
+	job is to make that ratio visible instead of a historically unmeasured prior.
+
+	`since` is accepted for a future creation-date filter and currently unused —
+	named explicitly rather than silently ignored, so a caller doesn't assume
+	filtering already works.
+	"""
+	lapsed = frappe.get_all(
+		DOCTYPE,
+		filters={"reconciliation_lapse_count": (">", 0)},
+		fields=["name", "logical_id", "status", "reconciliation_lapse_count"],
+	)
+	resolved_without_escalation = [r for r in lapsed if r["status"] in ("Completed", "Failed")]
+	still_unresolved = [r for r in lapsed if r["status"] == "Unknown"]
+	total = len(lapsed)
+	return {
+		"total_ever_lapsed": total,
+		"resolved_without_escalation": len(resolved_without_escalation),
+		"still_unresolved": len(still_unresolved),
+		"resolved_without_escalation_rate": (
+			len(resolved_without_escalation) / total if total else None
+		),
+	}
 
 
 def sweep_overdue_pending() -> dict:
