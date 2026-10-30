@@ -285,6 +285,64 @@ class TestJobReceiptContract(unittest.TestCase):
 		self.assertEqual(self.store[completed_lid].status, "Completed")
 		self.assertEqual(self.store[unknown_lid].status, "Unknown")
 
+	# --- sweep_overdue_reconciliation() (Hive TASK-10886, Moltbook d1670e43/f3751d86) ---
+
+	def test_sweep_reconciliation_re_escalates_lapsed_todo(self):
+		"""An Unknown receipt whose ToDo deadline has already passed gets cancelled +
+		re-assigned with a fresh deadline, rather than sitting unread forever."""
+		lid = self._mint()
+		self.jr.mark_unknown_if_overdue(lid)
+		doc = self.store[lid]
+
+		lapsed_todo = {"name": "todo-1", "allocated_to": "ops@example.com", "date": "2000-01-01"}
+		set_value_calls = []
+
+		def get_all(doctype, filters=None, fields=None, pluck=None):
+			if doctype == self.jr.DOCTYPE:
+				return [{"name": doc.name, "logical_id": doc.logical_id, "expected_effect": doc.expected_effect}]
+			if doctype == "ToDo":
+				return [lapsed_todo]
+			return []
+
+		def db_set_value(doctype, name, field, value):
+			set_value_calls.append((doctype, name, field, value))
+
+		self.fake_frappe.get_all = get_all
+		self.fake_frappe.db.set_value = db_set_value
+
+		result = self.jr.sweep_overdue_reconciliation()
+
+		self.assertEqual(result["checked"], 1)
+		self.assertEqual(result["re_escalated"], [lid])
+		self.assertIn(("ToDo", "todo-1", "status", "Cancelled"), set_value_calls)
+		self.assertEqual(self.assign_to_add.call_count, 2, "once on the original Unknown transition, once on re-escalation")
+		second_call_kwargs = self.assign_to_add.call_args_list[-1][0][0]
+		self.assertEqual(second_call_kwargs["assign_to"], ["ops@example.com"])
+		self.assertIn("past its reconciliation deadline", second_call_kwargs["description"])
+
+	def test_sweep_reconciliation_skips_unknown_without_lapsed_todo(self):
+		"""An Unknown receipt whose ToDo deadline has NOT yet passed must not be touched —
+		this sweep only acts once the obligation is genuinely overdue."""
+		lid = self._mint()
+		self.jr.mark_unknown_if_overdue(lid)
+		doc = self.store[lid]
+
+		def get_all(doctype, filters=None, fields=None, pluck=None):
+			if doctype == self.jr.DOCTYPE:
+				return [{"name": doc.name, "logical_id": doc.logical_id, "expected_effect": doc.expected_effect}]
+			if doctype == "ToDo":
+				return []  # no OPEN todo past its deadline
+			return []
+
+		self.fake_frappe.get_all = get_all
+		before_assign_calls = self.assign_to_add.call_count
+
+		result = self.jr.sweep_overdue_reconciliation()
+
+		self.assertEqual(result["checked"], 1)
+		self.assertEqual(result["re_escalated"], [])
+		self.assertEqual(self.assign_to_add.call_count, before_assign_calls, "must not re-escalate when nothing is actually overdue")
+
 
 if __name__ == "__main__":
 	unittest.main()
