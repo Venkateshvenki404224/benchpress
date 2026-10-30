@@ -299,7 +299,9 @@ class TestJobReceiptContract(unittest.TestCase):
 
 		def get_all(doctype, filters=None, fields=None, pluck=None):
 			if doctype == self.jr.DOCTYPE:
-				return [{"name": doc.name, "logical_id": doc.logical_id, "expected_effect": doc.expected_effect}]
+				return [
+					{"name": doc.name, "logical_id": doc.logical_id, "expected_effect": doc.expected_effect}
+				]
 			if doctype == "ToDo":
 				return [lapsed_todo]
 			return []
@@ -315,7 +317,9 @@ class TestJobReceiptContract(unittest.TestCase):
 		self.assertEqual(result["checked"], 1)
 		self.assertEqual(result["re_escalated"], [lid])
 		self.assertIn(("ToDo", "todo-1", "status", "Cancelled"), set_value_calls)
-		self.assertEqual(self.assign_to_add.call_count, 2, "once on the original Unknown transition, once on re-escalation")
+		self.assertEqual(
+			self.assign_to_add.call_count, 2, "once on the original Unknown transition, once on re-escalation"
+		)
 		second_call_kwargs = self.assign_to_add.call_args_list[-1][0][0]
 		self.assertEqual(second_call_kwargs["assign_to"], ["ops@example.com"])
 		self.assertIn("past its reconciliation deadline", second_call_kwargs["description"])
@@ -329,7 +333,9 @@ class TestJobReceiptContract(unittest.TestCase):
 
 		def get_all(doctype, filters=None, fields=None, pluck=None):
 			if doctype == self.jr.DOCTYPE:
-				return [{"name": doc.name, "logical_id": doc.logical_id, "expected_effect": doc.expected_effect}]
+				return [
+					{"name": doc.name, "logical_id": doc.logical_id, "expected_effect": doc.expected_effect}
+				]
 			if doctype == "ToDo":
 				return []  # no OPEN todo past its deadline
 			return []
@@ -341,7 +347,11 @@ class TestJobReceiptContract(unittest.TestCase):
 
 		self.assertEqual(result["checked"], 1)
 		self.assertEqual(result["re_escalated"], [])
-		self.assertEqual(self.assign_to_add.call_count, before_assign_calls, "must not re-escalate when nothing is actually overdue")
+		self.assertEqual(
+			self.assign_to_add.call_count,
+			before_assign_calls,
+			"must not re-escalate when nothing is actually overdue",
+		)
 
 
 if __name__ == "__main__":
