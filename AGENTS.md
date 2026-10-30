@@ -46,3 +46,30 @@ Route by the task:
 
 `CLAUDE.md` carries the same conventions with more detail on the compose
 topology. [`CONTRIBUTING.md`](CONTRIBUTING.md) is the full contributor guide.
+
+## Fresh checkout, dev server and checks
+
+- **Setup.** A fresh checkout or worktree needs no `.env`. Install the SPA's
+  dependencies with `cd frontend && npx yarn@1.22.22 install --frozen-lockfile`,
+  and the docs toolchain with `npm ci --ignore-scripts` from the root.
+- **Dev server.** `cd frontend && npx yarn@1.22.22 dev --port <port>` serves the
+  SPA. It proxies API calls to a Frappe backend on `127.0.0.1:8000`; without
+  one, pages that load data show their error or empty state.
+- **Validation.** `bash factory/checks.sh` runs what CI's lint, frontend and docs
+  jobs run: `uvx pre-commit@4.3.0 run --all-files`, the frontend unit tests
+  (`yarn test:run`) and build (`yarn build`), and, when a branch touches docs,
+  `npm run docs:build`, `docs:lint` and `docs:score` plus a check that the
+  generated files are committed.
+- **Server tests** need a bench and a site. Locally that is
+  `docker compose exec backend bench --site frontend run-tests --module <module>`,
+  which runs the code in `apps/benchpress`, not in a worktree. CI's Server job
+  runs the whole suite on every pull request.
+
+## Software factory
+
+`/factory run` builds every open GitHub issue labeled `factory` through
+intake → spec → build → gate → review → approve, one PR per issue into
+`develop`. State is in `factory/jobs/` (gitignored); `factory/bin/job` is its
+only writer. Checks: `factory/checks.sh`. A job merges only after its PR's
+GitHub checks pass. Dashboard: `cd factory && python3 -m http.server`, then open
+http://localhost:8000/dashboard.html.

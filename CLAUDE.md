@@ -290,6 +290,8 @@ clutter: test users have been found on the live site still holding
 - **Reviewing a diff or PR** → `quality-code-review`.
 - **Docs, commit messages, PR descriptions, the README** → `technical-writing`.
 - **New or changed doctype forms/list views** → `ui-design`.
+- **GitHub issues labeled `factory`** → `/factory run` builds each one into a PR
+  to `develop`. See "Software factory" in `AGENTS.md`.
 
 ## Working prompts (read before you code)
 

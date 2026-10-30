@@ -107,3 +107,6 @@ docs-site/docs/search-index.json
 
 # Agent working directories.
 .claude/worktrees/
+
+# Software factory jobs
+/factory/jobs/
