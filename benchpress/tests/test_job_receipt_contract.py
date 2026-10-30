@@ -25,6 +25,7 @@ class _FakeDoc:
 		self.claimed_at = None
 		self.completed_at = None
 		self.policy_hash = None
+		self.reconciliation_lapse_count = None
 
 	def insert(self, ignore_permissions=True):
 		self._store[self.logical_id] = self
@@ -352,6 +353,117 @@ class TestJobReceiptContract(unittest.TestCase):
 			before_assign_calls,
 			"must not re-escalate when nothing is actually overdue",
 		)
+
+	# --- severity tiering + false-positive measurement (Hive TASK-10899,
+	# spiritofthefleet's two named gaps on sweep_overdue_reconciliation) ---
+
+	def test_severity_is_routine_below_warn_threshold(self):
+		self.assertEqual(self.jr._reconciliation_severity(1), "routine")
+
+	def test_severity_is_warn_at_threshold(self):
+		self.assertEqual(
+			self.jr._reconciliation_severity(self.jr.RECONCILE_SEVERITY_WARN_AT), "warn"
+		)
+
+	def test_severity_is_critical_at_threshold(self):
+		self.assertEqual(
+			self.jr._reconciliation_severity(self.jr.RECONCILE_SEVERITY_CRITICAL_AT), "critical"
+		)
+
+	def test_sweep_reconciliation_increments_lapse_count_and_tags_severity(self):
+		"""First lapse on a receipt must be tagged routine and persist lapse_count=1 —
+		this is the baseline the severity-tiering gap required (every lapse was
+		previously treated identically, with no durable count at all)."""
+		lid = self._mint()
+		self.jr.mark_unknown_if_overdue(lid)
+		doc = self.store[lid]
+		self.assertEqual(doc.reconciliation_lapse_count, None)  # fake doc default; never set yet
+
+		lapsed_todo = {"name": "todo-1", "allocated_to": "ops@example.com", "date": "2000-01-01"}
+		set_value_calls = []
+
+		def get_all(doctype, filters=None, fields=None, pluck=None):
+			if doctype == self.jr.DOCTYPE:
+				return [
+					{
+						"name": doc.name,
+						"logical_id": doc.logical_id,
+						"expected_effect": doc.expected_effect,
+						"reconciliation_lapse_count": doc.reconciliation_lapse_count,
+					}
+				]
+			if doctype == "ToDo":
+				return [lapsed_todo]
+			return []
+
+		def db_set_value(doctype, name, field, value):
+			set_value_calls.append((doctype, name, field, value))
+			if doctype == self.jr.DOCTYPE and field == "reconciliation_lapse_count":
+				doc.reconciliation_lapse_count = value
+
+		self.fake_frappe.get_all = get_all
+		self.fake_frappe.db.set_value = db_set_value
+
+		result = self.jr.sweep_overdue_reconciliation()
+
+		self.assertEqual(result["re_escalated"], [lid])
+		self.assertIn((self.jr.DOCTYPE, doc.name, "reconciliation_lapse_count", 1), set_value_calls)
+		last_description = self.assign_to_add.call_args_list[-1][0][0]["description"]
+		self.assertIn("[routine]", last_description)
+		self.assertIn("lapse #1", last_description)
+
+	def test_sweep_reconciliation_escalates_to_warn_on_second_lapse(self):
+		"""A receipt that lapses a second time (lapse_count becomes 2, the configured
+		WARN threshold) must be tagged warn, not routine — this is exactly the
+		one-time-slip-vs-ignored-pattern distinction spiritofthefleet named as missing."""
+		lid = self._mint()
+		self.jr.mark_unknown_if_overdue(lid)
+		doc = self.store[lid]
+		doc.reconciliation_lapse_count = 1  # simulate one prior lapse already recorded
+
+		lapsed_todo = {"name": "todo-2", "allocated_to": "ops@example.com", "date": "2000-01-01"}
+
+		def get_all(doctype, filters=None, fields=None, pluck=None):
+			if doctype == self.jr.DOCTYPE:
+				return [
+					{
+						"name": doc.name,
+						"logical_id": doc.logical_id,
+						"expected_effect": doc.expected_effect,
+						"reconciliation_lapse_count": doc.reconciliation_lapse_count,
+					}
+				]
+			if doctype == "ToDo":
+				return [lapsed_todo]
+			return []
+
+		self.fake_frappe.get_all = get_all
+		self.fake_frappe.db.set_value = MagicMock()
+
+		self.jr.sweep_overdue_reconciliation()
+
+		last_description = self.assign_to_add.call_args_list[-1][0][0]["description"]
+		self.assertIn("[warn]", last_description)
+		self.assertIn("lapse #2", last_description)
+
+	def test_measure_false_positive_rate_with_no_lapsed_receipts_returns_none_rate(self):
+		self.fake_frappe.get_all = MagicMock(return_value=[])
+		result = self.jr.measure_reconciliation_false_positive_rate()
+		self.assertEqual(result["total_ever_lapsed"], 0)
+		self.assertIsNone(result["resolved_without_escalation_rate"])
+
+	def test_measure_false_positive_rate_buckets_resolved_vs_still_unresolved(self):
+		rows = [
+			{"name": "a", "logical_id": "a", "status": "Completed", "reconciliation_lapse_count": 1},
+			{"name": "b", "logical_id": "b", "status": "Failed", "reconciliation_lapse_count": 2},
+			{"name": "c", "logical_id": "c", "status": "Unknown", "reconciliation_lapse_count": 3},
+		]
+		self.fake_frappe.get_all = MagicMock(return_value=rows)
+		result = self.jr.measure_reconciliation_false_positive_rate()
+		self.assertEqual(result["total_ever_lapsed"], 3)
+		self.assertEqual(result["resolved_without_escalation"], 2)
+		self.assertEqual(result["still_unresolved"], 1)
+		self.assertAlmostEqual(result["resolved_without_escalation_rate"], 2 / 3)
 
 
 if __name__ == "__main__":

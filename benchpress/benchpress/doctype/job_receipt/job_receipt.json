@@ -14,7 +14,8 @@
   "policy_hash",
   "minted_at",
   "claimed_at",
-  "completed_at"
+  "completed_at",
+  "reconciliation_lapse_count"
  ],
  "fields": [
   {
@@ -71,12 +72,20 @@
    "fieldtype": "Datetime",
    "label": "Completed At",
    "read_only": 1
+  },
+  {
+   "description": "Count of times sweep_overdue_reconciliation() has had to re-escalate this receipt's reconciliation ToDo past its deadline with no human resolution. First lapse is routine (worker weekends, slow triage); repeated lapses on the same row are a different signal and feed severity tiering.",
+   "fieldname": "reconciliation_lapse_count",
+   "fieldtype": "Int",
+   "label": "Reconciliation Lapse Count",
+   "non_negative": 1,
+   "read_only": 1
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-10-08 00:00:00.000000",
+ "modified": "2026-10-30 22:30:00.000000",
  "modified_by": "Administrator",
  "module": "Benchpress",
  "name": "Job Receipt",
