@@ -68,6 +68,10 @@ vi.mock("frappe-ui", () => {
 		Button: passThrough("button"),
 		ErrorMessage: () => null,
 		FormControl: passThrough("input"),
+		ListHeader: () => null,
+		ListRows: () => null,
+		ListView: (_props, { slots }) =>
+			h("div", {}, [slots.default?.(), slots.cell?.({ column: {}, row: {} })]),
 		Select: passThrough("div"),
 		Tabs,
 		createResource: () => ({ data: [], loading: false, error: null }),
@@ -93,6 +97,28 @@ vi.mock("@/data/userContext", async () => {
 	const { reactive } = await import("vue");
 	return { userContext: reactive({ isAdmin: true }) };
 });
+
+vi.mock("@/components/DataTable.vue", () => ({
+	default: {
+		props: ["columns", "rows", "rowRoute", "dataTest"],
+		setup(props, { slots }) {
+			return () =>
+				h(
+					"div",
+					{ "data-test": props.dataTest || "labs-table" },
+					props.rows.map((row) =>
+						h(
+							"div",
+							{ "data-test": `lab-card-${row.name}`, key: row.name },
+							props.columns.map((col) =>
+								slots.cell?.({ column: col, row })
+							)
+						)
+					)
+				);
+		},
+	},
+}));
 
 const { useRoute } = await import("vue-router");
 const { userContext } = await import("@/data/userContext");
@@ -120,12 +146,13 @@ describe("the Labs page", () => {
 
 	const find = (test) => root.querySelector(`[data-test="${test}"]`);
 
-	it("draws one card per lab, and no table", () => {
+	it("draws a table with one row per lab, and no card grid", () => {
+		expect(find("labs-table")).not.toBeNull();
 		expect(root.querySelectorAll('[data-test^="lab-card-"]')).toHaveLength(3);
 		expect(find("lab-card-sales-desk")).not.toBeNull();
 		expect(find("lab-card-support-trial")).not.toBeNull();
 		expect(find("lab-card-bare-bench")).not.toBeNull();
-		expect(find("labs-table")).toBeNull();
+		expect(find("labs-grid")).toBeNull();
 	});
 
 	it("badges a deployed lab with its bench's state, and a draft with the image's", () => {
@@ -142,37 +169,8 @@ describe("the Labs page", () => {
 		expect(find("lab-card-support-trial").textContent).toContain("Never deployed");
 	});
 
-	const chipsOf = (name) =>
-		[...find(`lab-card-${name}`).querySelector('[data-test="recipe-chips"]').children].map(
-			(chip) => chip.textContent.trim()
-		);
-
-	it("chips the apps, then memory and CPU", () => {
-		expect(chipsOf("sales-desk")).toEqual(["ERPNext", "CRM", "4 GB", "2 vCPU"]);
-	});
-
-	it("chips a lab with no apps as Frappe", () => {
-		expect(chipsOf("bare-bench")).toEqual(["Frappe", "1 GB", "1 vCPU"]);
-	});
-
-	const LAB_DETAIL = { name: "LabDetail", params: { labId: "support-trial" } };
-
-	it("opens the lab from a click on its card", () => {
-		find("lab-card-support-trial").click();
-
-		expect(push).toHaveBeenCalledTimes(1);
-		expect(push).toHaveBeenCalledWith(LAB_DETAIL);
-	});
-
-	it("opens the lab once from its Open lab button", () => {
-		find("lab-open-support-trial").click();
-
-		expect(push).toHaveBeenCalledTimes(1);
-		expect(push).toHaveBeenCalledWith(LAB_DETAIL);
-	});
-
 	it("opens on the labs tab at /labs", () => {
-		expect(find("labs-grid")).not.toBeNull();
+		expect(find("labs-table")).not.toBeNull();
 		expect(find("templates")).toBeNull();
 	});
 
@@ -181,7 +179,7 @@ describe("the Labs page", () => {
 		await nextTick();
 
 		expect(find("templates")).not.toBeNull();
-		expect(find("labs-grid")).toBeNull();
+		expect(find("labs-table")).toBeNull();
 	});
 
 	const headerActions = () =>
@@ -189,7 +187,7 @@ describe("the Labs page", () => {
 			(button) => button.dataset.test
 		);
 
-	it("shows New lab to an admin as the only header action, and no From template button", () => {
+	it("shows New lab to an admin as the only header action", () => {
 		expect(headerActions()).toEqual(["new-lab"]);
 		expect(find("from-template")).toBeNull();
 	});
