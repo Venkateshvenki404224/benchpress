@@ -169,6 +169,66 @@ def _open_reconciliation_obligation(doc) -> None:
 	)
 
 
+def sweep_overdue_reconciliation() -> dict:
+	"""Unknown-side mirror of `sweep_overdue_pending` — closes the gap named on Moltbook
+
+	(spiritofthefleet, reply to own comment `f3751d86` on post
+	`d1670e43-bb36-40f6-8c3b-a127be4de77f`): `_open_reconciliation_obligation` writes a real
+	owner + `RECONCILE_SLA_HOURS` deadline onto a `ToDo` the moment a receipt flips
+	Pending -> Unknown, but nothing in the codebase ever read that deadline back. A lapsed
+	`ToDo.date` with no sweep behind it is the exact same silent-collapse failure a deadline
+	is supposed to prevent — a human has to notice an unprompted timestamp, which nobody is
+	guaranteed to do.
+
+	Scans every `Job Receipt` still `Unknown` whose open `ToDo` deadline (`date`) has
+	already passed, and — deliberately, per umiXBT's original "never auto-requeue or
+	auto-remediate on a guess" instruction baked into the ToDo description itself — does
+	NOT auto-resolve the receipt. It only re-escalates: bumps a fresh `ToDo` with a new
+	deadline and a note that the prior one lapsed unresolved, so an ignored obligation
+	compounds into a louder one instead of silently expiring. Returns a count, same
+	convention as `sweep_overdue_pending`.
+	"""
+	now = now_datetime()
+	overdue_unknown = frappe.get_all(
+		DOCTYPE,
+		filters={"status": "Unknown"},
+		fields=["name", "logical_id", "expected_effect"],
+	)
+	escalated = []
+	for row in overdue_unknown:
+		open_todos = frappe.get_all(
+			"ToDo",
+			filters={
+				"reference_type": DOCTYPE,
+				"reference_name": row["name"],
+				"status": "Open",
+				"date": ("<", now),
+			},
+			fields=["name", "allocated_to", "date"],
+		)
+		if not open_todos:
+			continue  # either no obligation was ever opened, or it isn't overdue yet
+		for todo in open_todos:
+			frappe.db.set_value("ToDo", todo["name"], "status", "Cancelled")
+			assign_to_add(
+				{
+					"doctype": DOCTYPE,
+					"name": row["name"],
+					"assign_to": [todo["allocated_to"]] if todo["allocated_to"] else ["Administrator"],
+					"description": (
+						f"Job Receipt {row['name']} ({row['logical_id']}) has been Unknown "
+						f"past its reconciliation deadline ({todo['date']}) with no resolution. "
+						f"Re-escalating: {row['expected_effect']}. Still do not auto-requeue or "
+						"auto-remediate on a guess — this exists to make the lapse visible, not "
+						"to decide the disposition."
+					),
+					"date": add_to_date(now, hours=RECONCILE_SLA_HOURS),
+				}
+			)
+		escalated.append(row["logical_id"])
+	return {"checked": len(overdue_unknown), "re_escalated": escalated}
+
+
 def sweep_overdue_pending() -> dict:
 	"""Scheduled caller for `mark_unknown_if_overdue` — the gap named on Moltbook
 

@@ -260,6 +260,11 @@ scheduler_events = {
 		"benchpress.credits.reaper.reap_stopped_instances",
 		# GitHub drops traffic data after fourteen days. No repo and token configured, no-op.
 		"benchpress.github_traffic.snapshot_traffic",
+		# Unknown-side mirror of sweep_overdue_pending (4-min cron, below): that one turns a
+		# dead-worker Pending into Unknown; this one re-escalates an Unknown whose own
+		# RECONCILE_SLA_HOURS=24 ToDo deadline has already lapsed unresolved. Daily cadence
+		# matches the 24h SLA — no point checking more often than the deadline can move.
+		"benchpress.job_receipt.sweep_overdue_reconciliation",
 	],
 	# "hourly": [
 	# 	"benchpress.tasks.hourly"
