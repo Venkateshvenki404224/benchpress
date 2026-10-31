@@ -20,6 +20,7 @@ class _FakeDoc:
 		self.name = name
 		self.logical_id = logical_id
 		self.expected_effect = None
+		self.expected_hash = None
 		self.status = "Pending"
 		self.minted_at = None
 		self.claimed_at = None
@@ -137,6 +138,36 @@ class TestJobReceiptContract(unittest.TestCase):
 		first_completed_at = self.store[lid].completed_at
 		self.jr.mark_completed(lid)
 		self.assertEqual(self.store[lid].completed_at, first_completed_at)
+
+	# --- content-hash check on completion (issue #444) ---
+
+	def test_mark_completed_without_hashes_is_identity_only(self):
+		"""No expected_hash minted, no actual_hash passed: unchanged legacy behavior."""
+		lid = self._mint()
+		self.jr.mark_completed(lid)
+		self.assertEqual(self.store[lid].status, "Completed")
+
+	def test_mark_completed_matching_hash_completes(self):
+		lid = "route_sync:bench-hash-match"
+		self.jr.mint(lid, "route written", expected_hash="abc123")
+		self.jr.mark_completed(lid, actual_hash="abc123")
+		self.assertEqual(self.store[lid].status, "Completed")
+
+	def test_mark_completed_mismatched_hash_raises_and_does_not_complete(self):
+		lid = "route_sync:bench-hash-mismatch"
+		self.jr.mint(lid, "route written", expected_hash="abc123")
+		with self.assertRaises(self.jr.ContentHashMismatchError):
+			self.jr.mark_completed(lid, actual_hash="deadbeef")
+		self.assertEqual(self.store[lid].status, "Pending")
+
+	def test_mark_completed_expected_hash_without_actual_hash_falls_back_to_identity(self):
+		"""A caller that minted expected_hash but can't supply actual_hash this call
+		(e.g. a legacy call site not yet updated) must not be penalized — falls back
+		to identity-only completion rather than raising on a missing comparison side."""
+		lid = "route_sync:bench-hash-one-sided"
+		self.jr.mint(lid, "route written", expected_hash="abc123")
+		self.jr.mark_completed(lid)
+		self.assertEqual(self.store[lid].status, "Completed")
 
 	def test_overdue_pending_becomes_unknown_not_failed(self):
 		lid = self._mint()

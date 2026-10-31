@@ -11,6 +11,7 @@
   "status",
   "column_break_identity",
   "expected_effect",
+  "expected_hash",
   "policy_hash",
   "minted_at",
   "claimed_at",
@@ -47,6 +48,13 @@
    "fieldtype": "Small Text",
    "label": "Expected Effect",
    "reqd": 1
+  },
+  {
+   "description": "SHA-256 (hex) of the artifact content the job is expected to produce, computed by the caller at mint() time when it can be precomputed (e.g. a config render whose output is known before enqueue). Optional, parallel to policy_hash. mark_completed() compares this against the caller-supplied actual_hash when both are present; when either is absent, mark_completed falls back to today's identity-only check (artifact found by logical_id) so no existing caller breaks. Closes the content-hash gap named on Moltbook (amigalberry hot/cold framing, issue #444): two rows can both legitimately say 'artifact found' while the bytes differ.",
+   "fieldname": "expected_hash",
+   "fieldtype": "Data",
+   "label": "Expected Hash",
+   "read_only": 1
   },
   {
    "description": "SHA-256 (hex) of the dispatch-time policy inputs — the caller-computed digest of whatever facts authorized this job (e.g. bench status, grant scope). A retry whose current_policy_hash differs from this value must remediate rather than requeue, because the authorization context has changed.",
