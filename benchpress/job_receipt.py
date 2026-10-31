@@ -79,7 +79,12 @@ RECONCILE_SEVERITY_WARN_AT = 2  # second lapse: still routine, but worth a visib
 RECONCILE_SEVERITY_CRITICAL_AT = 4  # fourth+ lapse: ignored pattern, not a one-time slip
 
 
-def mint(logical_id: str, expected_effect: str, policy_hash: str | None = None) -> None:
+def mint(
+	logical_id: str,
+	expected_effect: str,
+	policy_hash: str | None = None,
+	expected_hash: str | None = None,
+) -> None:
 	"""Open the ledger row BEFORE the enqueue call. Idempotent on `logical_id`.
 
 	Called by the producer, in the same transaction as the `frappe.enqueue` call that
@@ -89,6 +94,14 @@ def mint(logical_id: str, expected_effect: str, policy_hash: str | None = None) 
 	`policy_hash`, when supplied, is a caller-computed SHA-256 hex digest of the
 	dispatch-time authorization inputs (e.g. bench status, grant scope).  A later
 	call to `requeue_or_remediate()` uses it to decide whether a retry is safe.
+
+	`expected_hash`, when supplied, is a caller-computed SHA-256 hex digest of the
+	artifact content the job is expected to produce (only possible when that content
+	is knowable before enqueue, e.g. a deterministic config render). A later call to
+	`mark_completed()` compares this against its own `actual_hash` argument — closes
+	the gap named on Moltbook (amigalberry hot/cold framing, issue #444) where
+	identity-only completion ("artifact found by logical_id") can't tell two different
+	artifact bodies apart. Optional: omitting it preserves today's identity-only check.
 	"""
 	if frappe.db.exists(DOCTYPE, {"logical_id": logical_id}):
 		return
@@ -99,13 +112,30 @@ def mint(logical_id: str, expected_effect: str, policy_hash: str | None = None) 
 	doc.minted_at = now_datetime()
 	if policy_hash is not None:
 		doc.policy_hash = policy_hash
+	if expected_hash is not None:
+		doc.expected_hash = expected_hash
 	doc.insert(ignore_permissions=True)
 
 
-def mark_completed(logical_id: str) -> None:
+class ContentHashMismatchError(Exception):
+	"""Raised by `mark_completed` when both `expected_hash` and `actual_hash` are present
+	and they disagree — the artifact exists at the right identity but its content is not
+	what the caller promised at mint time."""
+
+
+def mark_completed(logical_id: str, actual_hash: str | None = None) -> None:
 	"""Called ONLY by the independent checker, after it has read the artifact back by id.
 
 	Never call this from inside the worker job itself — see module docstring, point 2.
+
+	`actual_hash`, when supplied, is the caller's SHA-256 hex digest of the artifact
+	content it just read back. If the row also carries `expected_hash` (set at mint
+	time), the two are compared: a mismatch raises `ContentHashMismatchError` instead
+	of completing the row, because the artifact exists at the right identity but is not
+	the content that was promised — the exact gap identity-only completion cannot catch
+	(Moltbook amigalberry hot/cold framing, issue #444). When either `expected_hash` or
+	`actual_hash` is absent, this falls back to today's identity-only check unchanged —
+	no existing caller is required to pass `actual_hash`.
 	"""
 	name = frappe.db.get_value(DOCTYPE, {"logical_id": logical_id}, "name")
 	if not name:
@@ -113,6 +143,11 @@ def mark_completed(logical_id: str) -> None:
 	doc = frappe.get_doc(DOCTYPE, name)
 	if doc.status == "Completed":
 		return  # idempotent: a checker re-run after its own successful write is a no-op
+	if doc.expected_hash and actual_hash is not None and doc.expected_hash != actual_hash:
+		raise ContentHashMismatchError(
+			f"logical_id={logical_id!r}: expected_hash={doc.expected_hash!r} != "
+			f"actual_hash={actual_hash!r}"
+		)
 	doc.status = "Completed"
 	doc.claimed_at = now_datetime()
 	doc.completed_at = now_datetime()
