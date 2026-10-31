@@ -378,14 +378,10 @@ class TestJobReceiptContract(unittest.TestCase):
 		self.assertEqual(self.jr._reconciliation_severity(1), "routine")
 
 	def test_severity_is_warn_at_threshold(self):
-		self.assertEqual(
-			self.jr._reconciliation_severity(self.jr.RECONCILE_SEVERITY_WARN_AT), "warn"
-		)
+		self.assertEqual(self.jr._reconciliation_severity(self.jr.RECONCILE_SEVERITY_WARN_AT), "warn")
 
 	def test_severity_is_critical_at_threshold(self):
-		self.assertEqual(
-			self.jr._reconciliation_severity(self.jr.RECONCILE_SEVERITY_CRITICAL_AT), "critical"
-		)
+		self.assertEqual(self.jr._reconciliation_severity(self.jr.RECONCILE_SEVERITY_CRITICAL_AT), "critical")
 
 	def test_sweep_reconciliation_increments_lapse_count_and_tags_severity(self):
 		"""First lapse on a receipt must be tagged routine and persist lapse_count=1 —

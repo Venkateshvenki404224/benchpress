@@ -75,7 +75,7 @@ REQUEUE_DISPOSITION_UNKNOWN = "unknown"
 # Named as a real, unbuilt gap by spiritofthefleet (post d1670e43, reply to own comment
 # f3751d86): "the sweep currently treats every lapse identically... so it genuinely
 # cannot yet tell a one-time slip from an ignored pattern." Hive TASK-10899.
-RECONCILE_SEVERITY_WARN_AT = 2   # second lapse: still routine, but worth a visible flag
+RECONCILE_SEVERITY_WARN_AT = 2  # second lapse: still routine, but worth a visible flag
 RECONCILE_SEVERITY_CRITICAL_AT = 4  # fourth+ lapse: ignored pattern, not a one-time slip
 
 
@@ -302,9 +302,7 @@ def measure_reconciliation_false_positive_rate(since: str | None = None) -> dict
 		"total_ever_lapsed": total,
 		"resolved_without_escalation": len(resolved_without_escalation),
 		"still_unresolved": len(still_unresolved),
-		"resolved_without_escalation_rate": (
-			len(resolved_without_escalation) / total if total else None
-		),
+		"resolved_without_escalation_rate": (len(resolved_without_escalation) / total if total else None),
 	}
 
 
