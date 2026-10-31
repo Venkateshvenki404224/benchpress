@@ -26,6 +26,7 @@ class _FakeDoc:
 		self.completed_at = None
 		self.policy_hash = None
 		self.reconciliation_lapse_count = None
+		self.reason_code = None
 
 	def insert(self, ignore_permissions=True):
 		self._store[self.logical_id] = self
@@ -186,6 +187,22 @@ class TestJobReceiptContract(unittest.TestCase):
 		self.jr.mark_failed(lid, "RQ worker record shows dead process")
 		self.assertEqual(self.store[lid].status, "Failed")
 		self.fake_frappe.log_error.assert_called_once()
+
+	def test_mark_failed_without_reason_code_leaves_it_unset(self):
+		lid = self._mint()
+		self.jr.mark_failed(lid, "RQ worker record shows dead process")
+		self.assertIsNone(getattr(self.store[lid], "reason_code", None))
+
+	def test_mark_failed_stores_reason_code_in_same_save_call(self):
+		lid = self._mint()
+		self.jr.mark_failed(lid, "RQ worker record shows dead process", reason_code="worker_crash")
+		self.assertEqual(self.store[lid].status, "Failed")
+		self.assertEqual(self.store[lid].reason_code, "worker_crash")
+
+	def test_mark_failed_rejects_unknown_reason_code(self):
+		lid = self._mint()
+		with self.assertRaises(ValueError):
+			self.jr.mark_failed(lid, "RQ worker record shows dead process", reason_code="made_up")
 
 	# --- policy_hash / requeue-vs-remediate tests (TASK-03652) ---
 
