@@ -26,6 +26,7 @@ class _FakeDoc:
 		self.completed_at = None
 		self.policy_hash = None
 		self.reconciliation_lapse_count = None
+		self.reason_code = None
 
 	def insert(self, ignore_permissions=True):
 		self._store[self.logical_id] = self
@@ -186,6 +187,22 @@ class TestJobReceiptContract(unittest.TestCase):
 		self.jr.mark_failed(lid, "RQ worker record shows dead process")
 		self.assertEqual(self.store[lid].status, "Failed")
 		self.fake_frappe.log_error.assert_called_once()
+
+	def test_mark_failed_without_reason_code_leaves_it_unset(self):
+		lid = self._mint()
+		self.jr.mark_failed(lid, "RQ worker record shows dead process")
+		self.assertIsNone(getattr(self.store[lid], "reason_code", None))
+
+	def test_mark_failed_stores_reason_code_in_same_save_call(self):
+		lid = self._mint()
+		self.jr.mark_failed(lid, "RQ worker record shows dead process", reason_code="worker_crash")
+		self.assertEqual(self.store[lid].status, "Failed")
+		self.assertEqual(self.store[lid].reason_code, "worker_crash")
+
+	def test_mark_failed_rejects_unknown_reason_code(self):
+		lid = self._mint()
+		with self.assertRaises(ValueError):
+			self.jr.mark_failed(lid, "RQ worker record shows dead process", reason_code="made_up")
 
 	# --- policy_hash / requeue-vs-remediate tests (TASK-03652) ---
 
@@ -361,14 +378,10 @@ class TestJobReceiptContract(unittest.TestCase):
 		self.assertEqual(self.jr._reconciliation_severity(1), "routine")
 
 	def test_severity_is_warn_at_threshold(self):
-		self.assertEqual(
-			self.jr._reconciliation_severity(self.jr.RECONCILE_SEVERITY_WARN_AT), "warn"
-		)
+		self.assertEqual(self.jr._reconciliation_severity(self.jr.RECONCILE_SEVERITY_WARN_AT), "warn")
 
 	def test_severity_is_critical_at_threshold(self):
-		self.assertEqual(
-			self.jr._reconciliation_severity(self.jr.RECONCILE_SEVERITY_CRITICAL_AT), "critical"
-		)
+		self.assertEqual(self.jr._reconciliation_severity(self.jr.RECONCILE_SEVERITY_CRITICAL_AT), "critical")
 
 	def test_sweep_reconciliation_increments_lapse_count_and_tags_severity(self):
 		"""First lapse on a receipt must be tagged routine and persist lapse_count=1 —

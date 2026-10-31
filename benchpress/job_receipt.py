@@ -75,7 +75,7 @@ REQUEUE_DISPOSITION_UNKNOWN = "unknown"
 # Named as a real, unbuilt gap by spiritofthefleet (post d1670e43, reply to own comment
 # f3751d86): "the sweep currently treats every lapse identically... so it genuinely
 # cannot yet tell a one-time slip from an ignored pattern." Hive TASK-10899.
-RECONCILE_SEVERITY_WARN_AT = 2   # second lapse: still routine, but worth a visible flag
+RECONCILE_SEVERITY_WARN_AT = 2  # second lapse: still routine, but worth a visible flag
 RECONCILE_SEVERITY_CRITICAL_AT = 4  # fourth+ lapse: ignored pattern, not a one-time slip
 
 
@@ -302,9 +302,7 @@ def measure_reconciliation_false_positive_rate(since: str | None = None) -> dict
 		"total_ever_lapsed": total,
 		"resolved_without_escalation": len(resolved_without_escalation),
 		"still_unresolved": len(still_unresolved),
-		"resolved_without_escalation_rate": (
-			len(resolved_without_escalation) / total if total else None
-		),
+		"resolved_without_escalation_rate": (len(resolved_without_escalation) / total if total else None),
 	}
 
 
@@ -337,13 +335,32 @@ def sweep_overdue_pending() -> dict:
 	return {"checked": len(overdue_ids), "flipped_to_unknown": flipped}
 
 
-def mark_failed(logical_id: str, reason: str) -> None:
-	"""Called only when a worker crash or dead-worker record is actually observed."""
+REASON_CODES = ("worker_crash", "artifact_mismatch", "policy_stale", "timeout")
+
+
+def mark_failed(logical_id: str, reason: str, reason_code: str | None = None) -> None:
+	"""Called only when a worker crash or dead-worker record is actually observed.
+
+	`reason` is the free-form human narrative and still goes to `frappe.log_error` only —
+	it is not queryable. `reason_code` (closed vocabulary: REASON_CODES) is the machine-
+	readable classification and is written in the SAME `doc.save()` call that sets
+	status="Failed", so a later programmatic reader never has to reconcile "why" from a
+	second source (application logs) after the fact. Proposed/discussed on Moltbook
+	(Lucifer_V, post 1d909dd0, comment 2df8a36f) — logged in
+	~/kb/concepts/moltbook-engineering-learning-loop.md, Hive TASK-11193.
+
+	`reason_code` is optional on this call for backward compatibility with existing
+	callers that haven't been updated yet; passing an unrecognized value raises.
+	"""
+	if reason_code is not None and reason_code not in REASON_CODES:
+		raise ValueError(f"reason_code must be one of {REASON_CODES!r}, got {reason_code!r}")
 	name = frappe.db.get_value(DOCTYPE, {"logical_id": logical_id}, "name")
 	if not name:
 		raise frappe.DoesNotExistError(f"No Job Receipt minted for logical_id={logical_id!r}")
 	doc = frappe.get_doc(DOCTYPE, name)
 	doc.status = "Failed"
+	if reason_code is not None:
+		doc.reason_code = reason_code
 	doc.save(ignore_permissions=True)
 	frappe.log_error(title="Job Receipt failed", message=f"{logical_id}: {reason}")
 

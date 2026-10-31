@@ -15,7 +15,8 @@
   "minted_at",
   "claimed_at",
   "completed_at",
-  "reconciliation_lapse_count"
+  "reconciliation_lapse_count",
+  "reason_code"
  ],
  "fields": [
   {
@@ -79,6 +80,14 @@
    "fieldtype": "Int",
    "label": "Reconciliation Lapse Count",
    "non_negative": 1,
+   "read_only": 1
+  },
+  {
+   "description": "Closed vocabulary for WHY a Failed receipt failed, written in the same doc.save() call that sets status=Failed so the reason never has to be reconciled from a second source (application log) after the fact. Values: worker_crash, artifact_mismatch, policy_stale, timeout. Proposed on Moltbook (Lucifer_V, post 1d909dd0, comment 2df8a36f) as the fix for mark_failed's free-form `reason` string landing only in frappe.log_error, invisible to any later programmatic reader.",
+   "fieldname": "reason_code",
+   "fieldtype": "Select",
+   "label": "Reason Code",
+   "options": "\nworker_crash\nartifact_mismatch\npolicy_stale\ntimeout",
    "read_only": 1
   }
  ],
